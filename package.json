@@ -1,0 +1,20 @@
+{
+  "name": "alloy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The infinitely malleable, fully modular web browser",
+  "scripts": {
+    "format:md": "prettier --write \"**/*.md\"",
+    "format:check": "prettier --check \"**/*.md\"",
+    "lint:md": "markdownlint-cli2 \"**/*.md\"",
+    "lint:rust": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+    "format:rust": "cargo fmt --all",
+    "check": "pnpm format:check && pnpm lint:md && cargo fmt --all --check && pnpm lint:rust",
+    "test": "cargo test --workspace"
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "^0.17.2",
+    "prettier": "^3.5.3"
+  },
+  "packageManager": "pnpm@11.21.0"
+}
