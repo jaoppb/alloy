@@ -76,7 +76,7 @@ Power users, developers, and researchers lack a browser architecture that enable
 - `core/network`: Request/response structs, protocol handlers, connection pools.
 - `core/js`: Web content JavaScript runtime & DOM script execution.
 - `core/engine`: Generic runtime engine traits, execution context, capability sandboxing.
-- `core/rhai`: Concrete Rhai script engine backend for browser subsystem muscle.
+- `core/runtime/rhai`: Concrete Rhai script engine backend for browser subsystem muscle.
 - `devtools`: Introspection server, event logs, AST inspect, script hot-reload trigger.
 - `extension`: WebExtension and native extension host bridge.
 
