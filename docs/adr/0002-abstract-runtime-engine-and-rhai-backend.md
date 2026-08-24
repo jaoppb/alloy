@@ -27,7 +27,7 @@ boundary between Rust domain data and script engines?
 ## Considered Options
 
 - **Option 1**: Define a generic `RuntimeEngine` and `ExecutionContext` trait in `core/engine`, implemented by
-  `core/runtime_rhai`.
+  `core/runtime/rhai`.
 - **Option 2**: Couple all domain crates directly to `rhai::Engine` and `rhai::Scope`.
 - **Option 3**: Message-passing actor model over asynchronous IPC channels.
 
@@ -39,7 +39,7 @@ Chosen option: **Option 1**, because:
 
 1. `core/engine` provides a clean trait interface (`RuntimeEngine`, `ExecutionContext`, `EngineValue`, `CustomType`)
    allowing domain crates to remain completely independent of Rhai or any specific interpreter.
-2. `core/runtime_rhai` implements these traits, managing Rhai AST compilation, evaluation, and scope binding.
+2. `core/runtime/rhai` implements these traits, managing Rhai AST compilation, evaluation, and scope binding.
 3. In-process trait dispatch provides sub-microsecond invocation speeds, which are required for high-frequency rendering
    and DOM traversal hooks.
 

@@ -59,7 +59,7 @@ pub trait ExecutionContext {
 }
 ```
 
-### 3.2 Rhai Engine Implementation (`core/rhai`)
+### 3.2 Rhai Engine Implementation (`core/runtime/rhai`)
 
 The `RhaiEngine` implements `RuntimeEngine`:
 
@@ -85,7 +85,7 @@ The `RhaiEngine` implements `RuntimeEngine`:
 ## 5. Acceptance Criteria
 
 - [ ] `RuntimeEngine` and `ExecutionContext` traits defined in `core/engine`.
-- [ ] `RhaiEngine` implementation in `core/rhai` passing trait compliance tests.
+- [ ] `RhaiEngine` implementation in `core/runtime/rhai` passing trait compliance tests.
 - [ ] Registered Rust domain struct (`DomNode`) readable and mutable from Rhai script.
 - [ ] Execution limit test: an infinite loop in Rhai is aborted with `EngineError::ExecutionLimitExceeded`.
 - [ ] Trait-mocking test verifying engine can be replaced without modifying domain crates.

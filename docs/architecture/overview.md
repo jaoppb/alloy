@@ -19,7 +19,7 @@ graph TB
     end
 
     subgraph Runtime ["Execution Engine (Muscle)"]
-        RhaiBackend["core/runtime_rhai<br/>(Rhai Script Engine)"]
+        RhaiBackend["core/runtime/rhai<br/>(Rhai Script Engine)"]
         FutureBackend["[Future: QuickJS / Wasm]"]
     end
 
@@ -77,19 +77,19 @@ graph TB
 
 ## 3. Cargo Workspace Crate Map
 
-| Crate Path      | Package Name   | Primary Responsibility                                    | Dependencies            |
-| --------------- | -------------- | --------------------------------------------------------- | ----------------------- |
-| `core/engine`   | `engine`       | Engine traits, Contexts, Capability Bitflags, EngineValue | None (Pure abstraction) |
-| `core/rhai`     | `rhai-runtime` | Concrete Rhai engine implementation for browser muscle    | `engine`, `rhai`        |
-| `core/js`       | `js`           | Web content ECMAScript runtime & DOM script execution     | `dom`                   |
-| `core/dom`      | `dom`          | DOM Node hierarchy, Element nodes, mutations              | `engine`                |
-| `core/html`     | `html`         | HTML5 tokenization and tree construction                  | `dom`, `engine`         |
-| `core/css`      | `css`          | CSS syntax parser, rule sets, cascade calculator          | `dom`, `engine`         |
-| `core/graphics` | `graphics`     | 2D display lists, Vulkan (`vulkano`) & OpenGL renderers   | `engine`                |
-| `core/window`   | `window`       | Window creation, event loop dispatch, surface binding     | `graphics`, `engine`    |
-| `core/network`  | `network`      | Sockets, DNS resolution, HTTP/1.1 & HTTP/2, cache         | `engine`                |
-| `devtools`      | `devtools`     | Remote debugging protocol, AST inspector, hot-reloader    | `engine`                |
-| `extension`     | `extension`    | WebExtensions and native script extension runtime         | `engine`, `dom`         |
+| Crate Path          | Package Name   | Primary Responsibility                                    | Dependencies            |
+| ------------------- | -------------- | --------------------------------------------------------- | ----------------------- |
+| `core/engine`       | `engine`       | Engine traits, Contexts, Capability Bitflags, EngineValue | None (Pure abstraction) |
+| `core/runtime/rhai` | `rhai-runtime` | Concrete Rhai engine implementation for browser muscle    | `engine`, `rhai`        |
+| `core/js`           | `js`           | Web content ECMAScript runtime & DOM script execution     | `dom`                   |
+| `core/dom`          | `dom`          | DOM Node hierarchy, Element nodes, mutations              | `engine`                |
+| `core/html`         | `html`         | HTML5 tokenization and tree construction                  | `dom`, `engine`         |
+| `core/css`          | `css`          | CSS syntax parser, rule sets, cascade calculator          | `dom`, `engine`         |
+| `core/graphics`     | `graphics`     | 2D display lists, Vulkan (`vulkano`) & OpenGL renderers   | `engine`                |
+| `core/window`       | `window`       | Window creation, event loop dispatch, surface binding     | `graphics`, `engine`    |
+| `core/network`      | `network`      | Sockets, DNS resolution, HTTP/1.1 & HTTP/2, cache         | `engine`                |
+| `devtools`          | `devtools`     | Remote debugging protocol, AST inspector, hot-reloader    | `engine`                |
+| `extension`         | `extension`    | WebExtensions and native script extension runtime         | `engine`, `dom`         |
 
 ---
 
