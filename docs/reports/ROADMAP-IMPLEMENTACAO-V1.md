@@ -175,11 +175,22 @@ decisão que resta é **não escrever um motor de JavaScript**.
 | `rusty_v8`       | Binding para V8 (C++)                       | Build de dezenas de minutos, binário muito grande, toolchain C++ e cross-compile penoso nos 3 SOs | Rejeitada: custo de build e de portabilidade desproporcional para a v1.0 |
 | Motor próprio    | Parser, interpretador e GC escritos do zero | Anos-dev antes do primeiro `alert()`                                                              | Rejeitada: consumiria sozinho o cronograma inteiro                       |
 
-`boa_engine` é a escolha coerente com o projeto: mantém a matriz de CI sem compilador C/C++, preserva
-**N-02**, e permite que `js` implemente a mesma trait `RuntimeEngine` de `PRD-002:31-56` — o que
-transforma o motor JS num backend intercambiável em vez de uma exceção arquitetural. O custo assumido
-é explícito: **páginas com JavaScript moderno pesado não vão funcionar na v1.0**, e a taxa de
-`test262` (seção 5) existe justamente para tornar esse limite visível em vez de vergonhoso.
+`boa_engine` é a escolha coerente com o projeto: mantém a matriz de CI sem compilador C/C++ e preserva
+**N-02**. O custo assumido é explícito: **páginas com JavaScript moderno pesado não vão funcionar na
+v1.0**, e a taxa de `test262` (seção 5) existe justamente para tornar esse limite visível em vez de
+vergonhoso.
+
+O que **não** se deve fazer é encaixar o motor JS na trait `RuntimeEngine` de `PRD-002:31-56`. Essa
+trait é do Muscle — `ADR-0006:63-68` separa "Web Content JavaScript (`core/js`)" de "Browser Muscle
+Engine (`core/engine` + `core/runtime/rhai`)" como responsabilidades distintas, e a seção 2.3 mostra
+que os dois lados nem sequer têm o mesmo modelo de ameaças. A forma de `RuntimeEngine` também não
+serve: `create_context`, `compile` e `eval` não modelam *realm* por aba, `Origin`, fila de microtasks
+nem event loop, que é justamente o que o runtime de conteúdo precisa.
+
+O desacoplamento que interessa é obtido repetindo o **padrão**, não a trait: `core/js` define a sua
+própria porta em `application/`, com `boa_engine` como um adaptador em `infrastructure/`. Trocar de
+motor JS continua sendo trocar um adaptador, e as duas fronteiras de script continuam sem se
+misturar.
 
 ### 2.3 ⚠️ Lacuna de especificação: JS de conteúdo é código hostil
 
