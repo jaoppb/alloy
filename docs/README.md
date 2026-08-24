@@ -18,6 +18,8 @@ docs/
 │   ├── PRD-003-script-isolation-and-sandboxing.md # Context isolation & capability security
 │   ├── PRD-004-hot-reload-subsystem.md # Runtime script hot-reloading requirements
 │   └── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
+├── reports/                            # Technical Reports (analysis, audits, roadmaps)
+│   └── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
 └── adr/                                # Architecture Decision Records (MADR format)
     ├── README.md                       # ADR index & decision log
     ├── 0001-record-architecture-decisions.md
