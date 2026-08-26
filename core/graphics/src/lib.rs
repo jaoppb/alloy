@@ -11,10 +11,10 @@ pub mod infrastructure;
 
 pub use application::cpu_backend::SoftwareCpuBackend;
 pub use application::factory::GraphicsBackendFactory;
-pub use application::layout::LayoutEngine;
 pub use domain::backend::RenderBackend;
 pub use domain::command::RenderCommand;
 pub use domain::display_list::DisplayList;
 pub use domain::error::GraphicsError;
 pub use domain::geometry::{Point, Position, Rect, Size};
+pub use domain::layout::LayoutEngine;
 pub use infrastructure::rhai_bridge::{ScriptDisplayListContainer, register_graphics_bindings};

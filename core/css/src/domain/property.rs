@@ -178,3 +178,14 @@ pub enum DisplayType {
     /// Flexbox container formatting.
     Flex,
 }
+
+impl DisplayType {
+    /// Derives the standard default `DisplayType` for a given DOM tag name (C-13).
+    #[must_use]
+    pub fn from_tag(tag: &dom::TagName) -> Self {
+        match tag.default_display() {
+            "inline" => Self::Inline,
+            _ => Self::Block,
+        }
+    }
+}

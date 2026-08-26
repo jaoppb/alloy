@@ -10,13 +10,13 @@ pub mod application;
 pub mod domain;
 pub mod infrastructure;
 
-pub use application::service::DomService;
 pub use domain::attribute::{AttributeMap, AttributeName, AttributeValue};
 pub use domain::children::Children;
 pub use domain::error::DomError;
 pub use domain::node::DomNode;
 pub use domain::node_data::NodeData;
 pub use domain::node_id::NodeId;
+pub use domain::service::DomService;
 pub use domain::tag_name::TagName;
 pub use domain::tree::DomTree;
 pub use infrastructure::bridge::register_dom_bindings;

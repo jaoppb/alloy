@@ -1,3 +1,1 @@
-pub mod service;
-
-pub use service::DomService;
+pub use crate::domain::service::DomService;

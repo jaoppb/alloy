@@ -9,10 +9,10 @@ pub mod application;
 pub mod domain;
 
 pub use application::cascade::StyleCascade;
-pub use application::parser::{CssParser, parse_css};
 pub use domain::computed::ComputedStyle;
 pub use domain::declaration::{Declaration, DeclarationList};
 pub use domain::error::CssError;
+pub use domain::parser::{CssParser, parse_css};
 pub use domain::property::{Color, DisplayType, PropertyName, PropertyValue, Px};
 pub use domain::rule::{Rule, RuleSet};
 pub use domain::selector::Selector;

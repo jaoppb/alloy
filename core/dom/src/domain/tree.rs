@@ -245,4 +245,10 @@ impl DomTree {
             }
         }
     }
+
+    /// Serializes a node subtree to a compact HTML string (C-24).
+    #[must_use]
+    pub fn serialize_to_html(&self, root: NodeId) -> String {
+        crate::domain::service::DomService::serialize_to_html(self, root)
+    }
 }

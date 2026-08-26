@@ -37,13 +37,7 @@ impl StyleCascade {
         // Apply matching CSS declarations if element
         if let NodeData::Element { tag_name, .. } = node.data() {
             // Set element default display
-            if tag_name.as_str() == "span"
-                || tag_name.as_str() == "a"
-                || tag_name.as_str() == "b"
-                || tag_name.as_str() == "i"
-            {
-                computed.set_display(DisplayType::Inline);
-            }
+            computed.set_display(DisplayType::from_tag(tag_name));
 
             let mut matched_decls: Vec<(Specificity, usize, Declaration)> = Vec::new();
             for (rule_idx, rule) in stylesheet.rules().iter().enumerate() {

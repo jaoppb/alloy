@@ -26,6 +26,16 @@ impl TagName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Returns the default CSS display mode string ("inline" or "block") for standard HTML elements (C-13).
+    #[must_use]
+    pub fn default_display(&self) -> &'static str {
+        match self.as_str() {
+            "span" | "a" | "b" | "i" | "em" | "strong" | "small" | "code" | "sub" | "sup"
+            | "label" => "inline",
+            _ => "block",
+        }
+    }
 }
 
 impl fmt::Display for TagName {

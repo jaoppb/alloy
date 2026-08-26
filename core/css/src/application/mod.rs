@@ -1,5 +1,4 @@
 pub mod cascade;
-pub mod parser;
 
+pub use crate::domain::parser::{CssParser, parse_css};
 pub use cascade::StyleCascade;
-pub use parser::{CssParser, parse_css};

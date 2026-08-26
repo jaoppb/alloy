@@ -4,6 +4,7 @@ pub mod error;
 pub mod node;
 pub mod node_data;
 pub mod node_id;
+pub mod service;
 pub mod tag_name;
 pub mod tree;
 
@@ -13,5 +14,6 @@ pub use error::DomError;
 pub use node::DomNode;
 pub use node_data::NodeData;
 pub use node_id::NodeId;
+pub use service::DomService;
 pub use tag_name::TagName;
 pub use tree::DomTree;

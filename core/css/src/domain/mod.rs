@@ -1,6 +1,7 @@
 pub mod computed;
 pub mod declaration;
 pub mod error;
+pub mod parser;
 pub mod property;
 pub mod rule;
 pub mod selector;
@@ -11,6 +12,7 @@ pub mod stylesheet;
 pub use computed::ComputedStyle;
 pub use declaration::{Declaration, DeclarationList};
 pub use error::CssError;
+pub use parser::{CssParser, parse_css};
 pub use property::{Color, DisplayType, PropertyName, PropertyValue, Px};
 pub use rule::{Rule, RuleSet};
 pub use selector::Selector;
