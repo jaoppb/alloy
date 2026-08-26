@@ -1,14 +1,22 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! # Core DOM (`core/dom`)
+//!
+//! Document Object Model tree implementation using an indexed arena pattern (`DomTree`).
+//! Enforces structural invariants (acyclicity, single-parent linkage) and provides
+//! safe scripting bridges to the abstract engine layer (PRD-001, PRD-002, ADR-0010).
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod application;
+pub mod domain;
+pub mod infrastructure;
+
+pub use application::service::DomService;
+pub use domain::attribute::{AttributeMap, AttributeName, AttributeValue};
+pub use domain::children::Children;
+pub use domain::error::DomError;
+pub use domain::node::DomNode;
+pub use domain::node_data::NodeData;
+pub use domain::node_id::NodeId;
+pub use domain::tag_name::TagName;
+pub use domain::tree::DomTree;
+pub use infrastructure::bridge::register_dom_bindings;
