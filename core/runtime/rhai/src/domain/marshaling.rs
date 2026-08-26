@@ -1,5 +1,21 @@
 use engine::{EngineError, EngineValue};
+use std::any::Any;
 use std::collections::HashMap;
+use std::sync::Arc;
+
+/// Wrapper around an opaque host instance handle inside Rhai scripts (ADR-0012, N-01).
+#[derive(Clone)]
+pub struct RhaiNativeHandle(pub Arc<dyn Any + Send + Sync>);
+
+impl std::fmt::Debug for RhaiNativeHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NativeHandle(..)")
+    }
+}
+
+/// Host singleton instance representation in Rhai scope (ADR-0012, N-01).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RhaiSingleton(pub String);
 
 /// Converts a canonical `EngineValue` into a `rhai::Dynamic`.
 pub fn engine_value_to_dynamic(val: EngineValue) -> rhai::Dynamic {
@@ -20,6 +36,7 @@ pub fn engine_value_to_dynamic(val: EngineValue) -> rhai::Dynamic {
                 .collect();
             rhai::Dynamic::from(rhai_map)
         }
+        EngineValue::Handle(arc) => rhai::Dynamic::from(RhaiNativeHandle(arc)),
     }
 }
 
@@ -30,6 +47,11 @@ pub fn engine_value_to_dynamic(val: EngineValue) -> rhai::Dynamic {
 pub fn dynamic_to_engine_value(dyn_val: &rhai::Dynamic) -> Result<EngineValue, EngineError> {
     if dyn_val.is_unit() {
         return Ok(EngineValue::Null);
+    }
+
+    if dyn_val.is::<RhaiNativeHandle>() {
+        let handle = dyn_val.clone_cast::<RhaiNativeHandle>();
+        return Ok(EngineValue::Handle(handle.0));
     }
 
     if dyn_val.is_bool() {

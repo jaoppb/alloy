@@ -1,6 +1,7 @@
 use crate::application::conversion::FromEngineValue;
 use crate::domain::capability::CapabilitySet;
 use crate::domain::error::EngineError;
+use crate::domain::host_object::HostObject;
 use crate::domain::identifier::Identifier;
 use crate::domain::value::EngineValue;
 use std::sync::Arc;
@@ -16,6 +17,12 @@ pub type NativeFn = Arc<
 pub trait ExecutionContext: Send + Sync {
     /// Returns the capability set governing this execution context isolate (PRD-003).
     fn capabilities(&self) -> &CapabilitySet;
+
+    /// Registers a declarative host object or namespace into this isolate (ADR-0012, N-01).
+    ///
+    /// # Errors
+    /// Returns `EngineError` if registration fails.
+    fn register_host_object(&mut self, object: HostObject) -> Result<(), EngineError>;
 
     /// Registers a native Rust function callback into this isolate.
     ///

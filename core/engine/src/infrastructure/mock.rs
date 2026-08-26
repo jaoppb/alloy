@@ -2,6 +2,7 @@ use crate::application::conversion::FromEngineValue;
 use crate::application::ports::{ExecutionContext, NativeFn, RuntimeEngine};
 use crate::domain::capability::CapabilitySet;
 use crate::domain::error::EngineError;
+use crate::domain::host_object::HostObject;
 use crate::domain::identifier::Identifier;
 use crate::domain::value::EngineValue;
 use std::collections::HashMap;
@@ -12,6 +13,7 @@ pub struct MockContext {
     capabilities: CapabilitySet,
     variables: HashMap<String, EngineValue>,
     functions: HashMap<String, NativeFn>,
+    host_objects: HashMap<String, HostObject>,
 }
 
 impl MockContext {
@@ -22,13 +24,26 @@ impl MockContext {
             capabilities,
             variables: HashMap::new(),
             functions: HashMap::new(),
+            host_objects: HashMap::new(),
         }
+    }
+
+    /// Returns a reference to the registered host objects.
+    #[must_use]
+    pub fn host_objects(&self) -> &HashMap<String, HostObject> {
+        &self.host_objects
     }
 }
 
 impl ExecutionContext for MockContext {
     fn capabilities(&self) -> &CapabilitySet {
         &self.capabilities
+    }
+
+    fn register_host_object(&mut self, object: HostObject) -> Result<(), EngineError> {
+        self.host_objects
+            .insert(object.name().as_str().to_string(), object);
+        Ok(())
     }
 
     fn register_fn(&mut self, name: Identifier, f: NativeFn) -> Result<(), EngineError> {
@@ -50,13 +65,26 @@ impl ExecutionContext for MockContext {
         name: &Identifier,
         args: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
-        let f = self
-            .functions
-            .get(name.as_str())
-            .cloned()
-            .ok_or_else(|| EngineError::FunctionNotFound(name.as_str().to_string()))?;
+        if let Some(f) = self.functions.get(name.as_str()).cloned() {
+            return f(self, args);
+        }
 
-        f(self, args)
+        if let Some((ns, method)) = name.as_str().split_once('.') {
+            if let Some(host_obj) = self.host_objects.get(ns) {
+                if let Some(cap) = host_obj.required_capability() {
+                    if !self.capabilities.contains(cap) {
+                        return Err(EngineError::PermissionDenied(format!("{cap:?}")));
+                    }
+                }
+                for (m_name, m_fn) in host_obj.methods() {
+                    if m_name.as_str() == method {
+                        return m_fn(None, args);
+                    }
+                }
+            }
+        }
+
+        Err(EngineError::FunctionNotFound(name.as_str().to_string()))
     }
 
     fn reset_scope(&mut self) -> Result<(), EngineError> {

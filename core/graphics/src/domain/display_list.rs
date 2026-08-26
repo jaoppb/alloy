@@ -38,6 +38,11 @@ impl DisplayList {
         self.commands.is_empty()
     }
 
+    /// Clears all commands from the display list.
+    pub fn clear(&mut self) {
+        self.commands.clear();
+    }
+
     /// Serializes the display list into a JSON string representation (PRD-005:91, C-18).
     #[must_use]
     pub fn serialize_to_json(&self) -> String {

@@ -1,6 +1,6 @@
 use engine::{
-    Capability, CapabilitySet, EngineError, ExecutionContext, Identifier, IntoEngineValue,
-    RuntimeEngine,
+    Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, HostObject, Identifier,
+    IntoEngineValue, RuntimeEngine,
 };
 use rhai_runtime::{ExecutionLimits, RhaiEngine};
 
@@ -106,4 +106,54 @@ fn test_compile_and_eval_ast() {
         .expect("Evaluation of compiled AST must succeed");
 
     assert_eq!(result, 42);
+}
+
+#[test]
+fn test_host_object_accessible_via_script_eval() {
+    let engine = RhaiEngine::new();
+    let mut context = engine
+        .create_context(CapabilitySet::new(Capability::DOM_MUTATE))
+        .expect("Context creation");
+
+    let mut doc_obj = HostObject::new(Identifier::new("document").unwrap());
+    doc_obj.add_method(Identifier::new("createElement").unwrap(), |_this, args| {
+        let tag = args
+            .first()
+            .and_then(|a| a.as_str().ok())
+            .unwrap_or("unknown");
+        Ok(EngineValue::String(format!("<{tag}></{tag}>")))
+    });
+
+    context.register_host_object(doc_obj).unwrap();
+
+    // Call via engine.eval directly (proves D-01 is fixed!)
+    let result: String = engine
+        .eval(&mut context, r#"document.createElement("div")"#)
+        .expect("Eval of host object method must succeed");
+
+    assert_eq!(result, "<div></div>");
+}
+
+#[test]
+fn test_host_object_permission_denied_via_script_eval() {
+    let engine = RhaiEngine::new();
+    // Context without DOM_MUTATE
+    let mut context = engine
+        .create_context(CapabilitySet::empty())
+        .expect("Context creation");
+
+    let mut doc_obj = HostObject::new(Identifier::new("document").unwrap())
+        .with_capability(Capability::DOM_MUTATE);
+    doc_obj.add_method(Identifier::new("createElement").unwrap(), |_this, _args| {
+        Ok(EngineValue::String("created".into()))
+    });
+
+    context.register_host_object(doc_obj).unwrap();
+
+    let result: Result<String, EngineError> =
+        engine.eval(&mut context, r#"document.createElement("div")"#);
+    assert!(
+        result.is_err(),
+        "Expected permission denied error when capability is missing"
+    );
 }

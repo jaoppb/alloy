@@ -18,6 +18,7 @@ pub use application::ports::{ExecutionContext, FileWatchPort, NativeFn, RuntimeE
 pub use application::sandbox::{TrappedExecutor, guarded_native_fn};
 pub use domain::capability::{Capability, CapabilitySet, SubsystemProfile};
 pub use domain::error::EngineError;
+pub use domain::host_object::{HostGetterFn, HostMethodFn, HostObject, HostSetterFn};
 pub use domain::hot_reload::{DebounceDuration, HotReloadStatus, ReloadEvent};
 pub use domain::identifier::Identifier;
 pub use domain::value::EngineValue;

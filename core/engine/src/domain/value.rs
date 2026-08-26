@@ -1,10 +1,13 @@
 use crate::domain::error::EngineError;
+use std::any::Any;
 use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
 
 /// Canonical dynamic value representation for data crossing the host/script boundary.
 ///
 /// Decouples domain crates from concrete interpreter values (e.g. `rhai::Dynamic`, `boa::JsValue`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub enum EngineValue {
     Null,
     Bool(bool),
@@ -13,9 +16,55 @@ pub enum EngineValue {
     String(String),
     Array(Vec<EngineValue>),
     Object(HashMap<String, EngineValue>),
+    /// Opaque native host instance handle (ADR-0012, N-01).
+    Handle(Arc<dyn Any + Send + Sync>),
+}
+
+impl PartialEq for EngineValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Null, Self::Null) => true,
+            (Self::Bool(a), Self::Bool(b)) => a == b,
+            (Self::Int(a), Self::Int(b)) => a == b,
+            (Self::Float(a), Self::Float(b)) => a == b,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::Array(a), Self::Array(b)) => a == b,
+            (Self::Object(a), Self::Object(b)) => a == b,
+            (Self::Handle(a), Self::Handle(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Debug for EngineValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Null => write!(f, "Null"),
+            Self::Bool(b) => write!(f, "Bool({b:?})"),
+            Self::Int(i) => write!(f, "Int({i:?})"),
+            Self::Float(fl) => write!(f, "Float({fl:?})"),
+            Self::String(s) => write!(f, "String({s:?})"),
+            Self::Array(a) => write!(f, "Array({a:?})"),
+            Self::Object(o) => write!(f, "Object({o:?})"),
+            Self::Handle(_) => write!(f, "Handle(..)"),
+        }
+    }
 }
 
 impl EngineValue {
+    /// Creates an opaque handle wrapping a concrete native Rust instance.
+    pub fn handle<T: Send + Sync + 'static>(val: T) -> Self {
+        Self::Handle(Arc::new(val))
+    }
+
+    /// Attempts to downcast a handle reference to concrete type `T`.
+    pub fn downcast_handle<T: 'static>(&self) -> Option<&T> {
+        match self {
+            Self::Handle(arc) => arc.downcast_ref::<T>(),
+            _ => None,
+        }
+    }
+
     /// Extracts boolean value or returns a `TypeMismatch` error.
     pub fn as_bool(&self) -> Result<bool, EngineError> {
         match self {
@@ -73,6 +122,7 @@ impl EngineValue {
             Self::String(_) => "String",
             Self::Array(_) => "Array",
             Self::Object(_) => "Object",
+            Self::Handle(_) => "Handle",
         }
     }
 }

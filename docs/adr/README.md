@@ -20,3 +20,4 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0009](0009-vulkan-rendering-with-opengl-fallback.md)                  | Vulkan Rendering with OpenGL and Software Fallback   | Accepted | 2026-08-22 |
 | [ADR-0010](0010-clean-architecture-ddd-and-object-calisthenics.md)         | Clean Architecture, DDD, and Object Calisthenics     | Accepted | 2026-08-23 |
 | [ADR-0011](0011-typed-errors-with-thiserror.md)                            | Typed Domain Errors with thiserror                   | Accepted | 2026-08-26 |
+| [ADR-0012](0012-host-objects-for-the-script-surface.md)                    | Host Objects & Universal Namespacing for Scripts     | Accepted | 2026-08-26 |

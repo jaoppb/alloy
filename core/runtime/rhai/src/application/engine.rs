@@ -57,7 +57,7 @@ impl RuntimeEngine for RhaiEngine {
     type Error = EngineError;
 
     fn create_context(&self, capabilities: CapabilitySet) -> Result<Self::Context, Self::Error> {
-        Ok(RhaiContext::new(capabilities))
+        Ok(RhaiContext::with_limits(capabilities, self.limits))
     }
 
     fn compile(&self, script_source: &str) -> Result<Self::CompiledScript, Self::Error> {
@@ -71,9 +71,8 @@ impl RuntimeEngine for RhaiEngine {
         context: &mut Self::Context,
         script: &str,
     ) -> Result<T, Self::Error> {
-        let dyn_result = self
-            .engine
-            .eval_with_scope::<rhai::Dynamic>(context.scope_mut(), script)
+        let dyn_result = context
+            .eval_dynamic(script)
             .map_err(|err| rhai_error_to_engine_error(*err))?;
 
         let engine_val = dynamic_to_engine_value(&dyn_result)?;

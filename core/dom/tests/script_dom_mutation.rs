@@ -69,9 +69,39 @@ fn test_c03_dom_node_readable_and_mutable_from_script() {
     // 6. Verify the mutation inside the Rust DomTree aggregate
     {
         let guard = tree.lock().unwrap();
-        let h1_node_id = dom::NodeId::new(h1_id.as_i64().unwrap() as u32);
+        let h1_node_id = h1_id
+            .downcast_handle::<dom::NodeId>()
+            .copied()
+            .or_else(|| h1_id.as_i64().ok().map(|i| dom::NodeId::new(i as u32)))
+            .unwrap();
         let serialized = DomService::serialize_to_html(&guard, h1_node_id);
         assert_eq!(serialized, "<h1>Updated by Script</h1>");
+    }
+
+    // 7. Verify script execution directly via engine.eval with document and Node (N-01, ADR-0012, D-01)
+    let eval_res: EngineValue = engine
+        .eval(
+            &mut context,
+            r#"
+            let header = document.createElement("h2");
+            let sub = document.createTextNode("Subtitle");
+            header.appendChild(sub);
+            sub.textContent = "New Subtitle";
+            header
+            "#,
+        )
+        .expect("DOM script execution via engine.eval must succeed");
+
+    let header_id = eval_res
+        .downcast_handle::<dom::NodeId>()
+        .copied()
+        .expect("Handle downcast");
+    {
+        let guard = tree.lock().unwrap();
+        assert_eq!(
+            DomService::serialize_to_html(&guard, header_id),
+            "<h2>New Subtitle</h2>"
+        );
     }
 }
 
@@ -100,4 +130,12 @@ fn test_dom_mutation_denied_without_capability() {
         }
         other => panic!("Expected EngineError::PermissionDenied, got: {other:?}"),
     }
+
+    // Also via eval directly:
+    let eval_res: Result<EngineValue, EngineError> =
+        engine.eval(&mut context, r#"document.createElement("div")"#);
+    assert!(
+        eval_res.is_err(),
+        "Expected permission error from eval without DOM_MUTATE"
+    );
 }

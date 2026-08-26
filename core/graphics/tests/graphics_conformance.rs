@@ -106,6 +106,23 @@ fn test_c18_display_list_serialization_and_script_binding() {
         }
         other => panic!("Expected EngineError::PermissionDenied, got {other:?}"),
     }
+
+    // 4. Test renderer host object directly via engine.eval (N-01, ADR-0012, D-01)
+    let count: i64 = engine
+        .eval(
+            &mut ctx,
+            r#"
+            renderer.pushRect(20.0, 30.0, 50.0, 60.0, "red");
+            renderer.commandCount()
+            "#,
+        )
+        .expect("Evaluation via engine.eval must succeed");
+    assert_eq!(count, 2);
+
+    let json: String = engine
+        .eval(&mut ctx, "renderer.toJSON()")
+        .expect("renderer.toJSON eval");
+    assert!(json.contains("draw_rect"));
 }
 
 #[test]
