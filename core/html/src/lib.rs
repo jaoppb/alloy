@@ -1,14 +1,15 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! # Core HTML (`core/html`)
+//!
+//! HTML5 tokenizer and tree builder constructing `DomTree` aggregates from text streams.
+//! Part of the aggregate rendering pipeline for Alloy (PRD-001, ADR-0010).
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod application;
+pub mod domain;
+
+pub use application::parser::{HtmlParser, parse_html};
+pub use domain::entities::decode_html_entities;
+pub use domain::token::{HtmlError, HtmlToken};
+pub use domain::tokenizer::HtmlTokenizer;
+pub use domain::tree_builder::{TreeBuilder, is_void_element};
