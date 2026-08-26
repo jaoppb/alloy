@@ -1,14 +1,21 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! # Core CSS (`core/css`)
+//!
+//! CSS parser, selector matcher, specificity calculator, and style cascade engine.
+//! Part of the aggregate rendering pipeline for Alloy (PRD-001, ADR-0010).
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod application;
+pub mod domain;
+
+pub use application::cascade::StyleCascade;
+pub use application::parser::{CssParser, parse_css};
+pub use domain::computed::ComputedStyle;
+pub use domain::declaration::{Declaration, DeclarationList};
+pub use domain::error::CssError;
+pub use domain::property::{Color, DisplayType, PropertyName, PropertyValue, Px};
+pub use domain::rule::{Rule, RuleSet};
+pub use domain::selector::Selector;
+pub use domain::specificity::Specificity;
+pub use domain::styled_node::{StyledNode, StyledTree};
+pub use domain::stylesheet::StyleSheet;
