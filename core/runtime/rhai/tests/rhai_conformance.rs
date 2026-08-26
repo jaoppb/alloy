@@ -92,8 +92,18 @@ fn test_variable_scope_and_reset() {
 }
 
 #[test]
-fn test_compile_ast() {
+fn test_compile_and_eval_ast() {
     let engine = RhaiEngine::new();
-    let ast = engine.compile("let a = 1; let b = 2; a + b").unwrap();
-    assert!(!ast.iter_functions().count() > 0 || true);
+    let mut context = engine.create_context(CapabilitySet::empty()).unwrap();
+
+    let ast = engine
+        .compile("let a = 10; let b = 32; a + b")
+        .expect("Compilation should succeed");
+
+    let result: i64 = engine
+        .raw_engine()
+        .eval_ast_with_scope(context.scope_mut(), &ast)
+        .expect("Evaluation of compiled AST must succeed");
+
+    assert_eq!(result, 42);
 }

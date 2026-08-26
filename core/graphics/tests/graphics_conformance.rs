@@ -154,3 +154,33 @@ fn test_i2_end_to_end_headless_pipeline_to_png() {
     // Clean up
     let _ = std::fs::remove_file(out_path);
 }
+
+#[test]
+fn test_out_of_bounds_clipping_safety() {
+    let mut backend = SoftwareCpuBackend::new(100, 100);
+
+    let mut list = DisplayList::new();
+    // Negative coordinates
+    list.push(RenderCommand::DrawRect {
+        rect: Rect::new(-50.0, -50.0, 80.0, 80.0),
+        color: Color::RED,
+    });
+    // Partially outside right/bottom
+    list.push(RenderCommand::DrawRect {
+        rect: Rect::new(80.0, 80.0, 50.0, 50.0),
+        color: Color::BLUE,
+    });
+    // Completely outside
+    list.push(RenderCommand::DrawRect {
+        rect: Rect::new(500.0, 500.0, 100.0, 100.0),
+        color: Color::GREEN,
+    });
+
+    // Rendering must succeed without panicking
+    backend
+        .render(&list)
+        .expect("Out of bounds commands must be clipped safely without panic");
+
+    let pixels = backend.to_rgba_bytes().unwrap();
+    assert_eq!(pixels.len(), 100 * 100 * 4);
+}

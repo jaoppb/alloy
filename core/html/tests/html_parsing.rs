@@ -99,3 +99,60 @@ fn test_parse_unclosed_tags_resilience() {
     let text = DomService::get_text_content(&tree, root);
     assert_eq!(text, "First paragraphNested div");
 }
+
+#[test]
+fn test_parse_unquoted_and_boolean_attributes() {
+    let html = r#"<input type=checkbox checked disabled class=active>"#;
+    let tree = parse_html(html).expect("Parse should succeed");
+
+    let root = tree.root().unwrap();
+    let inputs = DomService::find_by_tag_name(&tree, root, &TagName::new("input").unwrap());
+    assert_eq!(inputs.len(), 1);
+
+    let input_node = tree.get(inputs[0]).unwrap();
+    if let NodeData::Element { attributes, .. } = input_node.data() {
+        assert_eq!(
+            attributes
+                .get(&AttributeName::new("type"))
+                .unwrap()
+                .as_str(),
+            "checkbox"
+        );
+        assert_eq!(
+            attributes
+                .get(&AttributeName::new("checked"))
+                .unwrap()
+                .as_str(),
+            ""
+        );
+        assert_eq!(
+            attributes
+                .get(&AttributeName::new("disabled"))
+                .unwrap()
+                .as_str(),
+            ""
+        );
+        assert_eq!(
+            attributes
+                .get(&AttributeName::new("class"))
+                .unwrap()
+                .as_str(),
+            "active"
+        );
+    } else {
+        panic!("Expected Element node");
+    }
+}
+
+#[test]
+fn test_parse_case_insensitivity() {
+    let html = "<DIV CLASS='container'><P>Hello</P></DIV>";
+    let tree = parse_html(html).expect("Parse should succeed");
+
+    let root = tree.root().unwrap();
+    let divs = DomService::find_by_tag_name(&tree, root, &TagName::new("div").unwrap());
+    assert_eq!(divs.len(), 1, "Tag DIV must normalize to div");
+
+    let ps = DomService::find_by_tag_name(&tree, root, &TagName::new("p").unwrap());
+    assert_eq!(ps.len(), 1, "Tag P must normalize to p");
+}

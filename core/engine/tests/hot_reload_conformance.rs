@@ -33,8 +33,14 @@ fn test_c10_file_watcher_detects_rhai_modifications_with_debounce() {
         std::thread::sleep(Duration::from_millis(5));
     }
 
-    // Wait for debounce window to pass
-    std::thread::sleep(Duration::from_millis(150));
+    // Wait for debounce event to arrive using condition polling with timeout
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(3);
+    while event_counter.load(Ordering::SeqCst) == 0 && start.elapsed() < timeout {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // Allow debounce window to settle
+    std::thread::sleep(Duration::from_millis(60));
 
     // Counter must have been triggered without spawning 5 distinct reloads
     let triggers = event_counter.load(Ordering::SeqCst);

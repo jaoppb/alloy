@@ -137,3 +137,46 @@ fn test_depth_first_pre_order_traversal() {
     let order = tree.traverse_pre_order(root);
     assert_eq!(order, vec![root, head, body, p]);
 }
+
+#[test]
+fn test_deep_acyclicity_prevents_indirect_ancestor_cycles() {
+    let mut tree = DomTree::new();
+
+    let a = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    let b = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    let c = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    let d = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+
+    tree.append_child(a, b).unwrap();
+    tree.append_child(b, c).unwrap();
+    tree.append_child(c, d).unwrap();
+
+    // Attempting to append root ancestor 'a' under deep descendant 'd' must fail
+    let err = tree.append_child(d, a);
+    assert_eq!(
+        err,
+        Err(dom::DomError::CycleDetected { node: a, parent: d })
+    );
+}
+
+#[test]
+fn test_insert_before_with_unrelated_reference_node_fails() {
+    let mut tree = DomTree::new();
+
+    let parent1 = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    let child1 = tree.create_element(TagName::new("span").unwrap(), AttributeMap::new());
+    tree.append_child(parent1, child1).unwrap();
+
+    let parent2 = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    let child2 = tree.create_element(TagName::new("span").unwrap(), AttributeMap::new());
+    tree.append_child(parent2, child2).unwrap();
+
+    let new_node = tree.create_element(TagName::new("p").unwrap(), AttributeMap::new());
+
+    // Attempting insert_before on parent1 with child2 (which belongs to parent2) must fail
+    let err = tree.insert_before(parent1, new_node, child2);
+    assert!(
+        matches!(err, Err(dom::DomError::InvalidHierarchy(ref msg)) if msg.contains("not a child of parent")),
+        "Expected InvalidHierarchy, got {err:?}"
+    );
+}

@@ -177,3 +177,29 @@ fn test_style_inheritance_and_styled_tree() {
         "Child <p> must inherit font-size from parent"
     );
 }
+
+#[test]
+fn test_cascade_source_order_precedence_on_tie() {
+    let html = r#"<div class="box">Text</div>"#;
+    let dom = parse_html(html).expect("DOM parsing");
+
+    let css = r#"
+        .box {
+            color: red;
+        }
+        .box {
+            color: blue;
+        }
+    "#;
+    let stylesheet = parse_css(css).expect("CSS parsing");
+
+    let styled_tree = StyleCascade::build_styled_tree(&dom, &stylesheet);
+    let root = styled_tree.root().expect("Root node");
+    let div_node = root.children().first().expect("Div node");
+
+    assert_eq!(
+        div_node.style().color,
+        Color::BLUE,
+        "When specificity is tied, the last rule in source order must win"
+    );
+}
