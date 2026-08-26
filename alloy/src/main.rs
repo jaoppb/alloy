@@ -56,7 +56,7 @@ pub enum Commands {
     },
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match &cli.command {
@@ -66,68 +66,61 @@ fn main() {
             width,
             height,
             css,
-        }) => {
-            execute_render(file, output, *width, *height, css.as_deref());
-        }
+        }) => execute_render(file, output, *width, *height, css.as_deref()),
         None => {
             if let Some(script_path) = &cli.script {
-                execute_script(script_path);
-            } else if let Some(target) = &cli.target {
-                println!("Opening target: {target}");
-            } else {
-                println!(
-                    "Alloy browser engine v{} initialized.",
-                    env!("CARGO_PKG_VERSION")
-                );
+                return execute_script(script_path);
             }
+            if let Some(target) = &cli.target {
+                println!("Opening target: {target}");
+                return Ok(());
+            }
+            println!(
+                "Alloy browser engine v{} initialized.",
+                env!("CARGO_PKG_VERSION")
+            );
+            Ok(())
         }
     }
 }
 
-fn execute_render(file: &str, output: &str, width: u32, height: u32, css_path: Option<&str>) {
-    let html_content = match std::fs::read_to_string(file) {
-        Ok(src) => src,
-        Err(err) => {
-            eprintln!("Failed to read HTML file '{file}': {err}");
-            std::process::exit(1);
-        }
-    };
+fn execute_render(
+    file: &str,
+    output: &str,
+    width: u32,
+    height: u32,
+    css_path: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let html_content = std::fs::read_to_string(file)
+        .map_err(|err| format!("Failed to read HTML file '{file}': {err}"))?;
 
-    let dom = match parse_html(&html_content) {
-        Ok(tree) => tree,
-        Err(err) => {
-            eprintln!("Failed to parse HTML: {err}");
-            std::process::exit(1);
-        }
-    };
+    let dom = parse_html(&html_content).map_err(|err| format!("Failed to parse HTML: {err}"))?;
 
-    let stylesheet = if let Some(css_file) = css_path {
-        match std::fs::read_to_string(css_file) {
+    let stylesheet = match css_path {
+        Some(css_file) => match std::fs::read_to_string(css_file) {
             Ok(css_content) => parse_css(&css_content).unwrap_or_default(),
             Err(err) => {
                 eprintln!("Failed to read CSS file '{css_file}': {err}");
                 StyleSheet::default()
             }
-        }
-    } else {
-        extract_inline_style(&dom).unwrap_or_default()
+        },
+        None => extract_inline_style(&dom).unwrap_or_default(),
     };
 
     let styled_tree = StyleCascade::build_styled_tree(&dom, &stylesheet);
     let display_list = LayoutEngine::layout(&dom, &styled_tree, width as f32, height as f32);
 
     let mut backend = GraphicsBackendFactory::create_headless(width, height);
-    if let Err(err) = backend.render(&display_list) {
-        eprintln!("Graphics rendering failed: {err}");
-        std::process::exit(1);
-    }
+    backend
+        .render(&display_list)
+        .map_err(|err| format!("Graphics rendering failed: {err}"))?;
 
-    if let Err(err) = backend.save_png(Path::new(output)) {
-        eprintln!("Failed to save PNG image to '{output}': {err}");
-        std::process::exit(1);
-    }
+    backend
+        .save_png(Path::new(output))
+        .map_err(|err| format!("Failed to save PNG image to '{output}': {err}"))?;
 
     println!("Rendered '{file}' -> '{output}' ({width}x{height}) successfully.");
+    Ok(())
 }
 
 fn extract_inline_style(dom: &dom::DomTree) -> Option<StyleSheet> {
@@ -139,31 +132,19 @@ fn extract_inline_style(dom: &dom::DomTree) -> Option<StyleSheet> {
     parse_css(&css_text).ok()
 }
 
-fn execute_script(script_path: &str) {
-    let source = match std::fs::read_to_string(script_path) {
-        Ok(src) => src,
-        Err(err) => {
-            eprintln!("Failed to read script '{script_path}': {err}");
-            std::process::exit(1);
-        }
-    };
+fn execute_script(script_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let source = std::fs::read_to_string(script_path)
+        .map_err(|err| format!("Failed to read script '{script_path}': {err}"))?;
 
     let engine = RhaiEngine::new();
-    let mut context = match engine.create_context(CapabilitySet::all()) {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            eprintln!("Failed to create script context: {err}");
-            std::process::exit(1);
-        }
-    };
+    let mut context = engine
+        .create_context(CapabilitySet::all())
+        .map_err(|err| format!("Failed to create script context: {err}"))?;
 
-    match engine.eval::<EngineValue>(&mut context, &source) {
-        Ok(val) => {
-            println!("{val:?}");
-        }
-        Err(err) => {
-            eprintln!("Script execution failed: {err}");
-            std::process::exit(1);
-        }
-    }
+    let val = engine
+        .eval::<EngineValue>(&mut context, &source)
+        .map_err(|err| format!("Script execution failed: {err}"))?;
+
+    println!("{val:?}");
+    Ok(())
 }
