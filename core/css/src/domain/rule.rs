@@ -69,8 +69,20 @@ impl RuleSet {
         self.rules.is_empty()
     }
 
+    /// Constructs a rule set from a vector of rules.
+    #[must_use]
+    pub const fn from_vec(rules: Vec<Rule>) -> Self {
+        Self { rules }
+    }
+
     /// Iterates over the rules.
     pub fn iter(&self) -> impl Iterator<Item = &Rule> {
         self.rules.iter()
+    }
+}
+
+impl From<Vec<Rule>> for RuleSet {
+    fn from(rules: Vec<Rule>) -> Self {
+        Self::from_vec(rules)
     }
 }

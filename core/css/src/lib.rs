@@ -17,7 +17,7 @@ pub use domain::parser::{CssParser, parse_css};
 pub use domain::ports::ColorResolver;
 pub use domain::property::{Color, DisplayType, PropertyName, PropertyValue, Px};
 pub use domain::rule::{Rule, RuleSet};
-pub use domain::selector::Selector;
+pub use domain::selector::{AttributeMatcher, PseudoClass, Selector};
 pub use domain::specificity::Specificity;
 pub use domain::styled_node::{StyledNode, StyledTree};
 pub use domain::stylesheet::StyleSheet;

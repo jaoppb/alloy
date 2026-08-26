@@ -257,3 +257,56 @@ fn test_w3c_property_name_enum() {
     );
     assert_eq!(custom.as_str(), "--primary-brand-color");
 }
+
+#[test]
+fn test_selectors_level_3_combinators_attributes_and_pseudoclasses() {
+    let css = r#"
+        /* Child combinator */
+        ul > li { color: red; }
+        /* Adjacent sibling combinator */
+        h1 + p { color: green; }
+        /* General sibling combinator */
+        h1 ~ span { color: blue; }
+        /* Attribute selectors */
+        input[type="text"] { color: yellow; }
+        a[href^="https"] { color: purple; }
+        img[src$=".png"] { width: 100px; }
+        div[class*="box"] { display: block; }
+        /* Pseudo-classes */
+        li:first-child { font-weight: bold; }
+        div:empty { display: none; }
+        /* Compound selector */
+        p.intro#lead[data-highlight=true] { color: cyan; }
+    "#;
+
+    let sheet = parse_css(css).expect("CSS Level 3 parsing must succeed");
+    assert_eq!(sheet.rules().len(), 10);
+
+    // Verify Specificities
+    // ul > li: 2 tags -> (0, 0, 2)
+    let r1 = sheet.rules().iter().next().unwrap();
+    assert_eq!(r1.selectors()[0].specificity().as_tuple(), (0, 0, 2));
+
+    // p.intro#lead[data-highlight=true]: 1 id, 2 classes/attributes, 1 tag -> (1, 2, 1)
+    let last_rule = sheet.rules().iter().last().unwrap();
+    assert_eq!(last_rule.selectors()[0].specificity().as_tuple(), (1, 2, 1));
+
+    // Verify DOM Matching
+    let mut tree = DomTree::new();
+    let doc = tree.create_document();
+    let ul = tree.create_element(TagName::new("ul").unwrap(), AttributeMap::new());
+    let li1 = tree.create_element(TagName::new("li").unwrap(), AttributeMap::new());
+    let li2 = tree.create_element(TagName::new("li").unwrap(), AttributeMap::new());
+    tree.append_child(doc, ul).unwrap();
+    tree.append_child(ul, li1).unwrap();
+    tree.append_child(ul, li2).unwrap();
+
+    let child_sel = &r1.selectors()[0]; // ul > li
+    assert!(child_sel.matches(li1, &tree));
+    assert!(child_sel.matches(li2, &tree));
+    assert!(!child_sel.matches(ul, &tree));
+
+    let first_child_sel = &sheet.rules().iter().nth(7).unwrap().selectors()[0]; // li:first-child
+    assert!(first_child_sel.matches(li1, &tree));
+    assert!(!first_child_sel.matches(li2, &tree));
+}

@@ -17,7 +17,7 @@ pub use parser::{CssParser, parse_css};
 pub use ports::ColorResolver;
 pub use property::{Color, DisplayType, PropertyName, PropertyValue, Px};
 pub use rule::{Rule, RuleSet};
-pub use selector::Selector;
+pub use selector::{AttributeMatcher, PseudoClass, Selector};
 pub use specificity::Specificity;
 pub use styled_node::{StyledNode, StyledTree};
 pub use stylesheet::StyleSheet;
