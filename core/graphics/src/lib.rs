@@ -1,14 +1,20 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! # Core Graphics (`core/graphics`)
+//!
+//! 2D declarative graphics pipeline, display list commands, and multi-tier rasterization backends.
+//! Part of the aggregate rendering pipeline for Alloy (PRD-005, ADR-0009, ADR-0010).
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod application;
+pub mod domain;
+pub mod infrastructure;
+
+pub use application::cpu_backend::SoftwareCpuBackend;
+pub use application::factory::GraphicsBackendFactory;
+pub use application::layout::LayoutEngine;
+pub use domain::backend::RenderBackend;
+pub use domain::command::RenderCommand;
+pub use domain::display_list::DisplayList;
+pub use domain::error::GraphicsError;
+pub use domain::geometry::{Point, Rect, Size};
+pub use infrastructure::rhai_bridge::{ScriptDisplayListContainer, register_graphics_bindings};

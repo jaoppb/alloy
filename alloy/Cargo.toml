@@ -1,5 +1,5 @@
 [package]
-name = "graphics"
+name = "alloy"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,11 +8,10 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-dom = { workspace = true }
+clap = { workspace = true }
 engine = { workspace = true }
-css = { workspace = true }
-image = { workspace = true }
-
-[dev-dependencies]
 rhai-runtime = { workspace = true }
+graphics = { workspace = true }
 html = { workspace = true }
+css = { workspace = true }
+dom = { workspace = true }
