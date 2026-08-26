@@ -16,5 +16,5 @@ pub use domain::backend::RenderBackend;
 pub use domain::command::RenderCommand;
 pub use domain::display_list::DisplayList;
 pub use domain::error::GraphicsError;
-pub use domain::geometry::{Point, Rect, Size};
+pub use domain::geometry::{Point, Position, Rect, Size};
 pub use infrastructure::rhai_bridge::{ScriptDisplayListContainer, register_graphics_bindings};

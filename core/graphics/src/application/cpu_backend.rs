@@ -2,7 +2,7 @@ use crate::domain::backend::RenderBackend;
 use crate::domain::command::RenderCommand;
 use crate::domain::display_list::DisplayList;
 use crate::domain::error::GraphicsError;
-use crate::domain::geometry::Rect;
+use crate::domain::geometry::{Position, Rect};
 use css::Color;
 use std::path::Path;
 
@@ -25,12 +25,12 @@ impl SoftwareCpuBackend {
         }
     }
 
-    fn put_pixel(&mut self, x: u32, y: u32, color: Color) {
-        if x >= self.width || y >= self.height {
+    fn put_pixel(&mut self, pos: Position, color: Color) {
+        if pos.x() >= self.width || pos.y() >= self.height {
             return;
         }
 
-        let idx = ((y as usize) * (self.width as usize) + (x as usize)) * 4;
+        let idx = ((pos.y() as usize) * (self.width as usize) + (pos.x() as usize)) * 4;
         let alpha = color.a() as f32 / 255.0;
 
         if alpha >= 1.0 {
@@ -75,7 +75,7 @@ impl SoftwareCpuBackend {
 
         for y in y_start..y_end {
             for x in x_start..x_end {
-                self.put_pixel(x, y, color);
+                self.put_pixel(Position::new(x, y), color);
             }
         }
     }

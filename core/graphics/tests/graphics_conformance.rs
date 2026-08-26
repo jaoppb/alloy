@@ -3,8 +3,9 @@ use engine::{
     Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, RuntimeEngine,
 };
 use graphics::{
-    DisplayList, GraphicsBackendFactory, LayoutEngine, Rect, RenderBackend, RenderCommand,
-    ScriptDisplayListContainer, Size, SoftwareCpuBackend, register_graphics_bindings,
+    DisplayList, GraphicsBackendFactory, LayoutEngine, Point, Position, Rect, RenderBackend,
+    RenderCommand, ScriptDisplayListContainer, Size, SoftwareCpuBackend,
+    register_graphics_bindings,
 };
 use html::parse_html;
 use rhai_runtime::RhaiEngine;
@@ -196,4 +197,26 @@ fn test_size_invariants() {
     let valid = Size::new(100.0, 200.0).expect("Valid size");
     assert_eq!(valid.width(), 100.0);
     assert_eq!(valid.height(), 200.0);
+}
+
+#[test]
+fn test_geometry_value_objects() {
+    let pt = Point::new(10.0, 20.0);
+    assert_eq!(pt.x(), 10.0);
+    assert_eq!(pt.y(), 20.0);
+
+    let sz = Size::new(100.0, 50.0).unwrap();
+    let rect = Rect::from_origin_size(pt, sz);
+    assert_eq!(rect.origin(), pt);
+    assert_eq!(rect.size(), sz);
+    assert_eq!(rect.x(), 10.0);
+    assert_eq!(rect.y(), 20.0);
+    assert_eq!(rect.width(), 100.0);
+    assert_eq!(rect.height(), 50.0);
+    assert_eq!(rect.right(), 110.0);
+    assert_eq!(rect.bottom(), 70.0);
+
+    let pos = Position::new(5, 15);
+    assert_eq!(pos.x(), 5);
+    assert_eq!(pos.y(), 15);
 }
