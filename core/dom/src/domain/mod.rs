@@ -5,6 +5,7 @@ pub mod node;
 pub mod node_data;
 pub mod node_id;
 pub mod service;
+pub mod slot;
 pub mod tag_name;
 pub mod tree;
 
@@ -15,5 +16,6 @@ pub use node::DomNode;
 pub use node_data::NodeData;
 pub use node_id::NodeId;
 pub use service::DomService;
+pub use slot::Slot;
 pub use tag_name::TagName;
 pub use tree::DomTree;

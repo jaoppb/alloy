@@ -3,12 +3,14 @@ use crate::domain::error::DomError;
 use crate::domain::node::DomNode;
 use crate::domain::node_data::NodeData;
 use crate::domain::node_id::NodeId;
+use crate::domain::slot::Slot;
 use crate::domain::tag_name::TagName;
 
-/// Aggregate root managing DOM nodes within an indexed vector arena.
+/// Aggregate root managing DOM nodes within a generational slot arena (ADR-0010, ADR-0013, C-27).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DomTree {
-    nodes: Vec<Option<DomNode>>,
+    slots: Vec<Slot<DomNode>>,
+    free_head: Option<u32>,
     root: Option<NodeId>,
 }
 
@@ -17,7 +19,8 @@ impl DomTree {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            nodes: Vec::new(),
+            slots: Vec::new(),
+            free_head: None,
             root: None,
         }
     }
@@ -33,10 +36,7 @@ impl DomTree {
     /// # Errors
     /// Returns `DomError::NodeNotFound` if the node ID does not exist in the arena.
     pub fn set_root(&mut self, root: NodeId) -> Result<(), DomError> {
-        if self.get(root).is_none() {
-            return Err(DomError::NodeNotFound(root));
-        }
-
+        self.resolve_all(&[root])?;
         self.root = Some(root);
         Ok(())
     }
@@ -68,21 +68,46 @@ impl DomTree {
         self.allocate_node(NodeData::Comment(text.into()))
     }
 
-    /// Looks up an immutable reference to a node by its `NodeId`.
+    /// Looks up an immutable reference to a node by its generational `NodeId`.
     #[must_use]
     pub fn get(&self, id: NodeId) -> Option<&DomNode> {
-        self.nodes.get(id.as_usize())?.as_ref()
+        match self.slots.get(id.as_usize())? {
+            Slot::Occupied { data, generation } if *generation == id.generation() => Some(data),
+            _ => None,
+        }
     }
 
-    /// Looks up a mutable reference to a node by its `NodeId`.
+    /// Looks up a mutable reference to a node by its generational `NodeId`.
     pub fn get_mut(&mut self, id: NodeId) -> Option<&mut DomNode> {
-        self.nodes.get_mut(id.as_usize())?.as_mut()
+        match self.slots.get_mut(id.as_usize())? {
+            Slot::Occupied { data, generation } if *generation == id.generation() => Some(data),
+            _ => None,
+        }
     }
 
-    /// Returns the total number of nodes in the arena.
+    /// Validates that all node identifiers exist and match active generations (C-26).
+    ///
+    /// # Errors
+    /// Returns `DomError::NodeNotFound` on the first missing or stale identifier.
+    pub fn resolve_all(&self, ids: &[NodeId]) -> Result<(), DomError> {
+        for &id in ids {
+            if self.get(id).is_none() {
+                return Err(DomError::NodeNotFound(id));
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the total number of active nodes in the arena.
     #[must_use]
     pub fn node_count(&self) -> usize {
-        self.nodes.iter().flatten().count()
+        self.slots.iter().filter(|s| s.is_occupied()).count()
+    }
+
+    /// Accesses the underlying generational slots.
+    #[must_use]
+    pub fn slots(&self) -> &[Slot<DomNode>] {
+        &self.slots
     }
 
     /// Checks whether `node` is a descendant of `potential_ancestor`.
@@ -104,8 +129,7 @@ impl DomTree {
     /// - `DomError::NodeNotFound`: If `parent` or `child` does not exist.
     /// - `DomError::CycleDetected`: If appending would make an ancestor a child of its descendant.
     pub fn append_child(&mut self, parent: NodeId, child: NodeId) -> Result<(), DomError> {
-        self.validate_exists(parent)?;
-        self.validate_exists(child)?;
+        self.resolve_all(&[parent, child])?;
 
         if child == parent || self.is_descendant_of(parent, child) {
             return Err(DomError::CycleDetected {
@@ -138,9 +162,7 @@ impl DomTree {
         new_child: NodeId,
         reference_child: NodeId,
     ) -> Result<(), DomError> {
-        self.validate_exists(parent)?;
-        self.validate_exists(new_child)?;
-        self.validate_exists(reference_child)?;
+        self.resolve_all(&[parent, new_child, reference_child])?;
 
         let insert_idx = {
             let parent_node = self.get(parent).ok_or(DomError::NodeNotFound(parent))?;
@@ -179,8 +201,7 @@ impl DomTree {
     /// - `DomError::NodeNotFound`: If `parent` or `child` does not exist.
     /// - `DomError::InvalidHierarchy`: If `child` is not a direct child of `parent`.
     pub fn remove_child(&mut self, parent: NodeId, child: NodeId) -> Result<(), DomError> {
-        self.validate_exists(parent)?;
-        self.validate_exists(child)?;
+        self.resolve_all(&[parent, child])?;
 
         let was_removed = {
             let parent_node = self.get_mut(parent).ok_or(DomError::NodeNotFound(parent))?;
@@ -195,6 +216,32 @@ impl DomTree {
 
         if let Some(child_node) = self.get_mut(child) {
             child_node.set_parent(None);
+        }
+
+        Ok(())
+    }
+
+    /// Removes a node from the arena, recycling its slot with an incremented generation (ADR-0013, C-27).
+    ///
+    /// # Errors
+    /// - `DomError::NodeNotFound`: If `id` does not exist or has already been recycled.
+    pub fn remove_node(&mut self, id: NodeId) -> Result<(), DomError> {
+        self.resolve_all(&[id])?;
+        self.detach_from_parent(id);
+
+        if self.root == Some(id) {
+            self.root = None;
+        }
+
+        let idx = id.as_usize();
+        if let Some(Slot::Occupied { generation, .. }) = self.slots.get(idx) {
+            let next_gen = generation.wrapping_add(1);
+            let prev_free = self.free_head;
+            self.slots[idx] = Slot::Vacant {
+                next_free: prev_free,
+                generation: next_gen,
+            };
+            self.free_head = Some(id.index());
         }
 
         Ok(())
@@ -220,18 +267,35 @@ impl DomTree {
     }
 
     fn allocate_node(&mut self, data: NodeData) -> NodeId {
-        let index = self.nodes.len() as u32;
-        let id = NodeId::new(index);
-        let node = DomNode::new(id, data);
-        self.nodes.push(Some(node));
-        id
-    }
-
-    fn validate_exists(&self, id: NodeId) -> Result<(), DomError> {
-        if self.get(id).is_some() {
-            return Ok(());
+        if let Some(free_idx) = self.free_head {
+            let slot = &mut self.slots[free_idx as usize];
+            let slot_gen = match slot {
+                Slot::Vacant {
+                    next_free,
+                    generation,
+                } => {
+                    self.free_head = *next_free;
+                    *generation
+                }
+                Slot::Occupied { .. } => unreachable!("corrupt free list in DomTree"),
+            };
+            let id = NodeId::with_generation(free_idx, slot_gen);
+            let node = DomNode::new(id, data);
+            self.slots[free_idx as usize] = Slot::Occupied {
+                data: node,
+                generation: slot_gen,
+            };
+            id
+        } else {
+            let index = self.slots.len() as u32;
+            let id = NodeId::with_generation(index, 0);
+            let node = DomNode::new(id, data);
+            self.slots.push(Slot::Occupied {
+                data: node,
+                generation: 0,
+            });
+            id
         }
-        Err(DomError::NodeNotFound(id))
     }
 
     fn detach_from_parent(&mut self, child: NodeId) {

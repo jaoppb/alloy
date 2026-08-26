@@ -197,3 +197,46 @@ fn test_tag_name_default_display_and_serialization() {
 
     assert_eq!(tree.serialize_to_html(doc), "<p>hello</p>");
 }
+
+#[test]
+fn test_generational_arena_prevents_aba_stale_handles() {
+    let mut tree = DomTree::new();
+
+    // 1. Allocate node A at index 0, generation 0
+    let node_a = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    assert_eq!(node_a.index(), 0);
+    assert_eq!(node_a.generation(), 0);
+    assert!(tree.get(node_a).is_some());
+
+    // 2. Remove node A, recycling slot 0 with incremented generation 1
+    tree.remove_node(node_a).expect("Node A removal");
+    assert!(
+        tree.get(node_a).is_none(),
+        "Stale handle node_a must not resolve"
+    );
+
+    // 3. Allocate node B: recycles slot 0 with generation 1
+    let node_b = tree.create_element(TagName::new("span").unwrap(), AttributeMap::new());
+    assert_eq!(node_b.index(), 0);
+    assert_eq!(node_b.generation(), 1);
+
+    // 4. Stale handle node_a (index 0, gen 0) CANNOT access node B (index 0, gen 1) (ADR-0013, C-27)
+    assert!(tree.get(node_a).is_none());
+    assert!(tree.get(node_b).is_some());
+    assert_eq!(
+        tree.get(node_b)
+            .unwrap()
+            .data()
+            .as_element_tag()
+            .unwrap()
+            .as_str(),
+        "span"
+    );
+
+    // 5. Atomic resolve_all multi-node validation (C-26)
+    assert!(tree.resolve_all(&[node_b]).is_ok());
+    assert!(matches!(
+        tree.resolve_all(&[node_a, node_b]),
+        Err(DomError::NodeNotFound(id)) if id == node_a
+    ));
+}
