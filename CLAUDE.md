@@ -40,19 +40,19 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 
 ### Crate map
 
-| Path                | Package        | Responsibility                                                                                                            |
-| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `core/engine`       | `engine`       | `RuntimeEngine` / `ExecutionContext` traits, `EngineValue`, capability bitflags. **Zero dependencies — pure abstraction** |
-| `core/runtime/rhai` | `rhai-runtime` | Concrete Rhai backend implementing `engine`'s traits                                                                      |
-| `core/js`           | `js`           | Web-content ECMAScript runtime (untrusted page `<script>`) — distinct from the Rhai muscle engine                         |
-| `core/dom`          | `dom`          | Node hierarchy, elements, mutations                                                                                       |
-| `core/html`         | `html`         | HTML5 tokenization & tree construction                                                                                    |
-| `core/css`          | `css`          | Parser, rule sets, cascade                                                                                                |
-| `core/graphics`     | `graphics`     | `DisplayList`, Vulkan/OpenGL/software renderers                                                                           |
-| `core/window`       | `window`       | Window creation, event loop, surface binding                                                                              |
-| `core/network`      | `network`      | Sockets, DNS, HTTP/1.1 & HTTP/2, cache                                                                                    |
-| `devtools`          | `devtools`     | Debug protocol, inspector, hot-reload orchestration                                                                       |
-| `extension`         | `extension`    | WebExtensions bridge                                                                                                      |
+| Path                | Package        | Responsibility                                                                                                                                                                       |
+| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `core/engine`       | `engine`       | `RuntimeEngine` / `ExecutionContext` traits, `EngineValue`, capability bitflags. Pure type/macro deps (`thiserror`, `bitflags`), I/O watchers strictly isolated in `infrastructure/` |
+| `core/runtime/rhai` | `rhai-runtime` | Concrete Rhai backend implementing `engine`'s traits                                                                                                                                 |
+| `core/js`           | `js`           | Web-content ECMAScript runtime (untrusted page `<script>`) — distinct from the Rhai muscle engine                                                                                    |
+| `core/dom`          | `dom`          | Node hierarchy, elements, mutations                                                                                                                                                  |
+| `core/html`         | `html`         | HTML5 tokenization & tree construction                                                                                                                                               |
+| `core/css`          | `css`          | Parser, rule sets, cascade                                                                                                                                                           |
+| `core/graphics`     | `graphics`     | `DisplayList`, Vulkan/OpenGL/software renderers                                                                                                                                      |
+| `core/window`       | `window`       | Window creation, event loop, surface binding                                                                                                                                         |
+| `core/network`      | `network`      | Sockets, DNS, HTTP/1.1 & HTTP/2, cache                                                                                                                                               |
+| `devtools`          | `devtools`     | Debug protocol, inspector, hot-reload orchestration                                                                                                                                  |
+| `extension`         | `extension`    | WebExtensions bridge                                                                                                                                                                 |
 
 Package names are bare (no `alloy-` prefix), so deps read `dom = { path = "../dom" }` (`core/runtime/rhai` needs
 `../../engine`). Workspace members are listed **explicitly** in the root `Cargo.toml` plus a `core/runtime/*` glob — a

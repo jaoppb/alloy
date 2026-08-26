@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 dom = { workspace = true }
 engine = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 html = { workspace = true }

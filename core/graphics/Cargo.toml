@@ -12,6 +12,7 @@ dom = { workspace = true }
 engine = { workspace = true }
 css = { workspace = true }
 image = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 rhai-runtime = { workspace = true }

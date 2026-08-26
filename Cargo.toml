@@ -29,6 +29,7 @@ bitflags = "2.8"
 rhai = { version = "1.26.0", features = ["sync"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 notify = "8.0"
+thiserror = "2.0"
 
 # Internal workspace crates
 alloy = { path = "alloy" }

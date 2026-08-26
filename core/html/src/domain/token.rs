@@ -1,5 +1,5 @@
 use dom::{AttributeMap, DomError, TagName};
-use std::fmt;
+use thiserror::Error;
 
 /// Tokens emitted by the HTML tokenizer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,33 +26,18 @@ pub enum HtmlToken {
 }
 
 /// Errors occurring during HTML tokenization and tree construction.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum HtmlError {
     /// Stream ended prematurely while parsing a token.
+    #[error("Unexpected end of file in HTML stream")]
     UnexpectedEof,
     /// Malformed tag structure (e.g. invalid tag name or missing closing bracket).
+    #[error("Malformed HTML tag: {0}")]
     MalformedTag(String),
     /// Invalid tag name.
+    #[error("Invalid HTML tag name: {0}")]
     InvalidTagName(String),
     /// Underlying error from DOM arena mutations.
-    DomError(DomError),
-}
-
-impl fmt::Display for HtmlError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnexpectedEof => write!(f, "Unexpected end of file in HTML stream"),
-            Self::MalformedTag(msg) => write!(f, "Malformed HTML tag: {msg}"),
-            Self::InvalidTagName(msg) => write!(f, "Invalid HTML tag name: {msg}"),
-            Self::DomError(err) => write!(f, "DOM tree error during HTML parsing: {err}"),
-        }
-    }
-}
-
-impl std::error::Error for HtmlError {}
-
-impl From<DomError> for HtmlError {
-    fn from(err: DomError) -> Self {
-        Self::DomError(err)
-    }
+    #[error("DOM tree error during HTML parsing: {0}")]
+    DomError(#[from] DomError),
 }

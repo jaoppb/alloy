@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 engine = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 rhai-runtime = { workspace = true }

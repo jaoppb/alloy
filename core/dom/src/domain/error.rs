@@ -1,12 +1,14 @@
 use crate::domain::node_id::NodeId;
-use std::fmt;
+use thiserror::Error;
 
 /// Domain errors representing failures in DOM tree manipulation or validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DomError {
     /// Node was not found in the DOM arena.
+    #[error("Node not found in DOM arena: {0}")]
     NodeNotFound(NodeId),
     /// Appending or inserting would cause a cycle in the tree hierarchy.
+    #[error("Cycle detected: cannot attach node {node} under descendant {parent}")]
     CycleDetected {
         /// The node being attached.
         node: NodeId,
@@ -14,25 +16,9 @@ pub enum DomError {
         parent: NodeId,
     },
     /// Invalid tree hierarchy operation (e.g. attempting to make document child of an element).
+    #[error("Invalid DOM hierarchy: {0}")]
     InvalidHierarchy(String),
     /// Invalid tag name provided for an element node.
+    #[error("Invalid DOM element tag name: '{0}'")]
     InvalidTagName(String),
 }
-
-impl fmt::Display for DomError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NodeNotFound(id) => write!(f, "Node not found in DOM arena: {id}"),
-            Self::CycleDetected { node, parent } => {
-                write!(
-                    f,
-                    "Cycle detected: cannot attach node {node} under descendant {parent}"
-                )
-            }
-            Self::InvalidHierarchy(msg) => write!(f, "Invalid DOM hierarchy: {msg}"),
-            Self::InvalidTagName(tag) => write!(f, "Invalid DOM element tag name: '{tag}'"),
-        }
-    }
-}
-
-impl std::error::Error for DomError {}

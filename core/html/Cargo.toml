@@ -10,3 +10,4 @@ repository.workspace = true
 [dependencies]
 dom = { workspace = true }
 engine = { workspace = true }
+thiserror = { workspace = true }
