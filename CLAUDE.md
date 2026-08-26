@@ -25,9 +25,9 @@ pnpm format:rust                             # cargo fmt --all
 pnpm format:md / pnpm lint:md                # prettier --write / markdownlint-cli2
 ```
 
-Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt` + clippy and prettier +
-markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
-Clippy warnings are errors — never leave one behind.
+Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt` + clippy and prettier + markdownlint
+(auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`. Clippy
+warnings are errors — never leave one behind.
 
 Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
 Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.
@@ -35,8 +35,8 @@ Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrit
 ## Architecture
 
 **Skeleton and Muscle** (ADR-0003): Rust owns all data structures, memory, and OS I/O (the Skeleton). Scripts own
-behavior — event routing, policy, pipeline composition (the Muscle). When adding a feature, decide which side it
-belongs to; hardcoding user-facing policy into Rust violates the core pattern.
+behavior — event routing, policy, pipeline composition (the Muscle). When adding a feature, decide which side it belongs
+to; hardcoding user-facing policy into Rust violates the core pattern.
 
 ### Crate map
 
