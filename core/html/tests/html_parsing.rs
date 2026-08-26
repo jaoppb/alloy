@@ -156,3 +156,32 @@ fn test_parse_case_insensitivity() {
     let ps = DomService::find_by_tag_name(&tree, root, &TagName::new("p").unwrap());
     assert_eq!(ps.len(), 1, "Tag P must normalize to p");
 }
+
+#[test]
+fn test_html_entity_enum_and_extended_decoding() {
+    use html::HtmlEntity;
+
+    assert_eq!(HtmlEntity::parse("amp"), Some(HtmlEntity::Amp));
+    assert_eq!(HtmlEntity::Amp.as_char(), '&');
+    assert_eq!(HtmlEntity::parse("copy"), Some(HtmlEntity::Copy));
+    assert_eq!(HtmlEntity::Copy.as_char(), '©');
+    assert_eq!(HtmlEntity::parse("euro"), Some(HtmlEntity::Euro));
+    assert_eq!(HtmlEntity::Euro.as_char(), '€');
+
+    // Test decoding through decode_html_entities
+    assert_eq!(
+        html::decode_html_entities("&copy; 2026 &euro; 100"),
+        "© 2026 € 100"
+    );
+    assert_eq!(html::decode_html_entities("&#160;"), "\u{00A0}");
+}
+
+#[test]
+fn test_is_void_element_delegation_to_tag_name() {
+    assert!(html::is_void_element("img"));
+    assert!(html::is_void_element("br"));
+    assert!(html::is_void_element("input"));
+    assert!(!html::is_void_element("div"));
+    assert!(!html::is_void_element("p"));
+    assert!(!html::is_void_element("custom-widget"));
+}

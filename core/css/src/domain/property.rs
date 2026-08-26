@@ -91,21 +91,166 @@ impl Color {
     }
 }
 
-/// Normalized CSS property name (e.g. `color`, `background-color`, `font-size`).
+/// Normalized CSS property name mapped to W3C CSS3 properties with extensible custom property fallback (C-17).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PropertyName(String);
+pub enum PropertyName {
+    // Colors & Backgrounds
+    Color,
+    BackgroundColor,
+
+    // Box Model & Display
+    Display,
+    Width,
+    Height,
+    MinWidth,
+    MaxWidth,
+    MinHeight,
+    MaxHeight,
+    Margin,
+    MarginTop,
+    MarginRight,
+    MarginBottom,
+    MarginLeft,
+    Padding,
+    PaddingTop,
+    PaddingRight,
+    PaddingBottom,
+    PaddingLeft,
+    Border,
+    BorderWidth,
+    BorderColor,
+    BorderStyle,
+    BoxSizing,
+
+    // Typography
+    FontSize,
+    FontFamily,
+    FontWeight,
+    FontStyle,
+    LineHeight,
+    TextAlign,
+    TextDecoration,
+
+    // Positioning & Layout
+    Position,
+    Top,
+    Right,
+    Bottom,
+    Left,
+    ZIndex,
+    Overflow,
+    Opacity,
+    Visibility,
+
+    // Extensible custom / vendor properties (e.g. `--theme-color`, `-webkit-...`)
+    Custom(String),
+}
 
 impl PropertyName {
     /// Creates a new `PropertyName`, normalized to lowercase.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into().trim().to_ascii_lowercase())
+        let raw = name.into();
+        let trimmed = raw.trim();
+        let lower = trimmed.to_ascii_lowercase();
+
+        match lower.as_str() {
+            "color" => Self::Color,
+            "background-color" => Self::BackgroundColor,
+            "display" => Self::Display,
+            "width" => Self::Width,
+            "height" => Self::Height,
+            "min-width" => Self::MinWidth,
+            "max-width" => Self::MaxWidth,
+            "min-height" => Self::MinHeight,
+            "max-height" => Self::MaxHeight,
+            "margin" => Self::Margin,
+            "margin-top" => Self::MarginTop,
+            "margin-right" => Self::MarginRight,
+            "margin-bottom" => Self::MarginBottom,
+            "margin-left" => Self::MarginLeft,
+            "padding" => Self::Padding,
+            "padding-top" => Self::PaddingTop,
+            "padding-right" => Self::PaddingRight,
+            "padding-bottom" => Self::PaddingBottom,
+            "padding-left" => Self::PaddingLeft,
+            "border" => Self::Border,
+            "border-width" => Self::BorderWidth,
+            "border-color" => Self::BorderColor,
+            "border-style" => Self::BorderStyle,
+            "box-sizing" => Self::BoxSizing,
+            "font-size" => Self::FontSize,
+            "font-family" => Self::FontFamily,
+            "font-weight" => Self::FontWeight,
+            "font-style" => Self::FontStyle,
+            "line-height" => Self::LineHeight,
+            "text-align" => Self::TextAlign,
+            "text-decoration" => Self::TextDecoration,
+            "position" => Self::Position,
+            "top" => Self::Top,
+            "right" => Self::Right,
+            "bottom" => Self::Bottom,
+            "left" => Self::Left,
+            "z-index" => Self::ZIndex,
+            "overflow" => Self::Overflow,
+            "opacity" => Self::Opacity,
+            "visibility" => Self::Visibility,
+            _ => Self::Custom(lower),
+        }
     }
 
     /// Accesses the name slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        match self {
+            Self::Color => "color",
+            Self::BackgroundColor => "background-color",
+            Self::Display => "display",
+            Self::Width => "width",
+            Self::Height => "height",
+            Self::MinWidth => "min-width",
+            Self::MaxWidth => "max-width",
+            Self::MinHeight => "min-height",
+            Self::MaxHeight => "max-height",
+            Self::Margin => "margin",
+            Self::MarginTop => "margin-top",
+            Self::MarginRight => "margin-right",
+            Self::MarginBottom => "margin-bottom",
+            Self::MarginLeft => "margin-left",
+            Self::Padding => "padding",
+            Self::PaddingTop => "padding-top",
+            Self::PaddingRight => "padding-right",
+            Self::PaddingBottom => "padding-bottom",
+            Self::PaddingLeft => "padding-left",
+            Self::Border => "border",
+            Self::BorderWidth => "border-width",
+            Self::BorderColor => "border-color",
+            Self::BorderStyle => "border-style",
+            Self::BoxSizing => "box-sizing",
+            Self::FontSize => "font-size",
+            Self::FontFamily => "font-family",
+            Self::FontWeight => "font-weight",
+            Self::FontStyle => "font-style",
+            Self::LineHeight => "line-height",
+            Self::TextAlign => "text-align",
+            Self::TextDecoration => "text-decoration",
+            Self::Position => "position",
+            Self::Top => "top",
+            Self::Right => "right",
+            Self::Bottom => "bottom",
+            Self::Left => "left",
+            Self::ZIndex => "z-index",
+            Self::Overflow => "overflow",
+            Self::Opacity => "opacity",
+            Self::Visibility => "visibility",
+            Self::Custom(s) => s.as_str(),
+        }
+    }
+}
+
+impl std::fmt::Display for PropertyName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

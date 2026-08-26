@@ -51,7 +51,7 @@ impl TreeBuilder {
                 attributes,
                 self_closing,
             } => {
-                let is_void = is_void_element(name.as_str()) || self_closing;
+                let is_void = name.is_void() || self_closing;
                 let el_id = self.tree.create_element(name, attributes);
                 self.attach_to_current(el_id)?;
 
@@ -107,24 +107,8 @@ impl TreeBuilder {
     }
 }
 
-/// Checks if a tag is an HTML5 void element that does not require closing tags.
+/// Checks if a tag is an HTML5 void element that does not require closing tags (C-37).
 #[must_use]
 pub fn is_void_element(tag: &str) -> bool {
-    matches!(
-        tag,
-        "area"
-            | "base"
-            | "br"
-            | "col"
-            | "embed"
-            | "hr"
-            | "img"
-            | "input"
-            | "link"
-            | "meta"
-            | "param"
-            | "source"
-            | "track"
-            | "wbr"
-    )
+    dom::TagName::new(tag).is_ok_and(|t| t.is_void())
 }

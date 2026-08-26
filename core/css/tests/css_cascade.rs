@@ -239,3 +239,21 @@ fn test_color_resolver_adapter_and_rebeccapurple() {
         Some(Color::rgba(240, 248, 255, 255))
     );
 }
+
+#[test]
+fn test_w3c_property_name_enum() {
+    let color = PropertyName::new("color");
+    assert_eq!(color, PropertyName::Color);
+    assert_eq!(color.as_str(), "color");
+
+    let bg = PropertyName::new("BACKGROUND-COLOR");
+    assert_eq!(bg, PropertyName::BackgroundColor);
+    assert_eq!(bg.as_str(), "background-color");
+
+    let custom = PropertyName::new("--primary-brand-color");
+    assert_eq!(
+        custom,
+        PropertyName::Custom("--primary-brand-color".to_string())
+    );
+    assert_eq!(custom.as_str(), "--primary-brand-color");
+}

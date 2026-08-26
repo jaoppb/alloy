@@ -9,7 +9,7 @@ pub mod application;
 pub mod domain;
 
 pub use application::parser::{HtmlParser, parse_html};
-pub use domain::entities::decode_html_entities;
+pub use domain::entities::{HtmlEntity, decode_html_entities};
 pub use domain::token::{HtmlError, HtmlToken};
 pub use domain::tokenizer::HtmlTokenizer;
 pub use domain::tree_builder::{TreeBuilder, is_void_element};

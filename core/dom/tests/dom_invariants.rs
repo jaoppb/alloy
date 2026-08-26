@@ -199,6 +199,38 @@ fn test_tag_name_default_display_and_serialization() {
 }
 
 #[test]
+fn test_w3c_tag_name_and_attribute_name_enums() {
+    // 1. TagName W3C variants, voidness, and custom elements
+    let div = TagName::new("div").unwrap();
+    assert_eq!(div, TagName::Div);
+    assert!(!div.is_void());
+
+    let img = TagName::new("IMG").unwrap();
+    assert_eq!(img, TagName::Img);
+    assert!(img.is_void());
+
+    let custom = TagName::new("my-custom-component").unwrap();
+    assert_eq!(custom, TagName::Custom("my-custom-component".to_string()));
+    assert_eq!(custom.as_str(), "my-custom-component");
+    assert_eq!(custom.to_string(), "my-custom-component");
+
+    // 2. AttributeName standard, data-*, aria-*, and custom
+    let class_attr = AttributeName::new("class");
+    assert_eq!(class_attr, AttributeName::Class);
+    assert_eq!(class_attr.as_str(), "class");
+
+    let data_attr = AttributeName::new("DATA-USER-ID");
+    assert_eq!(data_attr, AttributeName::Data("data-user-id".to_string()));
+    assert_eq!(data_attr.as_str(), "data-user-id");
+
+    let aria_attr = AttributeName::new("aria-hidden");
+    assert_eq!(aria_attr, AttributeName::Aria("aria-hidden".to_string()));
+
+    let custom_attr = AttributeName::new("x-bind");
+    assert_eq!(custom_attr, AttributeName::Custom("x-bind".to_string()));
+}
+
+#[test]
 fn test_generational_arena_prevents_aba_stale_handles() {
     let mut tree = DomTree::new();
 

@@ -1,27 +1,128 @@
 use std::collections::HashMap;
 use std::fmt;
 
-/// Strongly typed attribute name (e.g. `class`, `id`, `href`).
+/// Strongly typed HTML/XML attribute name mapped to standard W3C attributes with open families for `data-*`, `aria-*`, and custom attributes (C-22).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AttributeName(String);
+pub enum AttributeName {
+    // Global attributes
+    Id,
+    Class,
+    Style,
+    Title,
+    Lang,
+    Dir,
+    Tabindex,
+    Hidden,
+
+    // Links & Resources
+    Href,
+    Src,
+    Alt,
+    Width,
+    Height,
+
+    // Forms
+    Type,
+    Value,
+    Name,
+    Placeholder,
+    Checked,
+    Disabled,
+    Selected,
+    Readonly,
+    Required,
+    Action,
+    Method,
+
+    // Metadata & Links
+    Rel,
+    Target,
+
+    // Extensible open families (C-22)
+    Data(String),
+    Aria(String),
+    Custom(String),
+}
 
 impl AttributeName {
-    /// Creates a new `AttributeName`.
+    /// Creates and normalizes a new `AttributeName`.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into().trim().to_ascii_lowercase())
+        let raw = name.into();
+        let trimmed = raw.trim();
+        let lower = trimmed.to_ascii_lowercase();
+
+        match lower.as_str() {
+            "id" => Self::Id,
+            "class" => Self::Class,
+            "style" => Self::Style,
+            "title" => Self::Title,
+            "lang" => Self::Lang,
+            "dir" => Self::Dir,
+            "tabindex" => Self::Tabindex,
+            "hidden" => Self::Hidden,
+            "href" => Self::Href,
+            "src" => Self::Src,
+            "alt" => Self::Alt,
+            "width" => Self::Width,
+            "height" => Self::Height,
+            "type" => Self::Type,
+            "value" => Self::Value,
+            "name" => Self::Name,
+            "placeholder" => Self::Placeholder,
+            "checked" => Self::Checked,
+            "disabled" => Self::Disabled,
+            "selected" => Self::Selected,
+            "readonly" => Self::Readonly,
+            "required" => Self::Required,
+            "action" => Self::Action,
+            "method" => Self::Method,
+            "rel" => Self::Rel,
+            "target" => Self::Target,
+            _ if lower.starts_with("data-") => Self::Data(lower),
+            _ if lower.starts_with("aria-") => Self::Aria(lower),
+            _ => Self::Custom(lower),
+        }
     }
 
-    /// Accesses the name as a string slice.
+    /// Accesses the attribute name as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        match self {
+            Self::Id => "id",
+            Self::Class => "class",
+            Self::Style => "style",
+            Self::Title => "title",
+            Self::Lang => "lang",
+            Self::Dir => "dir",
+            Self::Tabindex => "tabindex",
+            Self::Hidden => "hidden",
+            Self::Href => "href",
+            Self::Src => "src",
+            Self::Alt => "alt",
+            Self::Width => "width",
+            Self::Height => "height",
+            Self::Type => "type",
+            Self::Value => "value",
+            Self::Name => "name",
+            Self::Placeholder => "placeholder",
+            Self::Checked => "checked",
+            Self::Disabled => "disabled",
+            Self::Selected => "selected",
+            Self::Readonly => "readonly",
+            Self::Required => "required",
+            Self::Action => "action",
+            Self::Method => "method",
+            Self::Rel => "rel",
+            Self::Target => "target",
+            Self::Data(s) | Self::Aria(s) | Self::Custom(s) => s.as_str(),
+        }
     }
 }
 
 impl fmt::Display for AttributeName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.as_str())
     }
 }
 
