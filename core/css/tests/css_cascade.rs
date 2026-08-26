@@ -1,4 +1,7 @@
-use css::{Color, DisplayType, PropertyName, Px, Selector, Specificity, StyleCascade, parse_css};
+use css::{
+    Color, CssError, DeclarationList, DisplayType, PropertyName, Px, Rule, Selector, Specificity,
+    StyleCascade, parse_css,
+};
 use dom::{AttributeMap, AttributeName, AttributeValue, DomTree, TagName};
 use html::parse_html;
 
@@ -22,17 +25,17 @@ fn test_parse_stylesheet_rules_and_declarations() {
 
     let mut rules_iter = stylesheet.rules().iter();
     let body_rule = rules_iter.next().unwrap();
-    assert_eq!(body_rule.selectors.len(), 1);
+    assert_eq!(body_rule.selectors().len(), 1);
     assert_eq!(
-        body_rule.declarations.get(&PropertyName::new("color")),
+        body_rule.declarations().get(&PropertyName::new("color")),
         Some(&css::PropertyValue::Color(Color::BLACK))
     );
 
     let heading_rule = rules_iter.next().unwrap();
-    assert_eq!(heading_rule.selectors.len(), 2);
+    assert_eq!(heading_rule.selectors().len(), 2);
     assert_eq!(
         heading_rule
-            .declarations
+            .declarations()
             .get(&PropertyName::new("font-size")),
         Some(&css::PropertyValue::Length(Px::new(24.0)))
     );
@@ -137,7 +140,7 @@ fn test_cascade_specificity_override() {
     // Root is document; first child is <div>
     let div_styled = root.children().first().expect("Div styled node");
     assert_eq!(
-        div_styled.style().color,
+        div_styled.style().color(),
         Color::RED,
         "ID rule with highest specificity must override class and tag rules"
     );
@@ -161,18 +164,18 @@ fn test_style_inheritance_and_styled_tree() {
     let root = styled_tree.root().expect("Root node");
 
     let parent_node = root.children().first().expect("Parent div");
-    assert_eq!(parent_node.style().color, Color::BLUE);
-    assert_eq!(parent_node.style().font_size, Px::new(28.0));
-    assert_eq!(parent_node.style().display, DisplayType::Block);
+    assert_eq!(parent_node.style().color(), Color::BLUE);
+    assert_eq!(parent_node.style().font_size(), Px::new(28.0));
+    assert_eq!(parent_node.style().display(), DisplayType::Block);
 
     let child_node = parent_node.children().first().expect("Child p");
     assert_eq!(
-        child_node.style().color,
+        child_node.style().color(),
         Color::BLUE,
         "Child <p> must inherit color from parent"
     );
     assert_eq!(
-        child_node.style().font_size,
+        child_node.style().font_size(),
         Px::new(28.0),
         "Child <p> must inherit font-size from parent"
     );
@@ -198,8 +201,18 @@ fn test_cascade_source_order_precedence_on_tie() {
     let div_node = root.children().first().expect("Div node");
 
     assert_eq!(
-        div_node.style().color,
+        div_node.style().color(),
         Color::BLUE,
         "When specificity is tied, the last rule in source order must win"
     );
+}
+
+#[test]
+fn test_rule_invariants() {
+    let empty_selectors: Vec<Selector> = Vec::new();
+    let result = Rule::new(empty_selectors, DeclarationList::new());
+    assert!(matches!(result, Err(CssError::InvalidSelector(_))));
+
+    let valid_rule = Rule::new(vec![Selector::Universal], DeclarationList::new());
+    assert!(valid_rule.is_ok());
 }

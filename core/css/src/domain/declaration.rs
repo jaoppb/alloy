@@ -3,8 +3,8 @@ use crate::domain::property::{PropertyName, PropertyValue};
 /// A single CSS declaration mapping a property name to a property value.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Declaration {
-    pub name: PropertyName,
-    pub value: PropertyValue,
+    name: PropertyName,
+    value: PropertyValue,
 }
 
 impl Declaration {
@@ -12,6 +12,18 @@ impl Declaration {
     #[must_use]
     pub const fn new(name: PropertyName, value: PropertyValue) -> Self {
         Self { name, value }
+    }
+
+    /// Accesses the property name.
+    #[must_use]
+    pub const fn name(&self) -> &PropertyName {
+        &self.name
+    }
+
+    /// Accesses the property value.
+    #[must_use]
+    pub const fn value(&self) -> &PropertyValue {
+        &self.value
     }
 }
 

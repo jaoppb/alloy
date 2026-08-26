@@ -42,15 +42,15 @@ impl StyleCascade {
                 || tag_name.as_str() == "b"
                 || tag_name.as_str() == "i"
             {
-                computed.display = DisplayType::Inline;
+                computed.set_display(DisplayType::Inline);
             }
 
             let mut matched_decls: Vec<(Specificity, usize, Declaration)> = Vec::new();
             for (rule_idx, rule) in stylesheet.rules().iter().enumerate() {
-                for selector in &rule.selectors {
+                for selector in rule.selectors() {
                     if selector.matches(node_id, tree) {
                         let spec = selector.specificity();
-                        for decl in rule.declarations.iter() {
+                        for decl in rule.declarations().iter() {
                             matched_decls.push((spec, rule_idx, decl.clone()));
                         }
                     }
@@ -79,98 +79,99 @@ impl StyleCascade {
 }
 
 fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
-    let name = decl.name.as_str();
+    let name = decl.name().as_str();
 
     match name {
         "display" => {
-            if let PropertyValue::Keyword(ref kw) = decl.value {
-                style.display = match kw.as_str() {
+            if let PropertyValue::Keyword(kw) = decl.value() {
+                let disp = match kw.as_str() {
                     "inline" => DisplayType::Inline,
                     "none" => DisplayType::None,
                     "flex" => DisplayType::Flex,
                     _ => DisplayType::Block,
                 };
+                style.set_display(disp);
             }
         }
         "color" => {
-            if let PropertyValue::Color(c) = decl.value {
-                style.color = c;
+            if let PropertyValue::Color(c) = decl.value() {
+                style.set_color(*c);
             }
         }
         "background-color" | "background" => {
-            if let PropertyValue::Color(c) = decl.value {
-                style.background_color = c;
+            if let PropertyValue::Color(c) = decl.value() {
+                style.set_background_color(*c);
             }
         }
         "font-size" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.font_size = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_font_size(*px);
             }
         }
         "width" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.width = Some(px);
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_width(Some(*px));
             }
         }
         "height" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.height = Some(px);
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_height(Some(*px));
             }
         }
         "margin" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.margin_top = px;
-                style.margin_right = px;
-                style.margin_bottom = px;
-                style.margin_left = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_margin_top(*px);
+                style.set_margin_right(*px);
+                style.set_margin_bottom(*px);
+                style.set_margin_left(*px);
             }
         }
         "margin-top" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.margin_top = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_margin_top(*px);
             }
         }
         "margin-right" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.margin_right = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_margin_right(*px);
             }
         }
         "margin-bottom" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.margin_bottom = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_margin_bottom(*px);
             }
         }
         "margin-left" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.margin_left = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_margin_left(*px);
             }
         }
         "padding" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.padding_top = px;
-                style.padding_right = px;
-                style.padding_bottom = px;
-                style.padding_left = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_padding_top(*px);
+                style.set_padding_right(*px);
+                style.set_padding_bottom(*px);
+                style.set_padding_left(*px);
             }
         }
         "padding-top" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.padding_top = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_padding_top(*px);
             }
         }
         "padding-right" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.padding_right = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_padding_right(*px);
             }
         }
         "padding-bottom" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.padding_bottom = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_padding_bottom(*px);
             }
         }
         "padding-left" => {
-            if let PropertyValue::Length(px) = decl.value {
-                style.padding_left = px;
+            if let PropertyValue::Length(px) = decl.value() {
+                style.set_padding_left(*px);
             }
         }
         _ => {}

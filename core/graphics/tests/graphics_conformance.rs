@@ -4,7 +4,7 @@ use engine::{
 };
 use graphics::{
     DisplayList, GraphicsBackendFactory, LayoutEngine, Rect, RenderBackend, RenderCommand,
-    ScriptDisplayListContainer, SoftwareCpuBackend, register_graphics_bindings,
+    ScriptDisplayListContainer, Size, SoftwareCpuBackend, register_graphics_bindings,
 };
 use html::parse_html;
 use rhai_runtime::RhaiEngine;
@@ -183,4 +183,17 @@ fn test_out_of_bounds_clipping_safety() {
 
     let pixels = backend.to_rgba_bytes().unwrap();
     assert_eq!(pixels.len(), 100 * 100 * 4);
+}
+
+#[test]
+fn test_size_invariants() {
+    assert!(Size::new(-1.0, 0.0).is_err());
+    assert!(Size::new(0.0, -1.0).is_err());
+    assert!(Size::new(f32::NAN, 0.0).is_err());
+    assert!(Size::new(0.0, f32::NAN).is_err());
+    assert!(Size::new(f32::INFINITY, 0.0).is_err());
+
+    let valid = Size::new(100.0, 200.0).expect("Valid size");
+    assert_eq!(valid.width(), 100.0);
+    assert_eq!(valid.height(), 200.0);
 }

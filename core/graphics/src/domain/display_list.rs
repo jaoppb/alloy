@@ -59,10 +59,10 @@ impl DisplayList {
                 RenderCommand::DrawRect { rect, color } => {
                     out.push_str(&format!(
                         r#"{{"type":"draw_rect","x":{},"y":{},"w":{},"h":{},"color":"rgba({},{},{},{})"}}"#,
-                        rect.x,
-                        rect.y,
-                        rect.width,
-                        rect.height,
+                        rect.x(),
+                        rect.y(),
+                        rect.width(),
+                        rect.height(),
                         color.r(),
                         color.g(),
                         color.b(),
@@ -72,10 +72,10 @@ impl DisplayList {
                 RenderCommand::DrawBorder { rect, color, width } => {
                     out.push_str(&format!(
                         r#"{{"type":"draw_border","x":{},"y":{},"w":{},"h":{},"width":{},"color":"rgba({},{},{},{})"}}"#,
-                        rect.x,
-                        rect.y,
-                        rect.width,
-                        rect.height,
+                        rect.x(),
+                        rect.y(),
+                        rect.width(),
+                        rect.height(),
                         width,
                         color.r(),
                         color.g(),
@@ -92,8 +92,8 @@ impl DisplayList {
                     out.push_str(&format!(
                         r#"{{"type":"draw_text","text":"{}","x":{},"y":{},"font_size":{},"color":"rgba({},{},{},{})"}}"#,
                         text.replace('"', "\\\""),
-                        rect.x,
-                        rect.y,
+                        rect.x(),
+                        rect.y(),
                         font_size,
                         color.r(),
                         color.g(),

@@ -53,6 +53,26 @@ pub enum HotReloadStatus {
 /// Notification event emitted when a watched script file is updated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReloadEvent {
-    pub path: PathBuf,
-    pub timestamp: Instant,
+    path: PathBuf,
+    timestamp: Instant,
+}
+
+impl ReloadEvent {
+    /// Creates a new `ReloadEvent`.
+    #[must_use]
+    pub fn new(path: PathBuf, timestamp: Instant) -> Self {
+        Self { path, timestamp }
+    }
+
+    /// Accesses the watched file path.
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// Accesses the event timestamp.
+    #[must_use]
+    pub const fn timestamp(&self) -> Instant {
+        self.timestamp
+    }
 }

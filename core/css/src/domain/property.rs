@@ -2,7 +2,7 @@ use std::fmt;
 
 /// Strongly typed pixel length value object (ADR-0010).
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
-pub struct Px(pub f32);
+pub struct Px(f32);
 
 impl Px {
     /// Creates a new `Px` dimension.
@@ -26,9 +26,20 @@ impl fmt::Display for Px {
 
 /// Strongly typed 32-bit RGBA color representation `0xAARRGGBB` (ADR-0010).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Color(pub u32);
+pub struct Color(u32);
 
 impl Color {
+    /// Constructs a `Color` directly from raw u32 bits.
+    #[must_use]
+    pub const fn from_u32(val: u32) -> Self {
+        Self(val)
+    }
+
+    /// Returns the raw u32 bits.
+    #[must_use]
+    pub const fn value(self) -> u32 {
+        self.0
+    }
     pub const BLACK: Self = Self::rgba(0, 0, 0, 255);
     pub const WHITE: Self = Self::rgba(255, 255, 255, 255);
     pub const TRANSPARENT: Self = Self::rgba(0, 0, 0, 0);

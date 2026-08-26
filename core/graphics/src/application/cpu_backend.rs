@@ -68,8 +68,8 @@ impl SoftwareCpuBackend {
     }
 
     fn draw_filled_rect(&mut self, rect: Rect, color: Color) {
-        let x_start = rect.x.max(0.0) as u32;
-        let y_start = rect.y.max(0.0) as u32;
+        let x_start = rect.x().max(0.0) as u32;
+        let y_start = rect.y().max(0.0) as u32;
         let x_end = rect.right().min(self.width as f32).max(0.0) as u32;
         let y_end = rect.bottom().min(self.height as f32).max(0.0) as u32;
 
@@ -83,13 +83,19 @@ impl SoftwareCpuBackend {
     fn draw_outline_border(&mut self, rect: Rect, color: Color, border_w: f32) {
         let bw = border_w.max(1.0);
         // Top
-        self.draw_filled_rect(Rect::new(rect.x, rect.y, rect.width, bw), color);
+        self.draw_filled_rect(Rect::new(rect.x(), rect.y(), rect.width(), bw), color);
         // Bottom
-        self.draw_filled_rect(Rect::new(rect.x, rect.bottom() - bw, rect.width, bw), color);
+        self.draw_filled_rect(
+            Rect::new(rect.x(), rect.bottom() - bw, rect.width(), bw),
+            color,
+        );
         // Left
-        self.draw_filled_rect(Rect::new(rect.x, rect.y, bw, rect.height), color);
+        self.draw_filled_rect(Rect::new(rect.x(), rect.y(), bw, rect.height()), color);
         // Right
-        self.draw_filled_rect(Rect::new(rect.right() - bw, rect.y, bw, rect.height), color);
+        self.draw_filled_rect(
+            Rect::new(rect.right() - bw, rect.y(), bw, rect.height()),
+            color,
+        );
     }
 
     fn draw_simple_text(&mut self, text: &str, rect: Rect, color: Color, font_size: f32) {
@@ -99,8 +105,8 @@ impl SoftwareCpuBackend {
         }
 
         let line_height = font_size.max(10.0);
-        let bar_width = ((text.len() as f32) * (font_size * 0.5)).min(rect.width);
-        let text_bar = Rect::new(rect.x, rect.y + 2.0, bar_width, line_height * 0.7);
+        let bar_width = ((text.len() as f32) * (font_size * 0.5)).min(rect.width());
+        let text_bar = Rect::new(rect.x(), rect.y() + 2.0, bar_width, line_height * 0.7);
         self.draw_filled_rect(text_bar, color);
     }
 }

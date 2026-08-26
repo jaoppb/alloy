@@ -55,7 +55,7 @@ impl CssParser {
             }
 
             let declarations = parse_declarations(&decl_buf);
-            rules.push(Rule::new(selectors, declarations));
+            rules.push(Rule::new(selectors, declarations)?);
         }
 
         Ok(StyleSheet::new(rules))

@@ -1,21 +1,41 @@
 use crate::domain::declaration::DeclarationList;
+use crate::domain::error::CssError;
 use crate::domain::selector::Selector;
 
 /// A CSS rule combining one or more selectors with a block of declarations.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rule {
-    pub selectors: Vec<Selector>,
-    pub declarations: DeclarationList,
+    selectors: Vec<Selector>,
+    declarations: DeclarationList,
 }
 
 impl Rule {
-    /// Creates a new CSS rule.
-    #[must_use]
-    pub const fn new(selectors: Vec<Selector>, declarations: DeclarationList) -> Self {
-        Self {
+    /// Creates a new CSS rule, enforcing that at least one selector is provided.
+    ///
+    /// # Errors
+    /// Returns `CssError::InvalidSelector` if `selectors` is empty.
+    pub fn new(selectors: Vec<Selector>, declarations: DeclarationList) -> Result<Self, CssError> {
+        if selectors.is_empty() {
+            return Err(CssError::InvalidSelector(
+                "CSS rule must contain at least one selector".to_string(),
+            ));
+        }
+        Ok(Self {
             selectors,
             declarations,
-        }
+        })
+    }
+
+    /// Accesses the rule selectors.
+    #[must_use]
+    pub fn selectors(&self) -> &[Selector] {
+        &self.selectors
+    }
+
+    /// Accesses the rule declaration list.
+    #[must_use]
+    pub const fn declarations(&self) -> &DeclarationList {
+        &self.declarations
     }
 }
 
