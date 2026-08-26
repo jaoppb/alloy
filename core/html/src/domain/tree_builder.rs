@@ -31,8 +31,19 @@ impl TreeBuilder {
     /// Returns `HtmlError` if a DOM insertion invariant is violated.
     pub fn process_token(&mut self, token: HtmlToken) -> Result<(), HtmlError> {
         match token {
-            HtmlToken::Doctype(_) => {
-                // DOCTYPE recorded or skipped for v0.3 HTML subset
+            HtmlToken::Doctype(raw) => {
+                let trimmed = raw.trim();
+                let lower = trimmed.to_ascii_lowercase();
+                self.tree.set_doctype(trimmed);
+
+                // HTML5 Section 13.2.6.4: DOCTYPE sniffing
+                if lower == "html" || lower == "html system \"about:legacy-compat\"" {
+                    self.tree.set_quirks_mode(dom::QuirksMode::NoQuirks);
+                } else if lower.starts_with("html public ") && !lower.contains("dtd") {
+                    self.tree.set_quirks_mode(dom::QuirksMode::LimitedQuirks);
+                } else {
+                    self.tree.set_quirks_mode(dom::QuirksMode::Quirks);
+                }
                 Ok(())
             }
             HtmlToken::Comment(comment) => {

@@ -19,5 +19,5 @@ pub use domain::node_id::NodeId;
 pub use domain::service::DomService;
 pub use domain::slot::Slot;
 pub use domain::tag_name::TagName;
-pub use domain::tree::DomTree;
+pub use domain::tree::{DomTree, QuirksMode};
 pub use infrastructure::bridge::register_dom_bindings;

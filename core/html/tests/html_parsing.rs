@@ -185,3 +185,25 @@ fn test_is_void_element_delegation_to_tag_name() {
     assert!(!html::is_void_element("p"));
     assert!(!html::is_void_element("custom-widget"));
 }
+
+#[test]
+fn test_doctype_sniffing_standards_vs_quirks_mode() {
+    use dom::QuirksMode;
+
+    // 1. Standard HTML5 DOCTYPE -> Standards Mode (NoQuirks)
+    let standards_html = "<!DOCTYPE html><html><body><h1>Standards</h1></body></html>";
+    let standards_tree = parse_html(standards_html).expect("Parse standards html");
+    assert_eq!(standards_tree.quirks_mode(), QuirksMode::NoQuirks);
+    assert_eq!(standards_tree.doctype(), Some("html"));
+
+    // 2. Missing DOCTYPE -> Quirks Mode
+    let quirks_html = "<html><body><h1>Quirks</h1></body></html>";
+    let quirks_tree = parse_html(quirks_html).expect("Parse quirks html");
+    assert_eq!(quirks_tree.quirks_mode(), QuirksMode::Quirks);
+    assert_eq!(quirks_tree.doctype(), None);
+
+    // 3. Legacy compat DOCTYPE -> Standards Mode (NoQuirks)
+    let legacy_compat = "<!DOCTYPE html SYSTEM \"about:legacy-compat\"><html><body></body></html>";
+    let compat_tree = parse_html(legacy_compat).expect("Parse legacy compat");
+    assert_eq!(compat_tree.quirks_mode(), QuirksMode::NoQuirks);
+}

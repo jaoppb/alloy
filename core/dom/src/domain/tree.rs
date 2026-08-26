@@ -6,12 +6,26 @@ use crate::domain::node_id::NodeId;
 use crate::domain::slot::Slot;
 use crate::domain::tag_name::TagName;
 
+/// Rendering mode of the document determined by DOCTYPE sniffing (HTML5 Section 13.2.6.4, C-36).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum QuirksMode {
+    /// Full standards mode (No-Quirks Mode) triggered by standard `<!DOCTYPE html>`.
+    NoQuirks,
+    /// Limited-quirks mode (Almost Standards Mode).
+    LimitedQuirks,
+    /// Quirks mode for legacy documents lacking a valid HTML5 DOCTYPE.
+    #[default]
+    Quirks,
+}
+
 /// Aggregate root managing DOM nodes within a generational slot arena (ADR-0010, ADR-0013, C-27).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DomTree {
     slots: Vec<Slot<DomNode>>,
     free_head: Option<u32>,
     root: Option<NodeId>,
+    quirks_mode: QuirksMode,
+    doctype: Option<String>,
 }
 
 impl DomTree {
@@ -22,7 +36,31 @@ impl DomTree {
             slots: Vec::new(),
             free_head: None,
             root: None,
+            quirks_mode: QuirksMode::Quirks,
+            doctype: None,
         }
+    }
+
+    /// Returns the document's active quirks mode (C-36).
+    #[must_use]
+    pub const fn quirks_mode(&self) -> QuirksMode {
+        self.quirks_mode
+    }
+
+    /// Sets the document's quirks mode (C-36).
+    pub fn set_quirks_mode(&mut self, mode: QuirksMode) {
+        self.quirks_mode = mode;
+    }
+
+    /// Returns the raw DOCTYPE string declaration, if present.
+    #[must_use]
+    pub fn doctype(&self) -> Option<&str> {
+        self.doctype.as_deref()
+    }
+
+    /// Records the DOCTYPE declaration for this document.
+    pub fn set_doctype(&mut self, doctype: impl Into<String>) {
+        self.doctype = Some(doctype.into());
     }
 
     /// Returns the root node identifier, if set.
