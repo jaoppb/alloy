@@ -1,14 +1,24 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! # Core Engine (`core/engine`)
+//!
+//! Abstract scripting runtime and execution isolate traits for Alloy.
+//!
+//! Decouples domain crates from concrete interpreter implementations (PRD-002, ADR-0002).
+//! Owns the canonical dynamic value types, capability-based security gates, and domain errors.
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod application;
+pub mod domain;
+pub mod infrastructure;
+
+// Public re-exports of the ubiquitous scripting language
+pub use application::conversion::{FromEngineValue, IntoEngineValue};
+pub use application::hot_reload::{AtomicScriptSlot, HotReloadCoordinator, ScriptWatcher};
+pub use application::ports::{ExecutionContext, NativeFn, RuntimeEngine};
+pub use application::sandbox::{TrappedExecutor, guarded_native_fn};
+pub use domain::capability::{Capability, CapabilitySet, SubsystemProfile};
+pub use domain::error::EngineError;
+pub use domain::hot_reload::{DebounceDuration, HotReloadStatus, ReloadEvent};
+pub use domain::identifier::Identifier;
+pub use domain::value::EngineValue;
+pub use infrastructure::mock::{MockContext, MockEngine};

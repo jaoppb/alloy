@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+	"alloy",
 	"core/css",
 	"core/dom",
 	"core/engine",
@@ -13,3 +14,32 @@ members = [
 	"devtools",
 	"extension",
 ]
+
+[workspace.package]
+version = "0.1.0-alpha"
+edition = "2024"
+rust-version = "1.85.0"
+license = "MIT OR Apache-2.0"
+authors = ["Alloy Contributors"]
+repository = "https://github.com/jaoppb/alloy"
+
+[workspace.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+bitflags = "2.8"
+rhai = { version = "1.26.0", features = ["sync"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+notify = "8.0"
+
+# Internal workspace crates
+alloy = { path = "alloy" }
+engine = { path = "core/engine" }
+rhai-runtime = { path = "core/runtime/rhai" }
+dom = { path = "core/dom" }
+html = { path = "core/html" }
+css = { path = "core/css" }
+graphics = { path = "core/graphics" }
+window = { path = "core/window" }
+network = { path = "core/network" }
+js = { path = "core/js" }
+devtools = { path = "devtools" }
+extension = { path = "extension" }
