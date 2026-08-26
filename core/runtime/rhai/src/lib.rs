@@ -1,14 +1,16 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! # Rhai Runtime Backend (`core/runtime/rhai`)
+//!
+//! Concrete Rhai scripting engine implementing `RuntimeEngine` and `ExecutionContext` from `core/engine`.
+//! Provides memory and CPU instruction execution limits, preventing denial of service and infinite loops (PRD-002, C-02, C-04).
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod application;
+pub mod domain;
+
+pub use application::context::RhaiContext;
+pub use application::engine::RhaiEngine;
+pub use domain::limits::ExecutionLimits;
+pub use domain::marshaling::{
+    dynamic_to_engine_value, engine_value_to_dynamic, rhai_error_to_engine_error,
+};
