@@ -7,15 +7,18 @@
 
 pub mod application;
 pub mod domain;
+pub mod infrastructure;
 
 pub use application::cascade::StyleCascade;
 pub use domain::computed::ComputedStyle;
 pub use domain::declaration::{Declaration, DeclarationList};
 pub use domain::error::CssError;
 pub use domain::parser::{CssParser, parse_css};
+pub use domain::ports::ColorResolver;
 pub use domain::property::{Color, DisplayType, PropertyName, PropertyValue, Px};
 pub use domain::rule::{Rule, RuleSet};
 pub use domain::selector::Selector;
 pub use domain::specificity::Specificity;
 pub use domain::styled_node::{StyledNode, StyledTree};
 pub use domain::stylesheet::StyleSheet;
+pub use infrastructure::color_resolver::CssColorResolver;

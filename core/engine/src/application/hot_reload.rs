@@ -1,6 +1,7 @@
-use crate::application::ports::RuntimeEngine;
+use crate::application::ports::{FileWatchPort, RuntimeEngine};
+use crate::domain::error::EngineError;
 use crate::domain::hot_reload::{DebounceDuration, HotReloadStatus};
-use notify::{Event, RecursiveMode, Result as NotifyResult, Watcher};
+use crate::infrastructure::notify_watcher::NotifyFileWatcher;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -108,33 +109,40 @@ impl<E: RuntimeEngine> HotReloadCoordinator<E> {
     }
 }
 
-/// Filesystem watcher monitoring script files with debouncing (PRD-004:79, C-10).
-pub struct ScriptWatcher {
+/// Filesystem watcher monitoring script files with debouncing using a `FileWatchPort` (PRD-004, C-10, C-29).
+pub struct ScriptWatcher<W: FileWatchPort = NotifyFileWatcher> {
     debounce: DebounceDuration,
-    watcher: Option<notify::RecommendedWatcher>,
+    watcher: W,
 }
 
-impl Default for ScriptWatcher {
+impl Default for ScriptWatcher<NotifyFileWatcher> {
     fn default() -> Self {
         Self::new(DebounceDuration::default_50ms())
     }
 }
 
-impl ScriptWatcher {
-    /// Creates a new `ScriptWatcher` with a specific debounce duration.
+impl ScriptWatcher<NotifyFileWatcher> {
+    /// Creates a new `ScriptWatcher` with default `NotifyFileWatcher` adapter.
     #[must_use]
-    pub const fn new(debounce: DebounceDuration) -> Self {
+    pub fn new(debounce: DebounceDuration) -> Self {
         Self {
             debounce,
-            watcher: None,
+            watcher: NotifyFileWatcher::new(),
         }
+    }
+}
+
+impl<W: FileWatchPort> ScriptWatcher<W> {
+    /// Creates a new `ScriptWatcher` with a custom `FileWatchPort` implementation.
+    pub const fn with_watcher(debounce: DebounceDuration, watcher: W) -> Self {
+        Self { debounce, watcher }
     }
 
     /// Starts watching a path for `.rhai` modifications with debouncing.
     ///
     /// # Errors
-    /// Returns `notify::Error` if watcher initialization fails.
-    pub fn watch<F>(&mut self, path: &Path, on_change: F) -> NotifyResult<()>
+    /// Returns `EngineError` if watcher initialization fails.
+    pub fn watch<F>(&mut self, path: &Path, on_change: F) -> Result<(), EngineError>
     where
         F: Fn(PathBuf) + Send + Sync + 'static,
     {
@@ -142,35 +150,20 @@ impl ScriptWatcher {
         let last_trigger = Arc::new(Mutex::new(Instant::now() - debounce_dur));
         let callback = Arc::new(on_change);
 
-        let mut watcher = notify::recommended_watcher(move |res: NotifyResult<Event>| {
-            if let Ok(event) = res {
-                if !event.kind.is_modify() && !event.kind.is_create() {
+        self.watcher.watch(
+            path,
+            Box::new(move |file_path: PathBuf| {
+                if file_path.extension().is_none_or(|ext| ext != "rhai") {
                     return;
                 }
 
-                for path in event.paths {
-                    if path.extension().is_none_or(|ext| ext != "rhai") {
-                        continue;
-                    }
-
-                    let mut last = last_trigger.lock().unwrap();
-                    let now = Instant::now();
-                    if now.duration_since(*last) >= debounce_dur {
-                        *last = now;
-                        callback(path);
-                    }
+                let mut last = last_trigger.lock().unwrap();
+                let now = Instant::now();
+                if now.duration_since(*last) >= debounce_dur {
+                    *last = now;
+                    callback(file_path);
                 }
-            }
-        })?;
-
-        let mode = if path.is_dir() {
-            RecursiveMode::Recursive
-        } else {
-            RecursiveMode::NonRecursive
-        };
-
-        watcher.watch(path, mode)?;
-        self.watcher = Some(watcher);
-        Ok(())
+            }),
+        )
     }
 }

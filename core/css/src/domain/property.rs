@@ -84,53 +84,10 @@ impl Color {
         ((self.0 >> 24) & 0xFF) as u8
     }
 
-    /// Parses a CSS color string (hex or named color).
+    /// Parses a CSS color string by delegating to the `CssColorResolver` (C-15, C-16).
     #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
-        let s = raw.trim().to_ascii_lowercase();
-
-        match s.as_str() {
-            "transparent" => return Some(Self::TRANSPARENT),
-            "black" => return Some(Self::BLACK),
-            "white" => return Some(Self::WHITE),
-            "red" => return Some(Self::RED),
-            "green" => return Some(Self::GREEN),
-            "blue" => return Some(Self::BLUE),
-            "gray" | "grey" => return Some(Self::rgba(128, 128, 128, 255)),
-            "yellow" => return Some(Self::rgba(255, 255, 0, 255)),
-            _ => {}
-        }
-
-        if let Some(hex) = s.strip_prefix('#') {
-            return Self::parse_hex(hex);
-        }
-
-        None
-    }
-
-    fn parse_hex(hex: &str) -> Option<Self> {
-        match hex.len() {
-            3 => {
-                let r = u8::from_str_radix(&hex[0..1].repeat(2), 16).ok()?;
-                let g = u8::from_str_radix(&hex[1..2].repeat(2), 16).ok()?;
-                let b = u8::from_str_radix(&hex[2..3].repeat(2), 16).ok()?;
-                Some(Self::rgb(r, g, b))
-            }
-            6 => {
-                let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-                let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-                let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-                Some(Self::rgb(r, g, b))
-            }
-            8 => {
-                let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-                let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-                let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-                let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
-                Some(Self::rgba(r, g, b, a))
-            }
-            _ => None,
-        }
+        crate::infrastructure::color_resolver::CssColorResolver::resolve_static(raw)
     }
 }
 

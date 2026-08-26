@@ -1,6 +1,6 @@
 use css::{
-    Color, CssError, DeclarationList, DisplayType, PropertyName, Px, Rule, Selector, Specificity,
-    StyleCascade, parse_css,
+    Color, ColorResolver, CssColorResolver, CssError, DeclarationList, DisplayType, PropertyName,
+    Px, Rule, Selector, Specificity, StyleCascade, parse_css,
 };
 use dom::{AttributeMap, AttributeName, AttributeValue, DomTree, TagName};
 use html::parse_html;
@@ -215,4 +215,27 @@ fn test_rule_invariants() {
 
     let valid_rule = Rule::new(vec![Selector::Universal], DeclarationList::new());
     assert!(valid_rule.is_ok());
+}
+
+#[test]
+fn test_color_resolver_adapter_and_rebeccapurple() {
+    let resolver = CssColorResolver::new();
+    assert_eq!(
+        resolver.resolve("rebeccapurple"),
+        Some(Color::rgba(102, 51, 153, 255))
+    );
+    assert_eq!(
+        Color::parse("rebeccapurple"),
+        Some(Color::rgba(102, 51, 153, 255))
+    );
+    assert_eq!(
+        Color::parse("#663399"),
+        Some(Color::rgba(102, 51, 153, 255))
+    );
+    assert_eq!(Color::parse("#fff"), Some(Color::rgba(255, 255, 255, 255)));
+    assert_eq!(Color::parse("#00ff0080"), Some(Color::rgba(0, 255, 0, 128)));
+    assert_eq!(
+        resolver.resolve("aliceblue"),
+        Some(Color::rgba(240, 248, 255, 255))
+    );
 }

@@ -85,3 +85,16 @@ pub trait RuntimeEngine: Send + Sync {
         script: &str,
     ) -> Result<T, Self::Error>;
 }
+
+/// Port defining filesystem watching capabilities decoupled from concrete I/O libraries (C-29).
+pub trait FileWatchPort: Send + Sync {
+    /// Starts watching a path, executing callback on change.
+    ///
+    /// # Errors
+    /// Returns `EngineError` if watching fails to initialize.
+    fn watch(
+        &mut self,
+        path: &std::path::Path,
+        callback: Box<dyn Fn(std::path::PathBuf) + Send + Sync + 'static>,
+    ) -> Result<(), EngineError>;
+}
