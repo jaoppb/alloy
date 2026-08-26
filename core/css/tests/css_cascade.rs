@@ -306,6 +306,13 @@ fn test_selectors_level_3_combinators_attributes_and_pseudoclasses() {
     assert!(child_sel.matches(li2, &tree));
     assert!(!child_sel.matches(ul, &tree));
 
+    // Child combinator (>) must NOT match non-direct descendant
+    let inner_div = tree.create_element(TagName::new("div").unwrap(), AttributeMap::new());
+    let nested_li = tree.create_element(TagName::new("li").unwrap(), AttributeMap::new());
+    tree.append_child(ul, inner_div).unwrap();
+    tree.append_child(inner_div, nested_li).unwrap();
+    assert!(!child_sel.matches(nested_li, &tree));
+
     let first_child_sel = &sheet.rules().iter().nth(7).unwrap().selectors()[0]; // li:first-child
     assert!(first_child_sel.matches(li1, &tree));
     assert!(!first_child_sel.matches(li2, &tree));

@@ -119,8 +119,14 @@ fn test_identifier_validation() {
         "trimmed_name"
     );
 
-    assert!(Identifier::new("").is_err());
-    assert!(Identifier::new("   ").is_err());
+    assert!(matches!(
+        Identifier::new(""),
+        Err(EngineError::InvalidIdentifier(_))
+    ));
+    assert!(matches!(
+        Identifier::new("   "),
+        Err(EngineError::InvalidIdentifier(_))
+    ));
 }
 
 #[test]

@@ -3,8 +3,8 @@ use engine::{
     Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, RuntimeEngine,
 };
 use graphics::{
-    DisplayList, GraphicsBackendFactory, LayoutEngine, Point, Position, Rect, RenderBackend,
-    RenderCommand, ScriptDisplayListContainer, Size, SoftwareCpuBackend,
+    DisplayList, GraphicsBackendFactory, GraphicsError, LayoutEngine, Point, Position, Rect,
+    RenderBackend, RenderCommand, ScriptDisplayListContainer, Size, SoftwareCpuBackend,
     register_graphics_bindings,
 };
 use html::parse_html;
@@ -27,6 +27,12 @@ fn test_c14_render_backend_trait_implemented() {
     backend.render(&list).expect("Render should succeed");
     let bytes = backend.to_rgba_bytes().expect("Bytes should be present");
     assert_eq!(bytes.len(), 100 * 100 * 4);
+
+    // Pixel at (0, 0) should remain Color::WHITE [255, 255, 255, 255]
+    assert_eq!(&bytes[0..4], &[255, 255, 255, 255]);
+    // Pixel at (50, 50) inside the rect must be Color::RED [255, 0, 0, 255]
+    let idx = (50 * 100 + 50) * 4;
+    assert_eq!(&bytes[idx..idx + 4], &[255, 0, 0, 255]);
 }
 
 #[test]
@@ -205,11 +211,26 @@ fn test_out_of_bounds_clipping_safety() {
 
 #[test]
 fn test_size_invariants() {
-    assert!(Size::new(-1.0, 0.0).is_err());
-    assert!(Size::new(0.0, -1.0).is_err());
-    assert!(Size::new(f32::NAN, 0.0).is_err());
-    assert!(Size::new(0.0, f32::NAN).is_err());
-    assert!(Size::new(f32::INFINITY, 0.0).is_err());
+    assert!(matches!(
+        Size::new(-1.0, 0.0),
+        Err(GraphicsError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        Size::new(0.0, -1.0),
+        Err(GraphicsError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        Size::new(f32::NAN, 0.0),
+        Err(GraphicsError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        Size::new(0.0, f32::NAN),
+        Err(GraphicsError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        Size::new(f32::INFINITY, 0.0),
+        Err(GraphicsError::InvalidCommand(_))
+    ));
 
     let valid = Size::new(100.0, 200.0).expect("Valid size");
     assert_eq!(valid.width(), 100.0);

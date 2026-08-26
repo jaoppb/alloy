@@ -152,8 +152,13 @@ fn test_host_object_permission_denied_via_script_eval() {
 
     let result: Result<String, EngineError> =
         engine.eval(&mut context, r#"document.createElement("div")"#);
-    assert!(
-        result.is_err(),
-        "Expected permission denied error when capability is missing"
-    );
+    match result {
+        Err(EngineError::PermissionDenied(cap)) => {
+            assert!(
+                cap.contains("DOM_MUTATE"),
+                "Error must reference missing capability: {cap}"
+            );
+        }
+        other => panic!("Expected EngineError::PermissionDenied, got: {other:?}"),
+    }
 }

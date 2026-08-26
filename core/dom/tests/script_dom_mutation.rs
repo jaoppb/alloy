@@ -134,8 +134,13 @@ fn test_dom_mutation_denied_without_capability() {
     // Also via eval directly:
     let eval_res: Result<EngineValue, EngineError> =
         engine.eval(&mut context, r#"document.createElement("div")"#);
-    assert!(
-        eval_res.is_err(),
-        "Expected permission error from eval without DOM_MUTATE"
-    );
+    match eval_res {
+        Err(EngineError::PermissionDenied(cap)) => {
+            assert!(
+                cap.contains("DOM_MUTATE"),
+                "Eval error must reference DOM_MUTATE: {cap}"
+            );
+        }
+        other => panic!("Expected EngineError::PermissionDenied, got: {other:?}"),
+    }
 }

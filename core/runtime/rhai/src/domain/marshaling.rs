@@ -114,6 +114,21 @@ pub fn rhai_error_to_engine_error(err: rhai::EvalAltResult) -> EngineError {
         rhai::EvalAltResult::ErrorVariableNotFound(var_name, _) => {
             EngineError::VariableNotFound(var_name)
         }
-        other => EngineError::RuntimeError(other.to_string()),
+        rhai::EvalAltResult::ErrorRuntime(val, _) => {
+            let msg = val.to_string();
+            if let Some(cap) = msg.strip_prefix("PermissionDenied: ") {
+                EngineError::PermissionDenied(cap.to_string())
+            } else {
+                EngineError::RuntimeError(msg)
+            }
+        }
+        other => {
+            let msg = other.to_string();
+            if let Some(cap) = msg.strip_prefix("PermissionDenied: ") {
+                EngineError::PermissionDenied(cap.to_string())
+            } else {
+                EngineError::RuntimeError(msg)
+            }
+        }
     }
 }
