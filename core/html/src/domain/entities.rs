@@ -59,6 +59,15 @@ impl HtmlEntity {
     }
 }
 
+impl TryFrom<&str> for HtmlEntity {
+    type Error = crate::domain::token::HtmlError;
+
+    fn try_from(raw: &str) -> Result<Self, Self::Error> {
+        Self::parse(raw)
+            .ok_or_else(|| crate::domain::token::HtmlError::InvalidEntity(raw.to_string()))
+    }
+}
+
 /// Decodes HTML entity references (both named references and numeric codes) into characters.
 #[must_use]
 pub fn decode_html_entities(input: &str) -> String {

@@ -115,4 +115,22 @@ impl HostObject {
     pub fn properties(&self) -> &[(Identifier, HostGetterFn, Option<HostSetterFn>)] {
         &self.properties
     }
+
+    /// Looks up a method by identifier.
+    #[must_use]
+    pub fn get_method(&self, name: &Identifier) -> Option<&HostMethodFn> {
+        self.methods
+            .iter()
+            .find(|(id, _)| id == name)
+            .map(|(_, m)| m)
+    }
+
+    /// Looks up a method by string name.
+    #[must_use]
+    pub fn get_method_by_name(&self, name: &str) -> Option<&HostMethodFn> {
+        self.methods
+            .iter()
+            .find(|(id, _)| id.as_str() == name)
+            .map(|(_, m)| m)
+    }
 }

@@ -96,331 +96,18 @@ impl ExecutionContext for RhaiContext {
     }
 
     fn register_host_object(&mut self, object: HostObject) -> Result<(), EngineError> {
-        let cap = object.required_capability();
-        let has_cap = cap.is_none_or(|c| self.capabilities.contains(c));
         let obj_name = object.name().as_str().to_string();
 
         if object.is_singleton() {
             self.scope
-                .set_value(object.name().as_str(), RhaiSingleton(obj_name.clone()));
-
-            for (method_id, method_fn) in object.methods() {
-                let m_name = method_id.as_str();
-                let expected = obj_name.clone();
-                let m = Arc::clone(method_fn);
-
-                if !has_cap {
-                    let err_cap = cap.unwrap();
-                    let exp = expected.clone();
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton| -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 == exp {
-                                Err(EvalAltResult::ErrorRuntime(
-                                    format!("PermissionDenied: {err_cap:?}").into(),
-                                    rhai::Position::NONE,
-                                )
-                                .into())
-                            } else {
-                                Err("Receiver mismatch".into())
-                            }
-                        },
-                    );
-                    let exp = expected.clone();
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton,
-                              _a1: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 == exp {
-                                Err(EvalAltResult::ErrorRuntime(
-                                    format!("PermissionDenied: {err_cap:?}").into(),
-                                    rhai::Position::NONE,
-                                )
-                                .into())
-                            } else {
-                                Err("Receiver mismatch".into())
-                            }
-                        },
-                    );
-                    let exp = expected.clone();
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton,
-                              _a1: Dynamic,
-                              _a2: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 == exp {
-                                Err(EvalAltResult::ErrorRuntime(
-                                    format!("PermissionDenied: {err_cap:?}").into(),
-                                    rhai::Position::NONE,
-                                )
-                                .into())
-                            } else {
-                                Err("Receiver mismatch".into())
-                            }
-                        },
-                    );
-                    let exp = expected.clone();
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton,
-                              _a1: Dynamic,
-                              _a2: Dynamic,
-                              _a3: Dynamic,
-                              _a4: Dynamic,
-                              _a5: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 == exp {
-                                Err(EvalAltResult::ErrorRuntime(
-                                    format!("PermissionDenied: {err_cap:?}").into(),
-                                    rhai::Position::NONE,
-                                )
-                                .into())
-                            } else {
-                                Err("Receiver mismatch".into())
-                            }
-                        },
-                    );
-                } else {
-                    // Arity 0
-                    let exp = expected.clone();
-                    let m_clone = Arc::clone(&m);
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton| -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 != exp {
-                                return Err("Receiver mismatch".into());
-                            }
-                            let res = m_clone(None, &[]).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            Ok(engine_value_to_dynamic(res))
-                        },
-                    );
-
-                    // Arity 1
-                    let exp = expected.clone();
-                    let m_clone = Arc::clone(&m);
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton,
-                              a1: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 != exp {
-                                return Err("Receiver mismatch".into());
-                            }
-                            let v1 = dynamic_to_engine_value(&a1).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let res = m_clone(None, &[v1]).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            Ok(engine_value_to_dynamic(res))
-                        },
-                    );
-
-                    // Arity 2
-                    let exp = expected.clone();
-                    let m_clone = Arc::clone(&m);
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton,
-                              a1: Dynamic,
-                              a2: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 != exp {
-                                return Err("Receiver mismatch".into());
-                            }
-                            let v1 = dynamic_to_engine_value(&a1).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let v2 = dynamic_to_engine_value(&a2).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let res = m_clone(None, &[v1, v2]).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            Ok(engine_value_to_dynamic(res))
-                        },
-                    );
-
-                    // Arity 5 (for renderer.pushRect)
-                    let exp = expected.clone();
-                    let m_clone = Arc::clone(&m);
-                    self.engine.register_fn(
-                        m_name,
-                        move |s: &mut RhaiSingleton,
-                              a1: Dynamic,
-                              a2: Dynamic,
-                              a3: Dynamic,
-                              a4: Dynamic,
-                              a5: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            if s.0 != exp {
-                                return Err("Receiver mismatch".into());
-                            }
-                            let v1 = dynamic_to_engine_value(&a1).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let v2 = dynamic_to_engine_value(&a2).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let v3 = dynamic_to_engine_value(&a3).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let v4 = dynamic_to_engine_value(&a4).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let v5 = dynamic_to_engine_value(&a5).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let res = m_clone(None, &[v1, v2, v3, v4, v5]).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            Ok(engine_value_to_dynamic(res))
-                        },
-                    );
-                }
-            }
-        } else {
-            // Instance methods on RhaiNativeHandle (e.g. Node)
-            for (method_id, method_fn) in object.methods() {
-                let m_name = method_id.as_str();
-                let m = Arc::clone(method_fn);
-
-                if !has_cap {
-                    let err_cap = cap.unwrap();
-                    self.engine.register_fn(
-                        m_name,
-                        move |_h: &mut RhaiNativeHandle| -> Result<Dynamic, Box<EvalAltResult>> {
-                            Err(EvalAltResult::ErrorRuntime(
-                                format!("PermissionDenied: {err_cap:?}").into(),
-                                rhai::Position::NONE,
-                            )
-                            .into())
-                        },
-                    );
-                    self.engine.register_fn(
-                        m_name,
-                        move |_h: &mut RhaiNativeHandle,
-                              _a1: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            Err(EvalAltResult::ErrorRuntime(
-                                format!("PermissionDenied: {err_cap:?}").into(),
-                                rhai::Position::NONE,
-                            )
-                            .into())
-                        },
-                    );
-                } else {
-                    let m_clone = Arc::clone(&m);
-                    self.engine.register_fn(
-                        m_name,
-                        move |h: &mut RhaiNativeHandle| -> Result<Dynamic, Box<EvalAltResult>> {
-                            let target = EngineValue::Handle(Arc::clone(&h.0));
-                            let res = m_clone(Some(&target), &[]).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            Ok(engine_value_to_dynamic(res))
-                        },
-                    );
-
-                    let m_clone = Arc::clone(&m);
-                    self.engine.register_fn(
-                        m_name,
-                        move |h: &mut RhaiNativeHandle,
-                              a1: Dynamic|
-                              -> Result<Dynamic, Box<EvalAltResult>> {
-                            let target = EngineValue::Handle(Arc::clone(&h.0));
-                            let v1 = dynamic_to_engine_value(&a1).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            let res = m_clone(Some(&target), &[v1]).map_err(|e| {
-                                Box::new(EvalAltResult::ErrorRuntime(
-                                    e.to_string().into(),
-                                    rhai::Position::NONE,
-                                ))
-                            })?;
-                            Ok(engine_value_to_dynamic(res))
-                        },
-                    );
-                }
-            }
-
-            for (prop_id, getter_fn, setter_fn) in object.properties() {
-                let p_name = prop_id.as_str();
-                let g = Arc::clone(getter_fn);
-                if let Some(s) = setter_fn {
-                    let s = Arc::clone(s);
-                    self.engine.register_get_set(
-                        p_name,
-                        move |h: &mut RhaiNativeHandle| -> Dynamic {
-                            let target = EngineValue::Handle(Arc::clone(&h.0));
-                            g(Some(&target))
-                                .map(engine_value_to_dynamic)
-                                .unwrap_or(Dynamic::UNIT)
-                        },
-                        move |h: &mut RhaiNativeHandle, val: Dynamic| {
-                            let target = EngineValue::Handle(Arc::clone(&h.0));
-                            if let Ok(v) = dynamic_to_engine_value(&val) {
-                                let _ = s(Some(&target), v);
-                            }
-                        },
-                    );
-                } else {
-                    self.engine
-                        .register_get(p_name, move |h: &mut RhaiNativeHandle| -> Dynamic {
-                            let target = EngineValue::Handle(Arc::clone(&h.0));
-                            g(Some(&target))
-                                .map(engine_value_to_dynamic)
-                                .unwrap_or(Dynamic::UNIT)
-                        });
-                }
-            }
+                .set_value(object.name().as_str(), RhaiSingleton::new(obj_name.clone()));
         }
+
+        crate::application::host_dispatcher::HostDispatcher::register_host_object(
+            &mut self.engine,
+            &object,
+            &self.capabilities,
+        )?;
 
         self.host_objects.insert(obj_name, object);
         Ok(())
@@ -439,10 +126,11 @@ impl ExecutionContext for RhaiContext {
     }
 
     fn get_variable(&self, name: &Identifier) -> Result<Option<EngineValue>, EngineError> {
-        let Some(val) = self.scope.get_value::<Dynamic>(name.as_str()) else {
-            return Ok(None);
-        };
-        dynamic_to_engine_value(&val).map(Some)
+        let dyn_opt = self.scope.get_value::<Dynamic>(name.as_str());
+        match dyn_opt {
+            Some(d) => dynamic_to_engine_value(&d).map(Some),
+            None => Ok(None),
+        }
     }
 
     fn call_function(
@@ -450,7 +138,8 @@ impl ExecutionContext for RhaiContext {
         name: &Identifier,
         args: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
-        if let Some(f) = self.functions.get(name.as_str()).cloned() {
+        if let Some(native_fn) = self.functions.get(name.as_str()) {
+            let f = Arc::clone(native_fn);
             return f(self, args);
         }
 
@@ -469,6 +158,13 @@ impl ExecutionContext for RhaiContext {
             }
         }
 
+        if let Some(host_obj) = self.host_objects.get(name.as_str()) {
+            if let Some(method) = host_obj.get_method(name) {
+                let m = Arc::clone(method);
+                return m(None, args);
+            }
+        }
+
         Err(EngineError::FunctionNotFound(name.as_str().to_string()))
     }
 
@@ -477,7 +173,7 @@ impl ExecutionContext for RhaiContext {
         for (name, obj) in &self.host_objects {
             if obj.is_singleton() {
                 self.scope
-                    .set_value(name.as_str(), RhaiSingleton(name.clone()));
+                    .set_value(name.as_str(), RhaiSingleton::new(name.clone()));
             }
         }
         Ok(())

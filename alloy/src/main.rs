@@ -1,13 +1,12 @@
 #![forbid(unsafe_code)]
 
+use alloy::{AlloyCliError, VERSION_FINGERPRINT, XdgScriptManager, execute_render};
 use clap::{Parser, Subcommand};
-use css::{StyleCascade, StyleSheet, parse_css};
-use dom::{DomService, TagName};
 use engine::{CapabilitySet, EngineValue, RuntimeEngine};
-use graphics::{GraphicsBackendFactory, LayoutEngine};
-use html::parse_html;
 use rhai_runtime::RhaiEngine;
-use std::path::Path;
+use std::path::PathBuf;
+use tracing::info;
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -25,9 +24,21 @@ pub struct Cli {
     #[arg(short, long, value_name = "SCRIPT")]
     pub script: Option<String>,
 
+    /// Custom directory for script resolution shadowing
+    #[arg(long, value_name = "DIR")]
+    pub scripts_dir: Option<PathBuf>,
+
+    /// Enable live file watching and automatic origin syncing
+    #[arg(short, long)]
+    pub watch: bool,
+
     /// URL or local file path to open
     #[arg(value_name = "TARGET")]
     pub target: Option<String>,
+
+    /// Log format output: text, json, pretty
+    #[arg(long, default_value = "text")]
+    pub log_format: String,
 }
 
 #[derive(Subcommand, Debug)]
@@ -53,11 +64,29 @@ pub enum Commands {
         /// Optional external CSS file path
         #[arg(long)]
         css: Option<String>,
+
+        /// Enable live watching and auto-sync of origin scripts
+        #[arg(short, long)]
+        watch: bool,
     },
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn init_tracing(format: &str) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let subscriber = fmt().with_env_filter(filter);
+    match format {
+        "json" => subscriber.json().init(),
+        "pretty" => subscriber.pretty().init(),
+        _ => subscriber.compact().init(),
+    }
+}
+
+fn main() -> Result<(), AlloyCliError> {
     let cli = Cli::parse();
+    init_tracing(&cli.log_format);
+
+    let xdg = XdgScriptManager::new(cli.scripts_dir.clone())?;
+    xdg.seed_scripts()?;
 
     match &cli.command {
         Some(Commands::Render {
@@ -66,85 +95,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             width,
             height,
             css,
-        }) => execute_render(file, output, *width, *height, css.as_deref()),
+            watch,
+        }) => execute_render(
+            file,
+            output,
+            *width,
+            *height,
+            css.as_deref(),
+            *watch || cli.watch,
+            &xdg,
+        ),
         None => {
             if let Some(script_path) = &cli.script {
                 return execute_script(script_path);
             }
             if let Some(target) = &cli.target {
-                println!("Opening target: {target}");
+                info!("Opening target: {target}");
                 return Ok(());
             }
-            println!(
-                "Alloy browser engine v{} initialized.",
-                env!("CARGO_PKG_VERSION")
+            info!(
+                "Alloy browser engine v{} initialized with XDG isolation at {:?}",
+                VERSION_FINGERPRINT,
+                xdg.data_version_dir()
             );
             Ok(())
         }
     }
 }
 
-fn execute_render(
-    file: &str,
-    output: &str,
-    width: u32,
-    height: u32,
-    css_path: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let html_content = std::fs::read_to_string(file)
-        .map_err(|err| format!("Failed to read HTML file '{file}': {err}"))?;
-
-    let dom = parse_html(&html_content).map_err(|err| format!("Failed to parse HTML: {err}"))?;
-
-    let stylesheet = match css_path {
-        Some(css_file) => match std::fs::read_to_string(css_file) {
-            Ok(css_content) => parse_css(&css_content).unwrap_or_default(),
-            Err(err) => {
-                eprintln!("Failed to read CSS file '{css_file}': {err}");
-                StyleSheet::default()
-            }
-        },
-        None => extract_inline_style(&dom).unwrap_or_default(),
-    };
-
-    let styled_tree = StyleCascade::build_styled_tree(&dom, &stylesheet);
-    let display_list = LayoutEngine::layout(&dom, &styled_tree, width as f32, height as f32);
-
-    let mut backend = GraphicsBackendFactory::create_headless(width, height);
-    backend
-        .render(&display_list)
-        .map_err(|err| format!("Graphics rendering failed: {err}"))?;
-
-    backend
-        .save_png(Path::new(output))
-        .map_err(|err| format!("Failed to save PNG image to '{output}': {err}"))?;
-
-    println!("Rendered '{file}' -> '{output}' ({width}x{height}) successfully.");
-    Ok(())
-}
-
-fn extract_inline_style(dom: &dom::DomTree) -> Option<StyleSheet> {
-    let root = dom.root()?;
-    let style_tag = TagName::new("style").ok()?;
-    let style_nodes = DomService::find_by_tag_name(dom, root, &style_tag);
-    let style_node_id = *style_nodes.first()?;
-    let css_text = DomService::get_text_content(dom, style_node_id);
-    parse_css(&css_text).ok()
-}
-
-fn execute_script(script_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let source = std::fs::read_to_string(script_path)
-        .map_err(|err| format!("Failed to read script '{script_path}': {err}"))?;
+fn execute_script(script_path: &str) -> Result<(), AlloyCliError> {
+    let source = std::fs::read_to_string(script_path)?;
 
     let engine = RhaiEngine::new();
-    let mut context = engine
-        .create_context(CapabilitySet::all())
-        .map_err(|err| format!("Failed to create script context: {err}"))?;
+    let mut context = engine.create_context(CapabilitySet::all())?;
 
     let val = engine
         .eval::<EngineValue>(&mut context, &source)
-        .map_err(|err| format!("Script execution failed: {err}"))?;
+        .map_err(|err| AlloyCliError::ScriptExecution(err.to_string()))?;
 
-    println!("{val:?}");
+    info!("{val:?}");
     Ok(())
 }

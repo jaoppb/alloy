@@ -399,9 +399,9 @@ impl TagName {
         )
     }
 
-    /// Returns the default CSS display mode string for this element (C-13).
+    /// Returns the default CSS display mode for this element (C-13, C-49).
     #[must_use]
-    pub const fn default_display(&self) -> &'static str {
+    pub const fn default_display(&self) -> engine::DisplayType {
         match self {
             Self::Span
             | Self::A
@@ -432,7 +432,7 @@ impl TagName {
             | Self::Button
             | Self::Select
             | Self::Textarea
-            | Self::Label => "inline",
+            | Self::Label => engine::DisplayType::Inline,
 
             Self::Head
             | Self::Title
@@ -442,9 +442,9 @@ impl TagName {
             | Self::Style
             | Self::Script
             | Self::Noscript
-            | Self::Template => "none",
+            | Self::Template => engine::DisplayType::None,
 
-            _ => "block",
+            _ => engine::DisplayType::Block,
         }
     }
 }

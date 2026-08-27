@@ -1,7 +1,6 @@
 use crate::application::ports::{FileWatchPort, RuntimeEngine};
 use crate::domain::error::EngineError;
 use crate::domain::hot_reload::{DebounceDuration, HotReloadStatus};
-use crate::infrastructure::notify_watcher::NotifyFileWatcher;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -110,32 +109,21 @@ impl<E: RuntimeEngine> HotReloadCoordinator<E> {
 }
 
 /// Filesystem watcher monitoring script files with debouncing using a `FileWatchPort` (PRD-004, C-10, C-29).
-pub struct ScriptWatcher<W: FileWatchPort = NotifyFileWatcher> {
+pub struct ScriptWatcher<W: FileWatchPort> {
     debounce: DebounceDuration,
     watcher: W,
 }
 
-impl Default for ScriptWatcher<NotifyFileWatcher> {
-    fn default() -> Self {
-        Self::new(DebounceDuration::default_50ms())
-    }
-}
-
-impl ScriptWatcher<NotifyFileWatcher> {
-    /// Creates a new `ScriptWatcher` with default `NotifyFileWatcher` adapter.
-    #[must_use]
-    pub fn new(debounce: DebounceDuration) -> Self {
-        Self {
-            debounce,
-            watcher: NotifyFileWatcher::new(),
-        }
-    }
-}
-
 impl<W: FileWatchPort> ScriptWatcher<W> {
+    /// Creates a new `ScriptWatcher` parameterized with a `FileWatchPort` adapter.
+    #[must_use]
+    pub const fn new(debounce: DebounceDuration, watcher: W) -> Self {
+        Self { debounce, watcher }
+    }
+
     /// Creates a new `ScriptWatcher` with a custom `FileWatchPort` implementation.
     pub const fn with_watcher(debounce: DebounceDuration, watcher: W) -> Self {
-        Self { debounce, watcher }
+        Self::new(debounce, watcher)
     }
 
     /// Starts watching a path for `.rhai` modifications with debouncing.

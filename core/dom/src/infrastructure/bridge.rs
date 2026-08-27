@@ -3,7 +3,9 @@ use crate::domain::node_data::NodeData;
 use crate::domain::node_id::NodeId;
 use crate::domain::tag_name::TagName;
 use crate::domain::tree::DomTree;
-use engine::{Capability, EngineError, EngineValue, ExecutionContext, HostObject, Identifier};
+use engine::{
+    Capability, EngineError, EngineValue, ExecutionContext, HostModule, HostObject, Identifier,
+};
 use std::sync::{Arc, Mutex};
 
 fn extract_node_id(val: Option<&EngineValue>) -> Result<NodeId, EngineError> {
@@ -18,22 +20,25 @@ fn extract_node_id(val: Option<&EngineValue>) -> Result<NodeId, EngineError> {
     })
 }
 
-/// Registers DOM domain operations into an `ExecutionContext` under `document` and `Node` host objects (ADR-0012, N-01).
-///
-/// # Errors
-/// Returns `EngineError` if host object registration fails.
-pub fn register_dom_bindings(
-    ctx: &mut dyn ExecutionContext,
+/// Host module registering DOM document and node bindings (ADR-0012, N-01, C-53, C-56).
+pub struct DomHostModule {
     tree: Arc<Mutex<DomTree>>,
-) -> Result<(), EngineError> {
-    // 1. HostObject: document (singleton)
-    {
+}
+
+impl DomHostModule {
+    /// Creates a new `DomHostModule` wrapping a shared `DomTree`.
+    #[must_use]
+    pub fn new(tree: Arc<Mutex<DomTree>>) -> Self {
+        Self { tree }
+    }
+
+    fn create_document_host_object(&self) -> Result<HostObject, EngineError> {
         let mut document = HostObject::new(Identifier::new("document")?)
             .with_singleton(true)
             .with_capability(Capability::DOM_MUTATE);
 
         // createElement(tag_name: String) -> Handle<NodeId>
-        let t1 = Arc::clone(&tree);
+        let t1 = Arc::clone(&self.tree);
         document.add_method(Identifier::new("createElement")?, move |_this, args| {
             let tag_str =
                 args.first()
@@ -53,7 +58,7 @@ pub fn register_dom_bindings(
         });
 
         // createTextNode(text: String) -> Handle<NodeId>
-        let t2 = Arc::clone(&tree);
+        let t2 = Arc::clone(&self.tree);
         document.add_method(Identifier::new("createTextNode")?, move |_this, args| {
             let text =
                 args.first()
@@ -70,17 +75,16 @@ pub fn register_dom_bindings(
             Ok(EngineValue::handle(id))
         });
 
-        ctx.register_host_object(document)?;
+        Ok(document)
     }
 
-    // 2. HostObject: Node (instance entity)
-    {
+    fn create_node_host_object(&self) -> Result<HostObject, EngineError> {
         let mut node = HostObject::new(Identifier::new("Node")?)
             .with_singleton(false)
             .with_capability(Capability::DOM_MUTATE);
 
         // appendChild(child: Handle<NodeId>) -> Null
-        let t3 = Arc::clone(&tree);
+        let t3 = Arc::clone(&self.tree);
         node.add_method(Identifier::new("appendChild")?, move |this, args| {
             let parent = extract_node_id(this)?;
             let child = extract_node_id(args.first())?;
@@ -95,7 +99,7 @@ pub fn register_dom_bindings(
         });
 
         // getText() -> String
-        let t4 = Arc::clone(&tree);
+        let t4 = Arc::clone(&self.tree);
         node.add_method(Identifier::new("getText")?, move |this, _args| {
             let id = extract_node_id(this)?;
             let guard = t4
@@ -109,7 +113,7 @@ pub fn register_dom_bindings(
         });
 
         // setText(text: String) -> Null
-        let t5 = Arc::clone(&tree);
+        let t5 = Arc::clone(&self.tree);
         node.add_method(Identifier::new("setText")?, move |this, args| {
             let id = extract_node_id(this)?;
             let new_text =
@@ -137,8 +141,8 @@ pub fn register_dom_bindings(
         });
 
         // Property textContent getter & setter
-        let tg = Arc::clone(&tree);
-        let ts = Arc::clone(&tree);
+        let tg = Arc::clone(&self.tree);
+        let ts = Arc::clone(&self.tree);
         node.add_property(
             Identifier::new("textContent")?,
             move |this| {
@@ -170,12 +174,11 @@ pub fn register_dom_bindings(
             })),
         );
 
-        ctx.register_host_object(node)?;
+        Ok(node)
     }
 
-    // Backwards compatibility registrations for flat function calls
-    {
-        let t = Arc::clone(&tree);
+    fn register_legacy_functions(&self, ctx: &mut dyn ExecutionContext) -> Result<(), EngineError> {
+        let t = Arc::clone(&self.tree);
         ctx.register_fn(
             Identifier::new("dom_create_element")?,
             Arc::new(move |ctx, args| {
@@ -201,7 +204,7 @@ pub fn register_dom_bindings(
             }),
         )?;
 
-        let t = Arc::clone(&tree);
+        let t = Arc::clone(&self.tree);
         ctx.register_fn(
             Identifier::new("dom_create_text")?,
             Arc::new(move |ctx, args| {
@@ -225,7 +228,7 @@ pub fn register_dom_bindings(
             }),
         )?;
 
-        let t = Arc::clone(&tree);
+        let t = Arc::clone(&self.tree);
         ctx.register_fn(
             Identifier::new("dom_append_child")?,
             Arc::new(move |ctx, args| {
@@ -247,7 +250,7 @@ pub fn register_dom_bindings(
             }),
         )?;
 
-        let t = Arc::clone(&tree);
+        let t = Arc::clone(&self.tree);
         ctx.register_fn(
             Identifier::new("dom_get_text")?,
             Arc::new(move |ctx, args| {
@@ -269,7 +272,7 @@ pub fn register_dom_bindings(
             }),
         )?;
 
-        let t = Arc::clone(&tree);
+        let t = Arc::clone(&self.tree);
         ctx.register_fn(
             Identifier::new("dom_set_text")?,
             Arc::new(move |ctx, args| {
@@ -301,7 +304,28 @@ pub fn register_dom_bindings(
                 Ok(EngineValue::Null)
             }),
         )?;
+
+        Ok(())
+    }
+}
+
+impl HostModule for DomHostModule {
+    fn name(&self) -> &'static str {
+        "dom"
     }
 
-    Ok(())
+    fn register(&self, ctx: &mut dyn ExecutionContext) -> Result<(), EngineError> {
+        ctx.register_host_object(self.create_document_host_object()?)?;
+        ctx.register_host_object(self.create_node_host_object()?)?;
+        self.register_legacy_functions(ctx)?;
+        Ok(())
+    }
+}
+
+/// Registers DOM domain operations into an `ExecutionContext` under `document` and `Node` host objects (ADR-0012, N-01, C-53).
+pub fn register_dom_bindings(
+    ctx: &mut dyn ExecutionContext,
+    tree: Arc<Mutex<DomTree>>,
+) -> Result<(), EngineError> {
+    DomHostModule::new(tree).register(ctx)
 }

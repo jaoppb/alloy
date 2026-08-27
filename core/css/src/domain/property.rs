@@ -156,7 +156,7 @@ impl PropertyName {
 
         match lower.as_str() {
             "color" => Self::Color,
-            "background-color" => Self::BackgroundColor,
+            "background-color" | "background" => Self::BackgroundColor,
             "display" => Self::Display,
             "width" => Self::Width,
             "height" => Self::Height,
@@ -254,40 +254,125 @@ impl std::fmt::Display for PropertyName {
     }
 }
 
-/// Strongly typed CSS property value.
+/// Strongly typed CSS keywords mapped to W3C standards (C-46, C-50).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CssKeyword {
+    // Global
+    Inherit,
+    Initial,
+    Unset,
+    Revert,
+
+    // Display
+    Block,
+    Inline,
+    None,
+    Flex,
+
+    // Typography
+    Normal,
+    Italic,
+    Oblique,
+    Bold,
+    Bolder,
+    Lighter,
+
+    // Box & Layout
+    ContentBox,
+    BorderBox,
+    Auto,
+
+    // Alignment
+    Left,
+    Right,
+    Center,
+    Justify,
+
+    // Fallback for custom/unrecognized keywords
+    Custom(String),
+}
+
+impl CssKeyword {
+    /// Parses a raw CSS keyword string.
+    #[must_use]
+    pub fn parse(raw: &str) -> Self {
+        let lower = raw.trim().to_ascii_lowercase();
+        match lower.as_str() {
+            "inherit" => Self::Inherit,
+            "initial" => Self::Initial,
+            "unset" => Self::Unset,
+            "revert" => Self::Revert,
+            "block" => Self::Block,
+            "inline" => Self::Inline,
+            "none" => Self::None,
+            "flex" => Self::Flex,
+            "normal" => Self::Normal,
+            "italic" => Self::Italic,
+            "oblique" => Self::Oblique,
+            "bold" => Self::Bold,
+            "bolder" => Self::Bolder,
+            "lighter" => Self::Lighter,
+            "content-box" => Self::ContentBox,
+            "border-box" => Self::BorderBox,
+            "auto" => Self::Auto,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "center" => Self::Center,
+            "justify" => Self::Justify,
+            _ => Self::Custom(lower),
+        }
+    }
+
+    /// Accesses the keyword slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Inherit => "inherit",
+            Self::Initial => "initial",
+            Self::Unset => "unset",
+            Self::Revert => "revert",
+            Self::Block => "block",
+            Self::Inline => "inline",
+            Self::None => "none",
+            Self::Flex => "flex",
+            Self::Normal => "normal",
+            Self::Italic => "italic",
+            Self::Oblique => "oblique",
+            Self::Bold => "bold",
+            Self::Bolder => "bolder",
+            Self::Lighter => "lighter",
+            Self::ContentBox => "content-box",
+            Self::BorderBox => "border-box",
+            Self::Auto => "auto",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Center => "center",
+            Self::Justify => "justify",
+            Self::Custom(s) => s.as_str(),
+        }
+    }
+}
+
+/// Re-exported standard CSS display modes from engine domain (C-49).
+pub use engine::DisplayType;
+
+/// Strongly typed CSS property value (ADR-0010, C-46, C-50).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyValue {
     /// Color value.
     Color(Color),
     /// Length in pixels.
     Length(Px),
-    /// Identifier / keyword value (e.g. `block`, `inline`, `bold`).
-    Keyword(String),
+    /// Strongly typed keyword value (e.g. `block`, `inline`, `bold`).
+    Keyword(CssKeyword),
+    /// Strongly typed display mode.
+    Display(DisplayType),
     /// Unparsed raw string fallback.
     Raw(String),
 }
 
-/// CSS `display` property modes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum DisplayType {
-    /// Standard block formatting.
-    #[default]
-    Block,
-    /// Inline flow formatting.
-    Inline,
-    /// Element is hidden and generates no layout box.
-    None,
-    /// Flexbox container formatting.
-    Flex,
-}
-
-impl DisplayType {
-    /// Derives the standard default `DisplayType` for a given DOM tag name (C-13).
-    #[must_use]
-    pub fn from_tag(tag: &dom::TagName) -> Self {
-        match tag.default_display() {
-            "inline" => Self::Inline,
-            _ => Self::Block,
-        }
-    }
+/// Helper deriving default `DisplayType` for a given DOM tag (C-13, C-49).
+#[must_use]
+pub fn display_from_tag(tag: &dom::TagName) -> DisplayType {
+    tag.default_display()
 }

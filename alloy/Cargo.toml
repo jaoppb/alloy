@@ -15,3 +15,9 @@ graphics = { workspace = true }
 html = { workspace = true }
 css = { workspace = true }
 dom = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[build-dependencies]
+rhai = { workspace = true }

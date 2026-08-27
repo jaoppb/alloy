@@ -4,6 +4,9 @@ use crate::domain::geometry::Rect;
 use css::{Color, DisplayType, StyledNode, StyledTree};
 use dom::{DomTree, NodeData};
 
+/// Embedded default Rhai script for 2D layout calculation.
+pub const DEFAULT_LAYOUT_SCRIPT: &str = include_str!("layout.rhai");
+
 /// Translates a `StyledTree` and `DomTree` into a positioned 2D `DisplayList`.
 pub struct LayoutEngine;
 

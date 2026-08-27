@@ -16,5 +16,7 @@ pub use domain::command::RenderCommand;
 pub use domain::display_list::DisplayList;
 pub use domain::error::GraphicsError;
 pub use domain::geometry::{Point, Position, Rect, Size};
-pub use domain::layout::LayoutEngine;
-pub use infrastructure::rhai_bridge::{ScriptDisplayListContainer, register_graphics_bindings};
+pub use domain::layout::{DEFAULT_LAYOUT_SCRIPT, LayoutEngine};
+pub use infrastructure::rhai_bridge::{
+    GraphicsHostModule, ScriptDisplayListContainer, register_graphics_bindings,
+};

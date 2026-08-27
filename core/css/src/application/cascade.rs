@@ -1,10 +1,13 @@
 use crate::domain::computed::ComputedStyle;
 use crate::domain::declaration::Declaration;
-use crate::domain::property::{DisplayType, PropertyValue};
+use crate::domain::property::{CssKeyword, DisplayType, PropertyName, PropertyValue};
 use crate::domain::specificity::Specificity;
 use crate::domain::styled_node::{StyledNode, StyledTree};
 use crate::domain::stylesheet::StyleSheet;
 use dom::{DomTree, NodeData, NodeId};
+
+/// Embedded default Rhai script for CSS cascading logic.
+pub const DEFAULT_CASCADE_SCRIPT: &str = include_str!("cascade.rhai");
 
 /// Service computing cascaded styles across a `DomTree` and generating a `StyledTree`.
 pub struct StyleCascade;
@@ -36,8 +39,8 @@ impl StyleCascade {
 
         // Apply matching CSS declarations if element
         if let NodeData::Element { tag_name, .. } = node.data() {
-            // Set element default display
-            computed.set_display(DisplayType::from_tag(tag_name));
+            // Set element default display (C-13, C-49)
+            computed.set_display(tag_name.default_display());
 
             let mut matched_decls: Vec<(Specificity, usize, Declaration)> = Vec::new();
             for (rule_idx, rule) in stylesheet.rules().iter().enumerate() {
@@ -73,46 +76,46 @@ impl StyleCascade {
 }
 
 fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
-    let name = decl.name().as_str();
-
-    match name {
-        "display" => {
-            if let PropertyValue::Keyword(kw) = decl.value() {
-                let disp = match kw.as_str() {
-                    "inline" => DisplayType::Inline,
-                    "none" => DisplayType::None,
-                    "flex" => DisplayType::Flex,
+    match decl.name() {
+        PropertyName::Display => match decl.value() {
+            PropertyValue::Display(disp) => style.set_display(*disp),
+            PropertyValue::Keyword(kw) => {
+                let disp = match kw {
+                    CssKeyword::Inline => DisplayType::Inline,
+                    CssKeyword::None => DisplayType::None,
+                    CssKeyword::Flex => DisplayType::Flex,
                     _ => DisplayType::Block,
                 };
                 style.set_display(disp);
             }
-        }
-        "color" => {
+            _ => {}
+        },
+        PropertyName::Color => {
             if let PropertyValue::Color(c) = decl.value() {
                 style.set_color(*c);
             }
         }
-        "background-color" | "background" => {
+        PropertyName::BackgroundColor => {
             if let PropertyValue::Color(c) = decl.value() {
                 style.set_background_color(*c);
             }
         }
-        "font-size" => {
+        PropertyName::FontSize => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_font_size(*px);
             }
         }
-        "width" => {
+        PropertyName::Width => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_width(Some(*px));
             }
         }
-        "height" => {
+        PropertyName::Height => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_height(Some(*px));
             }
         }
-        "margin" => {
+        PropertyName::Margin => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_margin_top(*px);
                 style.set_margin_right(*px);
@@ -120,27 +123,27 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
                 style.set_margin_left(*px);
             }
         }
-        "margin-top" => {
+        PropertyName::MarginTop => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_margin_top(*px);
             }
         }
-        "margin-right" => {
+        PropertyName::MarginRight => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_margin_right(*px);
             }
         }
-        "margin-bottom" => {
+        PropertyName::MarginBottom => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_margin_bottom(*px);
             }
         }
-        "margin-left" => {
+        PropertyName::MarginLeft => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_margin_left(*px);
             }
         }
-        "padding" => {
+        PropertyName::Padding => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_padding_top(*px);
                 style.set_padding_right(*px);
@@ -148,22 +151,22 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
                 style.set_padding_left(*px);
             }
         }
-        "padding-top" => {
+        PropertyName::PaddingTop => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_padding_top(*px);
             }
         }
-        "padding-right" => {
+        PropertyName::PaddingRight => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_padding_right(*px);
             }
         }
-        "padding-bottom" => {
+        PropertyName::PaddingBottom => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_padding_bottom(*px);
             }
         }
-        "padding-left" => {
+        PropertyName::PaddingLeft => {
             if let PropertyValue::Length(px) = decl.value() {
                 style.set_padding_left(*px);
             }

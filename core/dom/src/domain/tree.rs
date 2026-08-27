@@ -18,6 +18,55 @@ pub enum QuirksMode {
     Quirks,
 }
 
+/// Strongly typed document type declaration (HTML5 Section 13.2.6.4, C-51).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Doctype {
+    /// Modern HTML5 standard document: `<!DOCTYPE html>`
+    Html5,
+    /// Legacy HTML 4.01 or XHTML document
+    Legacy {
+        name: String,
+        public_id: Option<String>,
+        system_id: Option<String>,
+    },
+    /// Quirks mode or unrecognized DOCTYPE
+    Quirks(String),
+}
+
+impl Doctype {
+    /// Parses a raw doctype string into a strongly typed `Doctype` according to HTML5 Section 13.2.6.4.
+    #[must_use]
+    pub fn parse(raw: &str) -> Self {
+        let trimmed = raw.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        if lower == "html"
+            || lower == "<!doctype html>"
+            || lower == "html system \"about:legacy-compat\""
+            || lower.contains("about:legacy-compat")
+        {
+            Self::Html5
+        } else if lower.starts_with("html public ") && !lower.contains("dtd") {
+            Self::Legacy {
+                name: trimmed.to_string(),
+                public_id: None,
+                system_id: None,
+            }
+        } else {
+            Self::Quirks(trimmed.to_string())
+        }
+    }
+
+    /// Determines the corresponding quirks mode.
+    #[must_use]
+    pub const fn to_quirks_mode(&self) -> QuirksMode {
+        match self {
+            Self::Html5 => QuirksMode::NoQuirks,
+            Self::Legacy { .. } => QuirksMode::LimitedQuirks,
+            Self::Quirks(_) => QuirksMode::Quirks,
+        }
+    }
+}
+
 /// Aggregate root managing DOM nodes within a generational slot arena (ADR-0010, ADR-0013, C-27).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DomTree {
@@ -25,7 +74,7 @@ pub struct DomTree {
     free_head: Option<u32>,
     root: Option<NodeId>,
     quirks_mode: QuirksMode,
-    doctype: Option<String>,
+    doctype: Option<Doctype>,
 }
 
 impl DomTree {
@@ -52,15 +101,16 @@ impl DomTree {
         self.quirks_mode = mode;
     }
 
-    /// Returns the raw DOCTYPE string declaration, if present.
+    /// Returns the active DOCTYPE declaration, if present (C-51).
     #[must_use]
-    pub fn doctype(&self) -> Option<&str> {
-        self.doctype.as_deref()
+    pub const fn doctype(&self) -> Option<&Doctype> {
+        self.doctype.as_ref()
     }
 
-    /// Records the DOCTYPE declaration for this document.
-    pub fn set_doctype(&mut self, doctype: impl Into<String>) {
-        self.doctype = Some(doctype.into());
+    /// Records the DOCTYPE declaration and synchronizes quirks mode (C-36, C-51).
+    pub fn set_doctype(&mut self, doctype: Doctype) {
+        self.quirks_mode = doctype.to_quirks_mode();
+        self.doctype = Some(doctype);
     }
 
     /// Returns the root node identifier, if set.
@@ -123,17 +173,19 @@ impl DomTree {
         }
     }
 
-    /// Validates that all node identifiers exist and match active generations (C-26).
+    /// Validates and resolves all node identifiers into active node references (C-26, C-52).
     ///
     /// # Errors
     /// Returns `DomError::NodeNotFound` on the first missing or stale identifier.
-    pub fn resolve_all(&self, ids: &[NodeId]) -> Result<(), DomError> {
+    pub fn resolve_all(&self, ids: &[NodeId]) -> Result<Vec<&DomNode>, DomError> {
+        let mut nodes = Vec::with_capacity(ids.len());
         for &id in ids {
-            if self.get(id).is_none() {
-                return Err(DomError::NodeNotFound(id));
+            match self.get(id) {
+                Some(node) => nodes.push(node),
+                None => return Err(DomError::NodeNotFound(id)),
             }
         }
-        Ok(())
+        Ok(nodes)
     }
 
     /// Returns the total number of active nodes in the arena.
@@ -348,9 +400,86 @@ impl DomTree {
         }
     }
 
-    /// Serializes a node subtree to a compact HTML string (C-24).
+    /// Recursively collects all text content inside a subtree rooted at `root` (C-48).
+    #[must_use]
+    pub fn get_text_content(&self, root: NodeId) -> String {
+        let mut buffer = String::new();
+        for id in self.traverse_pre_order(root) {
+            if let Some(node) = self.get(id) {
+                if let NodeData::Text(text) = node.data() {
+                    buffer.push_str(text);
+                }
+            }
+        }
+        buffer
+    }
+
+    /// Finds all element node IDs in the subtree that match `tag` (C-48).
+    #[must_use]
+    pub fn find_by_tag_name(&self, root: NodeId, tag: &TagName) -> Vec<NodeId> {
+        let mut matched = Vec::new();
+        for id in self.traverse_pre_order(root) {
+            if let Some(node) = self.get(id) {
+                if let Some(node_tag) = node.data().as_element_tag() {
+                    if node_tag == tag {
+                        matched.push(id);
+                    }
+                }
+            }
+        }
+        matched
+    }
+
+    /// Serializes a node subtree to a compact HTML string (C-24, C-48).
     #[must_use]
     pub fn serialize_to_html(&self, root: NodeId) -> String {
-        crate::domain::service::DomService::serialize_to_html(self, root)
+        let mut output = String::new();
+        self.serialize_node(root, &mut output);
+        output
+    }
+
+    fn serialize_node(&self, id: NodeId, out: &mut String) {
+        let Some(node) = self.get(id) else {
+            return;
+        };
+
+        match node.data() {
+            NodeData::Document => {
+                for child_id in node.children().iter() {
+                    self.serialize_node(child_id, out);
+                }
+            }
+            NodeData::Element {
+                tag_name,
+                attributes,
+            } => {
+                out.push('<');
+                out.push_str(tag_name.as_str());
+                for (name, val) in attributes.iter() {
+                    out.push(' ');
+                    out.push_str(name.as_str());
+                    out.push_str("=\"");
+                    out.push_str(val.as_str());
+                    out.push('"');
+                }
+                out.push('>');
+
+                for child_id in node.children().iter() {
+                    self.serialize_node(child_id, out);
+                }
+
+                out.push_str("</");
+                out.push_str(tag_name.as_str());
+                out.push('>');
+            }
+            NodeData::Text(text) => {
+                out.push_str(text);
+            }
+            NodeData::Comment(comment) => {
+                out.push_str("<!--");
+                out.push_str(comment);
+                out.push_str("-->");
+            }
+        }
     }
 }

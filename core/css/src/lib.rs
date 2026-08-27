@@ -9,7 +9,7 @@ pub mod application;
 pub mod domain;
 pub mod infrastructure;
 
-pub use application::cascade::StyleCascade;
+pub use application::cascade::{DEFAULT_CASCADE_SCRIPT, StyleCascade};
 pub use domain::computed::ComputedStyle;
 pub use domain::declaration::{Declaration, DeclarationList};
 pub use domain::error::CssError;

@@ -18,4 +18,4 @@ pub use node_id::NodeId;
 pub use service::DomService;
 pub use slot::Slot;
 pub use tag_name::TagName;
-pub use tree::{DomTree, QuirksMode};
+pub use tree::{Doctype, DomTree, QuirksMode};

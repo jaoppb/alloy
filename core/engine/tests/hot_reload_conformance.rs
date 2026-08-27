@@ -1,7 +1,7 @@
 use dom::{AttributeMap, AttributeName, AttributeValue, DomService, DomTree, TagName};
 use engine::{
     AtomicScriptSlot, DebounceDuration, HotReloadCoordinator, HotReloadStatus, MockEngine,
-    ScriptWatcher,
+    create_default_script_watcher,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -19,7 +19,7 @@ fn test_c10_file_watcher_detects_rhai_modifications_with_debounce() {
     let counter_clone = Arc::clone(&event_counter);
 
     let debounce = DebounceDuration::new(Duration::from_millis(50));
-    let mut watcher = ScriptWatcher::new(debounce);
+    let mut watcher = create_default_script_watcher(debounce);
 
     watcher
         .watch(&temp_dir, move |_path| {

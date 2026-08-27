@@ -183,10 +183,24 @@ fn test_insert_before_with_unrelated_reference_node_fails() {
 
 #[test]
 fn test_tag_name_default_display_and_serialization() {
-    assert_eq!(TagName::new("span").unwrap().default_display(), "inline");
-    assert_eq!(TagName::new("a").unwrap().default_display(), "inline");
-    assert_eq!(TagName::new("div").unwrap().default_display(), "block");
-    assert_eq!(TagName::new("p").unwrap().default_display(), "block");
+    use engine::DisplayType;
+
+    assert_eq!(
+        TagName::new("span").unwrap().default_display(),
+        DisplayType::Inline
+    );
+    assert_eq!(
+        TagName::new("a").unwrap().default_display(),
+        DisplayType::Inline
+    );
+    assert_eq!(
+        TagName::new("div").unwrap().default_display(),
+        DisplayType::Block
+    );
+    assert_eq!(
+        TagName::new("p").unwrap().default_display(),
+        DisplayType::Block
+    );
 
     let mut tree = DomTree::new();
     let doc = tree.create_document();

@@ -14,9 +14,12 @@ pub mod infrastructure;
 // Public re-exports of the ubiquitous scripting language
 pub use application::conversion::{FromEngineValue, IntoEngineValue};
 pub use application::hot_reload::{AtomicScriptSlot, HotReloadCoordinator, ScriptWatcher};
-pub use application::ports::{ExecutionContext, FileWatchPort, NativeFn, RuntimeEngine};
+pub use application::ports::{
+    ExecutionContext, FileWatchPort, HostModule, NativeFn, RuntimeEngine,
+};
 pub use application::sandbox::{TrappedExecutor, guarded_native_fn};
 pub use domain::capability::{Capability, CapabilitySet, SubsystemProfile};
+pub use domain::display::DisplayType;
 pub use domain::error::EngineError;
 pub use domain::host_object::{HostGetterFn, HostMethodFn, HostObject, HostSetterFn};
 pub use domain::hot_reload::{DebounceDuration, HotReloadStatus, ReloadEvent};
@@ -24,3 +27,12 @@ pub use domain::identifier::Identifier;
 pub use domain::value::EngineValue;
 pub use infrastructure::mock::{MockContext, MockEngine};
 pub use infrastructure::notify_watcher::NotifyFileWatcher;
+
+/// Default script watcher wired with the Notify-based filesystem adapter.
+pub type DefaultScriptWatcher = ScriptWatcher<NotifyFileWatcher>;
+
+/// Creates a default `ScriptWatcher` wired with `NotifyFileWatcher` adapter.
+#[must_use]
+pub fn create_default_script_watcher(debounce: DebounceDuration) -> DefaultScriptWatcher {
+    ScriptWatcher::new(debounce, NotifyFileWatcher::new())
+}

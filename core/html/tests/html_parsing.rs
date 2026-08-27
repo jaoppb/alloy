@@ -188,13 +188,13 @@ fn test_is_void_element_delegation_to_tag_name() {
 
 #[test]
 fn test_doctype_sniffing_standards_vs_quirks_mode() {
-    use dom::QuirksMode;
+    use dom::{Doctype, QuirksMode};
 
     // 1. Standard HTML5 DOCTYPE -> Standards Mode (NoQuirks)
     let standards_html = "<!DOCTYPE html><html><body><h1>Standards</h1></body></html>";
     let standards_tree = parse_html(standards_html).expect("Parse standards html");
     assert_eq!(standards_tree.quirks_mode(), QuirksMode::NoQuirks);
-    assert_eq!(standards_tree.doctype(), Some("html"));
+    assert_eq!(standards_tree.doctype(), Some(&Doctype::Html5));
 
     // 2. Missing DOCTYPE -> Quirks Mode
     let quirks_html = "<html><body><h1>Quirks</h1></body></html>";

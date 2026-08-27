@@ -1,6 +1,6 @@
 use crate::domain::declaration::{Declaration, DeclarationList};
 use crate::domain::error::CssError;
-use crate::domain::property::{Color, PropertyName, PropertyValue, Px};
+use crate::domain::property::{Color, CssKeyword, PropertyName, PropertyValue, Px};
 use crate::domain::rule::{Rule, RuleSet};
 use crate::domain::selector::{AttributeMatcher, PseudoClass, Selector};
 use crate::domain::stylesheet::StyleSheet;
@@ -305,28 +305,26 @@ fn parse_compound_selector(chunk: &str) -> Result<Selector, CssError> {
     }
 }
 
+type AttrOp = (&'static str, fn(String) -> AttributeMatcher);
+
 fn parse_attribute_selector(content: &str) -> Result<Selector, CssError> {
-    let (name_part, matcher) = if let Some((name, val)) = content.split_once("~=") {
-        (name.trim(), AttributeMatcher::Includes(clean_attr_val(val)))
-    } else if let Some((name, val)) = content.split_once("|=") {
-        (
-            name.trim(),
-            AttributeMatcher::DashMatch(clean_attr_val(val)),
-        )
-    } else if let Some((name, val)) = content.split_once("^=") {
-        (name.trim(), AttributeMatcher::Prefix(clean_attr_val(val)))
-    } else if let Some((name, val)) = content.split_once("$=") {
-        (name.trim(), AttributeMatcher::Suffix(clean_attr_val(val)))
-    } else if let Some((name, val)) = content.split_once("*=") {
-        (
-            name.trim(),
-            AttributeMatcher::Substring(clean_attr_val(val)),
-        )
-    } else if let Some((name, val)) = content.split_once('=') {
-        (name.trim(), AttributeMatcher::Exact(clean_attr_val(val)))
-    } else {
-        (content.trim(), AttributeMatcher::Exists)
-    };
+    const OPERATORS: [AttrOp; 6] = [
+        ("~=", AttributeMatcher::Includes),
+        ("|=", AttributeMatcher::DashMatch),
+        ("^=", AttributeMatcher::Prefix),
+        ("$=", AttributeMatcher::Suffix),
+        ("*=", AttributeMatcher::Substring),
+        ("=", AttributeMatcher::Exact),
+    ];
+
+    let (name_part, matcher) = OPERATORS
+        .iter()
+        .find_map(|(op, ctor)| {
+            content
+                .split_once(op)
+                .map(|(name, val)| (name.trim(), ctor(clean_attr_val(val))))
+        })
+        .unwrap_or_else(|| (content.trim(), AttributeMatcher::Exists));
 
     if name_part.is_empty() {
         return Err(CssError::InvalidSelector(
@@ -334,8 +332,10 @@ fn parse_attribute_selector(content: &str) -> Result<Selector, CssError> {
         ));
     }
 
+    let attr_name = AttributeName::new(name_part);
+
     Ok(Selector::Attribute {
-        name: AttributeName::new(name_part),
+        name: attr_name,
         matcher,
     })
 }
@@ -345,11 +345,7 @@ fn clean_attr_val(val: &str) -> String {
     if (trimmed.starts_with('"') && trimmed.ends_with('"'))
         || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
     {
-        if trimmed.len() >= 2 {
-            trimmed[1..trimmed.len() - 1].to_string()
-        } else {
-            String::new()
-        }
+        trimmed[1..trimmed.len() - 1].to_string()
     } else {
         trimmed.to_string()
     }
@@ -391,10 +387,9 @@ fn parse_property_value(raw: &str) -> PropertyValue {
         return PropertyValue::Length(Px::new(val));
     }
 
-    match raw {
-        "block" | "inline" | "none" | "flex" | "bold" | "normal" | "italic" => {
-            PropertyValue::Keyword(raw.to_string())
-        }
-        _ => PropertyValue::Raw(raw.to_string()),
+    let kw = CssKeyword::parse(raw);
+    match kw {
+        CssKeyword::Custom(_) => PropertyValue::Raw(raw.to_string()),
+        standard_kw => PropertyValue::Keyword(standard_kw),
     }
 }

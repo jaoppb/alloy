@@ -37,6 +37,9 @@ pub enum HtmlError {
     /// Invalid tag name.
     #[error("Invalid HTML tag name: {0}")]
     InvalidTagName(String),
+    /// Unrecognized HTML entity.
+    #[error("Unrecognized HTML entity: {0}")]
+    InvalidEntity(String),
     /// Underlying error from DOM arena mutations.
     #[error("DOM tree error during HTML parsing: {0}")]
     DomError(#[from] DomError),

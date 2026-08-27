@@ -57,6 +57,29 @@ pub trait ExecutionContext: Send + Sync {
     /// # Errors
     /// Returns `EngineError` if scope cleanup fails.
     fn reset_scope(&mut self) -> Result<(), EngineError>;
+
+    /// Registers a modular bundle of host objects and functions into this context (C-53, C-56).
+    ///
+    /// # Errors
+    /// Returns `EngineError` if module registration fails.
+    fn register_module(&mut self, module: &dyn HostModule) -> Result<(), EngineError>
+    where
+        Self: Sized,
+    {
+        module.register(self)
+    }
+}
+
+/// Modular bundle for registering subsystem host objects, methods, and functions (C-53, C-56).
+pub trait HostModule: Send + Sync {
+    /// Returns the unique name of this module.
+    fn name(&self) -> &'static str;
+
+    /// Injects native capabilities and host objects into the execution context.
+    ///
+    /// # Errors
+    /// Returns `EngineError` on registration failure.
+    fn register(&self, ctx: &mut dyn ExecutionContext) -> Result<(), EngineError>;
 }
 
 /// Abstract runtime engine trait decoupling domain crates from concrete script engines (PRD-002, C-01).

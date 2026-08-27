@@ -3,9 +3,29 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Wrapper around an opaque host instance handle inside Rhai scripts (ADR-0012, N-01).
+/// Wrapper around an opaque host instance handle inside Rhai scripts (ADR-0012, N-01, C-57).
 #[derive(Clone)]
-pub struct RhaiNativeHandle(pub Arc<dyn Any + Send + Sync>);
+pub struct RhaiNativeHandle(Arc<dyn Any + Send + Sync>);
+
+impl RhaiNativeHandle {
+    /// Wraps an opaque type into a `RhaiNativeHandle`.
+    #[must_use]
+    pub const fn new(handle: Arc<dyn Any + Send + Sync>) -> Self {
+        Self(handle)
+    }
+
+    /// Accesses the underlying inner handle.
+    #[must_use]
+    pub fn inner(&self) -> &Arc<dyn Any + Send + Sync> {
+        &self.0
+    }
+
+    /// Unwraps into the underlying inner handle.
+    #[must_use]
+    pub fn into_inner(self) -> Arc<dyn Any + Send + Sync> {
+        self.0
+    }
+}
 
 impl std::fmt::Debug for RhaiNativeHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -13,9 +33,29 @@ impl std::fmt::Debug for RhaiNativeHandle {
     }
 }
 
-/// Host singleton instance representation in Rhai scope (ADR-0012, N-01).
+/// Host singleton instance representation in Rhai scope (ADR-0012, N-01, C-57).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RhaiSingleton(pub String);
+pub struct RhaiSingleton(String);
+
+impl RhaiSingleton {
+    /// Creates a new `RhaiSingleton` identifier.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// Returns the singleton name slice.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes into the underlying String name.
+    #[must_use]
+    pub fn into_name(self) -> String {
+        self.0
+    }
+}
 
 /// Converts a canonical `EngineValue` into a `rhai::Dynamic`.
 pub fn engine_value_to_dynamic(val: EngineValue) -> rhai::Dynamic {
@@ -36,7 +76,7 @@ pub fn engine_value_to_dynamic(val: EngineValue) -> rhai::Dynamic {
                 .collect();
             rhai::Dynamic::from(rhai_map)
         }
-        EngineValue::Handle(arc) => rhai::Dynamic::from(RhaiNativeHandle(arc)),
+        EngineValue::Handle(arc) => rhai::Dynamic::from(RhaiNativeHandle::new(arc)),
     }
 }
 
@@ -51,7 +91,7 @@ pub fn dynamic_to_engine_value(dyn_val: &rhai::Dynamic) -> Result<EngineValue, E
 
     if dyn_val.is::<RhaiNativeHandle>() {
         let handle = dyn_val.clone_cast::<RhaiNativeHandle>();
-        return Ok(EngineValue::Handle(handle.0));
+        return Ok(EngineValue::Handle(handle.into_inner()));
     }
 
     if dyn_val.is_bool() {
