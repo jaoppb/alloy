@@ -2,9 +2,12 @@
 //! script-visible state, honour their own capability sets, and a fault in one
 //! does not disturb the next evaluation of another.
 
+use std::sync::{Arc, Mutex};
+
+use dom::{DomTree, serialize_html};
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, RuntimeEngine,
-    native_fn,
+    native_fn, profiles,
 };
 use rhai_runtime::RhaiEngine;
 
@@ -90,5 +93,42 @@ fn a_trapped_panic_in_one_context_does_not_disturb_another() {
     assert_eq!(
         still_there, 99,
         "the healthy context is untouched by the trapped panic"
+    );
+}
+
+#[test]
+fn each_bound_context_mutates_only_its_own_dom_tree() {
+    let engine = RhaiEngine::new();
+    let tree_a = Arc::new(Mutex::new(DomTree::new()));
+    let tree_b = Arc::new(Mutex::new(DomTree::new()));
+    let mut context_a = engine
+        .create_context(profiles::dom_parser())
+        .expect("context a");
+    let mut context_b = engine
+        .create_context(profiles::dom_parser())
+        .expect("context b");
+    context_a.bind_dom(Arc::clone(&tree_a)).expect("bind a");
+    context_b.bind_dom(Arc::clone(&tree_b)).expect("bind b");
+
+    engine
+        .eval_value(
+            &mut context_a,
+            r#"let node = document.create_element("aside"); document.append_child(node);"#,
+        )
+        .expect("A mutates its own tree");
+
+    let guard_a = tree_a.lock().expect("lock a");
+    assert_eq!(
+        serialize_html(&guard_a, guard_a.document()).expect("serialize a"),
+        "<aside></aside>",
+        "A's script landed in A's tree"
+    );
+    drop(guard_a);
+
+    let guard_b = tree_b.lock().expect("lock b");
+    assert_eq!(
+        serialize_html(&guard_b, guard_b.document()).expect("serialize b"),
+        "",
+        "B's tree is untouched by A's script"
     );
 }

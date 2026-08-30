@@ -284,6 +284,84 @@ fn mock_engine_passes_dyn_companion_conformance() {
     engine::conformance::run_dyn_suite(Box::new(MockEngine::new()));
 }
 
+/// A second, unrelated `RuntimeEngine` — just enough to feed a context of the
+/// wrong concrete type to `eval_value_dyn` and prove the ADR-0013 downcast
+/// guard rejects it instead of misusing it.
+struct AlienEngine;
+
+struct AlienContext(CapabilitySet);
+
+impl ExecutionContext for AlienContext {
+    fn capabilities(&self) -> CapabilitySet {
+        self.0
+    }
+    fn register_type_erased(&mut self, _: TypeRegistration) -> Result<(), EngineError> {
+        Ok(())
+    }
+    fn register_native_fn(&mut self, _: &str, _: Arity, _: NativeFn) -> Result<(), EngineError> {
+        Ok(())
+    }
+    fn set_value(&mut self, _: &str, _: EngineValue) -> Result<(), EngineError> {
+        Ok(())
+    }
+    fn get_value(&self, _: &str) -> Option<EngineValue> {
+        None
+    }
+    fn call_function_value(
+        &mut self,
+        _: &str,
+        _: &[EngineValue],
+    ) -> Result<EngineValue, EngineError> {
+        Err(EngineError::binding("alien engine has no functions"))
+    }
+    fn reset_scope(&mut self) -> Result<(), EngineError> {
+        Ok(())
+    }
+}
+
+impl RuntimeEngine for AlienEngine {
+    type Context = AlienContext;
+    type CompiledScript = ();
+
+    fn create_context(&self, capabilities: CapabilitySet) -> Result<AlienContext, EngineError> {
+        Ok(AlienContext(capabilities))
+    }
+    fn compile(&self, _: &str) -> Result<(), EngineError> {
+        Ok(())
+    }
+    fn eval_value(&self, _: &mut AlienContext, _: &str) -> Result<EngineValue, EngineError> {
+        Ok(EngineValue::Unit)
+    }
+    fn eval_compiled_value(
+        &self,
+        _: &mut AlienContext,
+        _: &(),
+    ) -> Result<EngineValue, EngineError> {
+        Ok(EngineValue::Unit)
+    }
+}
+
+#[test]
+fn dyn_eval_rejects_a_context_that_belongs_to_another_engine() {
+    use engine::DynRuntimeEngine;
+
+    let mock: Box<dyn DynRuntimeEngine> = Box::new(MockEngine::new());
+    let alien: Box<dyn DynRuntimeEngine> = Box::new(AlienEngine);
+    let mut mock_context = mock
+        .create_context_dyn(CapabilitySet::empty())
+        .expect("mock context");
+
+    match alien.eval_value_dyn(mock_context.as_mut(), "1") {
+        Err(EngineError::Binding { message }) => {
+            assert!(
+                message.contains("does not belong"),
+                "the guard must name the mismatch; message was: {message}"
+            );
+        }
+        other => panic!("expected EngineError::Binding for a cross-engine context, got {other:?}"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Adapter-local checks
 // ---------------------------------------------------------------------------

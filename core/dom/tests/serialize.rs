@@ -2,7 +2,10 @@
 //! attribute insertion order, and emits void elements without a close tag
 //! (v0.2 report §3 F3 step 5, §5).
 
-use dom::{AttributeName, AttributeValue, DomTree, NodeId, TagName, TextContent, serialize_html};
+use dom::{
+    AttributeName, AttributeValue, CommentContent, DomError, DomTree, NodeId, TagName, TextContent,
+    serialize_html,
+};
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {
     tree.create_element(TagName::new(tag).expect("valid tag"))
@@ -74,11 +77,29 @@ fn attributes_keep_insertion_order_across_an_update() {
 }
 
 #[test]
-fn serializing_a_stale_root_is_an_error() {
+fn a_comment_node_serializes_between_delimiters_without_escaping() {
+    let mut tree = DomTree::new();
+    let body = element(&mut tree, "body");
+    // v0.2 writes comment content raw (documented limitation) — `<`, `&` pass through.
+    let comment = tree.create_comment(CommentContent::new("keep <me> & raw"));
+    tree.append_child(tree.document(), body).unwrap();
+    tree.append_child(body, comment).unwrap();
+
+    assert_eq!(
+        serialize_html(&tree, tree.document()).unwrap(),
+        "<body><!--keep <me> & raw--></body>"
+    );
+}
+
+#[test]
+fn serializing_a_stale_root_is_a_node_not_found_error() {
     let mut tree = DomTree::new();
     let doomed = element(&mut tree, "div");
     tree.append_child(tree.document(), doomed).unwrap();
     tree.remove(doomed).unwrap();
 
-    assert!(serialize_html(&tree, doomed).is_err());
+    assert_eq!(
+        serialize_html(&tree, doomed).unwrap_err(),
+        DomError::NodeNotFound(doomed)
+    );
 }

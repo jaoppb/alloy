@@ -90,6 +90,76 @@ fn remove_tombstones_the_whole_subtree() {
 }
 
 #[test]
+fn insert_before_places_the_new_child_at_the_anchor_position() {
+    let mut tree = DomTree::new();
+    let parent = element(&mut tree, "ul");
+    let first = element(&mut tree, "li");
+    let third = element(&mut tree, "li");
+    tree.append_child(tree.document(), parent).unwrap();
+    tree.append_child(parent, first).unwrap();
+    tree.append_child(parent, third).unwrap();
+
+    let second = element(&mut tree, "li");
+    tree.insert_before(parent, second, third).unwrap();
+
+    let order: Vec<NodeId> = tree.child_ids(parent).unwrap().iter().collect();
+    assert_eq!(order, vec![first, second, third]);
+    assert_eq!(tree.parent(second).unwrap(), Some(parent));
+}
+
+#[test]
+fn insert_before_moves_a_node_that_already_has_a_parent() {
+    let mut tree = DomTree::new();
+    let old_parent = element(&mut tree, "aside");
+    let new_parent = element(&mut tree, "main");
+    let anchor = element(&mut tree, "p");
+    let moved = element(&mut tree, "span");
+    tree.append_child(tree.document(), old_parent).unwrap();
+    tree.append_child(tree.document(), new_parent).unwrap();
+    tree.append_child(new_parent, anchor).unwrap();
+    tree.append_child(old_parent, moved).unwrap();
+
+    tree.insert_before(new_parent, moved, anchor).unwrap();
+
+    assert!(!tree.child_ids(old_parent).unwrap().contains(moved));
+    let order: Vec<NodeId> = tree.child_ids(new_parent).unwrap().iter().collect();
+    assert_eq!(order, vec![moved, anchor]);
+}
+
+#[test]
+fn insert_before_rejects_an_anchor_that_is_not_a_child_of_the_parent() {
+    let mut tree = DomTree::new();
+    let parent = element(&mut tree, "ul");
+    let stranger = element(&mut tree, "li");
+    let newcomer = element(&mut tree, "li");
+    tree.append_child(tree.document(), parent).unwrap();
+    tree.append_child(tree.document(), stranger).unwrap();
+
+    let before = tree.clone();
+    assert_eq!(
+        tree.insert_before(parent, newcomer, stranger).unwrap_err(),
+        DomError::NodeNotFound(stranger)
+    );
+    assert_eq!(tree, before, "a rejected insert must not mutate the tree");
+}
+
+#[test]
+fn detach_unlinks_a_node_without_tombstoning_it() {
+    let mut tree = DomTree::new();
+    let parent = element(&mut tree, "div");
+    let child = element(&mut tree, "span");
+    tree.append_child(tree.document(), parent).unwrap();
+    tree.append_child(parent, child).unwrap();
+
+    tree.detach(child).unwrap();
+
+    assert!(!tree.child_ids(parent).unwrap().contains(child));
+    assert_eq!(tree.parent(child).unwrap(), None);
+    // still in the arena — detach is not remove
+    assert!(tree.node_kind(child).is_ok());
+}
+
+#[test]
 fn a_text_or_comment_node_cannot_hold_children() {
     let mut tree = DomTree::new();
     let text = tree.create_text(TextContent::new("leaf"));
