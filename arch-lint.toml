@@ -1,0 +1,61 @@
+# arch-lint — machine-enforced architecture rules for the Alloy workspace.
+# Docs: https://github.com/ynishi/arch-lint   ·   run: `just arch` (or `arch-lint check`)
+#
+# Scope of this file: the *code-pattern* half of the review gate — it mechanically
+# enforces the `tracing` and no-`unwrap` decisions (ADR-0014, ADR-0008) so they
+# are reproducible in a dev checkout, not just in review. The *dependency-graph*
+# half — "core/engine links no script interpreter" (ADR-0002 / ADR-0011 item 2) —
+# is not expressible in arch-lint 0.5 and stays in the `just no-engine` recipe
+# and the CI `no-engine` job.
+
+[analyzer]
+exclude = [
+    "**/target/**",
+    "**/node_modules/**",
+    # The port conformance suite (ADR-0011 item 6) is assertion code by nature —
+    # it is `pub` (not `#[cfg(test)]`) only so adapter `tests/` can import it, and
+    # it `panic!`s / `.expect()`s on the first violation on purpose.
+    "core/engine/src/conformance.rs",
+]
+respect_gitignore = true
+
+# --- enabled: the rules that map to a concrete review ask --------------------
+
+# G3 / ADR-0008: no `.unwrap()` / `.expect()` in production code. Tests opt out
+# (mirrors clippy.toml `allow-unwrap-in-tests` / `allow-expect-in-tests`).
+[rules.no-unwrap-expect]
+enabled = true
+allow_in_tests = true
+
+# G1 / ADR-0014: the `log` facade is not used here — `tracing` is the only
+# logging surface.
+[rules.require-tracing]
+enabled = true
+
+# G1 / ADR-0014: the subscriber must take its level from the environment
+# (`EnvFilter`), never a hardcoded `Level::INFO`.
+[rules.tracing-env-init]
+enabled = true
+
+# --- disabled: rules that fight a deliberate, documented idiom --------------
+
+# `EngineError` keeps a hand-written `Display` / `Error` on purpose — `core/engine`
+# is the port boundary and takes no proc-macro dependency (see ADR-0015 §scope).
+[rules.require-thiserror]
+enabled = false
+
+# `x.lock().unwrap_or_else(|poison| poison.into_inner())` is the chosen
+# mutex-poison-recovery idiom (a panicked holder must not wedge the host); it is
+# not an error being swallowed.
+[rules.no-silent-result-drop]
+enabled = false
+
+[rules.no-error-swallowing]
+enabled = false
+
+# Not an async codebase yet.
+[rules.no-sync-io]
+enabled = false
+
+[rules.handler-complexity]
+enabled = false

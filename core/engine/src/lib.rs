@@ -41,6 +41,10 @@
 //! variation and threat models.
 
 #![forbid(unsafe_code)]
+// Every fallible method returns the one `EngineError` (ADR-0011 item 4) and
+// documents its failure modes in prose; a `# Errors` heading on each would only
+// repeat that.
+#![allow(clippy::missing_errors_doc)]
 
 pub mod application;
 pub mod conformance;

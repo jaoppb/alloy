@@ -14,3 +14,6 @@ path = "src/main.rs"
 [dependencies]
 engine = { path = "../core/engine" }
 rhai-runtime = { path = "../core/runtime/rhai" }
+
+[lints]
+workspace = true

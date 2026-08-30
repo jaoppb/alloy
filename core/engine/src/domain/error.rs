@@ -151,10 +151,7 @@ fn write_location(
     formatter: &mut fmt::Formatter<'_>,
     location: Option<&SourceLocation>,
 ) -> fmt::Result {
-    match location {
-        Some(position) => write!(formatter, " at {position}"),
-        None => Ok(()),
-    }
+    location.map_or(Ok(()), |position| write!(formatter, " at {position}"))
 }
 
 impl std::error::Error for EngineError {}

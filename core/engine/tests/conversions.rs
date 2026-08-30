@@ -1,5 +1,8 @@
 //! Unit coverage for `IntoEngineValue` / `FromEngineValue` and `EngineFunction`.
 
+// Test-only idioms in free helpers that clippy's `-in-tests` heuristic misses.
+#![allow(clippy::expect_used, clippy::float_cmp, clippy::needless_pass_by_value)]
+
 use std::collections::BTreeMap;
 
 use engine::{Arity, EngineError, EngineFunction, EngineValue, FromEngineValue, IntoEngineValue};

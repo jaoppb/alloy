@@ -38,3 +38,29 @@ bitflags = "=2.13.1"
 # default `rhai::INT` = i64 and `rhai::FLOAT` = f64 (no `only_i32`, no `f32_float`),
 # `sync` to satisfy `RuntimeEngine: Send + Sync`. Not yet in the dependency graph.
 rhai = { version = "=1.26.0", default-features = false, features = ["std", "sync"] }
+# `alloy` CLI arg parser (F2).
+clap = { version = "=4.5.51", features = ["derive"] }
+# Structured logging (ADR-0014). `alloy` inits the subscriber; libraries only emit.
+tracing = "=0.1.41"
+tracing-subscriber = { version = "=0.3.20", features = ["env-filter", "json", "fmt"] }
+# Typed errors outside the engine port (ADR-0015); `core/engine` keeps its manual `Display`.
+thiserror = "=2.0.17"
+
+# Strict lint gate (review G3), inherited via `lints.workspace = true`. `priority = -1`
+# lets the specific lints below override the group denies.
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"

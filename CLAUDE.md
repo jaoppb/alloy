@@ -17,7 +17,7 @@ not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report origina
   `EngineType` traits, public `engine::conformance` suite, `engine::PORT_SCHEMA_VERSION` (= 1, ADR-0011 items 3/7).
   Depends only on `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in `tests/` closes
   **C-01, C-05**. ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` (items 1,3,4,5,6 ✅; item
-  2 `dyn RuntimeEngine` companion deferred to v0.2/ADR-0013). Verified locally (`make gate`): `cargo deny check` green,
+  2 `dyn RuntimeEngine` companion deferred to v0.2/ADR-0013). Verified locally (`just gate`): `cargo deny check` green,
   `cargo llvm-cov -p engine` ≈ 95% lines.
 - **`core/runtime/rhai`**: `RhaiEngine` / `RhaiContext` / `RhaiCompiledScript(Arc<rhai::AST>)`;
   `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
@@ -28,22 +28,22 @@ not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report origina
   and prints the result. Hand-rolled arg parsing, no deps. Explicit workspace member (the `core/runtime/*` glob is
   untouched). Example: `scripts/hello.rhai`.
 
-Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/dom`, `core/html`, `core/css`,
+Still **stubs** (doc-comment + `#![forbid(unsafe_code)]` only, no items yet): `core/dom`, `core/html`, `core/css`,
 `core/graphics`, `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-03 (v0.2 I1 — real
 `DomNode`), C-06 … C-18. Follow the `domain/` / `application/` / `infrastructure/` layering that `core/engine` and
 `core/runtime/rhai` now demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
 
 ## Commands
 
-Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `Makefile` wraps both — `make` lists every
-target.
+Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `justfile` wraps both — `just` lists every
+recipe.
 
 ```bash
-make gate                                   # full local gate (fmt-check + clippy + check + test + deny + coverage + no-engine) — mirrors CI
-make setup                                  # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, git hooks
-make test CRATE=engine ARGS="-- name"       # scoped test run
-make run ARGS="--script scripts/hello.rhai" # run the alloy binary
-make deny | make coverage | make no-engine  # individual CI gates
+just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + no-engine) — mirrors CI
+just setup                                   # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, arch-lint, git hooks
+just test engine "-- name"                   # scoped test run
+just run --script scripts/hello.rhai         # run the alloy binary
+just deny | just coverage | just no-engine   # individual CI gates
 
 # equivalent raw commands:
 pnpm check                                  # prettier check + markdownlint + cargo fmt --check + clippy
@@ -54,9 +54,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt` + clippy and prettier + markdownlint
-(auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`. Clippy
-warnings are errors — never leave one behind.
+Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint`, prettier and
+markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
+Clippy warnings are errors — never leave one behind. The strict lint set lives in `[workspace.lints.clippy]` (root
+`Cargo.toml`) plus `clippy.toml`; `arch-lint.toml` adds the `tracing` / no-`unwrap` code-pattern rules.
 
 Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
 Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.

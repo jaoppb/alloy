@@ -29,6 +29,16 @@
 //! gap, tracked for v0.2 with a PRD-002 amendment. [`check_call_function_invokes_a_registered_binding`]
 //! pins the current meaning so the semantics cannot drift silently.
 
+// An assertion suite that happens to be `pub` (so adapters can call it from
+// their `tests/`) rather than `#[cfg(test)]`: it panics on the first violation
+// by design. Same intent as `clippy.toml`'s `allow-*-in-tests`.
+#![allow(
+    clippy::panic,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects,
+    clippy::manual_let_else
+)]
+
 use crate::application::ports::{ExecutionContext, RuntimeEngine};
 use crate::domain::capability::{Capability, CapabilitySet};
 use crate::domain::value::EngineValue;

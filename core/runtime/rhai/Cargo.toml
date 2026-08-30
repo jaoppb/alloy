@@ -10,3 +10,6 @@ description = "Rhai backend implementing the core/engine RuntimeEngine / Executi
 [dependencies]
 engine = { path = "../../engine" }
 rhai = { workspace = true }
+
+[lints]
+workspace = true

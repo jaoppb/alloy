@@ -19,6 +19,9 @@
 //! aborts (PRD-003:79, mechanism of C-09).
 
 #![forbid(unsafe_code)]
+// Fallible methods return `engine::EngineError` and document their failures in
+// prose; a `# Errors` heading on each would only repeat that.
+#![allow(clippy::missing_errors_doc)]
 
 mod infrastructure;
 

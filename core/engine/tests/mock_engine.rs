@@ -32,7 +32,7 @@ use engine::{
 struct MockEngine;
 
 impl MockEngine {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self
     }
 }
@@ -54,7 +54,7 @@ impl MockContext {
         }
     }
 
-    fn registered_type_count(&self) -> usize {
+    const fn registered_type_count(&self) -> usize {
         self.registered_types.len()
     }
 }
@@ -155,7 +155,7 @@ enum Expression {
     Text(String),
     Variable(String),
     Call(String),
-    Add(Box<Expression>, Box<Expression>),
+    Add(Box<Self>, Box<Self>),
 }
 
 const ORIGIN: SourceLocation = SourceLocation::new(1, 1);

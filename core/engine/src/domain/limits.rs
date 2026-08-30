@@ -1,9 +1,11 @@
-//! Execution ceilings (PRD-002 §4.3, ADR-0004). Engine-agnostic *mechanism*
-//! config: the numbers live in a struct, never hard-coded in an adapter's eval
-//! path (v0.1 report decision 2.6). `core/runtime/rhai` (F2) maps these onto
-//! `Engine::set_max_operations` / `set_max_call_levels` / `set_max_expr_depths`
-//! and a wall-clock guard; a breach becomes
-//! [`EngineError::ExecutionLimitExceeded`][crate::EngineError] — the mechanism of C-04.
+//! Execution ceilings (PRD-002 §4.3, ADR-0004).
+//!
+//! Engine-agnostic *mechanism* config: the numbers live in a struct, never
+//! hard-coded in an adapter's eval path (v0.1 report decision 2.6).
+//! `core/runtime/rhai` (F2) maps these onto `Engine::set_max_operations` /
+//! `set_max_call_levels` / `set_max_expr_depths` and a wall-clock guard; a
+//! breach becomes [`EngineError::ExecutionLimitExceeded`][crate::EngineError] —
+//! the mechanism of C-04.
 
 use std::fmt;
 use std::time::Duration;
@@ -35,6 +37,7 @@ impl fmt::Display for ExecutionLimit {
 
 /// The full set of ceilings applied to every evaluation in a context.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::struct_field_names)] // every field is a `max_` ceiling — the prefix is meaningful
 pub struct ExecutionLimits {
     max_operations: u64,
     max_call_depth: u16,
