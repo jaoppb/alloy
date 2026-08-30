@@ -1,6 +1,13 @@
 [package]
 name = "engine"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Abstract runtime-engine port: RuntimeEngine / ExecutionContext traits, EngineValue boundary type, capability sandbox model. Names no concrete interpreter (ADR-0002, ADR-0011)."
 
 [dependencies]
+# The single third-party crate the abstraction is allowed to touch — it backs the
+# `Capability` bitflags transcribed verbatim from PRD-003:35-47.
+bitflags = { workspace = true }

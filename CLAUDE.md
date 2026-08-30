@@ -4,30 +4,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current State
 
-The workspace is a **bootstrap skeleton**: all 11 crates exist with `Cargo.toml` + a stub `src/lib.rs` (the default
-`add()` / `it_works()` template). Only `rhai-runtime` declares a dependency (`engine`). The architecture below is
-specified in `docs/` and not yet implemented — treat `docs/adr/` and `docs/requirements/` as the authoritative design
-contract when writing new code, and expect to create the `domain/` / `application/` / `infrastructure/` module trees
-yourself.
+**v0.1 ("O engine vive") is delivered — F0 + F1 + F2.** Done by the _solid_ path (ADR-0011 Replaceable Port Contract),
+not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report originally proposed; see the amendments in
+`docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`.
+
+- **Foundation**: `rust-toolchain.toml` (pins 1.97.1), versioned `Cargo.lock`, `[workspace.package]` +
+  `[workspace.dependencies]`, `deny.toml`, `.github/workflows/ci.yml`, `#![forbid(unsafe_code)]` on every crate.
+- **`core/engine`**: `domain/` (`EngineValue` / `ValueKind` — `#[non_exhaustive]`, `EngineError` — one enum,
+  `Capability`/`CapabilitySet`, `ExecutionLimits`, `SourceLocation`), `application/ports.rs` (`RuntimeEngine` /
+  `ExecutionContext` — PRD-002 with two documented deviations: no associated `type Error`; `EngineType` instead of
+  `rhai::CustomType`; PRD-002 generics kept as provided sugar over an object-safe core), conversion / `EngineFunction` /
+  `EngineType` traits, public `engine::conformance` suite, `engine::PORT_SCHEMA_VERSION` (= 1, ADR-0011 items 3/7).
+  Depends only on `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in `tests/` closes
+  **C-01, C-05**. ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` (items 1,3,4,5,6 ✅; item
+  2 `dyn RuntimeEngine` companion deferred to v0.2/ADR-0013). Verified locally (`make gate`): `cargo deny check` green,
+  `cargo llvm-cov -p engine` ≈ 95% lines.
+- **`core/runtime/rhai`**: `RhaiEngine` / `RhaiContext` / `RhaiCompiledScript(Arc<rhai::AST>)`;
+  `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
+  wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
+  C-09); `RhaiContext::register_custom_type::<T: EngineType + rhai::CustomType>` bridge. **The only crate that names a
+  `rhai` type.** `tests/` run the shared conformance suite + `FixtureNode` (**C-02**).
+- **`alloy`** binary: `cargo run -p alloy` opens/exits 0; `alloy --script <path>` runs a `.rhai` file under the sandbox
+  and prints the result. Hand-rolled arg parsing, no deps. Explicit workspace member (the `core/runtime/*` glob is
+  untouched). Example: `scripts/hello.rhai`.
+
+Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/dom`, `core/html`, `core/css`,
+`core/graphics`, `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-03 (v0.2 I1 — real
+`DomNode`), C-06 … C-18. Follow the `domain/` / `application/` / `infrastructure/` layering that `core/engine` and
+`core/runtime/rhai` now demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
 
 ## Commands
 
-Tooling is split: Cargo for Rust, pnpm for Markdown quality gates.
+Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `Makefile` wraps both — `make` lists every
+target.
 
 ```bash
-pnpm check                                  # full gate: prettier check + markdownlint + cargo fmt --check + clippy
+make gate                                   # full local gate (fmt-check + clippy + check + test + deny + coverage + no-engine) — mirrors CI
+make setup                                  # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, git hooks
+make test CRATE=engine ARGS="-- name"       # scoped test run
+make run ARGS="--script scripts/hello.rhai" # run the alloy binary
+make deny | make coverage | make no-engine  # individual CI gates
+
+# equivalent raw commands:
+pnpm check                                  # prettier check + markdownlint + cargo fmt --check + clippy
 cargo test --workspace                      # all tests (also `pnpm test`)
-cargo test -p dom                            # one crate
 cargo test -p dom -- node::tests::name       # one test
 cargo check --workspace --all-targets
-pnpm lint:rust                               # clippy --workspace --all-targets --all-features -D warnings
-pnpm format:rust                             # cargo fmt --all
-pnpm format:md / pnpm lint:md                # prettier --write / markdownlint-cli2
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all
 ```
 
-Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt` + clippy and prettier +
-markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
-Clippy warnings are errors — never leave one behind.
+Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt` + clippy and prettier + markdownlint
+(auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`. Clippy
+warnings are errors — never leave one behind.
 
 Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
 Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.
@@ -35,8 +64,8 @@ Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrit
 ## Architecture
 
 **Skeleton and Muscle** (ADR-0003): Rust owns all data structures, memory, and OS I/O (the Skeleton). Scripts own
-behavior — event routing, policy, pipeline composition (the Muscle). When adding a feature, decide which side it
-belongs to; hardcoding user-facing policy into Rust violates the core pattern.
+behavior — event routing, policy, pipeline composition (the Muscle). When adding a feature, decide which side it belongs
+to; hardcoding user-facing policy into Rust violates the core pattern.
 
 ### Crate map
 

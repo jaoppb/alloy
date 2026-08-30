@@ -2,12 +2,68 @@
 
 | Campo               | Valor                                                                                                                                     |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**          | 🟡 Parcial — só existe o esqueleto de 11 stubs; nenhuma linha das traits de `core/engine` está escrita                                    |
-| **Cobertura**       | ~0% — 0 de 4 critérios da v0.1 (C-01, C-02, C-04, C-05) têm implementação                                                                 |
+| **Status**          | ✅ Entregue (2026-08-30) — F0 + F1 + F2 implementados pelo **caminho sólido** (`ADR-0011`); ver emendas abaixo                            |
+| **Cobertura**       | 4 de 4 critérios da v0.1: **C-01, C-02, C-04, C-05 fechados**. C-03 segue aberto para a v0.2 (I1)                                         |
 | **Esforço**         | 28–42 dias-dev `[modelado]` no escopo completo (F0 6–9 · F1 10–15 · F2 12–18); 6–9 d `[modelado]` no mínimo viável                        |
 | **Depende de**      | Nada — F0 pode começar já. F1 exige `Cargo.lock` versionado antes de `rhai` entrar                                                        |
 | **Atenção**         | ⚠️ A decisão de projeto aceita `core/engine → rhai`, que contradiz `ADR-0002:49` e `overview.md:82` — os dois exigem emenda nesta entrega |
 | **Fecha requisito** | C-01, C-04, C-05 integralmente · C-02 sobre fixture de teste · C-03 permanece aberto para a v0.2                                          |
+
+---
+
+> ## ⚠️ Emendas — v0.1 implementada pelo **caminho sólido** (`ADR-0011`), não pelo "verbatim"
+>
+> A primeira emenda (2026-08-29) cobre **F0 + F1**; a segunda (2026-08-30, mais abaixo) cobre **F2**. Ambas seguem o
+> **contrato de portas do `ADR-0011`**, e **não** o caminho "seguir `PRD-002` verbatim + `core/engine → rhai`" descrito
+> nas decisões §2.1 e §2.2 deste relatório. Aquelas duas decisões estão **substituídas**:
+>
+> | Decisão original (§2)                                       | O que foi feito                                                                                                                                                                                                                                                      |
+> | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | §2.1 "seguir `PRD-002` verbatim, mesmo brigando com o tipo" | Duas divergências documentadas: sem `type Error` associado (um único `EngineError`, `ADR-0011` item 4); `EngineType` no lugar de `rhai::CustomType`. Os genéricos de `PRD-002` (`eval::<T>`, `register_fn`, …) viram métodos _provided_ sobre um núcleo object-safe. |
+> | §2.2 "`core/engine` passa a depender de `rhai`"             | **Não.** `core/engine` depende só de `bitflags`. `ADR-0002:49`, `overview.md:82` e o mapa de crates do `CLAUDE.md` continuam corretos e **não** foram enfraquecidos. Job de CI `no-engine` prova que nenhum interpretador entra no grafo.                            |
+> | §2.7 fixture `FixtureNode` para C-02                        | Implementada em F2 (`core/runtime/rhai/tests/fixture_node.rs`): `FixtureNode` com `impl EngineType` + `impl rhai::CustomType`; script lê `node.tag` e muta `node.text`. C-03 (o `DomNode` real) segue aberto para a v0.2 (I1).                                       |
+> | §2.8 crate binário `alloy`                                  | Implementado em F2. `cargo run -p alloy` abre e encerra (código 0); `alloy --script <path>` compila com `RhaiEngine`, roda sob o sandbox de limites e imprime o retorno. Parsing de argumentos na mão, zero dependências.                                            |
+>
+> ### Segunda emenda — 2026-08-30 · F2 implementada
+>
+> `core/runtime/rhai` está implementado sob o mesmo contrato do `ADR-0011`: `RhaiEngine` / `RhaiContext` /
+> `RhaiCompiledScript(Arc<rhai::AST>)`, marshaling `EngineValue ⇄ rhai::Dynamic` por `match`, os três limites de
+> `set_max_*` mais uma guarda `on_progress` de relógio de parede, `catch_unwind` → `ScriptPanic`, e a ponte `EngineType`
+> → `rhai::CustomType` como extensão do adaptador. `rhai-runtime` é o **único** crate que nomeia um tipo `rhai`; o job
+> de CI `no-engine` continua verde. Uma assinatura de F1 foi ajustada na integração:
+> `ExecutionContext::register_native_fn` ganhou um parâmetro `Arity`.
+>
+> **Fechado agora:** C-02 (suíte `engine::conformance` verde contra `RhaiEngine` + `fixture_node`), C-04 (laço infinito
+> abortado por limite de operações **e** por limite de tempo). **Mecanismo de C-09** presente (`ScriptPanic` com o host
+> vivo); o handler de fallback com log em DevTools é F6/v0.2. **Aberto:** C-03 (v0.2 I1), C-06…C-13 (fases seguintes).
+> `deny.toml` ganhou `MPL-2.0` (`smartstring`) e `CC0-1.0` (`tiny-keccak`). Artefatos SPDD:
+> `spdd/{analysis,prompt}/…-rhai-runtime-v0-1-f2.md`. Com isso a **v0.1 inteira** ("O engine vive") está entregue.
+>
+> ### Terceira emenda — 2026-08-30 · endurecimento da base (contrato `ADR-0011` + verificação de portões)
+>
+> Pós-entrega, para deixar a base sólida antes de seguir:
+>
+> - **`ADR-0011` item 3**: `EngineValue` / `ValueKind` agora são `#[non_exhaustive]`; `engine::PORT_SCHEMA_VERSION` (=1)
+>   é a única chave de versão do contrato de fronteira. `rhai-runtime` ganhou um braço `_` explícito no marshaling.
+> - **`ADR-0011` item 1**: `PRD-002` ganhou §2.1 (variation model) e §2.2 (threat model — autor confiável-mas-falível,
+>   **não** código hostil, que é `core/js`/`PRD-006`).
+> - **`ADR-0011` item 5**: contrato de lifecycle/concorrência escrito em
+>   `docs/architecture/runtime-engine-port-contract.md` (dono do estado durável, threading, re-entrância, cancelamento,
+>   tetos, falha) — que também é o registro item-a-item dos 7 pontos do contrato.
+> - **Lacuna de hook lifecycle registrada** (`PRD-002` §4.1 + doc de `call_function` em `ports.rs`): invocar função
+>   **definida no script** (`on_reload` etc.) não é expressável na porta v0.1; decisão fica para a v0.2. 2 checks de
+>   conformidade novos fixam o significado atual de `call_function` (= binding nativo registrado).
+> - **Portões verificados nesta máquina** (`cargo-deny 0.20`, `cargo-llvm-cov`): `cargo deny check` →
+>   `advisories ok, bans ok, licenses ok, sources ok`; cobertura de `engine` → **94,6% de linhas** (portão: 85%).
+>   `deny.toml` reescrito para o schema 0.20 (`wildcards`, `allow-wildcard-paths`, `private.ignore`) e
+>   `RUSTSEC-2026-0249` (`smartstring` unmaintained, transitivo via `rhai`, sem vuln) ignorado com justificativa. Os 9
+>   manifestos-stub passaram a herdar `*.workspace = true`. Item 2 (companion `dyn RuntimeEngine`) segue como adiamento
+>   explícito para a v0.2/ADR-0013.
+>
+> O restante deste documento (tabelas de esforço, armadilhas) permanece como registro histórico do plano, lido sob estas
+> emendas.
+
+---
 
 Este relatório cobre **apenas a v0.1** do `ROADMAP-IMPLEMENTACAO-V1.md` — as fases **F0** (fundação), **F1**
 (`core/engine`) e **F2** (`core/runtime/rhai`), que o roadmap §3.1 agrupa sob a versão "O engine vive". Nada aqui foi

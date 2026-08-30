@@ -1,7 +1,12 @@
 [package]
 name = "rhai-runtime"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Rhai backend implementing the core/engine RuntimeEngine / ExecutionContext port (ADR-0002, ADR-0011). The only place a rhai type is named."
 
 [dependencies]
 engine = { path = "../../engine" }
+rhai = { workspace = true }
