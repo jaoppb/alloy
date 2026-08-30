@@ -19,7 +19,10 @@ docs/
 │   ├── PRD-004-hot-reload-subsystem.md # Runtime script hot-reloading requirements
 │   └── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
 ├── reports/                            # Technical Reports (analysis, audits, roadmaps)
-│   └── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
+│   ├── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
+│   ├── IMPLEMENTACAO-DETALHADA-V0-3.md # Detailed F4+F5+I2 implementation plan for v0.3
+│   ├── IMPLEMENTACAO-DETALHADA-V0-5.md # Detailed F8+F9+I4 implementation plan for v0.5
+│   └── VIOLACAO-N02-UNSAFE-NO-RHAI.md  # Audit: PRD-001:97 vs. the unsafe in rhai's binding seam
 └── adr/                                # Architecture Decision Records (MADR format)
     ├── README.md                       # ADR index & decision log
     ├── 0001-record-architecture-decisions.md
