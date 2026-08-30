@@ -6,19 +6,23 @@
 
 ---
 
-> **Realisation note (2026-08-29, updated 2026-08-30).** The v0.1 F1+F2 increment implements this contract for the
-> `RuntimeEngine` / `ExecutionContext` port and supersedes the "follow PRD-002 verbatim / `core/engine → rhai`" decision
-> of `docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md` §2.1-2.2. Full item-by-item state:
-> **`docs/architecture/runtime-engine-port-contract.md`**.
+> **Realisation note (2026-08-29; updated 2026-08-30 for v0.1 F1+F2, then for v0.2 F6.)** The v0.1 F1+F2 increment
+> implements this contract for the `RuntimeEngine` / `ExecutionContext` port and supersedes the "follow PRD-002 verbatim
+> / `core/engine → rhai`" decision of `docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md` §2.1-2.2. v0.2 F6 closes the last
+> gap. Full item-by-item state: **`docs/architecture/runtime-engine-port-contract.md`**.
 >
 > - **Items 1, 3, 4, 5, 6 — satisfied.** Variation + threat model in `PRD-002` §2.1-2.2; boundary aggregates
 >   (`EngineValue`, `EngineError`, `TypeRegistration`) are `#[non_exhaustive]` with `engine::PORT_SCHEMA_VERSION` as the
 >   version knob; one `EngineError` with source location; lifecycle & concurrency contract written in the record doc;
 >   `engine::conformance` suite + `MockEngine` reference adapter + CI `no-engine` job. `RhaiEngine` (F2) passes the same
 >   suite.
-> - **Item 2 — partial.** `ExecutionContext` is object-safe; `RuntimeEngine` is not, and its `dyn`-dispatch companion is
->   a **recorded deferral to v0.2 / ADR-0013** (purely additive; no v0.1 consumer needs it).
-> - **Item 7 — freeze at `F1`** with `PORT_SCHEMA_VERSION = 1`, the companion excepted.
+> - **Item 2 — satisfied in v0.2 F6.** `ExecutionContext` was object-safe from `F1`; `RuntimeEngine` is not, but its
+>   `dyn`-dispatch companion (`DynRuntimeEngine` / `DynExecutionContext` / `DynCompiledScript` + free `eval_typed`,
+>   `core/engine/src/application/dyn_bridge.rs`) landed via **ADR-0013**. Purely additive — blanket impls, no `F1`
+>   signature change. `engine::conformance::run_dyn_suite` is its conformance form; `MockEngine` and `RhaiEngine` pass
+>   it.
+> - **Item 7 — frozen at `F1`.** `PORT_SCHEMA_VERSION = 2` since v0.2 F6/I1 added `EngineError::Dom` (`PRD-002` §4.2);
+>   the `dyn` companion needed no bump (additive). All seven items are now green.
 
 ---
 
