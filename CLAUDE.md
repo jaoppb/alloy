@@ -24,9 +24,9 @@ not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report origina
   wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
   C-09); `RhaiContext::register_custom_type::<T: EngineType + rhai::CustomType>` bridge. **The only crate that names a
   `rhai` type.** `tests/` run the shared conformance suite + `FixtureNode` (**C-02**).
-- **`alloy`** binary: `cargo run -p alloy` opens/exits 0; `alloy --script <path>` runs a `.rhai` file under the sandbox
-  and prints the result. Hand-rolled arg parsing, no deps. Explicit workspace member (the `core/runtime/*` glob is
-  untouched). Example: `scripts/hello.rhai`.
+- **`alloy`** binary: `cargo run -p alloy` prints help and exits 0; `alloy --script <path>` runs a `.rhai` file under
+  the sandbox and prints the result. `clap` derive for args, typed `AlloyError` (`thiserror`) for failures. Explicit
+  workspace member (the `core/runtime/*` glob is untouched). Example: `scripts/hello.rhai`.
 
 Still **stubs** (doc-comment + `#![forbid(unsafe_code)]` only, no items yet): `core/dom`, `core/html`, `core/css`,
 `core/graphics`, `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-03 (v0.2 I1 — real
