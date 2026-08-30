@@ -86,7 +86,8 @@ make deny | make coverage | make no-engine  # individual CI gates
 # equivalent raw commands:
 pnpm check                                  # prettier check + markdownlint + cargo fmt --check + clippy
 cargo test --workspace                      # all tests (also `pnpm test`)
-cargo test -p dom -- node::tests::name       # one test
+cargo test -p dom --test tree_invariants     # one integration-test file
+cargo test -p engine mock_engine             # tests matching a name
 cargo check --workspace --all-targets
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
@@ -156,12 +157,40 @@ explicit mapping functions/DTOs — no type leaking.
 - **Graphics tiers** (ADR-0009): Vulkan (`vulkano`) → OpenGL (`glow`/`glutin`) → CPU software rasterizer for headless
   CI. Layout code emits a declarative `DisplayList` and stays GPU-API agnostic.
 
-### Object Calisthenics (ADR-0010, enforced)
+### Clean Code + Object Calisthenics (ADR-0010, enforced)
 
-No naked primitives in domain models — use newtypes (`NodeId(u32)`, `TagName(String)`, `Px(f32)`, `Color(u32)`).
-First-class collections (`Children`, `RuleSet`, `HeaderMap`). No `else` (early return / `match` / `if let`), one
-indentation level per function, one dot per line, no abbreviated names (`element_identifier`, not `el_id`), no public
-mutable fields — mutate through invariant-validating methods.
+Write to _Clean Code_ (Robert C. Martin) as the baseline; Object Calisthenics is the strict subset that CI and review
+check mechanically. Both apply to every hand-written `core/*` line — `core/engine`, `core/runtime/rhai`, and `core/dom`
+are the reference.
+
+**Clean Code baseline:**
+
+- **Intention-revealing names.** Full words from the Ubiquitous Language (`attribute_name`, not `attr`); no encodings,
+  no noise words. A name that needs a comment to be understood is the wrong name.
+- **Small functions, one job, one level of abstraction.** A function either orchestrates or does detail work, never
+  both. Extract a private helper before a function grows a second reason to change or a second indentation level.
+- **Command–Query Separation.** A method either changes state and returns `()` (`DomTree::append_child`) or answers a
+  question and mutates nothing (`DomTree::tag`) — never both.
+- **No boolean/flag parameters.** Split into two named methods or take a small enum (`Attachment::End` /
+  `Attachment::Before`).
+- **Errors, not surprises.** Library code returns a typed `Result` (`DomError`, `EngineError`); no `unwrap` / `expect` /
+  `panic!` on a path a caller can reach. `expect` is allowed only for a genuinely impossible state, with a message
+  saying why it can't happen. Trapped script panics are the one deliberate exception (`catch_unwind`, C-09).
+- **Comments explain _why_, not _what_.** Cite the ADR/PRD/criterion a decision serves. Delete commented-out code.
+- **DRY, and the Boy Scout Rule.** No copy-paste logic; leave every file you touch a little cleaner than you found it.
+
+**Object Calisthenics (mechanically enforced):**
+
+- No naked primitives in domain models — newtypes (`NodeId(u32)`, `TagName(String)`, `Px(f32)`, `Color(u32)`).
+- First-class collections (`Children`, `AttributeMap`, `RuleSet`, `HeaderMap`) — no public `Vec` / `HashMap`.
+- No `else` (early return / `match` / `if let`; `let … else` also counts).
+- One level of indentation per function.
+- One dot per line (Law of Demeter; builder chains are fine).
+- No abbreviated names.
+- Keep entities small (< ~100 lines, single responsibility).
+- No public mutable fields — mutate through invariant-validating methods.
+
+Hand-written `Display` + `std::error::Error` on domain errors keeps `domain/` free of a derive-macro dependency.
 
 ## SPDD Workflow
 
