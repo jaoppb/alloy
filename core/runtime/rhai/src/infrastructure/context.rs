@@ -10,7 +10,7 @@ use engine::{
     NativeFn, TypeRegistration,
 };
 
-use crate::infrastructure::marshal;
+use crate::infrastructure::marshal::RhaiValue;
 use crate::infrastructure::native;
 
 /// A compiled Rhai program. `Arc<rhai::AST>` is the exact shape hot-reload
@@ -118,20 +118,20 @@ impl ExecutionContext for RhaiContext {
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError> {
-        native::register(&mut self.engine, name.as_str(), arity, handler.clone())?;
+        native::register(&mut self.engine, name.as_str(), arity, handler.clone());
         self.native_functions.insert(name.clone(), handler);
         Ok(())
     }
 
     fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError> {
-        let dynamic = marshal::engine_value_to_dynamic(value)?;
+        let RhaiValue(dynamic) = RhaiValue::try_from(value)?;
         self.scope.set_value(name.to_string(), dynamic);
         Ok(())
     }
 
     fn get_value(&self, name: &str) -> Option<EngineValue> {
         let dynamic = self.scope.get_value::<rhai::Dynamic>(name)?;
-        marshal::dynamic_to_engine_value(dynamic).ok()
+        EngineValue::try_from(RhaiValue(dynamic)).ok()
     }
 
     fn call_function_value(

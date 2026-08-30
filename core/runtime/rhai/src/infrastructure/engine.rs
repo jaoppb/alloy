@@ -48,7 +48,7 @@ impl RhaiEngine {
         match outcome {
             Err(payload) => Err(EngineError::script_panic(panic_message(&*payload))),
             Ok(Err(eval_error)) => Err(map_eval_error(&eval_error)),
-            Ok(Ok(dynamic)) => marshal::dynamic_to_engine_value(dynamic),
+            Ok(Ok(dynamic)) => EngineValue::try_from(marshal::RhaiValue(dynamic)),
         }
     }
 }
