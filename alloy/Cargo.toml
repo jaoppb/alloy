@@ -16,6 +16,8 @@ engine = { path = "../core/engine" }
 rhai-runtime = { path = "../core/runtime/rhai" }
 clap = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true
