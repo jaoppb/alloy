@@ -17,9 +17,14 @@ docs/
 │   ├── PRD-002-abstract-runtime-engine.md # Abstract engine & Rhai integration requirements
 │   ├── PRD-003-script-isolation-and-sandboxing.md # Context isolation & capability security
 │   ├── PRD-004-hot-reload-subsystem.md # Runtime script hot-reloading requirements
-│   └── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
+│   ├── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
+│   ├── PRD-006-web-content-javascript-runtime-port.md # Replaceable content JS engine port
+│   ├── PRD-007-style-cascade-and-layout-engine-ports.md # Replaceable CSS cascade & layout ports
+│   └── PRD-008-html-tokenizer-and-tree-sink-ports.md # Replaceable HTML tokenizer & tree sink ports
 ├── reports/                            # Technical Reports (analysis, audits, roadmaps)
-│   └── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
+│   ├── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
+│   ├── IMPLEMENTACAO-DETALHADA-V0-1.md # Detailed F0+F1+F2 implementation plan for v0.1
+│   └── IMPLEMENTACAO-DETALHADA-V0-2.md # Detailed F3+F6+I1 implementation plan for v0.2
 └── adr/                                # Architecture Decision Records (MADR format)
     ├── README.md                       # ADR index & decision log
     ├── 0001-record-architecture-decisions.md
