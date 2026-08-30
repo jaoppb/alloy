@@ -56,6 +56,13 @@ pub enum EngineError {
     /// A native binding or the script itself panicked. Trapped by the adapter so
     /// the host process survives (PRD-003:79, mechanism of C-09).
     ScriptPanic { message: String },
+
+    /// A DOM operation invoked from a script failed for a reason other than a
+    /// missing capability — an invariant violation, a stale node id, a busy
+    /// tree. Carries the `operation` that was attempted and a `reason` string
+    /// mapped from the domain crate's own error (v0.2 F6/I1; keeps `Binding`
+    /// free to mean "bad native-binding name / arity").
+    Dom { operation: String, reason: String },
 }
 
 impl EngineError {
@@ -110,6 +117,14 @@ impl EngineError {
             message: message.into(),
         }
     }
+
+    #[must_use]
+    pub fn dom(operation: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::Dom {
+            operation: operation.into(),
+            reason: reason.into(),
+        }
+    }
 }
 
 impl fmt::Display for EngineError {
@@ -143,6 +158,9 @@ impl fmt::Display for EngineError {
                 write!(formatter, ": {message}")
             }
             Self::ScriptPanic { message } => write!(formatter, "script panic (trapped): {message}"),
+            Self::Dom { operation, reason } => {
+                write!(formatter, "dom operation `{operation}` failed: {reason}")
+            }
         }
     }
 }

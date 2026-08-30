@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report originally proposed; see the amendments in
 `docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`.
 
+**v0.2 ("DOM scriptável e contido") in progress on `feat/v0-2-implementation`.** F3 (`core/dom`) and I1 (scriptable DOM)
+landed; F6 (sandbox chokepoint, fallback, ADR-0013 `dyn` companion, panic-injection matrix) is next. SPDD canvases:
+`spdd/{analysis,prompt}/202608300315-*-f3.md` and `…320-*-f6-i1.md`.
+
 - **Foundation**: `rust-toolchain.toml` (pins 1.97.1), versioned `Cargo.lock`, `[workspace.package]` +
   `[workspace.dependencies]`, `deny.toml`, `.github/workflows/ci.yml`, `#![forbid(unsafe_code)]` on every crate.
 - **`core/engine`**: `domain/` (`EngineValue` / `ValueKind` — `#[non_exhaustive]`, `EngineError` — one enum,
@@ -23,15 +27,32 @@ not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report origina
   `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
   wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
   C-09); `RhaiContext::register_custom_type::<T: EngineType + rhai::CustomType>` bridge. **The only crate that names a
-  `rhai` type.** `tests/` run the shared conformance suite + `FixtureNode` (**C-02**).
+  `rhai` type.** `PORT_SCHEMA_VERSION = 2` (v0.2 added `EngineError::Dom`). `tests/` run the shared conformance suite +
+  `FixtureNode` (**C-02**) + `scriptable_dom` (**C-03** and the I1 slice of C-06/C-07).
+- **`core/dom`** (v0.2 F3): pure domain crate, **zero dependencies**, `#![forbid(unsafe_code)]`, all nine Object
+  Calisthenics rules (no exception). `domain/` — arena `DomTree` (`Vec<Slot>` by `NodeId(u32)`; removal → `Tombstone`,
+  index never reused) enforcing the five invariants of report §2.2 through its methods only; value objects (`TagName` /
+  `AttributeName` validated + lowercased, `TextContent`, `CommentContent`, `AttributeValue`); first-class `Children` /
+  `AttributeMap` (insertion order); one `#[non_exhaustive]` `DomError` (9 variants; never names `EngineError`);
+  non-recursive `Descendants` / `Ancestors`. `application/serialize.rs` — deterministic `serialize_html` (escapes `&<>`,
+  void elements). 15 tests.
+- **`core/runtime/rhai` I1**: `infrastructure/dom_bindings.rs` — `NodeHandle` (`EngineType` + `rhai::CustomType`, script
+  name `Node`) holding `Arc<Mutex<DomTree>>` + `NodeId` + a baked-in `CapabilitySet`; each method self-guards
+  (`DOM_READ` reads, `DOM_MUTATE` mutators) and maps `DomError` → `EngineError::Dom`. `NODE_HANDLE_BINDINGS` is the
+  guarded-method manifest. `RhaiContext::bind_dom(Arc<Mutex<DomTree>>)` registers `Node` and the global `document`
+  handle. `native::to_eval_error` now boxes the `EngineError` in `EvalAltResult::ErrorSystem` and `error_map` downcasts
+  it back, so a `PermissionDenied` / `Dom` raised inside a binding round-trips to the host as that exact variant (C-07).
+  **Deviation from report §2.5/2.7**: `Arc<Mutex<_>>` not `Rc<RefCell<_>>`, `RhaiContext` stays `Send + Sync` — the
+  `rhai` `sync` feature (required for `RuntimeEngine: Send + Sync`) forces `CustomType: Send + Sync`.
 - **`alloy`** binary: `cargo run -p alloy` opens/exits 0; `alloy --script <path>` runs a `.rhai` file under the sandbox
-  and prints the result. Hand-rolled arg parsing, no deps. Explicit workspace member (the `core/runtime/*` glob is
-  untouched). Example: `scripts/hello.rhai`.
+  with a bound DOM (`DOM_READ | DOM_MUTATE`), prints any non-unit return value, then prints `serialize_html` when the
+  script built a tree. Hand-rolled arg parsing. Examples: `scripts/hello.rhai`, `scripts/hello_dom.rhai`.
 
-Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/dom`, `core/html`, `core/css`,
-`core/graphics`, `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-03 (v0.2 I1 — real
-`DomNode`), C-06 … C-18. Follow the `domain/` / `application/` / `infrastructure/` layering that `core/engine` and
-`core/runtime/rhai` now demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
+Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/html`, `core/css`, `core/graphics`,
+`core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-06/C-07 (full chokepoint + sweep),
+C-08, C-09 (fallback), all F6; then C-10 … C-18. Follow the `domain/` / `application/` / `infrastructure/` layering that
+`core/engine`, `core/runtime/rhai`, and `core/dom` now demonstrate; `docs/adr/` + `docs/requirements/` remain the
+authoritative contract.
 
 ## Commands
 

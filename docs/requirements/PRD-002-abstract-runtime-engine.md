@@ -134,6 +134,28 @@ no method that carries a `CompiledScript` into a by-name call, so `ExecutionCont
 (`call_compiled_function(&self, ctx, &CompiledScript, name, args)`) or a compiled AST attached to the context. **This is
 a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signature already frozen at `F1`.
 
+### 4.2 v0.2 F6/I1 amendment — `EngineError::Dom` and `PORT_SCHEMA_VERSION = 2`
+
+The scriptable-DOM bridge (roadmap I1) needs a boundary error that is distinct from `Binding` ("bad native-binding name
+/ arity"). `EngineError` gains one variant:
+
+```rust
+Dom { operation: String, reason: String }
+```
+
+raised when a DOM operation invoked from a script fails for a reason other than a missing capability (an invariant
+violation, a stale node id, a busy tree). `core/dom`'s own `DomError` is mapped to it in the `core/runtime/rhai`
+adapter; `core/dom` never names `EngineError`.
+
+**Migration (schema `1` → `2`).** The change is additive: `EngineError` is `#[non_exhaustive]`, so an out-of-tree
+adapter or consumer already carries a `_` arm and keeps compiling. A consumer that exhaustively matched `EngineError`
+in-tree must add a `Dom` arm. No method signature changes; `create_context` / `compile` / `eval_value` /
+`eval_compiled_value` / `set_value` / `get_value` / `register_native_fn` / `register_type_erased` /
+`call_function_value` / `reset_scope` / `capabilities` are untouched. `engine::PORT_SCHEMA_VERSION` moves to `2`.
+
+The object-safe `dyn` companion form required by `ADR-0011` item 2 is a **separate** v0.2 deliverable (F6, `ADR-0013`)
+and does not land with this amendment.
+
 ---
 
 ## 5. Acceptance Criteria

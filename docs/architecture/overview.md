@@ -77,12 +77,15 @@ graph TB
 
 ## 3. Cargo Workspace Crate Map
 
+Dependencies below are the **target** graph, not today's `Cargo.toml` — except where a crate is implemented. Implemented
+so far: `engine`, `rhai-runtime`, `dom` (v0.1 + v0.2 F3/I1).
+
 | Crate Path          | Package Name   | Primary Responsibility                                    | Dependencies            |
 | ------------------- | -------------- | --------------------------------------------------------- | ----------------------- |
 | `core/engine`       | `engine`       | Engine traits, Contexts, Capability Bitflags, EngineValue | None (Pure abstraction) |
-| `core/runtime/rhai` | `rhai-runtime` | Concrete Rhai engine implementation for browser muscle    | `engine`, `rhai`        |
+| `core/runtime/rhai` | `rhai-runtime` | Concrete Rhai engine implementation for browser muscle    | `engine`, `dom`, `rhai` |
 | `core/js`           | `js`           | Web content ECMAScript runtime & DOM script execution     | `dom`                   |
-| `core/dom`          | `dom`          | DOM Node hierarchy, Element nodes, mutations              | `engine`                |
+| `core/dom`          | `dom`          | DOM Node hierarchy, Element nodes, mutations              | None (Pure domain)      |
 | `core/html`         | `html`         | HTML5 tokenization and tree construction                  | `dom`, `engine`         |
 | `core/css`          | `css`          | CSS syntax parser, rule sets, cascade calculator          | `dom`, `engine`         |
 | `core/graphics`     | `graphics`     | 2D display lists, Vulkan (`vulkano`) & OpenGL renderers   | `engine`                |

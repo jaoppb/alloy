@@ -118,6 +118,18 @@ jobs:
           fi
           echo "engine dependency graph is interpreter-free:"
           cargo tree -p engine --edges normal
+      # v0.2 report decision 2.1: core/dom is a pure domain crate with NO deps —
+      # so html/css/js never inherit an interpreter transitively (N-04).
+      - run: cargo test -p dom --no-default-features
+      - name: Assert core/dom has an empty dependency graph
+        run: |
+          deps="$(cargo tree -p dom --edges normal --prefix none | tail -n +2)"
+          if [ -n "$deps" ]; then
+            echo "::error::core/dom gained a dependency — v0.2 decision 2.1 (dom stays domain-pure) violated"
+            cargo tree -p dom --edges normal
+            exit 1
+          fi
+          echo "core/dom dependency graph is empty."
 
   supply-chain:
     name: cargo-deny

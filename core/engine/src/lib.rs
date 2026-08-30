@@ -53,8 +53,14 @@ pub mod domain;
 /// Bump this on **any** change that an out-of-tree adapter or consumer could
 /// observe as breaking (a new `EngineValue` variant, a new `EngineError`
 /// variant with new meaning, a changed method signature), and add a migration
-/// note to PRD-002. `1` is the surface frozen at roadmap point F1.
-pub const PORT_SCHEMA_VERSION: u32 = 1;
+/// note to PRD-002.
+///
+/// - `1` — the surface frozen at roadmap point F1 (v0.1).
+/// - `2` — v0.2 F6/I1: added `EngineError::Dom { operation, reason }`. Additive
+///   for an out-of-tree adapter (it already needs a `_` arm on the
+///   `#[non_exhaustive]` enum); a consumer that exhaustively matched
+///   `EngineError` must add a `Dom` arm. See PRD-002 §5.1.
+pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::{
     ExecutionContext, FromEngineValue, IntoEngineValue, NativeFn, RuntimeEngine,

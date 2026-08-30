@@ -12,5 +12,6 @@ name = "alloy"
 path = "src/main.rs"
 
 [dependencies]
+dom = { path = "../core/dom" }
 engine = { path = "../core/engine" }
 rhai-runtime = { path = "../core/runtime/rhai" }

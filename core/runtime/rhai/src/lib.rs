@@ -22,4 +22,6 @@
 
 mod infrastructure;
 
-pub use infrastructure::{RhaiCompiledScript, RhaiContext, RhaiEngine};
+pub use infrastructure::{
+    NODE_HANDLE_BINDINGS, NodeHandle, RhaiCompiledScript, RhaiContext, RhaiEngine,
+};

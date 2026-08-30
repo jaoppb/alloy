@@ -19,6 +19,7 @@ dependencies = [
 name = "alloy"
 version = "0.1.0"
 dependencies = [
+ "dom",
  "engine",
  "rhai-runtime",
 ]
@@ -243,6 +244,7 @@ dependencies = [
 name = "rhai-runtime"
 version = "0.1.0"
 dependencies = [
+ "dom",
  "engine",
  "rhai",
 ]
