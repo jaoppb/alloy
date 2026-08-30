@@ -4,6 +4,7 @@
 
 pub mod capability;
 pub mod error;
+pub mod function_name;
 pub mod limits;
 pub mod source;
 pub mod value;

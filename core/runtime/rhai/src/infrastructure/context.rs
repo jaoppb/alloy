@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use engine::{
-    Arity, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext, NativeFn,
-    TypeRegistration,
+    Arity, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext, FunctionName,
+    NativeFn, TypeRegistration,
 };
 
 use crate::infrastructure::marshal;
@@ -38,8 +38,8 @@ pub struct RhaiContext {
     pub(crate) deadline: Arc<Mutex<Option<Instant>>>,
     /// Native bindings, kept so `call_function_value` can invoke one directly
     /// from Rust without going through the interpreter.
-    native_functions: HashMap<String, NativeFn>,
-    registered_type_names: Vec<&'static str>,
+    native_functions: HashMap<FunctionName, NativeFn>,
+    registered_types: Vec<TypeRegistration>,
 }
 
 impl RhaiContext {
@@ -54,7 +54,7 @@ impl RhaiContext {
             capabilities,
             deadline,
             native_functions: HashMap::new(),
-            registered_type_names: Vec::new(),
+            registered_types: Vec::new(),
         }
     }
 
@@ -67,8 +67,7 @@ impl RhaiContext {
         T: EngineType + rhai::CustomType,
     {
         self.engine.build_type::<T>();
-        self.registered_type_names
-            .push(T::registration().script_name());
+        self.registered_types.push(T::registration());
         Ok(())
     }
 
@@ -93,8 +92,11 @@ impl RhaiContext {
 
     /// The script-visible names of every type registered on this context.
     #[must_use]
-    pub fn registered_type_names(&self) -> &[&'static str] {
-        &self.registered_type_names
+    pub fn registered_type_names(&self) -> Vec<&'static str> {
+        self.registered_types
+            .iter()
+            .map(TypeRegistration::script_name)
+            .collect()
     }
 }
 
@@ -106,18 +108,18 @@ impl ExecutionContext for RhaiContext {
     fn register_type_erased(&mut self, registration: TypeRegistration) -> Result<(), EngineError> {
         // Name-only in v0.1: the concrete `rhai::CustomType` bridge needs the
         // static type and is offered by `register_custom_type`.
-        self.registered_type_names.push(registration.script_name());
+        self.registered_types.push(registration);
         Ok(())
     }
 
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError> {
-        native::register(&mut self.engine, name, arity, handler.clone())?;
-        self.native_functions.insert(name.to_owned(), handler);
+        native::register(&mut self.engine, name.as_str(), arity, handler.clone())?;
+        self.native_functions.insert(name.clone(), handler);
         Ok(())
     }
 
@@ -134,7 +136,7 @@ impl ExecutionContext for RhaiContext {
 
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
         let handler = self

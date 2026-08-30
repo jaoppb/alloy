@@ -59,6 +59,7 @@ where
     check_native_function_dispatch(&make_engine());
     check_call_function_invokes_a_registered_binding(&make_engine());
     check_call_function_rejects_an_unknown_name(&make_engine());
+    check_a_malformed_function_name_is_rejected(&make_engine());
     check_capabilities_are_carried(&make_engine());
     check_reset_scope_clears_locals(&make_engine());
 }
@@ -196,6 +197,15 @@ fn check_call_function_rejects_an_unknown_name<Engine: RuntimeEngine>(engine: &E
     assert!(
         matches!(outcome, Err(crate::EngineError::Binding { .. })),
         "call_function on an unregistered name must be EngineError::Binding, got {outcome:?}"
+    );
+}
+
+fn check_a_malformed_function_name_is_rejected<Engine: RuntimeEngine>(engine: &Engine) {
+    let mut scope = context(engine);
+    let outcome = scope.register_fn("has space", || 0_i64);
+    assert!(
+        matches!(outcome, Err(crate::EngineError::Binding { .. })),
+        "register_fn with a non-identifier name must be EngineError::Binding, got {outcome:?}"
     );
 }
 

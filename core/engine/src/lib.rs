@@ -57,8 +57,10 @@ pub mod domain;
 /// Bump this on **any** change that an out-of-tree adapter or consumer could
 /// observe as breaking (a new `EngineValue` variant, a new `EngineError`
 /// variant with new meaning, a changed method signature), and add a migration
-/// note to PRD-002. `1` is the surface frozen at roadmap point F1.
-pub const PORT_SCHEMA_VERSION: u32 = 1;
+/// note to PRD-002. `1` was frozen at roadmap point F1; `2` is the review
+/// response — `FunctionName` on the binding methods, `SourceLocation` as an enum
+/// over `Line` / `Column` (see PRD-002 §migration).
+pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::{
     ExecutionContext, FromEngineValue, IntoEngineValue, NativeFn, RuntimeEngine,
@@ -68,7 +70,8 @@ pub use application::{
 pub use domain::{
     capability::{Capability, CapabilitySet, profiles},
     error::EngineError,
+    function_name::FunctionName,
     limits::{ExecutionLimit, ExecutionLimits},
-    source::SourceLocation,
+    source::{Column, Line, SourceLocation},
     value::{EngineValue, ValueKind},
 };

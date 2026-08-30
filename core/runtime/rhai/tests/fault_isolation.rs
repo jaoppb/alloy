@@ -43,7 +43,11 @@ fn a_runtime_error_carries_its_source_location() {
     match engine.eval_value(&mut context, "\n\nmissing_variable") {
         Err(EngineError::ScriptRuntime { location, .. }) => {
             let position = location.expect("a runtime error should carry a location");
-            assert_eq!(position.line(), 3, "the reference is on the third line");
+            assert_eq!(
+                position.line().get(),
+                3,
+                "the reference is on the third line"
+            );
         }
         other => panic!("expected ScriptRuntime, got {other:?}"),
     }

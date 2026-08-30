@@ -29,6 +29,7 @@ use crate::application::engine_type::{EngineType, TypeRegistration};
 use crate::application::function::{Arity, EngineFunction};
 use crate::domain::capability::CapabilitySet;
 use crate::domain::error::EngineError;
+use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
 
 /// A type-erased native function body: marshalled arguments in, one value or an
@@ -54,7 +55,7 @@ pub trait ExecutionContext {
     /// parameter count); the `handler` re-checks it and errors on a mismatch.
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError>;
@@ -76,7 +77,7 @@ pub trait ExecutionContext {
     /// [`EngineError::Binding`].
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError>;
 
@@ -96,7 +97,7 @@ pub trait ExecutionContext {
     }
 
     /// PRD-002:49-51. Bind an ordinary Rust closure, adapting it through
-    /// [`EngineFunction`].
+    /// [`EngineFunction`]. `name` is validated into a [`FunctionName`].
     fn register_fn<Function, Args, Ret>(
         &mut self,
         name: &str,
@@ -106,10 +107,11 @@ pub trait ExecutionContext {
         Self: Sized,
         Function: EngineFunction<Args, Ret>,
     {
+        let name = FunctionName::parse(name)?;
         let arity = function.arity();
         let handler: NativeFn =
             Arc::new(move |arguments: &[EngineValue]| function.invoke(arguments));
-        self.register_native_fn(name, arity, handler)
+        self.register_native_fn(&name, arity, handler)
     }
 
     /// PRD-002:52. Set a scope variable from any [`IntoEngineValue`].
@@ -133,7 +135,8 @@ pub trait ExecutionContext {
         Self: Sized,
         Ret: FromEngineValue,
     {
-        let value = self.call_function_value(name, arguments)?;
+        let name = FunctionName::parse(name)?;
+        let value = self.call_function_value(&name, arguments)?;
         Ret::from_engine_value(value)
     }
 }

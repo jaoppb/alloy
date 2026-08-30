@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext,
-    NativeFn, RuntimeEngine, SourceLocation, TypeRegistration,
+    FunctionName, NativeFn, RuntimeEngine, SourceLocation, TypeRegistration,
 };
 
 // ---------------------------------------------------------------------------
@@ -107,11 +107,11 @@ impl ExecutionContext for MockContext {
 
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         _arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError> {
-        self.functions.insert(name.to_owned(), handler);
+        self.functions.insert(name.as_str().to_owned(), handler);
         Ok(())
     }
 
@@ -126,12 +126,12 @@ impl ExecutionContext for MockContext {
 
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
         let handler = self
             .functions
-            .get(name)
+            .get(name.as_str())
             .cloned()
             .ok_or_else(|| EngineError::binding(format!("unknown function `{name}`")))?;
         handler(arguments)
