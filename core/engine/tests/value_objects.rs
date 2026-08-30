@@ -257,3 +257,16 @@ fn function_name_accepts_identifiers_and_rejects_the_rest() {
         );
     }
 }
+
+#[test]
+fn function_name_conversions_and_display() {
+    let from_slice = FunctionName::try_from("on_event").unwrap();
+    let from_string = FunctionName::try_from(String::from("on_event")).unwrap();
+    assert_eq!(from_slice, from_string);
+    assert_eq!(
+        <FunctionName as AsRef<str>>::as_ref(&from_slice),
+        "on_event"
+    );
+    assert_eq!(from_slice.to_string(), "on_event");
+    assert!(FunctionName::try_from("no dots.").is_err());
+}
