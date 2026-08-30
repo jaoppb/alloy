@@ -28,9 +28,11 @@
 //! The PRD-002 sugar methods (`eval::<T>`, `register_fn`, `set_variable::<V>`,
 //! `call_function::<T>`, `register_type::<T>`) are **provided** methods layered
 //! over a small set of object-safe required methods that speak only
-//! `EngineValue` / [`EngineError`]. A `dyn`-dispatch companion port is scheduled
-//! for v0.2 (roadmap I1 / ADR-0013); until then consumers monomorphise with
-//! `fn run<E: RuntimeEngine>(…)`.
+//! `EngineValue` / [`EngineError`]. The `dyn`-dispatch companion required by
+//! ADR-0011 item 2 lives in [`application::dyn_bridge`] ([`DynRuntimeEngine`] /
+//! [`DynExecutionContext`] / [`DynCompiledScript`] + [`eval_typed`], ADR-0013,
+//! v0.2 F6): `Box<dyn DynRuntimeEngine>` is a usable engine handle. Blanket
+//! impls give every `RuntimeEngine` the companion for free.
 //!
 //! ## Contract record
 //!
@@ -63,9 +65,12 @@ pub mod domain;
 pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::{
-    ExecutionContext, FromEngineValue, IntoEngineValue, NativeFn, RuntimeEngine,
+    DynCompiledScript, DynExecutionContext, DynRuntimeEngine, ExecutionContext, FromEngineValue,
+    IntoEngineValue, NativeFn, RuntimeEngine,
     engine_type::{EngineType, TypeRegistration},
+    eval_typed,
     function::{Arity, EngineFunction},
+    native_fn,
 };
 pub use domain::{
     capability::{Capability, CapabilitySet, profiles},

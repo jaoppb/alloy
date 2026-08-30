@@ -8,9 +8,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report originally proposed; see the amendments in
 `docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`.
 
-**v0.2 ("DOM scriptável e contido") in progress on `feat/v0-2-implementation`.** F3 (`core/dom`) and I1 (scriptable DOM)
-landed; F6 (sandbox chokepoint, fallback, ADR-0013 `dyn` companion, panic-injection matrix) is next. SPDD canvases:
-`spdd/{analysis,prompt}/202608300315-*-f3.md` and `…320-*-f6-i1.md`.
+**v0.2 ("DOM scriptável e contido") delivered on `feat/v0-2-implementation` — F3 + I1 + F6.** Closes C-03, C-06, C-07,
+C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `…320-*-f6-i1.md`. Not yet merged to `main`
+(neither is v0.1).
+
+- **F6 — `core/engine`**: `application/dyn_bridge.rs` (ADR-0013) — the object-safe `dyn` companion: `DynRuntimeEngine` /
+  `DynExecutionContext` / `DynCompiledScript` + free `eval_typed`, all blanket-impl'd, no F1 signature change.
+  `engine::conformance::run_dyn_suite` — `MockEngine` and `RhaiEngine` pass it alongside `run_core_suite`. Contract
+  record item 2 → ✅.
+- **F6 — `core/runtime/rhai`**: `infrastructure/sandbox.rs` —
+  `RhaiContext::register_guarded_binding(name, arity, required, handler)` is the single capability chokepoint
+  (`CapabilitySet` captured by value; guard is `and` of bits + branch); `GuardedBinding` table +
+  `install_guarded_table` + `guarded_binding_names()` for the C-06 sweep. v0.2 ships **no** production top-level guarded
+  binding (all DOM access is `NodeHandle` methods, which self-guard) — the mechanism is tested and ready.
+  `infrastructure/fallback.rs` — `run_with_fallback` (primary → stderr diagnostic + `SourceLocation` → embedded
+  `scripts/default_dom.rhai` on a **clean** tree → Rust `minimal_document()`), `PanicHookGuard` scoped around each eval.
+  Tests: `dyn_conformance`, `isolation` (C-08: scope / capability / trapped-panic isolation), `fault_injection` (C-09:
+  panic in a guarded binding trapped for every capability; `run_with_fallback` recovers from every error class incl. the
+  default script failing). CI job `fault-injection` (`--test-threads=1`) is **blocking**.
+- **F6 — `alloy`**: `--script` runs through `run_with_fallback` — a failing script writes a diagnostic, the fallback DOM
+  is printed, and the process exits 0.
 
 - **Foundation**: `rust-toolchain.toml` (pins 1.97.1), versioned `Cargo.lock`, `[workspace.package]` +
   `[workspace.dependencies]`, `deny.toml`, `.github/workflows/ci.yml`, `#![forbid(unsafe_code)]` on every crate.
@@ -18,11 +35,12 @@ landed; F6 (sandbox chokepoint, fallback, ADR-0013 `dyn` companion, panic-inject
   `Capability`/`CapabilitySet`, `ExecutionLimits`, `SourceLocation`), `application/ports.rs` (`RuntimeEngine` /
   `ExecutionContext` — PRD-002 with two documented deviations: no associated `type Error`; `EngineType` instead of
   `rhai::CustomType`; PRD-002 generics kept as provided sugar over an object-safe core), conversion / `EngineFunction` /
-  `EngineType` traits, public `engine::conformance` suite, `engine::PORT_SCHEMA_VERSION` (= 1, ADR-0011 items 3/7).
-  Depends only on `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in `tests/` closes
-  **C-01, C-05**. ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` (items 1,3,4,5,6 ✅; item
-  2 `dyn RuntimeEngine` companion deferred to v0.2/ADR-0013). Verified locally (`make gate`): `cargo deny check` green,
-  `cargo llvm-cov -p engine` ≈ 95% lines.
+  `EngineType` traits, public `engine::conformance` suite (`run_core_suite` + `run_dyn_suite`),
+  `engine::PORT_SCHEMA_VERSION` (= 2 since v0.2 added `EngineError::Dom`; ADR-0011 items 3/7). Depends only on
+  `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in `tests/` closes **C-01, C-05**.
+  ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` — **all seven items ✅** (item 2's `dyn`
+  companion landed in v0.2 F6, ADR-0013). Verified locally: `cargo deny check` green, `cargo llvm-cov -p engine` ≈ 95%
+  lines.
 - **`core/runtime/rhai`**: `RhaiEngine` / `RhaiContext` / `RhaiCompiledScript(Arc<rhai::AST>)`;
   `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
   wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
@@ -49,10 +67,9 @@ landed; F6 (sandbox chokepoint, fallback, ADR-0013 `dyn` companion, panic-inject
   script built a tree. Hand-rolled arg parsing. Examples: `scripts/hello.rhai`, `scripts/hello_dom.rhai`.
 
 Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/html`, `core/css`, `core/graphics`,
-`core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-06/C-07 (full chokepoint + sweep),
-C-08, C-09 (fallback), all F6; then C-10 … C-18. Follow the `domain/` / `application/` / `infrastructure/` layering that
-`core/engine`, `core/runtime/rhai`, and `core/dom` now demonstrate; `docs/adr/` + `docs/requirements/` remain the
-authoritative contract.
+`core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-10 … C-18 (v0.3+). Follow the
+`domain/` / `application/` / `infrastructure/` layering that `core/engine`, `core/runtime/rhai`, and `core/dom` now
+demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
 
 ## Commands
 

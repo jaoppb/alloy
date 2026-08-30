@@ -2,12 +2,40 @@
 
 | Campo               | Valor                                                                                                                            |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**          | 🟡 Não iniciado — a v0.1 (F0+F1+F2) **está concluída** (2026-08-30). Ver a nota de sincronização logo abaixo                     |
-| **Cobertura**       | ~0% — 0 de 5 critérios da v0.2 (C-03, C-06, C-07, C-08, C-09) têm implementação                                                  |
+| **Status**          | ✅ **Implementada (2026-08-30)** — F3 + I1 + F6 no branch `feat/v0-2-implementation`. Ver a emenda de implementação abaixo       |
+| **Cobertura**       | 5 de 5 critérios da v0.2 fechados: C-03, C-06, C-07, C-08, C-09                                                                  |
 | **Esforço**         | 26–40 dias-dev `[modelado]` (F3 12–18 · F6 12–18 · companion object-safe + I1 3–6); `ROADMAP-IMPLEMENTACAO-V1.md:226` orça 24–36 |
 | **Depende de**      | v0.1 inteira. F6 exige `RhaiEngine`/`RhaiContext` de F2; I1 exige F2 **e** F3 (`ROADMAP-IMPLEMENTACAO-V1.md:290`)                |
 | **Atenção**         | ⚠️ O ADR do companion object-safe é **0013**, não 0012 — `ADR-0011:108` já reserva 0012 para a escolha do motor JS (`boa`)       |
 | **Fecha requisito** | C-06, C-07, C-08, C-09 integralmente · C-03 via ponto de integração I1                                                           |
+
+> ## ⚠️ Emenda — v0.2 implementada pelo **caminho sólido** (2026-08-30)
+>
+> Este plano foi executado no branch `feat/v0-2-implementation` (commits `feat(dom): v0.2 F3`,
+> `feat(rhai,engine): v0.2 I1`, `feat: v0.2 F6`). O fluxo SPDD foi rodado antes do código: `spdd/analysis/` +
+> `spdd/prompt/` para F3 e para F6/I1. Desvios do plano, todos documentados no código/SPDD:
+>
+> | Decisão do plano                                                           | O que foi feito                                                                                                                                                                                                                                                                         |
+> | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | §2.4 `DomError` com 6 variantes                                            | 9 variantes — `+CannotHaveChildren`, `+InvalidAttributeName`, `+NotCharacterData` para um modelo de erro total. `#[non_exhaustive]`.                                                                                                                                                    |
+> | §3 F3-5 `serialize_html(...) -> String`                                    | `-> Result<String, DomError>` — `root` obsoleto é `NodeNotFound`, não saída vazia silenciosa.                                                                                                                                                                                           |
+> | §2.5 / §2.7 `NodeHandle` com `Rc<RefCell<DomTree>>`, `RhaiContext` `!Send` | `Arc<Mutex<DomTree>>`; `RhaiContext` continua `Send + Sync`. A feature `sync` do `rhai` (exigida por `RuntimeEngine: Send + Sync`, `PRD-002:35`) obriga todo `CustomType` a ser `Send + Sync`, o que `Rc<RefCell<_>>` não é.                                                            |
+> | §2.5 getters/setters de propriedade (`node.tag`, `node.text = …`)          | Métodos (`node.tag()`, `node.set_text(…)`) — `rhai::TypeBuilder::with_get` não retorna `Result`, e um getter que engole erro de tipo / capability negada viola o modelo de erro.                                                                                                        |
+> | §2.6 chokepoint único `register_guarded_binding` cobre "todo binding"      | Dois pontos guardados **paralelos**: os métodos de `NodeHandle` se autoguardam via `CapabilitySet` embutido (manifesto `NODE_HANDLE_BINDINGS`), e `register_guarded_binding` cobre bindings nativos de topo (nenhum em produção na v0.2). A varredura de conformidade percorre os dois. |
+> | §2.9 companion `DynExecutionContext` com `set_value`/`call`/`reset_scope`  | O companion espelha o **núcleo object-safe inteiro** de `ExecutionContext` + `as_any_mut`. `DynRuntimeEngine` faz downcast do contexto; **nenhuma** assinatura de `RuntimeEngine`/`ExecutionContext` muda — só a variante `EngineError::Dom` (I1) move o schema para `2`.               |
+> | `EngineError::Dom { operation, reason }`                                   | Adicionada; `PORT_SCHEMA_VERSION 1 → 2`; `PRD-002 §4.2`; contract record itens 3/4/7.                                                                                                                                                                                                   |
+> | ADR-0013                                                                   | Escrito (`docs/adr/0013-…`), linha no índice; contract record item 2 → ✅; `PRD-002 §4.3`.                                                                                                                                                                                              |
+> | `overview.md` / `CLAUDE.md`                                                | `core/dom` → `None`; `core/runtime/rhai` += `dom`. `CLAUDE.md` "Current State" reescrito.                                                                                                                                                                                               |
+> | CI                                                                         | Job `no-engine` também exige `cargo tree -p dom` vazio + `cargo test -p dom --no-default-features`. Novo job **bloqueante** `fault-injection` (`--test-threads=1`).                                                                                                                     |
+>
+> Portões verificados nesta máquina: `cargo test --workspace` (todos verdes),
+> `cargo clippy --workspace --all-targets --all-features -D warnings` (limpo), `cargo fmt --all --check` (limpo),
+> `rustdoc -D warnings` para `dom` (limpo), `markdownlint` (limpo). `alloy --script scripts/hello_dom.rhai` imprime o
+> HTML serializado; um script com erro imprime diagnóstico em `stderr`, roda o fallback e encerra com código 0.
+>
+> O restante deste documento permanece como o plano original, lido sob esta emenda.
+
+---
 
 Este relatório cobre **apenas a v0.2** do `ROADMAP-IMPLEMENTACAO-V1.md` — as fases **F3** (`core/dom`), **F6** (sandbox)
 e o ponto de integração **I1** (`DomNode` scriptável), que o roadmap §3.1 agrupa sob a versão "DOM scriptável e contido"

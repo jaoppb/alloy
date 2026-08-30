@@ -23,5 +23,6 @@
 mod infrastructure;
 
 pub use infrastructure::{
-    NODE_HANDLE_BINDINGS, NodeHandle, RhaiCompiledScript, RhaiContext, RhaiEngine,
+    GuardedBinding, NODE_HANDLE_BINDINGS, NodeHandle, PanicHookGuard, RhaiCompiledScript,
+    RhaiContext, RhaiEngine, install_guarded_table, minimal_document, run_with_fallback,
 };

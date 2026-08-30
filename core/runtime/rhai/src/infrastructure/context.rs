@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use dom::DomTree;
 use engine::{
-    Arity, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext, NativeFn,
-    TypeRegistration,
+    Arity, Capability, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext,
+    NativeFn, TypeRegistration,
 };
 
 use crate::infrastructure::dom_bindings::NodeHandle;
@@ -46,6 +46,11 @@ pub struct RhaiContext {
     /// context holds an `Arc` clone; the host reads the mutated tree after
     /// `eval` returns (`ADR-0003`, contract §5.1).
     dom: Option<Arc<Mutex<DomTree>>>,
+    /// `(name, required)` for every binding installed through
+    /// [`RhaiContext::register_guarded_binding`]. The F6 conformance sweep walks
+    /// this alongside `NODE_HANDLE_BINDINGS` to prove no DOM binding is
+    /// unguarded (C-06).
+    guarded_bindings: Vec<(String, Capability)>,
 }
 
 impl RhaiContext {
@@ -62,7 +67,38 @@ impl RhaiContext {
             native_functions: HashMap::new(),
             registered_type_names: Vec::new(),
             dom: None,
+            guarded_bindings: Vec::new(),
         }
+    }
+
+    /// **C-06 / C-07**: register `handler` under `name` behind a single-point
+    /// capability guard. Every call from a script first checks `required`
+    /// against this context's grant — captured by value at registration, so
+    /// there is no per-call relookup — and returns
+    /// [`EngineError::PermissionDenied`] on a miss before the handler runs.
+    /// `register_fn` / `register_native_fn` remain for **pure** bindings.
+    pub fn register_guarded_binding(
+        &mut self,
+        name: &str,
+        arity: Arity,
+        required: Capability,
+        handler: NativeFn,
+    ) -> Result<(), EngineError> {
+        let capabilities = self.capabilities;
+        let guarded: NativeFn = Arc::new(move |arguments: &[EngineValue]| {
+            capabilities.require(required)?;
+            handler(arguments)
+        });
+        self.register_native_fn(name, arity, guarded)?;
+        self.guarded_bindings.push((name.to_owned(), required));
+        Ok(())
+    }
+
+    /// `(name, required)` for every binding registered through
+    /// [`register_guarded_binding`](Self::register_guarded_binding).
+    #[must_use]
+    pub fn guarded_binding_names(&self) -> &[(String, Capability)] {
+        &self.guarded_bindings
     }
 
     /// Adapter extension beyond the port (roadmap I1): bind a host-owned

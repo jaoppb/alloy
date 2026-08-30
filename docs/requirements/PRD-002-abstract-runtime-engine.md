@@ -153,8 +153,23 @@ in-tree must add a `Dom` arm. No method signature changes; `create_context` / `c
 `eval_compiled_value` / `set_value` / `get_value` / `register_native_fn` / `register_type_erased` /
 `call_function_value` / `reset_scope` / `capabilities` are untouched. `engine::PORT_SCHEMA_VERSION` moves to `2`.
 
-The object-safe `dyn` companion form required by `ADR-0011` item 2 is a **separate** v0.2 deliverable (F6, `ADR-0013`)
-and does not land with this amendment.
+### 4.3 v0.2 F6 amendment — the object-safe `dyn` companion (`ADR-0013`)
+
+`ADR-0011` item 2 requires an object-safe companion for the port. It lands in
+`core/engine/src/application/dyn_bridge.rs` as three `dyn`-safe traits and a free function, all speaking only boundary
+types:
+
+- `DynExecutionContext` — the object-safe core of `ExecutionContext` verbatim, plus `as_any_mut`.
+- `DynCompiledScript` — an erased compiled program.
+- `DynRuntimeEngine : Send + Sync` — `create_context_dyn` / `compile_dyn` / `eval_value_dyn` /
+  `eval_compiled_value_dyn`, all `-> Result<_, EngineError>`.
+- `eval_typed::<T: FromEngineValue>(&dyn DynRuntimeEngine, &mut dyn DynExecutionContext, &str) -> Result<T, EngineError>`.
+
+Blanket impls (`impl<C: ExecutionContext + 'static> DynExecutionContext for C`,
+`impl<S: Send + Sync + 'static> DynCompiledScript for S`,
+`impl<E: RuntimeEngine> DynRuntimeEngine for E where E::Context: 'static, E::CompiledScript: 'static`) give every
+adapter the companion for free. **No existing signature changes**, so this amendment does not move `PORT_SCHEMA_VERSION`
+on its own. `engine::conformance::run_dyn_suite` is its conformance form; `MockEngine` and `RhaiEngine` both pass it.
 
 ---
 

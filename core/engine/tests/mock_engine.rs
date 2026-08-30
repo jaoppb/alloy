@@ -279,6 +279,11 @@ fn mock_engine_passes_core_conformance() {
     engine::conformance::run_core_suite(MockEngine::new);
 }
 
+#[test]
+fn mock_engine_passes_dyn_companion_conformance() {
+    engine::conformance::run_dyn_suite(Box::new(MockEngine::new()));
+}
+
 // ---------------------------------------------------------------------------
 // Adapter-local checks
 // ---------------------------------------------------------------------------

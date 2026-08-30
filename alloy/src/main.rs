@@ -16,11 +16,14 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::{Arc, Mutex};
 
-use dom::{DomTree, serialize_html};
-use engine::{RuntimeEngine, profiles};
-use rhai_runtime::RhaiEngine;
+use dom::serialize_html;
+use engine::profiles;
+use rhai_runtime::{RhaiEngine, run_with_fallback};
+
+/// The embedded default DOM script (C-09 fallback): built into the binary so a
+/// muscle-script failure always has something to fall back to.
+const DEFAULT_DOM_SCRIPT: &str = include_str!("../../scripts/default_dom.rhai");
 
 const USAGE: &str = "\
 alloy — the infinitely malleable web browser (v0.1 preview)
@@ -90,39 +93,22 @@ fn run_script(path: &Path) -> Result<(), String> {
         .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
 
     let engine = RhaiEngine::new();
-    let tree = Arc::new(Mutex::new(DomTree::new()));
-    let mut context = engine
-        .create_context(profiles::dom_parser())
-        .map_err(|error| error.to_string())?;
-    context
-        .bind_dom(Arc::clone(&tree))
-        .map_err(|error| error.to_string())?;
+    let (tree, value) = run_with_fallback(
+        &engine,
+        profiles::dom_parser(),
+        &source,
+        Some(path),
+        DEFAULT_DOM_SCRIPT,
+    );
 
-    let value = engine
-        .eval_value(&mut context, &source)
-        .map_err(|error| error.to_string())?;
-
-    if !value.is_unit() {
+    if let Some(value) = value.filter(|value| !value.is_unit()) {
         println!("{value}");
     }
-    print_built_dom(&tree);
-    Ok(())
-}
 
-/// Print the serialized DOM the script built, if it built one. An empty tree
-/// (the script never touched `document`) prints nothing.
-fn print_built_dom(tree: &Arc<Mutex<DomTree>>) {
-    let tree = tree.lock().unwrap_or_else(|poison| poison.into_inner());
-    let root = tree.document();
-    let built_something = tree
-        .child_ids(root)
-        .map(|children| !children.is_empty())
-        .unwrap_or(false);
-    if !built_something {
-        return;
+    let html = serialize_html(&tree, tree.document())
+        .map_err(|error| format!("could not serialize the DOM: {error}"))?;
+    if !html.is_empty() {
+        println!("{html}");
     }
-    match serialize_html(&tree, root) {
-        Ok(html) => println!("{html}"),
-        Err(error) => eprintln!("alloy: could not serialize the DOM: {error}"),
-    }
+    Ok(())
 }

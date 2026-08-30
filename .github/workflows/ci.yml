@@ -131,6 +131,31 @@ jobs:
           fi
           echo "core/dom dependency graph is empty."
 
+  # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
+  fault-injection:
+    name: Panic-injection fault isolation
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-fault-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-fault-
+      # A panic injected into a guarded binding must be trapped as ScriptPanic
+      # with the process alive; run_with_fallback must recover from every error
+      # class. --test-threads=1 keeps the process-global panic hook deterministic.
+      # Fails immediately if any profile sets `panic = "abort"`.
+      - run: cargo test -p rhai-runtime --test fault_injection -- --test-threads=1
+
   supply-chain:
     name: cargo-deny
     runs-on: ubuntu-24.04
