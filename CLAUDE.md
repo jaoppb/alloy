@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **v0.1 ("O engine vive") is delivered — F0 + F1 + F2.** Done by the _solid_ path (ADR-0011 Replaceable Port Contract),
 not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report originally proposed; see the amendments in
-`docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`.
+`docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`. The PR #4 review response then added: strict
+`[workspace.lints.clippy]` + `clippy.toml`, a `justfile` (replacing the Makefile), `arch-lint`, `tracing` in `alloy`
+(ADR-0014), `thiserror` outside `core/engine` (ADR-0015), and the object-calisthenics VOs `FunctionName` / `Line` /
+`Column` (port schema **v2**).
 
 - **Foundation**: `rust-toolchain.toml` (pins 1.97.1), versioned `Cargo.lock`, `[workspace.package]` +
   `[workspace.dependencies]`, `deny.toml`, `.github/workflows/ci.yml`, `#![forbid(unsafe_code)]` on every crate.
@@ -14,11 +17,11 @@ not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report origina
   `Capability`/`CapabilitySet`, `ExecutionLimits`, `SourceLocation`), `application/ports.rs` (`RuntimeEngine` /
   `ExecutionContext` — PRD-002 with two documented deviations: no associated `type Error`; `EngineType` instead of
   `rhai::CustomType`; PRD-002 generics kept as provided sugar over an object-safe core), conversion / `EngineFunction` /
-  `EngineType` traits, public `engine::conformance` suite, `engine::PORT_SCHEMA_VERSION` (= 1, ADR-0011 items 3/7).
-  Depends only on `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in `tests/` closes
-  **C-01, C-05**. ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` (items 1,3,4,5,6 ✅; item
-  2 `dyn RuntimeEngine` companion deferred to v0.2/ADR-0013). Verified locally (`just gate`): `cargo deny check` green,
-  `cargo llvm-cov -p engine` ≈ 95% lines.
+  `EngineType` traits, public `engine::conformance` suite, `engine::PORT_SCHEMA_VERSION` (= 2, ADR-0011 items 3/7; see
+  PRD-002 §4.2). Depends only on `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in
+  `tests/` closes **C-01, C-05**. ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` (items
+  1,3,4,5,6 ✅; item 2 `dyn RuntimeEngine` companion deferred to v0.2/ADR-0013). Verified locally (`just gate`):
+  `cargo deny check` green, `cargo llvm-cov -p engine` ≈ 95% lines.
 - **`core/runtime/rhai`**: `RhaiEngine` / `RhaiContext` / `RhaiCompiledScript(Arc<rhai::AST>)`;
   `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
   wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
