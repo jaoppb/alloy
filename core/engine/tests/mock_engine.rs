@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext,
-    FunctionName, NativeFn, RuntimeEngine, SourceLocation, TypeRegistration,
+    FunctionName, NativeFn, RuntimeEngine, SourceLocation, TypeRegistration, VariableName,
 };
 
 // ---------------------------------------------------------------------------
@@ -115,13 +115,13 @@ impl ExecutionContext for MockContext {
         Ok(())
     }
 
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError> {
-        self.variables.insert(name.to_owned(), value);
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError> {
+        self.variables.insert(name.as_str().to_owned(), value);
         Ok(())
     }
 
-    fn get_value(&self, name: &str) -> Option<EngineValue> {
-        self.variables.get(name).cloned()
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue> {
+        self.variables.get(name.as_str()).cloned()
     }
 
     fn call_function_value(
@@ -264,7 +264,7 @@ fn add(
 /// backend. In F2 the very same function is handed a `RhaiEngine`.
 fn evaluate_subject<Engine: RuntimeEngine>(engine: &Engine) -> Result<String, EngineError> {
     let mut context = engine.create_context(CapabilitySet::empty())?;
-    context.set_variable("subject", "world")?;
+    context.set_variable(&VariableName::parse("subject")?, "world")?;
     engine.eval::<String>(&mut context, "subject")
 }
 
@@ -303,7 +303,9 @@ fn addition_actually_evaluates() {
     let mut context = engine
         .create_context(CapabilitySet::empty())
         .expect("context");
-    context.set_variable("base", 40_i64).expect("set base");
+    context
+        .set_variable(&VariableName::parse("base").expect("valid name"), 40_i64)
+        .expect("set base");
     let total: i64 = engine.eval(&mut context, "base + 2").expect("evaluate sum");
     assert_eq!(total, 42);
 }

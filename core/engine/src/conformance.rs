@@ -41,7 +41,17 @@
 
 use crate::application::ports::{ExecutionContext, RuntimeEngine};
 use crate::domain::capability::{Capability, CapabilitySet};
+use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
+use crate::domain::variable_name::VariableName;
+
+fn function_name(raw: &str) -> FunctionName {
+    FunctionName::parse(raw).expect("conformance fixtures use valid identifiers")
+}
+
+fn variable_name(raw: &str) -> VariableName {
+    VariableName::parse(raw).expect("conformance fixtures use valid identifiers")
+}
 
 /// Run every core check against engines produced by `make_engine`. Panics with a
 /// descriptive message on the first violation.
@@ -59,7 +69,6 @@ where
     check_native_function_dispatch(&make_engine());
     check_call_function_invokes_a_registered_binding(&make_engine());
     check_call_function_rejects_an_unknown_name(&make_engine());
-    check_a_malformed_function_name_is_rejected(&make_engine());
     check_capabilities_are_carried(&make_engine());
     check_reset_scope_clears_locals(&make_engine());
 }
@@ -102,7 +111,7 @@ fn check_typed_eval_sugar<Engine: RuntimeEngine>(engine: &Engine) {
 fn check_variable_roundtrip<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
     scope
-        .set_variable("answer", 42_i64)
+        .set_variable(&variable_name("answer"), 42_i64)
         .unwrap_or_else(|error| panic!("set_variable failed: {error}"));
     let seen: i64 = engine
         .eval(&mut scope, "answer")
@@ -146,10 +155,10 @@ fn check_contexts_are_isolated<Engine: RuntimeEngine>(engine: &Engine) {
     let mut first = context(engine);
     let mut second = context(engine);
     first
-        .set_variable("x", 1_i64)
+        .set_variable(&variable_name("x"), 1_i64)
         .expect("set x in first context");
     second
-        .set_variable("x", 2_i64)
+        .set_variable(&variable_name("x"), 2_i64)
         .expect("set x in second context");
 
     let from_first: i64 = engine.eval(&mut first, "x").expect("read x from first");
@@ -164,7 +173,7 @@ fn check_contexts_are_isolated<Engine: RuntimeEngine>(engine: &Engine) {
 fn check_native_function_dispatch<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
     scope
-        .register_fn("meaning", || 42_i64)
+        .register_fn(&function_name("meaning"), || 42_i64)
         .unwrap_or_else(|error| panic!("register_fn failed: {error}"));
     let called: i64 = engine
         .eval(&mut scope, "meaning()")
@@ -180,10 +189,10 @@ fn check_native_function_dispatch<Engine: RuntimeEngine>(engine: &Engine) {
 fn check_call_function_invokes_a_registered_binding<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
     scope
-        .register_fn("increment", |value: i64| value + 1)
+        .register_fn(&function_name("increment"), |value: i64| value + 1)
         .unwrap_or_else(|error| panic!("register_fn failed: {error}"));
     let result: i64 = scope
-        .call_function("increment", &[EngineValue::Int(41)])
+        .call_function(&function_name("increment"), &[EngineValue::Int(41)])
         .unwrap_or_else(|error| panic!("call_function on a registered binding failed: {error}"));
     assert_eq!(
         result, 42,
@@ -193,19 +202,10 @@ fn check_call_function_invokes_a_registered_binding<Engine: RuntimeEngine>(engin
 
 fn check_call_function_rejects_an_unknown_name<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
-    let outcome = scope.call_function::<EngineValue>("no_such_binding", &[]);
+    let outcome = scope.call_function::<EngineValue>(&function_name("no_such_binding"), &[]);
     assert!(
         matches!(outcome, Err(crate::EngineError::Binding { .. })),
         "call_function on an unregistered name must be EngineError::Binding, got {outcome:?}"
-    );
-}
-
-fn check_a_malformed_function_name_is_rejected<Engine: RuntimeEngine>(engine: &Engine) {
-    let mut scope = context(engine);
-    let outcome = scope.register_fn("has space", || 0_i64);
-    assert!(
-        matches!(outcome, Err(crate::EngineError::Binding { .. })),
-        "register_fn with a non-identifier name must be EngineError::Binding, got {outcome:?}"
     );
 }
 
@@ -226,7 +226,9 @@ fn check_capabilities_are_carried<Engine: RuntimeEngine>(engine: &Engine) {
 
 fn check_reset_scope_clears_locals<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
-    scope.set_variable("temp", 99_i64).expect("set temp");
+    scope
+        .set_variable(&variable_name("temp"), 99_i64)
+        .expect("set temp");
     scope
         .reset_scope()
         .unwrap_or_else(|error| panic!("reset_scope failed: {error}"));

@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use engine::{
     Arity, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext, FunctionName,
-    NativeFn, TypeRegistration,
+    NativeFn, TypeRegistration, VariableName,
 };
 
 use crate::infrastructure::marshal::RhaiValue;
@@ -74,20 +74,20 @@ impl RhaiContext {
     /// Adapter extension: push a concrete custom value into the scope (there is
     /// no [`EngineValue`] shape for a `rhai::CustomType`). The bound is what
     /// `rhai`'s sealed `Variant` marker is auto-implemented for.
-    pub fn set_custom_value<T>(&mut self, name: &str, value: T)
+    pub fn set_custom_value<T>(&mut self, name: &VariableName, value: T)
     where
         T: Clone + Send + Sync + 'static,
     {
-        self.scope.set_value(name.to_string(), value);
+        self.scope.set_value(name.as_str().to_owned(), value);
     }
 
     /// Adapter extension: read a concrete custom value back out of the scope.
     #[must_use]
-    pub fn custom_value<T>(&self, name: &str) -> Option<T>
+    pub fn custom_value<T>(&self, name: &VariableName) -> Option<T>
     where
         T: Clone + Send + Sync + 'static,
     {
-        self.scope.get_value::<T>(name)
+        self.scope.get_value::<T>(name.as_str())
     }
 
     /// The script-visible names of every type registered on this context.
@@ -123,14 +123,14 @@ impl ExecutionContext for RhaiContext {
         Ok(())
     }
 
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError> {
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError> {
         let RhaiValue(dynamic) = RhaiValue::try_from(value)?;
-        self.scope.set_value(name.to_string(), dynamic);
+        self.scope.set_value(name.as_str().to_owned(), dynamic);
         Ok(())
     }
 
-    fn get_value(&self, name: &str) -> Option<EngineValue> {
-        let dynamic = self.scope.get_value::<rhai::Dynamic>(name)?;
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue> {
+        let dynamic = self.scope.get_value::<rhai::Dynamic>(name.as_str())?;
         EngineValue::try_from(RhaiValue(dynamic)).ok()
     }
 

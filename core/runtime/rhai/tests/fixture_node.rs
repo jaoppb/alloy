@@ -4,7 +4,9 @@
 //! `FixtureNode` is a stand-in for the real `core/dom` `DomNode`, which arrives
 //! at roadmap I1 (v0.2). C-03 stays open until then.
 
-use engine::{Capability, CapabilitySet, EngineType, RuntimeEngine, TypeRegistration};
+use engine::{
+    Capability, CapabilitySet, EngineType, RuntimeEngine, TypeRegistration, VariableName,
+};
 use rhai::{CustomType, TypeBuilder};
 use rhai_runtime::RhaiEngine;
 
@@ -56,7 +58,8 @@ fn a_registered_domain_struct_is_readable_and_mutable_from_script() {
     context
         .register_custom_type::<FixtureNode>()
         .expect("register FixtureNode");
-    context.set_custom_value("node", FixtureNode::new(7, "div", "hello"));
+    let node_name = VariableName::parse("node").expect("valid name");
+    context.set_custom_value(&node_name, FixtureNode::new(7, "div", "hello"));
 
     // read
     let tag: String = engine
@@ -70,7 +73,7 @@ fn a_registered_domain_struct_is_readable_and_mutable_from_script() {
         .expect("mutate node.text from script");
 
     let mutated: FixtureNode = context
-        .custom_value("node")
+        .custom_value(&node_name)
         .expect("read node back into Rust");
     assert_eq!(
         mutated.text, "hello world",

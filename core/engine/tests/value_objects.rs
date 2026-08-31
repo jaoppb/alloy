@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use engine::{
     Capability, CapabilitySet, Column, EngineError, EngineValue, ExecutionLimit, ExecutionLimits,
-    FunctionName, SourceLocation, TypeRegistration, ValueKind, profiles,
+    FunctionName, SourceLocation, TypeRegistration, ValueKind, VariableName, profiles,
 };
 
 // ---- EngineValue --------------------------------------------------------
@@ -269,4 +269,22 @@ fn function_name_conversions_and_display() {
     );
     assert_eq!(from_slice.to_string(), "on_event");
     assert!(FunctionName::try_from("no dots.").is_err());
+}
+
+// ---- VariableName -------------------------------------------------
+
+#[test]
+fn variable_name_follows_the_same_identifier_rule() {
+    for good in ["subject", "_x", "n0"] {
+        assert_eq!(VariableName::parse(good).unwrap().as_str(), good);
+    }
+    for bad in ["", "1st", "has space", "a-b"] {
+        assert!(
+            matches!(VariableName::parse(bad), Err(EngineError::Binding { .. })),
+            "`{bad}` must be rejected as EngineError::Binding"
+        );
+    }
+    let name = VariableName::try_from(String::from("count")).unwrap();
+    assert_eq!(<VariableName as AsRef<str>>::as_ref(&name), "count");
+    assert_eq!(name.to_string(), "count");
 }

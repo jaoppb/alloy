@@ -58,8 +58,8 @@ pub mod domain;
 /// observe as breaking (a new `EngineValue` variant, a new `EngineError`
 /// variant with new meaning, a changed method signature), and add a migration
 /// note to PRD-002. `1` was frozen at roadmap point F1; `2` is the review
-/// response — `FunctionName` on the binding methods, `SourceLocation` as an enum
-/// over `Line` / `Column` (see PRD-002 §migration).
+/// response — `FunctionName` / `VariableName` on the binding and scope methods,
+/// `SourceLocation` as an enum over `Line` / `Column` (see PRD-002 §4.2).
 pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::{
@@ -74,4 +74,5 @@ pub use domain::{
     limits::{ExecutionLimit, ExecutionLimits},
     source::{Column, Line, SourceLocation},
     value::{EngineValue, ValueKind},
+    variable_name::VariableName,
 };

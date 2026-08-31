@@ -5,6 +5,7 @@
 use core::fmt;
 
 use crate::domain::error::EngineError;
+use crate::domain::ident::require_identifier;
 
 /// The name a native function is registered and called under. Non-empty, and a
 /// valid script identifier: an ASCII letter or `_` first, then ASCII
@@ -16,18 +17,8 @@ impl FunctionName {
     /// Validate `raw`, or explain why it is not a usable binding name via
     /// [`EngineError::Binding`].
     pub fn parse(raw: &str) -> Result<Self, EngineError> {
-        let mut characters = raw.chars();
-        let starts_valid = characters
-            .next()
-            .is_some_and(|first| first.is_ascii_alphabetic() || first == '_');
-        let rest_valid =
-            characters.all(|character| character.is_ascii_alphanumeric() || character == '_');
-        if starts_valid && rest_valid {
-            return Ok(Self(Box::from(raw)));
-        }
-        Err(EngineError::binding(format!(
-            "`{raw}` is not a valid function name (identifier: letter or `_`, then letters/digits/`_`)"
-        )))
+        require_identifier(raw, "function name")?;
+        Ok(Self(Box::from(raw)))
     }
 
     /// The name as a string slice.

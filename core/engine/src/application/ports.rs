@@ -31,6 +31,7 @@ use crate::domain::capability::CapabilitySet;
 use crate::domain::error::EngineError;
 use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
+use crate::domain::variable_name::VariableName;
 
 /// A type-erased native function body: marshalled arguments in, one value or an
 /// error out. This is the shape F6 will wrap with a capability guard.
@@ -61,10 +62,10 @@ pub trait ExecutionContext {
     ) -> Result<(), EngineError>;
 
     /// Set a scope variable to an already-marshalled value.
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError>;
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError>;
 
     /// Read a scope variable, if present.
-    fn get_value(&self, name: &str) -> Option<EngineValue>;
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue>;
 
     /// Invoke a **registered native binding** by name (the handler installed by
     /// [`register_native_fn`](Self::register_native_fn) / `register_fn`).
@@ -97,25 +98,24 @@ pub trait ExecutionContext {
     }
 
     /// PRD-002:49-51. Bind an ordinary Rust closure, adapting it through
-    /// [`EngineFunction`]. `name` is validated into a [`FunctionName`].
+    /// [`EngineFunction`].
     fn register_fn<Function, Args, Ret>(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         function: Function,
     ) -> Result<(), EngineError>
     where
         Self: Sized,
         Function: EngineFunction<Args, Ret>,
     {
-        let name = FunctionName::parse(name)?;
         let arity = function.arity();
         let handler: NativeFn =
             Arc::new(move |arguments: &[EngineValue]| function.invoke(arguments));
-        self.register_native_fn(&name, arity, handler)
+        self.register_native_fn(name, arity, handler)
     }
 
     /// PRD-002:52. Set a scope variable from any [`IntoEngineValue`].
-    fn set_variable<Value>(&mut self, name: &str, value: Value) -> Result<(), EngineError>
+    fn set_variable<Value>(&mut self, name: &VariableName, value: Value) -> Result<(), EngineError>
     where
         Self: Sized,
         Value: IntoEngineValue,
@@ -128,15 +128,14 @@ pub trait ExecutionContext {
     /// v0.1 scope limit).
     fn call_function<Ret>(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<Ret, EngineError>
     where
         Self: Sized,
         Ret: FromEngineValue,
     {
-        let name = FunctionName::parse(name)?;
-        let value = self.call_function_value(&name, arguments)?;
+        let value = self.call_function_value(name, arguments)?;
         Ret::from_engine_value(value)
     }
 }
