@@ -82,7 +82,7 @@ fix:
 # --- quality gates -------------------------------------------------
 
 # Full local gate (CI minus the 3-OS matrix)
-gate: fmt-check lint check test deny coverage arch no-engine
+gate: fmt-check lint check test deny coverage arch
     @echo "✓ all local gates passed"
 
 # Alias for `gate`
@@ -109,7 +109,7 @@ coverage-html:
     {{cargo}} llvm-cov --package {{cov_pkg}} --all-features --html
     @echo "report: target/llvm-cov/html/index.html"
 
-# Code-pattern architecture gate: `tracing` + no-`unwrap` decisions (ADR-0014 / ADR-0008)
+# Architecture gate: layers, dependencies, `tracing` + no-`unwrap` (arch-lint)
 arch:
     @command -v arch-lint >/dev/null || { echo "arch-lint not found — run: just setup"; exit 1; }
     arch-lint check

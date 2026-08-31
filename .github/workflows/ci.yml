@@ -28,10 +28,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      # pnpm must exist before setup-node@v5 resolves the `packageManager` field.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      # pnpm must exist before setup-node@v7 resolves the `packageManager` field.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -46,11 +46,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # rustup on the runner honours rust-toolchain.toml (channel + components).
       - name: Show toolchain
         run: rustup show active-toolchain
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -75,10 +75,10 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-14, windows-2022]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Show toolchain
         run: rustup show active-toolchain
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -90,36 +90,6 @@ jobs:
       - run: cargo check --workspace --all-targets
       - run: cargo test --workspace --all-features
 
-  # ---- ADR-0002 / ADR-0011 N-04: the engine abstraction links no runtime --
-  no-engine:
-    name: Engine abstraction is adapter-free
-    needs: rust-quality
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-noengine-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-noengine-
-      - run: cargo build -p engine --all-features
-      - name: Assert no script interpreter in engine's dependency graph
-        run: |
-          if cargo tree -p engine --edges normal --prefix none | grep -Eiq '^(rhai|boa_engine|rquickjs|deno_core|v8|mlua|rlua) '; then
-            echo "::error::core/engine linked a concrete script runtime — ADR-0002:49 / ADR-0011 item 2 violated"
-            cargo tree -p engine --edges normal
-            exit 1
-          fi
-          echo "engine dependency graph is interpreter-free:"
-          cargo tree -p engine --edges normal
-
   supply-chain:
     name: cargo-deny
     runs-on: ubuntu-24.04
@@ -127,8 +97,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/cargo-deny
           key: cargo-deny-bin-0.20
@@ -137,16 +107,17 @@ jobs:
           test -x ~/.cargo/bin/cargo-deny || cargo install cargo-deny --locked --version ^0.20
       - run: cargo deny check
 
-  # ---- code-pattern architecture rules: tracing / no-unwrap (ADR-0014) -----
+  # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
   arch-lint:
     name: arch-lint
+    needs: rust-quality
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/arch-lint
           key: arch-lint-bin-0.5
@@ -163,10 +134,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Add llvm-tools
         run: rustup component add llvm-tools-preview
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
