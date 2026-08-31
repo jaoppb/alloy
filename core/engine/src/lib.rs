@@ -43,6 +43,10 @@
 //! variation and threat models.
 
 #![forbid(unsafe_code)]
+// Every fallible method returns the one `EngineError` (ADR-0011 item 4) and
+// documents its failure modes in prose; a `# Errors` heading on each would only
+// repeat that.
+#![allow(clippy::missing_errors_doc)]
 
 pub mod application;
 pub mod conformance;
@@ -54,14 +58,10 @@ pub mod domain;
 ///
 /// Bump this on **any** change that an out-of-tree adapter or consumer could
 /// observe as breaking (a new `EngineValue` variant, a new `EngineError`
-/// variant with new meaning, a changed method signature), and add a migration
-/// note to PRD-002.
-///
-/// - `1` — the surface frozen at roadmap point F1 (v0.1).
-/// - `2` — v0.2 F6/I1: added `EngineError::Dom { operation, reason }`. Additive
-///   for an out-of-tree adapter (it already needs a `_` arm on the
-///   `#[non_exhaustive]` enum); a consumer that exhaustively matched
-///   `EngineError` must add a `Dom` arm. See PRD-002 §5.1.
+/// note to PRD-002. `1` was frozen at roadmap point F1; `2` is the review
+/// response & v0.2 I1 — `FunctionName` / `VariableName` on binding and scope
+/// methods, `SourceLocation` as an enum over `Line` / `Column`, and additive
+/// `EngineError::Dom { operation, reason }` (see PRD-002 §4.2).
 pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::{
@@ -75,7 +75,9 @@ pub use application::{
 pub use domain::{
     capability::{Capability, CapabilitySet, profiles},
     error::EngineError,
+    function_name::FunctionName,
     limits::{ExecutionLimit, ExecutionLimits},
-    source::SourceLocation,
+    source::{Column, Line, SourceLocation},
     value::{EngineValue, ValueKind},
+    variable_name::VariableName,
 };

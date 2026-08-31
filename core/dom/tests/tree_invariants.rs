@@ -1,6 +1,8 @@
 //! The five `DomTree` invariants of the v0.2 report §2.2, plus value-object
 //! validation and the type-checked accessors.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use dom::{AttributeName, AttributeValue, DomError, DomTree, NodeId, TagName, TextContent};
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {

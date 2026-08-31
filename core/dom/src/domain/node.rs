@@ -1,7 +1,9 @@
-//! Node identity and payload: [`NodeId`], the [`NodeKind`] payloads, and the
-//! arena slot. `NodeData` and `Slot` are crate-internal — the outside world only
-//! ever names a [`NodeId`] and reads through [`crate::DomTree`] (Object
-//! Calisthenics rule 8, `ADR-0010:136`).
+//! Node identity and payload.
+//!
+//! [`NodeId`], the [`NodeKind`] payloads, and the arena slot. `NodeData` and
+//! `Slot` are crate-internal — the outside world only ever names a [`NodeId`]
+//! and reads through [`crate::DomTree`] (Object Calisthenics rule 8,
+//! `ADR-0010:136`).
 
 use core::fmt;
 
@@ -10,23 +12,24 @@ use crate::domain::children::Children;
 use crate::domain::tag_name::TagName;
 use crate::domain::text::{CommentContent, TextContent};
 
-/// A handle to a node inside one [`crate::DomTree`]. `Copy`; the raw `u32` is
-/// the arena index (v0.2 report §2.2; `ADR-0010:131` and `CLAUDE.md` write this
-/// newtype verbatim). A `NodeId` into a removed node stays valid syntactically
-/// but resolves to [`crate::DomError::NodeNotFound`] — v0.2 keeps no
-/// generational tag (deferred to C-13).
+/// A handle to a node inside one [`crate::DomTree`].
+///
+/// `Copy`; the raw `u32` is the arena index (v0.2 report §2.2; `ADR-0010:131`
+/// and `CLAUDE.md` write this newtype verbatim). A `NodeId` into a removed node
+/// stays valid syntactically but resolves to [`crate::DomError::NodeNotFound`] —
+/// v0.2 keeps no generational tag (deferred to C-13).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeId(u32);
 
 impl NodeId {
     pub(crate) fn from_index(index: usize) -> Self {
-        Self(u32::try_from(index).expect("DOM node id space (u32) exhausted"))
+        Self(u32::try_from(index).unwrap_or(u32::MAX))
     }
 
     /// The arena index this id addresses.
     #[must_use]
-    pub const fn index(self) -> usize {
-        self.0 as usize
+    pub fn index(self) -> usize {
+        usize::try_from(self.0).unwrap_or(usize::MAX)
     }
 }
 
@@ -44,7 +47,7 @@ pub struct ElementData {
 }
 
 impl ElementData {
-    pub(crate) fn new(tag: TagName) -> Self {
+    pub(crate) const fn new(tag: TagName) -> Self {
         Self {
             tag,
             attributes: AttributeMap::new(),
@@ -61,7 +64,7 @@ impl ElementData {
         &self.attributes
     }
 
-    pub(crate) fn attributes_mut(&mut self) -> &mut AttributeMap {
+    pub(crate) const fn attributes_mut(&mut self) -> &mut AttributeMap {
         &mut self.attributes
     }
 }
@@ -86,7 +89,7 @@ pub(crate) struct NodeData {
 }
 
 impl NodeData {
-    pub(crate) fn new(kind: NodeKind) -> Self {
+    pub(crate) const fn new(kind: NodeKind) -> Self {
         Self {
             kind,
             parent: None,
@@ -98,7 +101,7 @@ impl NodeData {
         &self.kind
     }
 
-    pub(crate) fn kind_mut(&mut self) -> &mut NodeKind {
+    pub(crate) const fn kind_mut(&mut self) -> &mut NodeKind {
         &mut self.kind
     }
 
@@ -106,7 +109,7 @@ impl NodeData {
         self.parent
     }
 
-    pub(crate) fn set_parent(&mut self, parent: Option<NodeId>) {
+    pub(crate) const fn set_parent(&mut self, parent: Option<NodeId>) {
         self.parent = parent;
     }
 
@@ -114,7 +117,7 @@ impl NodeData {
         &self.children
     }
 
-    pub(crate) fn children_mut(&mut self) -> &mut Children {
+    pub(crate) const fn children_mut(&mut self) -> &mut Children {
         &mut self.children
     }
 }

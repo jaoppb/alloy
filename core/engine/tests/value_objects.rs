@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use engine::{
-    Capability, CapabilitySet, EngineError, EngineValue, ExecutionLimit, ExecutionLimits,
-    SourceLocation, TypeRegistration, ValueKind, profiles,
+    Capability, CapabilitySet, Column, EngineError, EngineValue, ExecutionLimit, ExecutionLimits,
+    FunctionName, SourceLocation, TypeRegistration, ValueKind, VariableName, profiles,
 };
 
 // ---- EngineValue --------------------------------------------------------
@@ -225,12 +225,12 @@ fn execution_limit_display_names_each_ceiling() {
 #[test]
 fn source_location_reports_and_prints_positions() {
     let full = SourceLocation::new(10, 4);
-    assert_eq!(full.line(), 10);
-    assert_eq!(full.column(), 4);
+    assert_eq!(full.line().get(), 10);
+    assert_eq!(full.column().map(Column::get), Some(4));
     assert_eq!(full.to_string(), "line 10, column 4");
 
     let line_only = SourceLocation::line_only(7);
-    assert_eq!(line_only.column(), 0);
+    assert_eq!(line_only.column(), None);
     assert_eq!(line_only.to_string(), "line 7");
 }
 
@@ -241,4 +241,50 @@ fn type_registration_keeps_its_script_name() {
     let registration = TypeRegistration::new("DomNode");
     assert_eq!(registration.script_name(), "DomNode");
     assert_eq!(registration, TypeRegistration::new("DomNode"));
+}
+
+// ---- FunctionName ---------------------------------------------------
+
+#[test]
+fn function_name_accepts_identifiers_and_rejects_the_rest() {
+    for good in ["snake_case", "_leading", "with9digits", "F"] {
+        assert_eq!(FunctionName::parse(good).unwrap().as_str(), good);
+    }
+    for bad in ["", "9leading", "has space", "kebab-case", "dot.path", "π"] {
+        assert!(
+            matches!(FunctionName::parse(bad), Err(EngineError::Binding { .. })),
+            "`{bad}` must be rejected as EngineError::Binding"
+        );
+    }
+}
+
+#[test]
+fn function_name_conversions_and_display() {
+    let from_slice = FunctionName::try_from("on_event").unwrap();
+    let from_string = FunctionName::try_from(String::from("on_event")).unwrap();
+    assert_eq!(from_slice, from_string);
+    assert_eq!(
+        <FunctionName as AsRef<str>>::as_ref(&from_slice),
+        "on_event"
+    );
+    assert_eq!(from_slice.to_string(), "on_event");
+    assert!(FunctionName::try_from("no dots.").is_err());
+}
+
+// ---- VariableName -------------------------------------------------
+
+#[test]
+fn variable_name_follows_the_same_identifier_rule() {
+    for good in ["subject", "_x", "n0"] {
+        assert_eq!(VariableName::parse(good).unwrap().as_str(), good);
+    }
+    for bad in ["", "1st", "has space", "a-b"] {
+        assert!(
+            matches!(VariableName::parse(bad), Err(EngineError::Binding { .. })),
+            "`{bad}` must be rejected as EngineError::Binding"
+        );
+    }
+    let name = VariableName::try_from(String::from("count")).unwrap();
+    assert_eq!(<VariableName as AsRef<str>>::as_ref(&name), "count");
+    assert_eq!(name.to_string(), "count");
 }

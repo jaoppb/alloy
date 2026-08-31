@@ -1,6 +1,8 @@
-//! [`TextContent`] and [`CommentContent`] — thin newtypes over the character
-//! data of a text or comment node. No validation: any string is legal content
-//! (v0.2 report §2.2). Escaping is the serializer's concern, not the model's.
+//! [`TextContent`] and [`CommentContent`] newtypes.
+//!
+//! Thin newtypes over the character data of a text or comment node. No
+//! validation: any string is legal content (v0.2 report §2.2). Escaping is the
+//! serializer's concern, not the model's.
 
 /// The character data of a `Text` node.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]

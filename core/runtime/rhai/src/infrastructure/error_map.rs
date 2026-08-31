@@ -8,15 +8,13 @@ use rhai::{EvalAltResult, ParseError, Position};
 /// is not recorded).
 #[must_use]
 pub fn position_to_location(position: Position) -> Option<SourceLocation> {
-    if position.is_none() {
-        return None;
-    }
-    let line = position.line().unwrap_or(0);
-    let column = position.position().unwrap_or(0);
-    Some(SourceLocation::new(
-        u32::try_from(line).unwrap_or(u32::MAX),
-        u32::try_from(column).unwrap_or(u32::MAX),
-    ))
+    let line = position.line()?;
+    let line = u32::try_from(line).unwrap_or(u32::MAX);
+    let Some(column) = position.position() else {
+        return Some(SourceLocation::line_only(line));
+    };
+    let column = u32::try_from(column).unwrap_or(u32::MAX);
+    Some(SourceLocation::new(line, column))
 }
 
 /// Map a compile-time parse failure to [`EngineError::Compilation`]

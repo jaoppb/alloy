@@ -26,7 +26,7 @@ impl AttributeName {
     }
 }
 
-fn is_forbidden(character: char) -> bool {
+const fn is_forbidden(character: char) -> bool {
     character.is_ascii_control()
         || character.is_whitespace()
         || matches!(character, '"' | '\'' | '/' | '=' | '>')
@@ -100,12 +100,12 @@ impl AttributeMap {
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.entries.len()
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 }

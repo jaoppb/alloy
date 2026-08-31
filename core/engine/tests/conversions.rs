@@ -1,5 +1,8 @@
 //! Unit coverage for `IntoEngineValue` / `FromEngineValue` and `EngineFunction`.
 
+// Test-only idioms in free helpers that clippy's `-in-tests` heuristic misses.
+#![allow(clippy::expect_used, clippy::float_cmp, clippy::needless_pass_by_value)]
+
 use std::collections::BTreeMap;
 
 use engine::{Arity, EngineError, EngineFunction, EngineValue, FromEngineValue, IntoEngineValue};
@@ -150,6 +153,21 @@ fn closures_of_each_supported_arity_are_engine_functions() {
         ),
         EngineValue::Int(10)
     );
+    assert_eq!(
+        invoke(
+            |a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64| a + b + c + d + e + f + g,
+            &[
+                EngineValue::Int(1),
+                EngineValue::Int(2),
+                EngineValue::Int(3),
+                EngineValue::Int(4),
+                EngineValue::Int(5),
+                EngineValue::Int(6),
+                EngineValue::Int(7),
+            ]
+        ),
+        EngineValue::Int(28)
+    );
 }
 
 #[test]
@@ -164,6 +182,10 @@ fn arity_is_reported_for_every_supported_shape() {
     assert_eq!(
         arity_of(&|_a: i64, _b: i64, _c: i64, _d: i64| 0_i64),
         Arity::exact(4)
+    );
+    assert_eq!(
+        arity_of(&|_a: i64, _b: i64, _c: i64, _d: i64, _e: i64, _f: i64, _g: i64| 0_i64),
+        Arity::exact(7)
     );
     assert_eq!(Arity::exact(2).count(), 2);
 }

@@ -134,7 +134,14 @@ no method that carries a `CompiledScript` into a by-name call, so `ExecutionCont
 (`call_compiled_function(&self, ctx, &CompiledScript, name, args)`) or a compiled AST attached to the context. **This is
 a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signature already frozen at `F1`.
 
-### 4.2 v0.2 F6/I1 amendment — `EngineError::Dom` and `PORT_SCHEMA_VERSION = 2`
+### 4.2 Boundary-schema migrations (`engine::PORT_SCHEMA_VERSION`)
+
+| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                                                              | Adapter action                                                                                                                                                                                                                           |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                             | —                                                                                                                                                                                                                                        |
+| **2**   | Review response & v0.2 I1. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. `SourceLocation` is an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column`. `EngineError` gains additive `Dom { operation: String, reason: String }` variant. | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. Handle `EngineError::Dom`. |
+
+### 4.3 v0.2 F6/I1 amendment — `EngineError::Dom`
 
 The scriptable-DOM bridge (roadmap I1) needs a boundary error that is distinct from `Binding` ("bad native-binding name
 / arity"). `EngineError` gains one variant:
@@ -147,13 +154,7 @@ raised when a DOM operation invoked from a script fails for a reason other than 
 violation, a stale node id, a busy tree). `core/dom`'s own `DomError` is mapped to it in the `core/runtime/rhai`
 adapter; `core/dom` never names `EngineError`.
 
-**Migration (schema `1` → `2`).** The change is additive: `EngineError` is `#[non_exhaustive]`, so an out-of-tree
-adapter or consumer already carries a `_` arm and keeps compiling. A consumer that exhaustively matched `EngineError`
-in-tree must add a `Dom` arm. No method signature changes; `create_context` / `compile` / `eval_value` /
-`eval_compiled_value` / `set_value` / `get_value` / `register_native_fn` / `register_type_erased` /
-`call_function_value` / `reset_scope` / `capabilities` are untouched. `engine::PORT_SCHEMA_VERSION` moves to `2`.
-
-### 4.3 v0.2 F6 amendment — the object-safe `dyn` companion (`ADR-0013`)
+### 4.4 v0.2 F6 amendment — the object-safe `dyn` companion (`ADR-0013`)
 
 `ADR-0011` item 2 requires an object-safe companion for the port. It lands in
 `core/engine/src/application/dyn_bridge.rs` as three `dyn`-safe traits and a free function, all speaking only boundary

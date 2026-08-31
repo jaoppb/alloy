@@ -6,11 +6,12 @@ use crate::domain::error::DomError;
 use crate::domain::node::{ElementData, NodeId, NodeKind};
 use crate::domain::tree::DomTree;
 
-/// Serialize the subtree rooted at `root`. A `Document` root contributes only
-/// its children's markup; an element gets a start tag and, unless it is a void
-/// element, an end tag; text and comment nodes are written escaped / delimited.
-/// Attribute order is insertion order. `Err(DomError::NodeNotFound)` when `root`
-/// does not resolve.
+/// Serialize the subtree rooted at `root`.
+///
+/// A `Document` root contributes only its children's markup; an element gets a
+/// start tag and, unless it is a void element, an end tag; text and comment
+/// nodes are written escaped / delimited. Attribute order is insertion order.
+/// `Err(DomError::NodeNotFound)` when `root` does not resolve.
 pub fn serialize_html(tree: &DomTree, root: NodeId) -> Result<String, DomError> {
     tree.node_kind(root)?;
     let mut output = String::new();
@@ -22,6 +23,7 @@ pub fn serialize_html(tree: &DomTree, root: NodeId) -> Result<String, DomError> 
 }
 
 /// One unit of pending serialization work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Step {
     Enter(NodeId),
     CloseElement(NodeId),

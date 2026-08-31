@@ -8,11 +8,11 @@ use std::time::Instant;
 use dom::DomTree;
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext,
-    NativeFn, TypeRegistration,
+    FunctionName, NativeFn, TypeRegistration, VariableName,
 };
 
 use crate::infrastructure::dom_bindings::NodeHandle;
-use crate::infrastructure::marshal;
+use crate::infrastructure::marshal::RhaiValue;
 use crate::infrastructure::native;
 
 /// A compiled Rhai program. `Arc<rhai::AST>` is the exact shape hot-reload
@@ -40,8 +40,8 @@ pub struct RhaiContext {
     pub(crate) deadline: Arc<Mutex<Option<Instant>>>,
     /// Native bindings, kept so `call_function_value` can invoke one directly
     /// from Rust without going through the interpreter.
-    native_functions: HashMap<String, NativeFn>,
-    registered_type_names: Vec<&'static str>,
+    native_functions: HashMap<FunctionName, NativeFn>,
+    registered_types: Vec<TypeRegistration>,
     /// The host-owned DOM tree bound by [`RhaiContext::bind_dom`], if any. The
     /// context holds an `Arc` clone; the host reads the mutated tree after
     /// `eval` returns (`ADR-0003`, contract §5.1).
@@ -50,7 +50,7 @@ pub struct RhaiContext {
     /// [`RhaiContext::register_guarded_binding`]. The F6 conformance sweep walks
     /// this alongside `NODE_HANDLE_BINDINGS` to prove no DOM binding is
     /// unguarded (C-06).
-    guarded_bindings: Vec<(String, Capability)>,
+    guarded_bindings: Vec<(FunctionName, Capability)>,
 }
 
 impl RhaiContext {
@@ -65,7 +65,7 @@ impl RhaiContext {
             capabilities,
             deadline,
             native_functions: HashMap::new(),
-            registered_type_names: Vec::new(),
+            registered_types: Vec::new(),
             dom: None,
             guarded_bindings: Vec::new(),
         }
@@ -79,7 +79,7 @@ impl RhaiContext {
     /// `register_fn` / `register_native_fn` remain for **pure** bindings.
     pub fn register_guarded_binding(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         required: Capability,
         handler: NativeFn,
@@ -90,14 +90,14 @@ impl RhaiContext {
             handler(arguments)
         });
         self.register_native_fn(name, arity, guarded)?;
-        self.guarded_bindings.push((name.to_owned(), required));
+        self.guarded_bindings.push((name.clone(), required));
         Ok(())
     }
 
     /// `(name, required)` for every binding registered through
     /// [`register_guarded_binding`](Self::register_guarded_binding).
     #[must_use]
-    pub fn guarded_binding_names(&self) -> &[(String, Capability)] {
+    pub fn guarded_binding_names(&self) -> &[(FunctionName, Capability)] {
         &self.guarded_bindings
     }
 
@@ -112,10 +112,11 @@ impl RhaiContext {
         self.register_custom_type::<NodeHandle>()?;
         let root = tree
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .document();
         let document = NodeHandle::new(Arc::clone(&tree), root, self.capabilities);
-        self.set_custom_value("document", document);
+        let name = VariableName::parse("document")?;
+        self.set_custom_value(&name, document);
         self.dom = Some(tree);
         Ok(())
     }
@@ -123,7 +124,7 @@ impl RhaiContext {
     /// The DOM tree bound by [`bind_dom`](Self::bind_dom), if any. The host reads
     /// the mutated tree through this after an evaluation returns.
     #[must_use]
-    pub fn dom(&self) -> Option<&Arc<Mutex<DomTree>>> {
+    pub const fn dom(&self) -> Option<&Arc<Mutex<DomTree>>> {
         self.dom.as_ref()
     }
 
@@ -136,34 +137,36 @@ impl RhaiContext {
         T: EngineType + rhai::CustomType,
     {
         self.engine.build_type::<T>();
-        self.registered_type_names
-            .push(T::registration().script_name());
+        self.registered_types.push(T::registration());
         Ok(())
     }
 
     /// Adapter extension: push a concrete custom value into the scope (there is
     /// no [`EngineValue`] shape for a `rhai::CustomType`). The bound is what
     /// `rhai`'s sealed `Variant` marker is auto-implemented for.
-    pub fn set_custom_value<T>(&mut self, name: &str, value: T)
+    pub fn set_custom_value<T>(&mut self, name: &VariableName, value: T)
     where
         T: Clone + Send + Sync + 'static,
     {
-        self.scope.set_value(name.to_string(), value);
+        self.scope.set_value(name.as_str().to_owned(), value);
     }
 
     /// Adapter extension: read a concrete custom value back out of the scope.
     #[must_use]
-    pub fn custom_value<T>(&self, name: &str) -> Option<T>
+    pub fn custom_value<T>(&self, name: &VariableName) -> Option<T>
     where
         T: Clone + Send + Sync + 'static,
     {
-        self.scope.get_value::<T>(name)
+        self.scope.get_value::<T>(name.as_str())
     }
 
     /// The script-visible names of every type registered on this context.
     #[must_use]
-    pub fn registered_type_names(&self) -> &[&'static str] {
-        &self.registered_type_names
+    pub fn registered_type_names(&self) -> Vec<&'static str> {
+        self.registered_types
+            .iter()
+            .map(TypeRegistration::script_name)
+            .collect()
     }
 }
 
@@ -175,35 +178,35 @@ impl ExecutionContext for RhaiContext {
     fn register_type_erased(&mut self, registration: TypeRegistration) -> Result<(), EngineError> {
         // Name-only in v0.1: the concrete `rhai::CustomType` bridge needs the
         // static type and is offered by `register_custom_type`.
-        self.registered_type_names.push(registration.script_name());
+        self.registered_types.push(registration);
         Ok(())
     }
 
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError> {
-        native::register(&mut self.engine, name, arity, handler.clone())?;
-        self.native_functions.insert(name.to_owned(), handler);
+        native::register(&mut self.engine, name.as_str(), arity, handler.clone());
+        self.native_functions.insert(name.clone(), handler);
         Ok(())
     }
 
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError> {
-        let dynamic = marshal::engine_value_to_dynamic(value)?;
-        self.scope.set_value(name.to_string(), dynamic);
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError> {
+        let RhaiValue(dynamic) = RhaiValue::try_from(value)?;
+        self.scope.set_value(name.as_str().to_owned(), dynamic);
         Ok(())
     }
 
-    fn get_value(&self, name: &str) -> Option<EngineValue> {
-        let dynamic = self.scope.get_value::<rhai::Dynamic>(name)?;
-        marshal::dynamic_to_engine_value(dynamic).ok()
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue> {
+        let dynamic = self.scope.get_value::<rhai::Dynamic>(name.as_str())?;
+        EngineValue::try_from(RhaiValue(dynamic)).ok()
     }
 
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
         let handler = self

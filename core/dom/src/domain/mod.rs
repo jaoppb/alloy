@@ -1,7 +1,9 @@
-//! Innermost layer (`ADR-0010` §1): the [`tree::DomTree`] aggregate, its value
-//! objects and first-class collections, its one typed [`error::DomError`], and
-//! the non-recursive [`traversal`] iterators. Zero I/O, zero dependencies; the
-//! nine Object Calisthenics rules apply in full — `core/dom` takes no exception.
+//! Innermost layer (`ADR-0010` §1).
+//!
+//! The [`tree::DomTree`] aggregate, its value objects and first-class
+//! collections, its one typed [`error::DomError`], and the non-recursive
+//! [`traversal`] iterators. Zero I/O, zero dependencies; the nine Object
+//! Calisthenics rules apply in full — `core/dom` takes no exception.
 
 pub mod attributes;
 pub mod children;

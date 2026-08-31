@@ -58,7 +58,11 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
-    pub(crate) fn new(tree: Arc<Mutex<DomTree>>, id: NodeId, capabilities: CapabilitySet) -> Self {
+    pub(crate) const fn new(
+        tree: Arc<Mutex<DomTree>>,
+        id: NodeId,
+        capabilities: CapabilitySet,
+    ) -> Self {
         Self {
             tree,
             id,
@@ -106,10 +110,11 @@ impl NodeHandle {
 
     fn children(&self) -> Result<Array, Box<EvalAltResult>> {
         self.require(Capability::DOM_READ)?;
-        let tree = self.lock("children")?;
-        let ids = tree
-            .child_ids(self.id)
-            .map_err(|error| dom_error("children", &error))?;
+        let ids = {
+            let tree = self.lock("children")?;
+            tree.child_ids(self.id)
+                .map_err(|error| dom_error("children", &error))?
+        };
         Ok(ids
             .iter()
             .map(|child| Dynamic::from(self.sibling(child)))
@@ -124,23 +129,25 @@ impl NodeHandle {
         let value = tree
             .attribute(self.id, &attribute_name)
             .map_err(|error| dom_error("get_attribute", &error))?;
-        Ok(value.map_or(Dynamic::UNIT, |found| {
+        let result = value.map_or(Dynamic::UNIT, |found| {
             Dynamic::from(found.as_str().to_owned())
-        }))
+        });
+        drop(tree);
+        Ok(result)
     }
 
     fn create_element(&self, tag: &str) -> Result<Self, Box<EvalAltResult>> {
         self.require(Capability::DOM_MUTATE)?;
         let tag_name = TagName::new(tag).map_err(|error| dom_error("create_element", &error))?;
-        let mut tree = self.lock("create_element")?;
-        let created = tree.create_element(tag_name);
+        let created = self.lock("create_element")?.create_element(tag_name);
         Ok(self.sibling(created))
     }
 
     fn create_text(&self, content: &str) -> Result<Self, Box<EvalAltResult>> {
         self.require(Capability::DOM_MUTATE)?;
-        let mut tree = self.lock("create_text")?;
-        let created = tree.create_text(TextContent::new(content));
+        let created = self
+            .lock("create_text")?
+            .create_text(TextContent::new(content));
         Ok(self.sibling(created))
     }
 
@@ -183,6 +190,7 @@ impl NodeHandle {
     }
 }
 
+#[allow(clippy::unnecessary_box_returns)]
 fn dom_error(operation: &str, error: &DomError) -> Box<EvalAltResult> {
     to_eval_error(EngineError::dom(operation, error.to_string()))
 }
@@ -209,7 +217,7 @@ impl CustomType for NodeHandle {
             .with_fn("create_text", |handle: &mut Self, content: &str| {
                 handle.create_text(content)
             })
-            .with_fn("append_child", |handle: &mut Self, child: NodeHandle| {
+            .with_fn("append_child", |handle: &mut Self, child: Self| {
                 handle.append_child(&child)
             })
             .with_fn("set_text", |handle: &mut Self, content: &str| {

@@ -2,6 +2,8 @@
 //! attribute insertion order, and emits void elements without a close tag
 //! (v0.2 report §3 F3 step 5, §5).
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use dom::{
     AttributeName, AttributeValue, CommentContent, DomError, DomTree, NodeId, TagName, TextContent,
     serialize_html,

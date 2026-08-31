@@ -47,7 +47,7 @@ impl CapabilitySet {
 
     /// Is `needed` (which may itself be several flags) fully granted?
     #[must_use]
-    pub fn contains(&self, needed: Capability) -> bool {
+    pub const fn contains(&self, needed: Capability) -> bool {
         self.0.contains(needed)
     }
 
@@ -61,7 +61,7 @@ impl CapabilitySet {
     /// `Ok(())` when `needed` is granted, else [`EngineError::PermissionDenied`]
     /// naming the first missing flag. This is the single check every guarded
     /// binding will call in F6.
-    pub fn require(&self, needed: Capability) -> Result<(), EngineError> {
+    pub const fn require(&self, needed: Capability) -> Result<(), EngineError> {
         if self.0.contains(needed) {
             return Ok(());
         }

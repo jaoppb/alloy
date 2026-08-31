@@ -189,10 +189,7 @@ impl<T: FromEngineValue> FromEngineValue for BTreeMap<String, T> {
 
 impl<T: IntoEngineValue> IntoEngineValue for Option<T> {
     fn into_engine_value(self) -> EngineValue {
-        match self {
-            Some(inner) => inner.into_engine_value(),
-            None => EngineValue::Unit,
-        }
+        self.map_or(EngineValue::Unit, IntoEngineValue::into_engine_value)
     }
 }
 

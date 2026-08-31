@@ -2,18 +2,25 @@
 //! script-visible state, honour their own capability sets, and a fault in one
 //! does not disturb the next evaluation of another.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::significant_drop_tightening
+)]
+
 use std::sync::{Arc, Mutex};
 
 use dom::{DomTree, serialize_html};
 use engine::{
-    Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, RuntimeEngine,
-    native_fn, profiles,
+    Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, FunctionName,
+    RuntimeEngine, VariableName, native_fn, profiles,
 };
 use rhai_runtime::RhaiEngine;
 
 #[test]
 fn contexts_from_one_engine_share_no_scope() {
     let engine = RhaiEngine::new();
+    let secret = VariableName::parse("secret").expect("valid variable name");
     let mut first = engine
         .create_context(CapabilitySet::empty())
         .expect("first");
@@ -21,8 +28,8 @@ fn contexts_from_one_engine_share_no_scope() {
         .create_context(CapabilitySet::empty())
         .expect("second");
 
-    first.set_variable("secret", 1_i64).expect("set in first");
-    second.set_variable("secret", 2_i64).expect("set in second");
+    first.set_variable(&secret, 1_i64).expect("set in first");
+    second.set_variable(&secret, 2_i64).expect("set in second");
 
     let from_first: i64 = engine.eval(&mut first, "secret").expect("read first");
     let from_second: i64 = engine.eval(&mut second, "secret").expect("read second");
@@ -40,6 +47,7 @@ fn contexts_from_one_engine_share_no_scope() {
 #[test]
 fn a_guarded_binding_follows_each_context_capability_set() {
     let engine = RhaiEngine::new();
+    let touch = FunctionName::parse("touch").expect("valid function name");
     let handler = native_fn(|_arguments: &[EngineValue]| Ok(EngineValue::Int(7)));
 
     let mut granted = engine
@@ -47,7 +55,7 @@ fn a_guarded_binding_follows_each_context_capability_set() {
         .expect("granted context");
     granted
         .register_guarded_binding(
-            "touch",
+            &touch,
             Arity::exact(0),
             Capability::DOM_MUTATE,
             handler.clone(),
@@ -60,7 +68,7 @@ fn a_guarded_binding_follows_each_context_capability_set() {
         .create_context(CapabilitySet::empty())
         .expect("denied context");
     denied
-        .register_guarded_binding("touch", Arity::exact(0), Capability::DOM_MUTATE, handler)
+        .register_guarded_binding(&touch, Arity::exact(0), Capability::DOM_MUTATE, handler)
         .expect("register on denied");
     match engine.eval_value(&mut denied, "touch()") {
         Err(EngineError::PermissionDenied { capability }) => {
@@ -73,16 +81,18 @@ fn a_guarded_binding_follows_each_context_capability_set() {
 #[test]
 fn a_trapped_panic_in_one_context_does_not_disturb_another() {
     let engine = RhaiEngine::new();
+    let boom = FunctionName::parse("boom").expect("valid function name");
+    let kept = VariableName::parse("kept").expect("valid variable name");
     let mut faulting = engine
         .create_context(CapabilitySet::empty())
         .expect("faulting");
     let mut healthy = engine
         .create_context(CapabilitySet::empty())
         .expect("healthy");
-    healthy.set_variable("kept", 99_i64).expect("set kept");
+    healthy.set_variable(&kept, 99_i64).expect("set kept");
 
     faulting
-        .register_fn("boom", || -> i64 {
+        .register_fn(&boom, || -> i64 {
             panic!("kaboom in the faulting context")
         })
         .expect("register boom");

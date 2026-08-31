@@ -1,6 +1,8 @@
-//! [`Descendants`] and [`Ancestors`] — non-recursive tree iterators
-//! (v0.2 report §2.3). Each keeps an explicit stack / cursor; neither ever
-//! calls itself, so a hostile-depth tree cannot overflow the call stack.
+//! [`Descendants`] and [`Ancestors`] tree iterators.
+//!
+//! Non-recursive tree iterators (v0.2 report §2.3). Each keeps an explicit
+//! stack / cursor; neither ever calls itself, so a hostile-depth tree cannot
+//! overflow the call stack.
 
 use crate::domain::node::NodeId;
 use crate::domain::tree::DomTree;

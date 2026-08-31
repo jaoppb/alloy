@@ -21,6 +21,7 @@
 //! - [`application`] — [`serialize_html`], a pure deterministic serializer.
 
 #![forbid(unsafe_code)]
+#![allow(clippy::missing_errors_doc)]
 
 pub mod application;
 pub mod domain;

@@ -34,8 +34,8 @@ pub enum EngineValue {
     /// 64-bit float. Backends are pinned so their native float is also 64-bit.
     Float(f64),
     Text(String),
-    Array(Vec<EngineValue>),
-    Map(BTreeMap<String, EngineValue>),
+    Array(Vec<Self>),
+    Map(BTreeMap<String, Self>),
 }
 
 impl EngineValue {
@@ -59,7 +59,7 @@ impl EngineValue {
     }
 
     /// Borrow as a `bool`, or [`EngineError::TypeMismatch`].
-    pub fn as_bool(&self) -> Result<bool, EngineError> {
+    pub const fn as_bool(&self) -> Result<bool, EngineError> {
         match self {
             Self::Bool(value) => Ok(*value),
             other => Err(EngineError::type_mismatch(
@@ -70,7 +70,7 @@ impl EngineValue {
     }
 
     /// Borrow as an `i64`, or [`EngineError::TypeMismatch`].
-    pub fn as_int(&self) -> Result<i64, EngineError> {
+    pub const fn as_int(&self) -> Result<i64, EngineError> {
         match self {
             Self::Int(value) => Ok(*value),
             other => Err(EngineError::type_mismatch(
@@ -80,9 +80,10 @@ impl EngineValue {
         }
     }
 
-    /// Borrow as an `f64`, accepting an integer by widening it, or
-    /// [`EngineError::TypeMismatch`].
-    pub fn as_float(&self) -> Result<f64, EngineError> {
+    /// Borrow as an `f64`, accepting an integer by widening it (lossy past
+    /// 2^53, by design), or [`EngineError::TypeMismatch`].
+    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
+    pub const fn as_float(&self) -> Result<f64, EngineError> {
         match self {
             Self::Float(value) => Ok(*value),
             Self::Int(value) => Ok(*value as f64),
@@ -105,7 +106,7 @@ impl EngineValue {
     }
 
     /// Borrow as a slice of values, or [`EngineError::TypeMismatch`].
-    pub fn as_array(&self) -> Result<&[EngineValue], EngineError> {
+    pub fn as_array(&self) -> Result<&[Self], EngineError> {
         match self {
             Self::Array(values) => Ok(values),
             other => Err(EngineError::type_mismatch(
@@ -116,7 +117,7 @@ impl EngineValue {
     }
 
     /// Borrow as a string-keyed map, or [`EngineError::TypeMismatch`].
-    pub fn as_map(&self) -> Result<&BTreeMap<String, EngineValue>, EngineError> {
+    pub const fn as_map(&self) -> Result<&BTreeMap<String, Self>, EngineError> {
         match self {
             Self::Map(entries) => Ok(entries),
             other => Err(EngineError::type_mismatch(

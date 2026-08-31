@@ -33,7 +33,7 @@ fn starts_with_letter(raw: &str) -> bool {
         .is_some_and(|character| character.is_ascii_alphabetic())
 }
 
-fn is_tag_character(character: char) -> bool {
+const fn is_tag_character(character: char) -> bool {
     character.is_ascii_alphanumeric() || character == '-'
 }
 

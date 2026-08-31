@@ -4,6 +4,9 @@
 
 pub mod capability;
 pub mod error;
+pub mod function_name;
+pub(crate) mod ident;
 pub mod limits;
 pub mod source;
 pub mod value;
+pub mod variable_name;

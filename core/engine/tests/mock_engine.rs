@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext,
-    NativeFn, RuntimeEngine, SourceLocation, TypeRegistration,
+    FunctionName, NativeFn, RuntimeEngine, SourceLocation, TypeRegistration, VariableName,
 };
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ use engine::{
 struct MockEngine;
 
 impl MockEngine {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self
     }
 }
@@ -54,7 +54,7 @@ impl MockContext {
         }
     }
 
-    fn registered_type_count(&self) -> usize {
+    const fn registered_type_count(&self) -> usize {
         self.registered_types.len()
     }
 }
@@ -107,31 +107,31 @@ impl ExecutionContext for MockContext {
 
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         _arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError> {
-        self.functions.insert(name.to_owned(), handler);
+        self.functions.insert(name.as_str().to_owned(), handler);
         Ok(())
     }
 
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError> {
-        self.variables.insert(name.to_owned(), value);
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError> {
+        self.variables.insert(name.as_str().to_owned(), value);
         Ok(())
     }
 
-    fn get_value(&self, name: &str) -> Option<EngineValue> {
-        self.variables.get(name).cloned()
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue> {
+        self.variables.get(name.as_str()).cloned()
     }
 
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
         let handler = self
             .functions
-            .get(name)
+            .get(name.as_str())
             .cloned()
             .ok_or_else(|| EngineError::binding(format!("unknown function `{name}`")))?;
         handler(arguments)
@@ -155,7 +155,7 @@ enum Expression {
     Text(String),
     Variable(String),
     Call(String),
-    Add(Box<Expression>, Box<Expression>),
+    Add(Box<Self>, Box<Self>),
 }
 
 const ORIGIN: SourceLocation = SourceLocation::new(1, 1);
@@ -264,7 +264,7 @@ fn add(
 /// backend. In F2 the very same function is handed a `RhaiEngine`.
 fn evaluate_subject<Engine: RuntimeEngine>(engine: &Engine) -> Result<String, EngineError> {
     let mut context = engine.create_context(CapabilitySet::empty())?;
-    context.set_variable("subject", "world")?;
+    context.set_variable(&VariableName::parse("subject")?, "world")?;
     engine.eval::<String>(&mut context, "subject")
 }
 
@@ -298,18 +298,23 @@ impl ExecutionContext for AlienContext {
     fn register_type_erased(&mut self, _: TypeRegistration) -> Result<(), EngineError> {
         Ok(())
     }
-    fn register_native_fn(&mut self, _: &str, _: Arity, _: NativeFn) -> Result<(), EngineError> {
+    fn register_native_fn(
+        &mut self,
+        _: &FunctionName,
+        _: Arity,
+        _: NativeFn,
+    ) -> Result<(), EngineError> {
         Ok(())
     }
-    fn set_value(&mut self, _: &str, _: EngineValue) -> Result<(), EngineError> {
+    fn set_value(&mut self, _: &VariableName, _: EngineValue) -> Result<(), EngineError> {
         Ok(())
     }
-    fn get_value(&self, _: &str) -> Option<EngineValue> {
+    fn get_value(&self, _: &VariableName) -> Option<EngineValue> {
         None
     }
     fn call_function_value(
         &mut self,
-        _: &str,
+        _: &FunctionName,
         _: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
         Err(EngineError::binding("alien engine has no functions"))
@@ -335,7 +340,7 @@ impl RuntimeEngine for AlienEngine {
     fn eval_compiled_value(
         &self,
         _: &mut AlienContext,
-        _: &(),
+        (): &(),
     ) -> Result<EngineValue, EngineError> {
         Ok(EngineValue::Unit)
     }
@@ -386,7 +391,9 @@ fn addition_actually_evaluates() {
     let mut context = engine
         .create_context(CapabilitySet::empty())
         .expect("context");
-    context.set_variable("base", 40_i64).expect("set base");
+    context
+        .set_variable(&VariableName::parse("base").expect("valid name"), 40_i64)
+        .expect("set base");
     let total: i64 = engine.eval(&mut context, "base + 2").expect("evaluate sum");
     assert_eq!(total, 42);
 }

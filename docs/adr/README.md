@@ -7,6 +7,8 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 
 ## 📜 ADR Index
 
+<<<<<<< HEAD
+
 | ADR                                                                        | Title                                                    | Status   | Date       |
 | -------------------------------------------------------------------------- | -------------------------------------------------------- | -------- | ---------- |
 | [ADR-0001](0001-record-architecture-decisions.md)                          | Record Architecture Decisions                            | Accepted | 2026-08-22 |
@@ -21,3 +23,5 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0010](0010-clean-architecture-ddd-and-object-calisthenics.md)         | Clean Architecture, DDD, and Object Calisthenics         | Accepted | 2026-08-23 |
 | [ADR-0011](0011-replaceable-subsystem-ports-and-conformance-contract.md)   | Replaceable Subsystem Ports and Conformance Contract     | Accepted | 2026-08-29 |
 | [ADR-0013](0013-object-safe-runtime-engine-companion.md)                   | Object-Safe `dyn` Companion for the `RuntimeEngine` Port | Accepted | 2026-08-30 |
+| [ADR-0014](0014-structured-logging-with-tracing.md)                        | Structured Logging with `tracing`                        | Accepted | 2026-08-30 |
+| [ADR-0015](0015-typed-errors-with-thiserror.md)                            | Typed Errors with `thiserror`                            | Accepted | 2026-08-30 |

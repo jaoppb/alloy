@@ -29,6 +29,16 @@
 //! gap, tracked for v0.2 with a PRD-002 amendment. [`check_call_function_invokes_a_registered_binding`]
 //! pins the current meaning so the semantics cannot drift silently.
 
+// An assertion suite that happens to be `pub` (so adapters can call it from
+// their `tests/`) rather than `#[cfg(test)]`: it panics on the first violation
+// by design. Same intent as `clippy.toml`'s `allow-*-in-tests`.
+#![allow(
+    clippy::panic,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects,
+    clippy::manual_let_else
+)]
+
 use std::sync::Arc;
 
 use crate::application::dyn_bridge::{DynExecutionContext, DynRuntimeEngine, eval_typed};
@@ -36,7 +46,17 @@ use crate::application::function::Arity;
 use crate::application::ports::{ExecutionContext, RuntimeEngine};
 use crate::domain::capability::{Capability, CapabilitySet};
 use crate::domain::error::EngineError;
+use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
+use crate::domain::variable_name::VariableName;
+
+fn function_name(raw: &str) -> FunctionName {
+    FunctionName::parse(raw).expect("conformance fixtures use valid identifiers")
+}
+
+fn variable_name(raw: &str) -> VariableName {
+    VariableName::parse(raw).expect("conformance fixtures use valid identifiers")
+}
 
 /// Run every core check against engines produced by `make_engine`. Panics with a
 /// descriptive message on the first violation.
@@ -96,7 +116,7 @@ fn check_typed_eval_sugar<Engine: RuntimeEngine>(engine: &Engine) {
 fn check_variable_roundtrip<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
     scope
-        .set_variable("answer", 42_i64)
+        .set_variable(&variable_name("answer"), 42_i64)
         .unwrap_or_else(|error| panic!("set_variable failed: {error}"));
     let seen: i64 = engine
         .eval(&mut scope, "answer")
@@ -140,10 +160,10 @@ fn check_contexts_are_isolated<Engine: RuntimeEngine>(engine: &Engine) {
     let mut first = context(engine);
     let mut second = context(engine);
     first
-        .set_variable("x", 1_i64)
+        .set_variable(&variable_name("x"), 1_i64)
         .expect("set x in first context");
     second
-        .set_variable("x", 2_i64)
+        .set_variable(&variable_name("x"), 2_i64)
         .expect("set x in second context");
 
     let from_first: i64 = engine.eval(&mut first, "x").expect("read x from first");
@@ -158,7 +178,7 @@ fn check_contexts_are_isolated<Engine: RuntimeEngine>(engine: &Engine) {
 fn check_native_function_dispatch<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
     scope
-        .register_fn("meaning", || 42_i64)
+        .register_fn(&function_name("meaning"), || 42_i64)
         .unwrap_or_else(|error| panic!("register_fn failed: {error}"));
     let called: i64 = engine
         .eval(&mut scope, "meaning()")
@@ -174,10 +194,10 @@ fn check_native_function_dispatch<Engine: RuntimeEngine>(engine: &Engine) {
 fn check_call_function_invokes_a_registered_binding<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
     scope
-        .register_fn("increment", |value: i64| value + 1)
+        .register_fn(&function_name("increment"), |value: i64| value + 1)
         .unwrap_or_else(|error| panic!("register_fn failed: {error}"));
     let result: i64 = scope
-        .call_function("increment", &[EngineValue::Int(41)])
+        .call_function(&function_name("increment"), &[EngineValue::Int(41)])
         .unwrap_or_else(|error| panic!("call_function on a registered binding failed: {error}"));
     assert_eq!(
         result, 42,
@@ -187,7 +207,7 @@ fn check_call_function_invokes_a_registered_binding<Engine: RuntimeEngine>(engin
 
 fn check_call_function_rejects_an_unknown_name<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
-    let outcome = scope.call_function::<EngineValue>("no_such_binding", &[]);
+    let outcome = scope.call_function::<EngineValue>(&function_name("no_such_binding"), &[]);
     assert!(
         matches!(outcome, Err(crate::EngineError::Binding { .. })),
         "call_function on an unregistered name must be EngineError::Binding, got {outcome:?}"
@@ -214,7 +234,9 @@ fn check_capabilities_are_carried<Engine: RuntimeEngine>(engine: &Engine) {
 
 fn check_reset_scope_clears_locals<Engine: RuntimeEngine>(engine: &Engine) {
     let mut scope = context(engine);
-    scope.set_variable("temp", 99_i64).expect("set temp");
+    scope
+        .set_variable(&variable_name("temp"), 99_i64)
+        .expect("set temp");
     ExecutionContext::reset_scope(&mut scope)
         .unwrap_or_else(|error| panic!("reset_scope failed: {error}"));
     let after = engine.eval::<EngineValue>(&mut scope, "temp");
@@ -228,9 +250,11 @@ fn check_reset_scope_clears_locals<Engine: RuntimeEngine>(engine: &Engine) {
 // The `dyn` companion suite (ADR-0013 / ADR-0011 item 2)
 // ---------------------------------------------------------------------------
 
-/// Run the object-safe companion checks against a boxed engine. Every adapter
-/// that passes [`run_core_suite`] must also pass this through
+/// Run the object-safe companion checks against a boxed engine.
+///
+/// Every adapter that passes [`run_core_suite`] must also pass this through
 /// `Box<dyn DynRuntimeEngine>`. `MockEngine` and `RhaiEngine` both do.
+#[allow(clippy::needless_pass_by_value)]
 pub fn run_dyn_suite(engine: Box<dyn DynRuntimeEngine>) {
     let engine = engine.as_ref();
     check_dyn_literal_evaluation(engine);
@@ -267,7 +291,7 @@ fn check_dyn_typed_eval(engine: &dyn DynRuntimeEngine) {
 fn check_dyn_variable_roundtrip(engine: &dyn DynRuntimeEngine) {
     let mut scope = dyn_context(engine);
     scope
-        .set_value("answer", EngineValue::Int(42))
+        .set_value(&variable_name("answer"), EngineValue::Int(42))
         .unwrap_or_else(|error| panic!("dyn set_value failed: {error}"));
     let seen: i64 = eval_typed(engine, scope.as_mut(), "answer")
         .unwrap_or_else(|error| panic!("dyn reading a set variable failed: {error}"));
@@ -298,10 +322,10 @@ fn check_dyn_contexts_are_isolated(engine: &dyn DynRuntimeEngine) {
     let mut first = dyn_context(engine);
     let mut second = dyn_context(engine);
     first
-        .set_value("x", EngineValue::Int(1))
+        .set_value(&variable_name("x"), EngineValue::Int(1))
         .expect("dyn set x in first");
     second
-        .set_value("x", EngineValue::Int(2))
+        .set_value(&variable_name("x"), EngineValue::Int(2))
         .expect("dyn set x in second");
     let from_first: i64 = eval_typed(engine, first.as_mut(), "x").expect("dyn read x from first");
     let from_second: i64 =
@@ -314,7 +338,7 @@ fn check_dyn_native_function_dispatch(engine: &dyn DynRuntimeEngine) {
     let mut scope = dyn_context(engine);
     let handler: crate::NativeFn = Arc::new(|_arguments: &[EngineValue]| Ok(EngineValue::Int(42)));
     scope
-        .register_native_fn("meaning", Arity::exact(0), handler)
+        .register_native_fn(&function_name("meaning"), Arity::exact(0), handler)
         .unwrap_or_else(|error| panic!("dyn register_native_fn failed: {error}"));
     let called: i64 = eval_typed(engine, scope.as_mut(), "meaning()")
         .unwrap_or_else(|error| panic!("dyn calling a registered native fn failed: {error}"));
@@ -339,7 +363,7 @@ fn check_dyn_capabilities_are_carried(engine: &dyn DynRuntimeEngine) {
 fn check_dyn_reset_scope_clears_locals(engine: &dyn DynRuntimeEngine) {
     let mut scope = dyn_context(engine);
     scope
-        .set_value("temp", EngineValue::Int(99))
+        .set_value(&variable_name("temp"), EngineValue::Int(99))
         .expect("dyn set temp");
     scope
         .reset_scope()

@@ -3,7 +3,7 @@
 //! `EngineError::ScriptPanic`; the host process stays alive. (The full
 //! DevTools-logging fallback handler is F6/v0.2.)
 
-use engine::{CapabilitySet, EngineError, ExecutionContext, RuntimeEngine};
+use engine::{CapabilitySet, EngineError, ExecutionContext, FunctionName, RuntimeEngine};
 use rhai_runtime::RhaiEngine;
 
 #[test]
@@ -13,7 +13,10 @@ fn a_panicking_native_function_is_trapped_and_the_engine_stays_usable() {
         .create_context(CapabilitySet::empty())
         .expect("context");
     context
-        .register_fn("boom", || -> i64 { panic!("native code exploded") })
+        .register_fn(
+            &FunctionName::parse("boom").expect("valid name"),
+            || -> i64 { panic!("native code exploded") },
+        )
         .expect("register boom");
 
     match engine.eval_value(&mut context, "boom()") {
@@ -43,7 +46,11 @@ fn a_runtime_error_carries_its_source_location() {
     match engine.eval_value(&mut context, "\n\nmissing_variable") {
         Err(EngineError::ScriptRuntime { location, .. }) => {
             let position = location.expect("a runtime error should carry a location");
-            assert_eq!(position.line(), 3, "the reference is on the third line");
+            assert_eq!(
+                position.line().get(),
+                3,
+                "the reference is on the third line"
+            );
         }
         other => panic!("expected ScriptRuntime, got {other:?}"),
     }

@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **v0.1 ("O engine vive") is delivered — F0 + F1 + F2.** Done by the _solid_ path (ADR-0011 Replaceable Port Contract),
 not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report originally proposed; see the amendments in
-`docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`.
+`docs/reports/IMPLEMENTACAO-DETALHADA-V0-1.md`. The PR #4 review response then added: strict
+`[workspace.lints.clippy]` + `clippy.toml`, a `justfile` (replacing the Makefile), `arch-lint`, `tracing` in `alloy`
+(ADR-0014), `thiserror` outside `core/engine` (ADR-0015), and the object-calisthenics VOs `FunctionName` /
+`VariableName` / `Line` / `Column` (port schema **v2** — every name on the port is a validated newtype).
 
 **v0.2 ("DOM scriptável e contido") delivered on `feat/v0-2-implementation` — F3 + I1 + F6.** Closes C-03, C-06, C-07,
 C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `…320-*-f6-i1.md`. Not yet merged to `main`
@@ -34,13 +37,12 @@ C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `�
 - **`core/engine`**: `domain/` (`EngineValue` / `ValueKind` — `#[non_exhaustive]`, `EngineError` — one enum,
   `Capability`/`CapabilitySet`, `ExecutionLimits`, `SourceLocation`), `application/ports.rs` (`RuntimeEngine` /
   `ExecutionContext` — PRD-002 with two documented deviations: no associated `type Error`; `EngineType` instead of
-  `rhai::CustomType`; PRD-002 generics kept as provided sugar over an object-safe core), conversion / `EngineFunction` /
-  `EngineType` traits, public `engine::conformance` suite (`run_core_suite` + `run_dyn_suite`),
-  `engine::PORT_SCHEMA_VERSION` (= 2 since v0.2 added `EngineError::Dom`; ADR-0011 items 3/7). Depends only on
-  `bitflags` — enforced by the CI `no-engine` job. `MockEngine` reference adapter in `tests/` closes **C-01, C-05**.
-  ADR-0011 contract state: `docs/architecture/runtime-engine-port-contract.md` — **all seven items ✅** (item 2's `dyn`
-  companion landed in v0.2 F6, ADR-0013). Verified locally: `cargo deny check` green, `cargo llvm-cov -p engine` ≈ 95%
-  lines.
+  `rhai::CustomType`; PRD-002 generics kept as provided sugar over an object-safe core), `EngineType` traits, public
+  `engine::conformance` suite (`run_core_suite` + `run_dyn_suite`), `engine::PORT_SCHEMA_VERSION` (= 2 since v0.2 added
+  `EngineError::Dom` and v0.1 added VOs; ADR-0011 items 3/7). Depends only on `bitflags` — enforced by the CI
+  `no-engine` job. `MockEngine` reference adapter in `tests/` closes **C-01, C-05**. ADR-0011 contract state:
+  `docs/architecture/runtime-engine-port-contract.md` — **all seven items ✅** (item 2's `dyn` companion landed in v0.2
+  F6, ADR-0013). Verified locally (`just gate`): `cargo deny check` green, `cargo llvm-cov -p engine` ≈ 95% lines.
 - **`core/runtime/rhai`**: `RhaiEngine` / `RhaiContext` / `RhaiCompiledScript(Arc<rhai::AST>)`;
   `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
   wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
@@ -62,9 +64,10 @@ C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `�
   it back, so a `PermissionDenied` / `Dom` raised inside a binding round-trips to the host as that exact variant (C-07).
   **Deviation from report §2.5/2.7**: `Arc<Mutex<_>>` not `Rc<RefCell<_>>`, `RhaiContext` stays `Send + Sync` — the
   `rhai` `sync` feature (required for `RuntimeEngine: Send + Sync`) forces `CustomType: Send + Sync`.
-- **`alloy`** binary: `cargo run -p alloy` opens/exits 0; `alloy --script <path>` runs a `.rhai` file under the sandbox
-  with a bound DOM (`DOM_READ | DOM_MUTATE`), prints any non-unit return value, then prints `serialize_html` when the
-  script built a tree. Hand-rolled arg parsing. Examples: `scripts/hello.rhai`, `scripts/hello_dom.rhai`.
+- **`alloy`** binary: `cargo run -p alloy` prints help and exits 0; `alloy --script <path>` runs a `.rhai` file under
+  the sandbox with a bound DOM (`DOM_READ | DOM_MUTATE`), logs return value via `tracing`, prints serialized HTML, and
+  falls back safely on script error. `clap` derive for args, typed `AlloyError` (`thiserror`) for failures, `tracing`
+  (ADR-0014) for structured diagnostics. Examples: `scripts/hello.rhai`, `scripts/hello_dom.rhai`.
 
 Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/html`, `core/css`, `core/graphics`,
 `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-10 … C-18 (v0.3+). Follow the
@@ -73,15 +76,15 @@ demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contrac
 
 ## Commands
 
-Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `Makefile` wraps both — `make` lists every
-target.
+Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `justfile` wraps both — `just` lists every
+recipe.
 
 ```bash
-make gate                                   # full local gate (fmt-check + clippy + check + test + deny + coverage + no-engine) — mirrors CI
-make setup                                  # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, git hooks
-make test CRATE=engine ARGS="-- name"       # scoped test run
-make run ARGS="--script scripts/hello.rhai" # run the alloy binary
-make deny | make coverage | make no-engine  # individual CI gates
+just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + no-engine) — mirrors CI
+just setup                                   # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, arch-lint, git hooks
+just test engine "-- name"                   # scoped test run
+just run --script scripts/hello.rhai         # run the alloy binary
+just deny | just coverage | just no-engine   # individual CI gates
 
 # equivalent raw commands:
 pnpm check                                  # prettier check + markdownlint + cargo fmt --check + clippy
@@ -93,9 +96,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt` + clippy and prettier + markdownlint
-(auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`. Clippy
-warnings are errors — never leave one behind.
+Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint`, prettier and
+markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
+Clippy warnings are errors — never leave one behind. The strict lint set lives in `[workspace.lints.clippy]` (root
+`Cargo.toml`) plus `clippy.toml`; `arch-lint.toml` adds the `tracing` / no-`unwrap` code-pattern rules.
 
 Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
 Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.

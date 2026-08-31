@@ -9,7 +9,7 @@
 //! `NodeHandle` methods, which self-guard). The mechanism is here, tested, and
 //! ready for the first scripted policy port.
 
-use engine::{Arity, Capability, EngineError, NativeFn};
+use engine::{Arity, Capability, EngineError, FunctionName, NativeFn};
 
 use crate::infrastructure::context::RhaiContext;
 
@@ -42,8 +42,9 @@ pub fn install_guarded_table(
     table: &[GuardedBinding],
 ) -> Result<(), EngineError> {
     for binding in table {
+        let name = FunctionName::parse(binding.name)?;
         context.register_guarded_binding(
-            binding.name,
+            &name,
             binding.arity,
             binding.required,
             binding.handler.clone(),

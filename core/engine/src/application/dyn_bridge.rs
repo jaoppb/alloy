@@ -28,7 +28,9 @@ use crate::application::function::Arity;
 use crate::application::ports::{ExecutionContext, NativeFn, RuntimeEngine};
 use crate::domain::capability::CapabilitySet;
 use crate::domain::error::EngineError;
+use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
+use crate::domain::variable_name::VariableName;
 
 /// The object-safe face of [`ExecutionContext`]. Every method speaks only
 /// boundary types; `dyn DynExecutionContext` is usable directly.
@@ -37,15 +39,15 @@ pub trait DynExecutionContext {
     fn register_type_erased(&mut self, registration: TypeRegistration) -> Result<(), EngineError>;
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError>;
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError>;
-    fn get_value(&self, name: &str) -> Option<EngineValue>;
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError>;
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue>;
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError>;
     fn reset_scope(&mut self) -> Result<(), EngineError>;
@@ -68,24 +70,24 @@ where
 
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError> {
         ExecutionContext::register_native_fn(self, name, arity, handler)
     }
 
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError> {
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError> {
         ExecutionContext::set_value(self, name, value)
     }
 
-    fn get_value(&self, name: &str) -> Option<EngineValue> {
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue> {
         ExecutionContext::get_value(self, name)
     }
 
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError> {
         ExecutionContext::call_function_value(self, name, arguments)

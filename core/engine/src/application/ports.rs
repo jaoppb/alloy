@@ -29,7 +29,9 @@ use crate::application::engine_type::{EngineType, TypeRegistration};
 use crate::application::function::{Arity, EngineFunction};
 use crate::domain::capability::CapabilitySet;
 use crate::domain::error::EngineError;
+use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
+use crate::domain::variable_name::VariableName;
 
 /// A type-erased native function body: marshalled arguments in, one value or an
 /// error out. This is the shape F6 will wrap with a capability guard.
@@ -54,16 +56,16 @@ pub trait ExecutionContext {
     /// parameter count); the `handler` re-checks it and errors on a mismatch.
     fn register_native_fn(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arity: Arity,
         handler: NativeFn,
     ) -> Result<(), EngineError>;
 
     /// Set a scope variable to an already-marshalled value.
-    fn set_value(&mut self, name: &str, value: EngineValue) -> Result<(), EngineError>;
+    fn set_value(&mut self, name: &VariableName, value: EngineValue) -> Result<(), EngineError>;
 
     /// Read a scope variable, if present.
-    fn get_value(&self, name: &str) -> Option<EngineValue>;
+    fn get_value(&self, name: &VariableName) -> Option<EngineValue>;
 
     /// Invoke a **registered native binding** by name (the handler installed by
     /// [`register_native_fn`](Self::register_native_fn) / `register_fn`).
@@ -76,7 +78,7 @@ pub trait ExecutionContext {
     /// [`EngineError::Binding`].
     fn call_function_value(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<EngineValue, EngineError>;
 
@@ -99,7 +101,7 @@ pub trait ExecutionContext {
     /// [`EngineFunction`].
     fn register_fn<Function, Args, Ret>(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         function: Function,
     ) -> Result<(), EngineError>
     where
@@ -113,7 +115,7 @@ pub trait ExecutionContext {
     }
 
     /// PRD-002:52. Set a scope variable from any [`IntoEngineValue`].
-    fn set_variable<Value>(&mut self, name: &str, value: Value) -> Result<(), EngineError>
+    fn set_variable<Value>(&mut self, name: &VariableName, value: Value) -> Result<(), EngineError>
     where
         Self: Sized,
         Value: IntoEngineValue,
@@ -126,7 +128,7 @@ pub trait ExecutionContext {
     /// v0.1 scope limit).
     fn call_function<Ret>(
         &mut self,
-        name: &str,
+        name: &FunctionName,
         arguments: &[EngineValue],
     ) -> Result<Ret, EngineError>
     where

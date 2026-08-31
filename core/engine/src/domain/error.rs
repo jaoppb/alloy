@@ -2,8 +2,8 @@
 //!
 //! Every adapter maps its native failures into these variants; no adapter error
 //! type (`rhai::EvalAltResult`, `rhai::ParseError`, …) ever crosses the seam.
-//! Hand-written `Display` / [`std::error::Error`] keep the domain layer free of
-//! a derive-macro dependency.
+//! Hand-written `Display` / [`std::error::Error`] keep this port crate free of a
+//! derive-macro dependency — the deliberate `thiserror` carve-out of ADR-0015.
 
 use std::fmt;
 
@@ -169,10 +169,7 @@ fn write_location(
     formatter: &mut fmt::Formatter<'_>,
     location: Option<&SourceLocation>,
 ) -> fmt::Result {
-    match location {
-        Some(position) => write!(formatter, " at {position}"),
-        None => Ok(()),
-    }
+    location.map_or(Ok(()), |position| write!(formatter, " at {position}"))
 }
 
 impl std::error::Error for EngineError {}

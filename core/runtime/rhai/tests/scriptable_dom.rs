@@ -5,6 +5,12 @@
 //! `EngineError::PermissionDenied`. (The full panic-injection / conformance
 //! sweep is F6.)
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::significant_drop_tightening
+)]
+
 use std::sync::{Arc, Mutex};
 
 use dom::{DomTree, serialize_html};

@@ -5,7 +5,7 @@
 //!
 //! 1. Run the primary script into a fresh [`DomTree`].
 //! 2. On **any** `Err` (compile, limit, permission, panic, DOM): write a
-//!    diagnostic to `stderr` (the DevTools event bus of `PRD-003:67` is a stub
+//!    diagnostic to `stderr` (the `DevTools` event bus of `PRD-003:67` is a stub
 //!    in v0.2).
 //! 3. Run the embedded `default_dom.rhai` in a **new** guarded context over a
 //!    **clean** tree — never the partial one.
@@ -24,11 +24,13 @@ use engine::{CapabilitySet, EngineError, EngineValue, RuntimeEngine, SourceLocat
 
 use crate::RhaiEngine;
 
-/// Run `primary_source` with a bound DOM; on failure log it and fall back to
-/// `default_dom_source`, then to [`minimal_document`]. Always returns a
-/// well-formed tree; never panics. The second element is the primary script's
-/// return value — `Some` only when the primary ran to completion, `None` on any
-/// fallback path (a fallback script's return value carries no meaning).
+/// Run `primary_source` with a bound DOM and fall back safely on error.
+///
+/// On failure log it and fall back to `default_dom_source`, then to
+/// [`minimal_document`]. Always returns a well-formed tree; never panics. The
+/// second element is the primary script's return value — `Some` only when the
+/// primary ran to completion, `None` on any fallback path (a fallback script's
+/// return value carries no meaning).
 #[must_use]
 pub fn run_with_fallback(
     engine: &RhaiEngine,
@@ -50,9 +52,9 @@ fn recover(engine: &RhaiEngine, capabilities: CapabilitySet, default_dom_source:
     match evaluate_into_tree(engine, capabilities, default_dom_source) {
         Ok((tree, _value)) => tree,
         Err(error) => {
-            eprintln!(
-                "alloy: the embedded default DOM script also failed ({error}); \
-                 using the built-in minimal document"
+            tracing::error!(
+                %error,
+                "the embedded default DOM script also failed; using the built-in minimal document"
             );
             minimal_document()
         }
@@ -81,23 +83,24 @@ fn unwrap_tree(tree: Arc<Mutex<DomTree>>) -> DomTree {
     match Arc::try_unwrap(tree) {
         Ok(mutex) => mutex
             .into_inner()
-            .unwrap_or_else(|poison| poison.into_inner()),
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
         Err(shared) => shared
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone(),
     }
 }
 
 fn report_failure(path: Option<&Path>, error: &EngineError) {
     let origin = path.map_or_else(|| "<script>".to_owned(), |path| path.display().to_string());
-    eprintln!("alloy: muscle script `{origin}` failed: {error}");
     if let Some(location) = source_location(error) {
-        eprintln!("       at {location}");
+        tracing::warn!(origin, %error, %location, "muscle script failed; running fallback");
+    } else {
+        tracing::warn!(origin, %error, "muscle script failed; running fallback");
     }
 }
 
-fn source_location(error: &EngineError) -> Option<SourceLocation> {
+const fn source_location(error: &EngineError) -> Option<SourceLocation> {
     match error {
         EngineError::Compilation { location, .. } | EngineError::ScriptRuntime { location, .. } => {
             *location
@@ -112,18 +115,20 @@ fn source_location(error: &EngineError) -> Option<SourceLocation> {
 #[must_use]
 pub fn minimal_document() -> DomTree {
     let mut tree = DomTree::new();
-    let html = tree.create_element(TagName::new("html").expect("`html` is a valid tag"));
-    let body = tree.create_element(TagName::new("body").expect("`body` is a valid tag"));
-    tree.append_child(tree.document(), html)
-        .expect("a fresh document accepts a child");
-    tree.append_child(html, body)
-        .expect("a fresh element accepts a child");
+    if let (Ok(html_tag), Ok(body_tag)) = (TagName::new("html"), TagName::new("body")) {
+        let html = tree.create_element(html_tag);
+        let body = tree.create_element(body_tag);
+        let _ = tree.append_child(tree.document(), html);
+        let _ = tree.append_child(html, body);
+    }
     tree
 }
 
 /// The shape `std::panic::take_hook` returns / `set_hook` accepts.
 type BoxedPanicHook = Box<dyn Fn(&PanicHookInfo<'_>) + Sync + Send + 'static>;
 
+/// Scoped guard for the process-wide panic hook.
+///
 /// Silences the default panic backtrace for the lifetime of the guard, then
 /// restores the previous hook on drop. The panic itself is still trapped by
 /// `catch_unwind` and surfaces as [`EngineError::ScriptPanic`].

@@ -11,3 +11,6 @@ description = "Abstract runtime-engine port: RuntimeEngine / ExecutionContext tr
 # The single third-party crate the abstraction is allowed to touch — it backs the
 # `Capability` bitflags transcribed verbatim from PRD-003:35-47.
 bitflags = { workspace = true }
+
+[lints]
+workspace = true

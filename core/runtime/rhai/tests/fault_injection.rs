@@ -6,8 +6,8 @@
 //! including the embedded default script itself failing.
 
 use engine::{
-    Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionLimits, RuntimeEngine,
-    native_fn, profiles,
+    Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionLimits, FunctionName,
+    RuntimeEngine, native_fn, profiles,
 };
 use rhai_runtime::{RhaiEngine, minimal_document, run_with_fallback};
 
@@ -32,6 +32,7 @@ const DEFAULT_DOM: &str = "\
 #[test]
 fn a_panicking_guarded_binding_is_trapped_for_every_capability() {
     let engine = RhaiEngine::new();
+    let explode = FunctionName::parse("explode").expect("valid function name");
     for capability in ALL_CAPABILITIES {
         let mut context = engine
             .create_context(CapabilitySet::new(capability))
@@ -42,7 +43,7 @@ fn a_panicking_guarded_binding_is_trapped_for_every_capability() {
             },
         );
         context
-            .register_guarded_binding("explode", Arity::exact(0), capability, handler)
+            .register_guarded_binding(&explode, Arity::exact(0), capability, handler)
             .expect("register explode");
 
         let outcome = engine.eval_value(&mut context, "explode()");

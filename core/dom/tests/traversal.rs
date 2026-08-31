@@ -1,6 +1,8 @@
 //! `Descendants` visits in document order; `Ancestors` ends at the `Document`
 //! root; both are inert on a stale id (v0.2 report §2.3, §5).
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use dom::{DomTree, NodeId, TagName};
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {

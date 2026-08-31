@@ -1,4 +1,6 @@
-//! [`DomTree`] — the arena aggregate. It owns every node and is the *only* way
+//! [`DomTree`] — the arena aggregate.
+//!
+//! It owns every node and is the *only* way
 //! to mutate the tree; the five invariants of the v0.2 report §2.2 (acyclicity,
 //! single parent, no self-parent, an irremovable `Document` root, `Children` ⇄
 //! `parent` coherence) are enforced here and nowhere else (`ADR-0010:136`
@@ -24,6 +26,7 @@ pub struct DomTree {
 }
 
 /// Where in a parent's child list [`DomTree::attach`] places a node.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Attachment {
     End,
     Before(NodeId),
@@ -222,7 +225,7 @@ impl DomTree {
         child: NodeId,
         position: Attachment,
     ) -> Result<(), DomError> {
-        self.reject_self_parent(parent, child)?;
+        Self::reject_self_parent(parent, child)?;
         self.ensure_container(parent)?;
         self.node(child)?;
         self.reject_cycle(parent, child)?;
@@ -232,7 +235,7 @@ impl DomTree {
         Ok(())
     }
 
-    fn reject_self_parent(&self, parent: NodeId, child: NodeId) -> Result<(), DomError> {
+    fn reject_self_parent(parent: NodeId, child: NodeId) -> Result<(), DomError> {
         if parent == child {
             return Err(DomError::SelfParent);
         }
@@ -297,9 +300,11 @@ impl DomTree {
         let mut collected = vec![root];
         let mut cursor = 0;
         while cursor < collected.len() {
-            let parent = collected[cursor];
+            let Some(&parent) = collected.get(cursor) else {
+                break;
+            };
             collected.extend(self.node(parent)?.children().iter());
-            cursor += 1;
+            cursor = cursor.saturating_add(1);
         }
         Ok(collected)
     }

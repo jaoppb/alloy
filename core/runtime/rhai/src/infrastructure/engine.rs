@@ -1,7 +1,7 @@
 //! [`RhaiEngine`] — the [`engine::RuntimeEngine`] implementation.
 
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use engine::{CapabilitySet, EngineError, EngineValue, ExecutionLimits, RuntimeEngine};
@@ -48,7 +48,7 @@ impl RhaiEngine {
         match outcome {
             Err(payload) => Err(EngineError::script_panic(panic_message(&*payload))),
             Ok(Err(eval_error)) => Err(map_eval_error(&eval_error)),
-            Ok(Ok(dynamic)) => marshal::dynamic_to_engine_value(dynamic),
+            Ok(Ok(dynamic)) => EngineValue::try_from(marshal::RhaiValue(dynamic)),
         }
     }
 }
@@ -117,21 +117,18 @@ fn configured_engine(
 }
 
 fn arm_deadline(deadline: &Arc<Mutex<Option<Instant>>>, budget: Duration) {
-    let mut slot = deadline.lock().unwrap_or_else(|poison| poison.into_inner());
+    let mut slot = deadline.lock().unwrap_or_else(PoisonError::into_inner);
     *slot = Instant::now().checked_add(budget);
 }
 
 fn disarm_deadline(deadline: &Arc<Mutex<Option<Instant>>>) {
-    let mut slot = deadline.lock().unwrap_or_else(|poison| poison.into_inner());
+    let mut slot = deadline.lock().unwrap_or_else(PoisonError::into_inner);
     *slot = None;
 }
 
 fn deadline_reached(deadline: &Arc<Mutex<Option<Instant>>>) -> bool {
-    let slot = deadline.lock().unwrap_or_else(|poison| poison.into_inner());
-    match *slot {
-        Some(instant) => Instant::now() >= instant,
-        None => false,
-    }
+    let slot = deadline.lock().unwrap_or_else(PoisonError::into_inner);
+    slot.is_some_and(|instant| Instant::now() >= instant)
 }
 
 fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
