@@ -2,8 +2,10 @@
 
 - **Status**: Accepted
 - **Author**: Core Architecture Team
-- **Date**: 2026-08-22
+- **Date**: 2026-08-22 (retrofitted to the `ADR-0011` Replaceable Port Contract: 2026-08-30)
 - **Target Release**: v0.1.0-alpha
+- **Port**: `RuntimeEngine` / `ExecutionContext` — `core/engine`. Freeze point `F1`. Contract record:
+  `docs/architecture/runtime-engine-port-contract.md`.
 
 ---
 
@@ -22,6 +24,49 @@ Binding domain crates directly to a specific embedded scripting engine creates t
 - Type registrations and memory management become language-specific.
 - Replacing or testing alternative script engines requires invasive refactors across all crates.
 - Sandbox security rules cannot be uniformly enforced across different runtime engines.
+
+### 2.1 Variation model — what may legitimately differ between backends
+
+An implementation of this port (Rhai today; Boa / QuickJS / a Wasm host / a mock later) MAY differ in:
+
+- **Surface language and syntax.** `compile` accepts an opaque `&str`; nothing constrains the grammar.
+- **Compiled representation.** `type CompiledScript` is the backend's own parsed form (Rhai: `Arc<rhai::AST>`). It is
+  opaque to callers and only required to be `Send + Sync + 'static`.
+- **Native-binding mechanism.** How a backend turns a `NativeFn` into something its scripts can call (Rhai:
+  `register_raw_fn` with `Dynamic` slots).
+- **Type projection.** How an `EngineType` becomes a script-visible type (Rhai: a bridge to `rhai::CustomType`).
+- **Limit primitives and their granularity.** Which knobs of `ExecutionLimits` a backend can honour and how precisely
+  (Rhai: operation counter + call/expression depth + a wall-clock `on_progress` guard).
+- **Performance and memory profile**, and non-observable evaluation order.
+
+An implementation MUST NOT differ in:
+
+- The **meaning and set** of `EngineValue` shapes and `EngineError` variants (one enum, `ADR-0011` item 4).
+- **Determinism of `compile`**: the same source yields an equivalent program every time; a syntax error is always
+  `EngineError::Compilation` with a source location when the backend has one.
+- **Capability semantics**: a context never widens its grant; `CapabilitySet` is carried for the context's whole life.
+- The **object-safe method contracts** (`create_context`, `compile`, `eval_value`, `eval_compiled_value`,
+  `set_value`/`get_value`, `register_native_fn`, `register_type_erased`, `reset_scope`, `capabilities`).
+- **Isolation**: two contexts from one engine share no script-visible state (`PRD-003:78`).
+- **Fault containment**: a script or native-binding panic is trapped as `EngineError::ScriptPanic`; the host process
+  never aborts (`PRD-003:79`).
+
+The conformance suite (`engine::conformance`, `ADR-0011` item 6) is the executable form of the "MUST NOT differ" list.
+
+### 2.2 Threat model — trusted-but-fallible author
+
+Muscle scripts run under this port are written by **the user customising their own browser** (`PRD-003:21-24`). They are
+_trusted_ but _fallible_. The defended-against failures are:
+
+- Infinite loops and runaway recursion → bounded by `ExecutionLimits` (C-04).
+- Panics, thrown values, and logic bugs → trapped, mapped to `EngineError`, host survives (C-09).
+- Accidental over-reach (a UI script touching the network) → `CapabilitySet` least-privilege,
+  `EngineError::PermissionDenied` (C-06/C-07, enforced per binding from `F6`).
+
+**Out of scope for this port**: deliberately hostile code, sandbox-escape attempts, timing/side-channel attacks, and
+resource-exhaustion attacks by a malicious author. Arbitrary third-party page JavaScript is a **different** boundary
+with a **different** threat model — `core/js` / `PRD-006`, `ADR-0006:63-68`. The capability system here is
+defence-in-depth and least-privilege hygiene, not a containment boundary for adversarial code.
 
 ---
 
@@ -80,12 +125,35 @@ The `RhaiEngine` implements `RuntimeEngine`:
 4. **Transparent Error Mapping**: Script evaluation errors (syntax errors, runtime panics, type mismatches) must be
    mapped to structured Rust errors with line/column metadata.
 
+### 4.1 Known gap — script-defined hook invocation (deferred)
+
+`PRD-001 §5.2` defines a hook lifecycle (`on_init`, `on_event`, `on_process`, `on_reload`) of functions **defined by a
+compiled script** and called by the host by name; `PRD-004` ends its flow at "Invoke `on_reload()`". The v0.1 port has
+no method that carries a `CompiledScript` into a by-name call, so `ExecutionContext::call_function` currently means only
+"invoke a registered native binding". Closing this needs either an added method
+(`call_compiled_function(&self, ctx, &CompiledScript, name, args)`) or a compiled AST attached to the context. **This is
+a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signature already frozen at `F1`.
+
+### 4.2 Boundary-schema migrations (`engine::PORT_SCHEMA_VERSION`)
+
+| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Adapter action                                                                                                                                                                                                |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | —                                                                                                                                                                                                             |
+| **2**   | Review response. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. Both newtypes reject the non-identifier at construction. `SourceLocation` is now an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column` newtypes — the `column == 0` "unknown" sentinel is gone; `column()` returns `Option<Column>`. | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. |
+
 ---
 
 ## 5. Acceptance Criteria
 
-- [ ] `RuntimeEngine` and `ExecutionContext` traits defined in `core/engine`.
-- [ ] `RhaiEngine` implementation in `core/runtime/rhai` passing trait compliance tests.
-- [ ] Registered Rust domain struct (`DomNode`) readable and mutable from Rhai script.
-- [ ] Execution limit test: an infinite loop in Rhai is aborted with `EngineError::ExecutionLimitExceeded`.
-- [ ] Trait-mocking test verifying engine can be replaced without modifying domain crates.
+- [x] `RuntimeEngine` and `ExecutionContext` traits defined in `core/engine`. _(with two `ADR-0011`-mandated deviations,
+      recorded in §2.1 and `core/engine/src/application/ports.rs`: no associated `type Error` — one `EngineError`; own
+      `EngineType` marker instead of `rhai::CustomType`.)_
+- [x] `RhaiEngine` implementation in `core/runtime/rhai` passing trait compliance tests. _(`engine::conformance` suite,
+      run from `core/runtime/rhai/tests/conformance.rs`.)_
+- [ ] Registered Rust domain struct (`DomNode`) readable and mutable from Rhai script. _(v0.1 proves the mechanism with
+      `FixtureNode` in `core/runtime/rhai/tests/fixture_node.rs`; the real `core/dom` `DomNode` — roadmap C-03 — lands
+      at integration point `I1`, v0.2.)_
+- [x] Execution limit test: an infinite loop in Rhai is aborted with `EngineError::ExecutionLimitExceeded`.
+      _(`core/runtime/rhai/tests/execution_limits.rs` — operation ceiling **and** wall-clock ceiling.)_
+- [x] Trait-mocking test verifying engine can be replaced without modifying domain crates. _(`MockEngine` +
+      `evaluate_subject<E: RuntimeEngine>` in `core/engine/tests/mock_engine.rs`.)_

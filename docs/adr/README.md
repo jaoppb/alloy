@@ -19,4 +19,6 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0008](0008-git-hooks-and-code-quality-tooling.md)                     | Git Hooks and Code Quality Tooling                   | Accepted | 2026-08-22 |
 | [ADR-0009](0009-vulkan-rendering-with-opengl-fallback.md)                  | Vulkan Rendering with OpenGL and Software Fallback   | Accepted | 2026-08-22 |
 | [ADR-0010](0010-clean-architecture-ddd-and-object-calisthenics.md)         | Clean Architecture, DDD, and Object Calisthenics     | Accepted | 2026-08-23 |
-| [ADR-0011](0011-replaceable-subsystem-ports-and-conformance-contract.md)   | Replaceable Subsystem Ports and Conformance Contract | Proposed | 2026-08-28 |
+| [ADR-0011](0011-replaceable-subsystem-ports-and-conformance-contract.md)   | Replaceable Subsystem Ports and Conformance Contract | Accepted | 2026-08-29 |
+| [ADR-0014](0014-structured-logging-with-tracing.md)                        | Structured Logging with `tracing`                    | Accepted | 2026-08-30 |
+| [ADR-0015](0015-typed-errors-with-thiserror.md)                            | Typed Errors with `thiserror`                        | Accepted | 2026-08-30 |

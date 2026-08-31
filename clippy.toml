@@ -1,0 +1,7 @@
+# Clippy knobs for the strict lint set declared in `[workspace.lints.clippy]`
+# (root Cargo.toml). Test code is held to a looser bar: assertions panic, and
+# `.unwrap()` on a known-good fixture is clearer than `?` in a `#[test]`.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

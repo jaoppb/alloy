@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: the whole workflow starts with no token scopes.
+# Each job re-grants only what it needs.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ---- cheap gates first: markdown + rust style ----------------------------
+  markdown:
+    name: Markdown (prettier + markdownlint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # pnpm must exist before setup-node@v7 resolves the `packageManager` field.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint:md
+
+  rust-quality:
+    name: Rust format + clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # rustup on the runner honours rust-toolchain.toml (channel + components).
+      - name: Show toolchain
+        run: rustup show active-toolchain
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-quality-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-quality-
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # ---- expensive gate: full test matrix on the 3 target OSes --------------
+  test:
+    name: Test (${{ matrix.os }})
+    needs: rust-quality
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show toolchain
+        run: rustup show active-toolchain
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+      - run: cargo check --workspace --all-targets
+      - run: cargo test --workspace --all-features
+
+  supply-chain:
+    name: cargo-deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-bin-0.20
+      - name: Install cargo-deny
+        run: |
+          test -x ~/.cargo/bin/cargo-deny || cargo install cargo-deny --locked --version ^0.20
+      - run: cargo deny check
+
+  # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
+  arch-lint:
+    name: arch-lint
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/arch-lint
+          key: arch-lint-bin-0.5
+      - name: Install arch-lint
+        run: |
+          test -x ~/.cargo/bin/arch-lint || cargo install arch-lint-cli --locked --version ^0.5
+      - run: arch-lint check
+
+  coverage:
+    name: domain/ coverage
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Add llvm-tools
+        run: rustup component add llvm-tools-preview
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/bin/cargo-llvm-cov
+            target/
+          key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-cov-
+      - name: Install cargo-llvm-cov
+        run: test -x ~/.cargo/bin/cargo-llvm-cov || cargo install cargo-llvm-cov --locked
+      # domain/ has no I/O and no excuse — roadmap §5 sets the v0.1 gate at 85%.
+      - name: Coverage for engine domain/
+        run: >
+          cargo llvm-cov --package engine --all-features
+          --lcov --output-path lcov.info
+          --fail-under-lines 85
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: lcov.info

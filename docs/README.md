@@ -11,7 +11,8 @@ web browser.
 docs/
 ├── README.md                           # This index
 ├── architecture/                       # System Architecture & Design
-│   └── overview.md                     # High-level architecture, C4 diagrams, and core patterns
+│   ├── overview.md                     # High-level architecture, C4 diagrams, and core patterns
+│   └── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
 ├── requirements/                       # Product & System Requirements (PRDs)
 │   ├── PRD-001-alloy-core-system.md    # Overall browser system requirements
 │   ├── PRD-002-abstract-runtime-engine.md # Abstract engine & Rhai integration requirements
@@ -36,7 +37,8 @@ docs/
     ├── 0007-spdd-methodology-and-reasons-canvas-integration.md
     ├── 0008-git-hooks-and-code-quality-tooling.md
     ├── 0009-vulkan-rendering-with-opengl-fallback.md
-    └── 0010-clean-architecture-ddd-and-object-calisthenics.md
+    ├── 0010-clean-architecture-ddd-and-object-calisthenics.md
+    └── 0011-replaceable-subsystem-ports-and-conformance-contract.md
 ```
 
 ---

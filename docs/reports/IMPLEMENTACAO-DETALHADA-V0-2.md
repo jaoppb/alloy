@@ -2,7 +2,7 @@
 
 | Campo               | Valor                                                                                                                            |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**          | 🟡 Não iniciado — depende da v0.1 (F0+F1+F2) descrita em `IMPLEMENTACAO-DETALHADA-V0-1.md`, aqui assumida **concluída**          |
+| **Status**          | 🟡 Não iniciado — a v0.1 (F0+F1+F2) **está concluída** (2026-08-30). Ver a nota de sincronização logo abaixo                     |
 | **Cobertura**       | ~0% — 0 de 5 critérios da v0.2 (C-03, C-06, C-07, C-08, C-09) têm implementação                                                  |
 | **Esforço**         | 26–40 dias-dev `[modelado]` (F3 12–18 · F6 12–18 · companion object-safe + I1 3–6); `ROADMAP-IMPLEMENTACAO-V1.md:226` orça 24–36 |
 | **Depende de**      | v0.1 inteira. F6 exige `RhaiEngine`/`RhaiContext` de F2; I1 exige F2 **e** F3 (`ROADMAP-IMPLEMENTACAO-V1.md:290`)                |
@@ -23,6 +23,20 @@ Decisões de escopo já tomadas com o solicitante, e assumidas ao longo do docum
   os três limites de execução, marshaling, `catch_unwind` → `ScriptPanic` e a `FixtureNode` de C-02; binário
   `alloy --script`; CI 3 SOs, lockfile versionado, `rust-toolchain.toml`, `deny.toml`, `spdd/`, `forbid(unsafe_code)`.
 - O escopo é o **delta** da v0.2 sobre esse estado. O fluxo **SPDD** é prescrito para F3 e F6, não executado aqui.
+
+> **Nota de sincronização — 2026-08-30.** A v0.1 foi implementada pelo **caminho sólido do `ADR-0011`**, não pelo
+> "verbatim" (ver as emendas em `IMPLEMENTACAO-DETALHADA-V0-1.md`). Ajustes que a v0.2 já deve assumir:
+>
+> - `core/engine` **não depende de `rhai`**. `EngineType` (marker próprio) substitui `rhai::CustomType`; um único
+>   `EngineError` (sem `type Error` associado). Os genéricos de `PRD-002` são métodos _provided_ sobre um núcleo
+>   object-safe — `dyn ExecutionContext` já compila; o companion `dyn RuntimeEngine` (ADR-0013) continua sendo tarefa da
+>   v0.2.
+> - `EngineError` na v0.1 tem as variantes `Compilation`, `ExecutionLimitExceeded`, `PermissionDenied`, `TypeMismatch`,
+>   `Conversion`, `Binding`, `ScriptRuntime`, `ScriptPanic`.
+> - `ExecutionContext::register_native_fn` recebe `(name, Arity, NativeFn)`. A checagem de capability por binding (F6)
+>   deve embrulhar esse ponto — `CapabilitySet::require` já existe em `core/engine`.
+> - A prova de C-02 é `core/runtime/rhai/tests/fixture_node.rs` (`FixtureNode` + `impl rhai::CustomType`); o `DomNode`
+>   real e o `NodeHandle` continuam sendo trabalho de I1.
 
 ---
 
