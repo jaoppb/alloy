@@ -91,13 +91,13 @@ From `ROADMAP-IMPLEMENTACAO-V1.md` §3.2 (F6), §3.3 (I1) and `docs/reports/IMPL
 
 ### New Concepts Required
 
-- **`GuardedBinding`** — `{ name: &'static str, required: Capability, handler: NativeFn }`. A table of these is walked
-  once per context build; the C-06 conformance sweep walks the same table.
-- **`RhaiContext::register_guarded_binding`** — the single chokepoint: wraps a `handler` so `capabilities.require(cap)?`
-  runs before it. Records `(name, required)` for the sweep. `register_native_fn` (unguarded) stays for **pure**
-  functions only.
-- **`NodeHandle`** — `{ tree: Rc<RefCell<DomTree>>, id: NodeId, capabilities: CapabilitySet }`. The script-visible DOM
-  node. `Clone` is cheap (`Rc` bump + `Copy` fields). `impl engine::EngineType` (script name `"Node"`) +
+- **`GuardedBinding`** — `{ name: &'static str, arity: Arity, required: Capability, handler: NativeFn }`. A table of
+  these is walked once per context build; the C-06 conformance sweep walks the same table.
+- **`RhaiContext::register_guarded_binding`** — the single chokepoint: takes `&FunctionName`, arity, required
+  `Capability`, and wraps a `handler` so `capabilities.require(cap)?` runs before it. Records `(FunctionName, required)`
+  for the sweep. `register_native_fn` (unguarded) stays for **pure** functions only.
+- **`NodeHandle`** — `{ tree: Arc<Mutex<DomTree>>, id: NodeId, capabilities: CapabilitySet }`. The script-visible DOM
+  node. `Clone` is cheap (`Arc` bump + `Copy` fields). `impl engine::EngineType` (script name `"Node"`) +
   `impl rhai::CustomType`. Every method checks its own capability (`DOM_READ` for reads, `DOM_MUTATE` for mutations) —
   the capability is baked in at handle-creation time because `ADR-0004` fixes it for the context's life.
 - **`NODE_HANDLE_BINDINGS`** — `&[(&str, Capability)]` manifest of every `NodeHandle` method and its required

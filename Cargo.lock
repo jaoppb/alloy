@@ -194,6 +194,9 @@ version = "0.1.0"
 [[package]]
 name = "dom"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "engine"

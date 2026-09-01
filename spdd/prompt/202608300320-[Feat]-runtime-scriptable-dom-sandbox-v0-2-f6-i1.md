@@ -68,19 +68,20 @@ class RhaiContext {
   -rhai_Engine engine
   -rhai_Scope scope
   -CapabilitySet capabilities
-  -Vec~(String,Capability)~ guarded_binding_names
-  -Option~Rc~RefCell~DomTree~~~ dom
-  +register_guarded_binding(str, Capability, NativeFn) Result
-  +bind_dom(Rc~RefCell~DomTree~~) Result
-  +guarded_binding_names() (String,Capability)[]
+  -Vec~(FunctionName,Capability)~ guarded_binding_names
+  -Option~Arc~Mutex~DomTree~~~ dom
+  +register_guarded_binding(FunctionName, Arity, Capability, NativeFn) Result
+  +bind_dom(Arc~Mutex~DomTree~~) Result
+  +guarded_binding_names() (FunctionName,Capability)[]
 }
 class GuardedBinding {
   +str name
+  +Arity arity
   +Capability required
   +NativeFn handler
 }
 class NodeHandle {
-  -Rc~RefCell~DomTree~~ tree
+  -Arc~Mutex~DomTree~~ tree
   -NodeId id
   -CapabilitySet capabilities
   +tag() Result~String~
@@ -115,7 +116,7 @@ RhaiEngine "1" --> "*" RhaiContext : creates
 RhaiContext ..> GuardedBinding : registers
 RhaiContext o-- NodeHandle : document global
 NodeHandle ..> dom_bindings : maps DomError
-NodeHandle ..> DomTree : borrows via Rc RefCell
+NodeHandle ..> DomTree : borrows via Arc Mutex
 fallback ..> RhaiEngine : primary + default eval
 fallback ..> DomTree : clean tree
 AlloyCli ..> fallback : run_with_fallback
@@ -148,23 +149,25 @@ dyn_bridge ..> DynRuntimeEngine : eval_typed / run_dyn_suite
    `pub fn dom(operation, reason) -> Self` + a `Display` arm reading _dom operation &lt;operation&gt; failed:
    &lt;reason&gt;_. Change `PORT_SCHEMA_VERSION` to `2` and extend its doc comment with the v0.2 delta.
 3. **Guarded bindings (`core/runtime/rhai/src/infrastructure/sandbox.rs`)**:
-    - `pub struct GuardedBinding { pub name: &'static str, pub required: Capability, pub handler: NativeFn }`.
-    - `RhaiContext::register_guarded_binding(name, required, handler) -> Result<(), EngineError>`:
-      `let caps = self.capabilities();` (Copy), wrap `move |args| { caps.require(required)?; handler(args) }` as a
-      `NativeFn`, call `native::register`, and push `(name.to_owned(), required)` to `self.guarded_binding_names`.
-    - `RhaiContext::guarded_binding_names(&self) -> &[(String, Capability)]` for the sweep.
+    - `pub struct GuardedBinding { pub name: &'static str, pub arity: Arity, pub required: Capability, pub handler:`
+      `NativeFn }`.
+    - `RhaiContext::register_guarded_binding(&self, name: &FunctionName, arity: Arity, required: Capability, handler:`
+      `NativeFn) -> Result<(), EngineError>`: `let caps = self.capabilities();` (Copy), wrap
+      `move |args| { caps.require(required)?; handler(args) }` as a `NativeFn`, call `native::register`, and push
+      `(name.clone(), required)` to `self.guarded_bindings`.
+    - `RhaiContext::guarded_binding_names(&self) -> &[(FunctionName, Capability)]` for the sweep.
     - `install_guarded_table(ctx, &[GuardedBinding])` helper iterates once at context build (used by `bind_dom` and any
       future subsystem wiring).
 4. **`NodeHandle` (`core/runtime/rhai/src/infrastructure/dom_bindings.rs`)**:
-    - `#[derive(Clone)] pub struct NodeHandle { tree: Rc<RefCell<DomTree>>, id: NodeId, capabilities: CapabilitySet }`.
+    - `#[derive(Clone)] pub struct NodeHandle { tree: Arc<Mutex<DomTree>>, id: NodeId, capabilities: CapabilitySet }`.
     - `impl engine::EngineType for NodeHandle { fn registration() -> TypeRegistration { TypeRegistration::new("Node") } }`.
     - `impl rhai::CustomType for NodeHandle`: `build` registers `with_name("Node")` and, via `with_fn`, every method of
       the Entities list. Each method body: `self.capabilities.require(CAP).map_err(engine_error_to_eval)?;` →
-      `let tree = self.tree.try_borrow[_mut]() .map_err(|_| dom_busy("op"))?;` → call the `DomTree` op →
+      `let tree = self.tree.lock().unwrap_or_else(PoisonError::into_inner);` → call the `DomTree` op →
       `.map_err(|e| dom_bindings::dom_error_to_engine_error("op", e)) .map_err(engine_error_to_eval)?;` → marshal the
       result (`String`, `rhai::Array` of `NodeHandle`, `Dynamic`, or `()`).
     - `create_element` / `create_text` return a `NodeHandle` sharing `self.tree.clone()` and `self.capabilities`.
-    - `append_child(child)`: `Rc::ptr_eq(&self.tree, &child.tree)` guard →
+    - `append_child(child)`: `Arc::ptr_eq(&self.tree, &child.tree)` guard →
       `EngineError::dom("append_child", "node belongs to another document")` otherwise.
     - `pub const NODE_HANDLE_BINDINGS: &[(&str, Capability)]` — one row per method with its required capability
       (`tag/text/children/get_attribute` → `DOM_READ`; the rest → `DOM_MUTATE`).
@@ -172,14 +175,14 @@ dyn_bridge ..> DynRuntimeEngine : eval_typed / run_dyn_suite
       `EngineError::dom(operation, error.to_string())`.
     - `fn engine_error_to_eval(error: EngineError) -> Box<rhai::EvalAltResult>` (reuse / expose
       `native::to_eval_error`).
-    - `fn dom_busy(operation: &str) -> EngineError` → `EngineError::dom(operation, "DOM busy")`.
 5. **`bind_dom` (`context.rs`, concrete, outside the trait)**:
-   `RhaiContext::bind_dom(&mut self, tree: Rc<RefCell<DomTree>>) -> Result<(), EngineError>`:
-   `self.register_custom_type::<NodeHandle>()?;` → `let root = tree.borrow().document();` →
-   `let handle = NodeHandle { tree: tree.clone(), id: root, capabilities: self.capabilities() };` →
+   `RhaiContext::bind_dom(&mut self, tree: Arc<Mutex<DomTree>>) -> Result<(), EngineError>`:
+   `self.register_custom_type::<NodeHandle>()?;` →
+   `let root = tree.lock().unwrap_or_else(PoisonError::into_inner).document();` →
+   `let handle = NodeHandle { tree: Arc::clone(&tree), id: root, capabilities: self.capabilities };` →
    `self.set_custom_value("document", handle);` → `self.dom = Some(tree);`. `RhaiContext` gains
-   `dom: Option<Rc<RefCell<DomTree>>>` and `guarded_binding_names: Vec<(String, Capability)>`; it is now `!Send`
-   (documented).
+   `dom: Option<Arc<Mutex<DomTree>>>` and `guarded_bindings: Vec<(FunctionName, Capability)>`; `RhaiContext` remains
+   `Send + Sync` (matching `rhai` `sync` feature).
 6. **Fallback (`core/runtime/rhai/src/infrastructure/fallback.rs`)**:
     - `pub struct PanicHookGuard { previous: Option<Box<dyn Fn(&PanicHookInfo) + Sync + Send>> }` — `new()` installs a
       hook that records `location` into a shared `Arc<Mutex<Option<String>>>` and prints nothing; `Drop` restores

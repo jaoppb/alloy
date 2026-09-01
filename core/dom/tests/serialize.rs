@@ -1,5 +1,5 @@
-//! `serialize_html` is deterministic, escapes text and attribute values, keeps
-//! attribute insertion order, and emits void elements without a close tag
+//! `serialize_html` is deterministic, escapes text and attribute values, sorts
+//! attributes alphabetically, and emits void elements without a close tag
 //! (v0.2 report §3 F3 step 5, §5).
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -54,27 +54,62 @@ fn void_elements_have_no_closing_tag() {
     let mut tree = DomTree::new();
     let body = element(&mut tree, "body");
     let line_break = element(&mut tree, "br");
+    let image = element(&mut tree, "img");
     tree.append_child(tree.document(), body).unwrap();
     tree.append_child(body, line_break).unwrap();
+    tree.append_child(body, image).unwrap();
+    attribute(&mut tree, image, "src", "logo.png");
 
     assert_eq!(
         serialize_html(&tree, tree.document()).unwrap(),
-        "<body><br></body>"
+        r#"<body><br><img src="logo.png"></body>"#
     );
 }
 
 #[test]
-fn attributes_keep_insertion_order_across_an_update() {
+fn attributes_are_sorted_deterministically_via_btree_map() {
     let mut tree = DomTree::new();
     let node = element(&mut tree, "div");
     tree.append_child(tree.document(), node).unwrap();
-    attribute(&mut tree, node, "id", "one");
     attribute(&mut tree, node, "role", "main");
+    attribute(&mut tree, node, "id", "one");
+    attribute(&mut tree, node, "class", "box");
     attribute(&mut tree, node, "id", "two");
 
     assert_eq!(
         serialize_html(&tree, tree.document()).unwrap(),
-        r#"<div id="two" role="main"></div>"#
+        r#"<div class="box" id="two" role="main"></div>"#
+    );
+}
+
+#[test]
+fn custom_elements_serialize_with_open_and_close_tags() {
+    let mut tree = DomTree::new();
+    let custom = element(&mut tree, "custom-card");
+    let text = tree.create_text(TextContent::new("Hello Custom"));
+    tree.append_child(tree.document(), custom).unwrap();
+    tree.append_child(custom, text).unwrap();
+
+    assert_eq!(
+        serialize_html(&tree, tree.document()).unwrap(),
+        "<custom-card>Hello Custom</custom-card>"
+    );
+}
+
+#[test]
+fn full_w3c_named_entities_are_escaped_in_text_and_attributes() {
+    let mut tree = DomTree::new();
+    let p = element(&mut tree, "p");
+    let text = tree.create_text(TextContent::new(
+        "Alloy © 2026 • 100€ & 50£ \u{00A0} trade™",
+    ));
+    tree.append_child(tree.document(), p).unwrap();
+    tree.append_child(p, text).unwrap();
+    attribute(&mut tree, p, "data-symbol", "© & \"quoted\"");
+
+    assert_eq!(
+        serialize_html(&tree, tree.document()).unwrap(),
+        r#"<p data-symbol="&copy; &amp; &quot;quoted&quot;">Alloy &copy; 2026 &bull; 100&euro; &amp; 50&pound; &nbsp; trade&trade;</p>"#
     );
 }
 

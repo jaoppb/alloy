@@ -22,6 +22,12 @@ use crate::domain::text::{CommentContent, TextContent};
 pub struct NodeId(u32);
 
 impl NodeId {
+    /// The root `Document` node id (`node #0`).
+    #[must_use]
+    pub const fn root() -> Self {
+        Self(0)
+    }
+
     pub(crate) fn from_index(index: usize) -> Self {
         Self(u32::try_from(index).unwrap_or(u32::MAX))
     }

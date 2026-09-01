@@ -11,6 +11,7 @@ description = "DOM tree aggregate: an arena-backed DomTree with enforced tree in
 # 2.1): no `engine`, no interpreter, nothing transitive. The DOM↔engine bridge
 # lives in `core/runtime/rhai/infrastructure/` (roadmap I1).
 [dependencies]
+thiserror = { workspace = true }
 
 [lints]
 workspace = true

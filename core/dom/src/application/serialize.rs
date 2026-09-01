@@ -10,8 +10,8 @@ use crate::domain::tree::DomTree;
 ///
 /// A `Document` root contributes only its children's markup; an element gets a
 /// start tag and, unless it is a void element, an end tag; text and comment
-/// nodes are written escaped / delimited. Attribute order is insertion order.
-/// `Err(DomError::NodeNotFound)` when `root` does not resolve.
+/// nodes are written escaped / delimited. Attribute order is deterministic
+/// sorted order. `Err(DomError::NodeNotFound)` when `root` does not resolve.
 pub fn serialize_html(tree: &DomTree, root: NodeId) -> Result<String, DomError> {
     tree.node_kind(root)?;
     let mut output = String::new();
@@ -75,7 +75,7 @@ fn write_element(
     steps: &mut Vec<Step>,
 ) {
     write_open_tag(output, element);
-    if is_void(element.tag().as_str()) {
+    if element.tag().is_void() {
         return;
     }
     steps.push(Step::CloseElement(node));
@@ -120,31 +120,73 @@ fn push_children(tree: &DomTree, parent: NodeId, steps: &mut Vec<Step>) {
 }
 
 fn escape_text(raw: &str) -> String {
-    raw.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    let mut escaped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match escape_named_entity(ch) {
+            Some(entity) => escaped.push_str(entity),
+            None => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 fn escape_attribute(raw: &str) -> String {
-    escape_text(raw).replace('"', "&quot;")
+    let mut escaped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        if ch == '"' {
+            escaped.push_str("&quot;");
+        } else {
+            match escape_named_entity(ch) {
+                Some(entity) => escaped.push_str(entity),
+                None => escaped.push(ch),
+            }
+        }
+    }
+    escaped
 }
 
-fn is_void(tag: &str) -> bool {
-    matches!(
-        tag,
-        "area"
-            | "base"
-            | "br"
-            | "col"
-            | "embed"
-            | "hr"
-            | "img"
-            | "input"
-            | "link"
-            | "meta"
-            | "param"
-            | "source"
-            | "track"
-            | "wbr"
-    )
+const fn escape_named_entity(ch: char) -> Option<&'static str> {
+    match ch {
+        '&' => Some("&amp;"),
+        '<' => Some("&lt;"),
+        '>' => Some("&gt;"),
+        '\u{00A0}' => Some("&nbsp;"),
+        '\u{00A2}' => Some("&cent;"),
+        '\u{00A3}' => Some("&pound;"),
+        '\u{00A5}' => Some("&yen;"),
+        '\u{00A7}' => Some("&sect;"),
+        '\u{00A9}' => Some("&copy;"),
+        '\u{00AB}' => Some("&laquo;"),
+        '\u{00AE}' => Some("&reg;"),
+        '\u{00B0}' => Some("&deg;"),
+        '\u{00B1}' => Some("&plusmn;"),
+        '\u{00B5}' => Some("&micro;"),
+        '\u{00B7}' => Some("&middot;"),
+        '\u{00BB}' => Some("&raquo;"),
+        '\u{00BC}' => Some("&frac14;"),
+        '\u{00BD}' => Some("&frac12;"),
+        '\u{00BE}' => Some("&frac34;"),
+        '\u{00D7}' => Some("&times;"),
+        '\u{00F7}' => Some("&divide;"),
+        '\u{2013}' => Some("&ndash;"),
+        '\u{2014}' => Some("&mdash;"),
+        '\u{2018}' => Some("&lsquo;"),
+        '\u{2019}' => Some("&rsquo;"),
+        '\u{201C}' => Some("&ldquo;"),
+        '\u{201D}' => Some("&rdquo;"),
+        '\u{2022}' => Some("&bull;"),
+        '\u{2026}' => Some("&hellip;"),
+        '\u{20AC}' => Some("&euro;"),
+        '\u{2122}' => Some("&trade;"),
+        '\u{2190}' => Some("&larr;"),
+        '\u{2191}' => Some("&uarr;"),
+        '\u{2192}' => Some("&rarr;"),
+        '\u{2193}' => Some("&darr;"),
+        '\u{2194}' => Some("&harr;"),
+        '\u{2248}' => Some("&asymp;"),
+        '\u{2260}' => Some("&ne;"),
+        '\u{2264}' => Some("&le;"),
+        '\u{2265}' => Some("&ge;"),
+        _ => None,
+    }
 }

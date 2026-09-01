@@ -38,7 +38,7 @@ impl DomTree {
     pub fn new() -> Self {
         Self {
             slots: vec![Slot::Occupied(NodeData::new(NodeKind::Document))],
-            document: NodeId::from_index(0),
+            document: NodeId::root(),
         }
     }
 

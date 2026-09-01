@@ -203,8 +203,61 @@ fn invalid_tag_and_attribute_names_are_rejected() {
         Err(DomError::InvalidTagName(_))
     ));
     assert_eq!(TagName::new("DIV").unwrap().as_str(), "div");
+    assert_eq!(TagName::new("div").unwrap(), TagName::Div);
+    assert_eq!(
+        TagName::new("custom-card").unwrap(),
+        TagName::Custom("custom-card".into())
+    );
     assert!(matches!(
         AttributeName::new("bad=name"),
         Err(DomError::InvalidAttributeName(_))
     ));
+}
+
+#[test]
+fn node_id_root_identifies_document() {
+    let tree = DomTree::new();
+    assert_eq!(NodeId::root(), tree.document());
+    assert_eq!(NodeId::root().index(), 0);
+}
+
+#[test]
+fn thiserror_display_messages_are_formatted_correctly() {
+    let id = NodeId::root();
+    assert_eq!(
+        DomError::NodeNotFound(id).to_string(),
+        "node #0 does not exist"
+    );
+    assert_eq!(
+        DomError::WouldCycle.to_string(),
+        "operation would make the tree cyclic"
+    );
+    assert_eq!(
+        DomError::SelfParent.to_string(),
+        "a node cannot be its own parent"
+    );
+    assert_eq!(
+        DomError::CannotDetachDocument.to_string(),
+        "the document root cannot be detached or removed"
+    );
+    assert_eq!(
+        DomError::CannotHaveChildren(id).to_string(),
+        "node #0 cannot hold children"
+    );
+    assert_eq!(
+        DomError::InvalidTagName("123".into()).to_string(),
+        "not a valid tag name: \"123\""
+    );
+    assert_eq!(
+        DomError::InvalidAttributeName("a b".into()).to_string(),
+        "not a valid attribute name: \"a b\""
+    );
+    assert_eq!(
+        DomError::NotAnElement(id).to_string(),
+        "node #0 is not an element"
+    );
+    assert_eq!(
+        DomError::NotCharacterData(id).to_string(),
+        "node #0 is not character data"
+    );
 }

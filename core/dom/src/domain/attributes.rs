@@ -1,14 +1,14 @@
 //! [`AttributeName`] / [`AttributeValue`] value objects and [`AttributeMap`], the
-//! insertion-ordered first-class collection of an element's attributes
-//! (v0.2 report §2.2; `ADR-0010:132` rule 4).
+//! first-class collection of an element's attributes (v0.2 report §2.2; `ADR-0010:132` rule 4).
 
 use core::fmt;
+use std::collections::BTreeMap;
 
 use crate::domain::error::DomError;
 
 /// A validated attribute name: non-empty, ASCII, no control or whitespace
 /// characters and none of `" ' / = >`; lowercased on construction.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AttributeName(String);
 
 impl AttributeName {
@@ -53,59 +53,47 @@ impl AttributeValue {
     }
 }
 
-/// An element's attributes in insertion order. A `set` on a name already present
-/// overwrites in place and never reorders (v0.2 report §2.2).
+/// An element's attributes backed by a [`BTreeMap`] for fast lookups and
+/// deterministic, alphabetically sorted serialization output (v0.2 report §2.2).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AttributeMap {
-    entries: Vec<(AttributeName, AttributeValue)>,
+    entries: BTreeMap<AttributeName, AttributeValue>,
 }
 
 impl AttributeMap {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: BTreeMap::new(),
         }
     }
 
-    /// Insert `name`, or overwrite its value in place when already present.
+    /// Insert `name`, or overwrite its value when already present.
     pub fn set(&mut self, name: AttributeName, value: AttributeValue) {
-        match self
-            .entries
-            .iter_mut()
-            .find(|(existing, _)| *existing == name)
-        {
-            Some(entry) => entry.1 = value,
-            None => self.entries.push((name, value)),
-        }
+        self.entries.insert(name, value);
     }
 
     #[must_use]
     pub fn get(&self, name: &AttributeName) -> Option<&AttributeValue> {
-        self.entries
-            .iter()
-            .find(|(existing, _)| existing == name)
-            .map(|entry| &entry.1)
+        self.entries.get(name)
     }
 
     /// Remove `name` if present; returns whether it was.
     pub fn remove(&mut self, name: &AttributeName) -> bool {
-        let original_length = self.entries.len();
-        self.entries.retain(|(existing, _)| existing != name);
-        self.entries.len() != original_length
+        self.entries.remove(name).is_some()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&AttributeName, &AttributeValue)> + '_ {
-        self.entries.iter().map(|entry| (&entry.0, &entry.1))
+        self.entries.iter()
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 }

@@ -34,6 +34,18 @@ paths = ["core/runtime/rhai/**"]
 name = "alloy_cli"
 paths = ["alloy/**"]
 
+[[scopes]]
+name = "dom_domain"
+paths = ["core/dom/src/domain/**"]
+
+[[scopes]]
+name = "dom_application"
+paths = ["core/dom/src/application/**"]
+
+[[scopes]]
+name = "dom"
+paths = ["core/dom/**"]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -47,6 +59,18 @@ message = "Domain layer must not depend on application ports or runtime infrastr
 from = "engine"
 to = ["runtime_rhai", "alloy_cli"]
 message = "Engine abstraction crate must not depend on concrete script runtimes or CLI (ADR-0002 / ADR-0011)."
+
+# DOM domain layer must not depend on application layer or other subsystems
+[[deny-scope-dep]]
+from = "dom_domain"
+to = ["dom_application", "engine", "runtime_rhai", "alloy_cli"]
+message = "DOM domain layer must not depend on application layer, engine ports, runtime, or CLI."
+
+# DOM crate must not depend on engine, runtime adapters, or CLI
+[[deny-scope-dep]]
+from = "dom"
+to = ["engine", "runtime_rhai", "alloy_cli"]
+message = "core/dom must not depend on engine, concrete script runtimes, or CLI."
 
 # --- import restrictions ---------------------------------------------------
 

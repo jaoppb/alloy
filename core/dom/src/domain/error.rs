@@ -5,30 +5,37 @@
 //! `core/runtime/rhai` adapter's job at roadmap I1. `#[non_exhaustive]` so that
 //! mapping keeps compiling as variants are added.
 
-use core::fmt;
-
 use crate::domain::node::NodeId;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(thiserror::Error, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DomError {
     /// The id addresses an empty (never-used or tombstoned) arena slot.
+    #[error("{0} does not exist")]
     NodeNotFound(NodeId),
     /// The requested `append` / `insert` would make the tree cyclic.
+    #[error("operation would make the tree cyclic")]
     WouldCycle,
     /// `parent` and `child` are the same node.
+    #[error("a node cannot be its own parent")]
     SelfParent,
     /// `detach` / `remove` was called on the `Document` root.
+    #[error("the document root cannot be detached or removed")]
     CannotDetachDocument,
     /// The chosen parent is a `Text` or `Comment` node and cannot hold children.
+    #[error("{0} cannot hold children")]
     CannotHaveChildren(NodeId),
     /// A tag string failed [`crate::TagName`] validation.
+    #[error("not a valid tag name: {0:?}")]
     InvalidTagName(String),
     /// An attribute name failed [`crate::AttributeName`] validation.
+    #[error("not a valid attribute name: {0:?}")]
     InvalidAttributeName(String),
     /// A tag / attribute operation targeted a non-`Element` node.
+    #[error("{0} is not an element")]
     NotAnElement(NodeId),
     /// A text operation targeted a node that is not character data.
+    #[error("{0} is not character data")]
     NotCharacterData(NodeId),
 }
 
@@ -43,25 +50,3 @@ impl DomError {
         Self::InvalidAttributeName(raw.into())
     }
 }
-
-impl fmt::Display for DomError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NodeNotFound(id) => write!(formatter, "{id} does not exist"),
-            Self::WouldCycle => formatter.write_str("operation would make the tree cyclic"),
-            Self::SelfParent => formatter.write_str("a node cannot be its own parent"),
-            Self::CannotDetachDocument => {
-                formatter.write_str("the document root cannot be detached or removed")
-            }
-            Self::CannotHaveChildren(id) => write!(formatter, "{id} cannot hold children"),
-            Self::InvalidTagName(raw) => write!(formatter, "not a valid tag name: {raw:?}"),
-            Self::InvalidAttributeName(raw) => {
-                write!(formatter, "not a valid attribute name: {raw:?}")
-            }
-            Self::NotAnElement(id) => write!(formatter, "{id} is not an element"),
-            Self::NotCharacterData(id) => write!(formatter, "{id} is not character data"),
-        }
-    }
-}
-
-impl std::error::Error for DomError {}
