@@ -5,8 +5,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use dom::{
-    AttributeName, AttributeValue, CommentContent, DomError, DomTree, NodeId, TagName, TextContent,
-    serialize_html,
+    AttributeName, AttributeValue, CommentContent, DomError, DomTree, HtmlEntity, NodeId, TagName,
+    TextContent, serialize_html,
 };
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {
@@ -111,6 +111,23 @@ fn full_w3c_named_entities_are_escaped_in_text_and_attributes() {
         serialize_html(&tree, tree.document()).unwrap(),
         r#"<p data-symbol="&copy; &amp; &quot;quoted&quot;">Alloy &copy; 2026 &bull; 100&euro; &amp; 50&pound; &nbsp; trade&trade;</p>"#
     );
+}
+
+#[test]
+fn html_entity_bidirectional_lookups() {
+    assert_eq!(HtmlEntity::from_char('&'), Some(HtmlEntity::Amp));
+    assert_eq!(HtmlEntity::from_char('©'), Some(HtmlEntity::Copy));
+    assert_eq!(HtmlEntity::from_char('€'), Some(HtmlEntity::Euro));
+    assert_eq!(HtmlEntity::from_char('z'), None);
+
+    assert_eq!(HtmlEntity::from_name("copy"), Some(HtmlEntity::Copy));
+    assert_eq!(HtmlEntity::from_name("euro"), Some(HtmlEntity::Euro));
+    assert_eq!(HtmlEntity::from_name("unknown"), None);
+
+    assert_eq!(HtmlEntity::Copy.as_char(), '©');
+    assert_eq!(HtmlEntity::Copy.as_entity(), "&copy;");
+    assert_eq!(HtmlEntity::Copy.entity_name(), "copy");
+    assert_eq!(HtmlEntity::Copy.to_string(), "&copy;");
 }
 
 #[test]

@@ -7,6 +7,7 @@
 
 pub mod attributes;
 pub mod children;
+pub mod entity;
 pub mod error;
 pub mod node;
 pub mod tag_name;
