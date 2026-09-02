@@ -136,10 +136,41 @@ a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signa
 
 ### 4.2 Boundary-schema migrations (`engine::PORT_SCHEMA_VERSION`)
 
-| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Adapter action                                                                                                                                                                                                |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | —                                                                                                                                                                                                             |
-| **2**   | Review response. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. Both newtypes reject the non-identifier at construction. `SourceLocation` is now an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column` newtypes — the `column == 0` "unknown" sentinel is gone; `column()` returns `Option<Column>`. | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. |
+| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                                                              | Adapter action                                                                                                                                                                                                                           |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                             | —                                                                                                                                                                                                                                        |
+| **2**   | Review response & v0.2 I1. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. `SourceLocation` is an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column`. `EngineError` gains additive `Dom { operation: String, reason: String }` variant. | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. Handle `EngineError::Dom`. |
+
+### 4.3 v0.2 F6/I1 amendment — `EngineError::Dom`
+
+The scriptable-DOM bridge (roadmap I1) needs a boundary error that is distinct from `Binding` ("bad native-binding name
+/ arity"). `EngineError` gains one variant:
+
+```rust
+Dom { operation: String, reason: String }
+```
+
+raised when a DOM operation invoked from a script fails for a reason other than a missing capability (an invariant
+violation, a stale node id, a busy tree). `core/dom`'s own `DomError` is mapped to it in the `core/runtime/rhai`
+adapter; `core/dom` never names `EngineError`.
+
+### 4.4 v0.2 F6 amendment — the object-safe `dyn` companion (`ADR-0013`)
+
+`ADR-0011` item 2 requires an object-safe companion for the port. It lands in
+`core/engine/src/application/dyn_bridge.rs` as three `dyn`-safe traits and a free function, all speaking only boundary
+types:
+
+- `DynExecutionContext` — the object-safe core of `ExecutionContext` verbatim, plus `as_any_mut`.
+- `DynCompiledScript` — an erased compiled program.
+- `DynRuntimeEngine : Send + Sync` — `create_context_dyn` / `compile_dyn` / `eval_value_dyn` /
+  `eval_compiled_value_dyn`, all `-> Result<_, EngineError>`.
+- `eval_typed::<T: FromEngineValue>(&dyn DynRuntimeEngine, &mut dyn DynExecutionContext, &str) -> Result<T, EngineError>`.
+
+Blanket impls (`impl<C: ExecutionContext + 'static> DynExecutionContext for C`,
+`impl<S: Send + Sync + 'static> DynCompiledScript for S`,
+`impl<E: RuntimeEngine> DynRuntimeEngine for E where E::Context: 'static, E::CompiledScript: 'static`) give every
+adapter the companion for free. **No existing signature changes**, so this amendment does not move `PORT_SCHEMA_VERSION`
+on its own. `engine::conformance::run_dyn_suite` is its conformance form; `MockEngine` and `RhaiEngine` both pass it.
 
 ---
 

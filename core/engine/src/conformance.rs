@@ -39,8 +39,13 @@
     clippy::manual_let_else
 )]
 
+use std::sync::Arc;
+
+use crate::application::dyn_bridge::{DynExecutionContext, DynRuntimeEngine, eval_typed};
+use crate::application::function::Arity;
 use crate::application::ports::{ExecutionContext, RuntimeEngine};
 use crate::domain::capability::{Capability, CapabilitySet};
+use crate::domain::error::EngineError;
 use crate::domain::function_name::FunctionName;
 use crate::domain::value::EngineValue;
 use crate::domain::variable_name::VariableName;
@@ -214,12 +219,15 @@ fn check_capabilities_are_carried<Engine: RuntimeEngine>(engine: &Engine) {
     let scope = engine
         .create_context(granted)
         .unwrap_or_else(|error| panic!("create_context with a grant failed: {error}"));
+    // Fully qualified: `Engine::Context` implements both `ExecutionContext` and
+    // the `DynExecutionContext` companion, so a bare `.capabilities()` is
+    // ambiguous inside this module.
     assert!(
-        scope.capabilities().contains(Capability::DOM_READ),
+        ExecutionContext::capabilities(&scope).contains(Capability::DOM_READ),
         "the context must report the capabilities it was built with"
     );
     assert!(
-        !scope.capabilities().contains(Capability::NETWORK_FETCH),
+        !ExecutionContext::capabilities(&scope).contains(Capability::NETWORK_FETCH),
         "the context must not report capabilities it was never granted"
     );
 }
@@ -229,12 +237,140 @@ fn check_reset_scope_clears_locals<Engine: RuntimeEngine>(engine: &Engine) {
     scope
         .set_variable(&variable_name("temp"), 99_i64)
         .expect("set temp");
-    scope
-        .reset_scope()
+    ExecutionContext::reset_scope(&mut scope)
         .unwrap_or_else(|error| panic!("reset_scope failed: {error}"));
     let after = engine.eval::<EngineValue>(&mut scope, "temp");
     assert!(
         after.is_err(),
         "after reset_scope a script-local variable must no longer resolve, got {after:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The `dyn` companion suite (ADR-0013 / ADR-0011 item 2)
+// ---------------------------------------------------------------------------
+
+/// Run the object-safe companion checks against a boxed engine.
+///
+/// Every adapter that passes [`run_core_suite`] must also pass this through
+/// `Box<dyn DynRuntimeEngine>`. `MockEngine` and `RhaiEngine` both do.
+#[allow(clippy::needless_pass_by_value)]
+pub fn run_dyn_suite(engine: Box<dyn DynRuntimeEngine>) {
+    let engine = engine.as_ref();
+    check_dyn_literal_evaluation(engine);
+    check_dyn_typed_eval(engine);
+    check_dyn_variable_roundtrip(engine);
+    check_dyn_compiled_path_matches_source_path(engine);
+    check_dyn_contexts_are_isolated(engine);
+    check_dyn_native_function_dispatch(engine);
+    check_dyn_capabilities_are_carried(engine);
+    check_dyn_reset_scope_clears_locals(engine);
+}
+
+fn dyn_context(engine: &dyn DynRuntimeEngine) -> Box<dyn DynExecutionContext> {
+    engine
+        .create_context_dyn(CapabilitySet::empty())
+        .unwrap_or_else(|error| panic!("create_context_dyn(empty) must succeed, got {error}"))
+}
+
+fn check_dyn_literal_evaluation(engine: &dyn DynRuntimeEngine) {
+    let mut scope = dyn_context(engine);
+    let value = engine
+        .eval_value_dyn(scope.as_mut(), "1")
+        .unwrap_or_else(|error| panic!("dyn eval_value(\"1\") failed: {error}"));
+    assert_eq!(value, EngineValue::Int(1), "dyn: literal must be Int(1)");
+}
+
+fn check_dyn_typed_eval(engine: &dyn DynRuntimeEngine) {
+    let mut scope = dyn_context(engine);
+    let answer: i64 = eval_typed(engine, scope.as_mut(), "42")
+        .unwrap_or_else(|error| panic!("dyn eval_typed::<i64>(\"42\") failed: {error}"));
+    assert_eq!(answer, 42, "dyn: eval_typed must convert Int -> i64");
+}
+
+fn check_dyn_variable_roundtrip(engine: &dyn DynRuntimeEngine) {
+    let mut scope = dyn_context(engine);
+    scope
+        .set_value(&variable_name("answer"), EngineValue::Int(42))
+        .unwrap_or_else(|error| panic!("dyn set_value failed: {error}"));
+    let seen: i64 = eval_typed(engine, scope.as_mut(), "answer")
+        .unwrap_or_else(|error| panic!("dyn reading a set variable failed: {error}"));
+    assert_eq!(
+        seen, 42,
+        "dyn: a set variable must be visible to the script"
+    );
+}
+
+fn check_dyn_compiled_path_matches_source_path(engine: &dyn DynRuntimeEngine) {
+    let mut scope = dyn_context(engine);
+    let compiled = engine
+        .compile_dyn("7")
+        .unwrap_or_else(|error| panic!("dyn compile_dyn(\"7\") failed: {error}"));
+    let from_compiled = engine
+        .eval_compiled_value_dyn(scope.as_mut(), compiled.as_ref())
+        .unwrap_or_else(|error| panic!("dyn eval_compiled_value failed: {error}"));
+    let from_source = engine
+        .eval_value_dyn(scope.as_mut(), "7")
+        .unwrap_or_else(|error| panic!("dyn eval_value failed: {error}"));
+    assert_eq!(
+        from_compiled, from_source,
+        "dyn: compiled and source evaluation of the same program must agree"
+    );
+}
+
+fn check_dyn_contexts_are_isolated(engine: &dyn DynRuntimeEngine) {
+    let mut first = dyn_context(engine);
+    let mut second = dyn_context(engine);
+    first
+        .set_value(&variable_name("x"), EngineValue::Int(1))
+        .expect("dyn set x in first");
+    second
+        .set_value(&variable_name("x"), EngineValue::Int(2))
+        .expect("dyn set x in second");
+    let from_first: i64 = eval_typed(engine, first.as_mut(), "x").expect("dyn read x from first");
+    let from_second: i64 =
+        eval_typed(engine, second.as_mut(), "x").expect("dyn read x from second");
+    assert_eq!(from_first, 1, "dyn: first context keeps its own x");
+    assert_eq!(from_second, 2, "dyn: second context is undisturbed");
+}
+
+fn check_dyn_native_function_dispatch(engine: &dyn DynRuntimeEngine) {
+    let mut scope = dyn_context(engine);
+    let handler: crate::NativeFn = Arc::new(|_arguments: &[EngineValue]| Ok(EngineValue::Int(42)));
+    scope
+        .register_native_fn(&function_name("meaning"), Arity::exact(0), handler)
+        .unwrap_or_else(|error| panic!("dyn register_native_fn failed: {error}"));
+    let called: i64 = eval_typed(engine, scope.as_mut(), "meaning()")
+        .unwrap_or_else(|error| panic!("dyn calling a registered native fn failed: {error}"));
+    assert_eq!(called, 42, "dyn: a registered native fn must be callable");
+}
+
+fn check_dyn_capabilities_are_carried(engine: &dyn DynRuntimeEngine) {
+    let granted = CapabilitySet::new(Capability::DOM_READ | Capability::DOM_MUTATE);
+    let scope = engine
+        .create_context_dyn(granted)
+        .unwrap_or_else(|error| panic!("dyn create_context with a grant failed: {error}"));
+    assert!(
+        scope.capabilities().contains(Capability::DOM_READ),
+        "dyn: the context must report the capabilities it was built with"
+    );
+    assert!(
+        !scope.capabilities().contains(Capability::NETWORK_FETCH),
+        "dyn: the context must not report capabilities it was never granted"
+    );
+}
+
+fn check_dyn_reset_scope_clears_locals(engine: &dyn DynRuntimeEngine) {
+    let mut scope = dyn_context(engine);
+    scope
+        .set_value(&variable_name("temp"), EngineValue::Int(99))
+        .expect("dyn set temp");
+    scope
+        .reset_scope()
+        .unwrap_or_else(|error| panic!("dyn reset_scope failed: {error}"));
+    let after: Result<EngineValue, EngineError> = eval_typed(engine, scope.as_mut(), "temp");
+    assert!(
+        after.is_err(),
+        "dyn: after reset_scope a script-local variable must no longer resolve, got {after:?}"
     );
 }

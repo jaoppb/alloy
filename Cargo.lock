@@ -29,6 +29,7 @@ name = "alloy"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "dom",
  "engine",
  "rhai-runtime",
  "thiserror",
@@ -193,6 +194,9 @@ version = "0.1.0"
 [[package]]
 name = "dom"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "engine"
@@ -429,8 +433,10 @@ dependencies = [
 name = "rhai-runtime"
 version = "0.1.0"
 dependencies = [
+ "dom",
  "engine",
  "rhai",
+ "tracing",
 ]
 
 [[package]]

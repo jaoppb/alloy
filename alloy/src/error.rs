@@ -6,6 +6,7 @@
 use std::io;
 use std::path::PathBuf;
 
+use dom::DomError;
 use engine::EngineError;
 
 /// Something went wrong running `alloy`.
@@ -22,4 +23,8 @@ pub enum AlloyError {
     /// Compiling or running the script under the sandbox failed.
     #[error(transparent)]
     Engine(#[from] EngineError),
+
+    /// Serializing the DOM failed.
+    #[error("could not serialize the DOM: {0}")]
+    Dom(#[from] DomError),
 }

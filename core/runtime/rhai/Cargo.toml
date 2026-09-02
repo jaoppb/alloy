@@ -9,7 +9,12 @@ description = "Rhai backend implementing the core/engine RuntimeEngine / Executi
 
 [dependencies]
 engine = { path = "../../engine" }
+# The scriptable-DOM bridge (`infrastructure::dom_bindings`, roadmap I1) needs the
+# real `DomTree`. `core/dom` is a pure domain crate — this edge stays one-way and
+# never lets a `rhai` type reach `core/dom`.
+dom = { path = "../../dom" }
 rhai = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,11 +1,13 @@
-//! Alloy CLI — v0.1 entry point.
+//! Alloy CLI — entry point.
 //!
-//! Two things work here, matching the v0.1 micro-deliverables
+//! Two things work here, matching the roadmap micro-deliverables
 //! (`ROADMAP-IMPLEMENTACAO-V1.md` §3.1):
 //!
 //! - `alloy` with no arguments prints help and exits cleanly (code 0).
 //! - `alloy --script <path>` compiles the file with [`RhaiEngine`], runs it
-//!   under the execution-limit sandbox, and logs the returned value.
+//!   under the execution-limit sandbox with a bound DOM tree
+//!   (`DOM_READ | DOM_MUTATE`), logs any non-unit return value via [`tracing`],
+//!   and — when the script built a tree — prints its serialized HTML to stdout.
 //!
 //! Argument parsing is [`clap`]; failures are the typed [`AlloyError`];
 //! diagnostics go through [`tracing`] (ADR-0014). Everything downstream —
@@ -20,10 +22,15 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{CommandFactory, Parser};
-use engine::{CapabilitySet, RuntimeEngine};
-use rhai_runtime::RhaiEngine;
+use dom::serialize_html;
+use engine::profiles;
+use rhai_runtime::{RhaiEngine, run_with_fallback};
 
 use crate::error::AlloyError;
+
+/// The embedded default DOM script (C-09 fallback): built into the binary so a
+/// muscle-script failure always has something to fall back to.
+const DEFAULT_DOM_SCRIPT: &str = include_str!("../../scripts/default_dom.rhai");
 
 /// The infinitely malleable web browser (v0.1 preview).
 ///
@@ -63,13 +70,21 @@ fn run_script(path: &Path) -> Result<(), AlloyError> {
     })?;
 
     let engine = RhaiEngine::new();
-    let mut context = engine.create_context(CapabilitySet::empty())?;
-    let value = engine.eval_value(&mut context, &source)?;
+    let (tree, value) = run_with_fallback(
+        &engine,
+        profiles::dom_parser(),
+        &source,
+        Some(path),
+        DEFAULT_DOM_SCRIPT,
+    );
 
-    if value.is_unit() {
-        tracing::info!("script evaluated to ()");
-        return Ok(());
+    if let Some(value) = value.filter(|value| !value.is_unit()) {
+        tracing::info!(%value, "script result");
     }
-    tracing::info!(%value, "script result");
+
+    let html = serialize_html(&tree, tree.document())?;
+    if !html.is_empty() {
+        println!("{html}");
+    }
     Ok(())
 }

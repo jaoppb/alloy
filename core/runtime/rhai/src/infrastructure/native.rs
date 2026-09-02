@@ -20,16 +20,21 @@ pub fn register(engine: &mut rhai::Engine, name: &str, arity: Arity, handler: Na
                 .iter()
                 .map(|slot| EngineValue::try_from(RhaiValue((*slot).clone())))
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| to_eval_error(&error))?;
-            let produced = handler(&engine_values).map_err(|error| to_eval_error(&error))?;
+                .map_err(to_eval_error)?;
+            let produced = handler(&engine_values).map_err(to_eval_error)?;
             RhaiValue::try_from(produced)
                 .map(|wrapped| wrapped.0)
-                .map_err(|error| to_eval_error(&error))
+                .map_err(to_eval_error)
         },
     );
 }
 
+/// Carry an [`EngineError`] out of a native binding **without flattening it to a
+/// string**: `rhai::EvalAltResult::ErrorSystem` boxes it, and
+/// [`crate::infrastructure::error_map::map_eval_error`] downcasts it back on the
+/// way out. This is what lets a `PermissionDenied` / `Dom` raised inside a
+/// binding surface to the host as that exact variant (C-07, I1).
 #[allow(clippy::unnecessary_box_returns)] // `Box<EvalAltResult>` is rhai's required error type
-fn to_eval_error(error: &EngineError) -> Box<EvalAltResult> {
-    error.to_string().into()
+pub fn to_eval_error(error: EngineError) -> Box<EvalAltResult> {
+    Box::new(EvalAltResult::ErrorSystem(String::new(), Box::new(error)))
 }

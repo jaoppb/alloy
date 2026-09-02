@@ -56,6 +56,10 @@ pub fn map_eval_error(error: &EvalAltResult) -> EngineError {
                 position_to_location(*position),
             )
         }
+        EvalAltResult::ErrorSystem(_, inner) => inner
+            .downcast_ref::<EngineError>()
+            .cloned()
+            .unwrap_or_else(|| EngineError::script_runtime(inner.to_string(), None)),
         other => {
             EngineError::script_runtime(other.to_string(), position_to_location(other.position()))
         }

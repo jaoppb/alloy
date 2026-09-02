@@ -3,15 +3,15 @@
 The `RuntimeEngine` / `ExecutionContext` seam in `core/engine` is a **Replaceable Subsystem Port** under `ADR-0011`.
 This document is its contract record: the state of all seven mandatory items at the `F1` freeze point.
 
-| Item | Contract requirement                                                      | State                                                                                                                                                                                                                                        |
-| ---- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-002` §2.1 (variation model), §2.2 (threat model)                                                                                                                                                                                     |
-| 2    | Port traits: assoc types only, no adapter types, object-safe or companion | 🟡 `ExecutionContext` is object-safe now; `RuntimeEngine` is **not** and the `dyn` companion is deferred to v0.2 / ADR-0013 — see §2 below                                                                                                   |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `EngineValue`, `ValueKind`, `EngineError`, `TypeRegistration` are `#[non_exhaustive]`; `engine::PORT_SCHEMA_VERSION` is the single version knob                                                                                           |
-| 4    | Exactly one typed error, source location                                  | ✅ `EngineError`; `SourceLocation` on `Compilation` / `ScriptRuntime`                                                                                                                                                                        |
-| 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                  |
-| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `engine::conformance`; `MockEngine` reference adapter (`core/engine/tests/`); CI `no-engine` job proves `engine`'s graph links no interpreter. The `no-engine` _feature_ on a consumer arrives with the first consumer (`core/dom`, v0.2) |
-| 7    | Frozen-API milestone                                                      | 🟡 Frozen at `F1` **except** the item-2 companion; `PORT_SCHEMA_VERSION = 1` is that surface. Any boundary change bumps it + adds a `PRD-002` migration note                                                                                 |
+| Item | Contract requirement                                                      | State                                                                                                                                                                                                                                                         |
+| ---- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-002` §2.1 (variation model), §2.2 (threat model)                                                                                                                                                                                                      |
+| 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ `ExecutionContext` object-safe; `RuntimeEngine` not, but its `dyn` companion (`DynRuntimeEngine` / `DynExecutionContext` / `DynCompiledScript` + `eval_typed`) landed in v0.2 F6 — **ADR-0013**, `application/dyn_bridge.rs`. See §2 below                 |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `EngineValue`, `ValueKind`, `EngineError`, `TypeRegistration` are `#[non_exhaustive]`; `engine::PORT_SCHEMA_VERSION` is the single version knob. **`= 2`** since v0.2 F6/I1 added `EngineError::Dom` (additive; `PRD-002` §4.2)                            |
+| 4    | Exactly one typed error, source location                                  | ✅ `EngineError`; `SourceLocation` on `Compilation` / `ScriptRuntime`. v0.2 added `Dom { operation, reason }` for DOM-binding failures, kept distinct from `Binding`                                                                                          |
+| 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                                   |
+| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `engine::conformance`; `MockEngine` reference adapter (`core/engine/tests/`); CI `no-engine` job proves `engine`'s graph links no interpreter. `core/dom` (v0.2 F3) links no engine at all — locked by CI asserting `cargo tree -p dom` is dependency-free |
+| 7    | Frozen-API milestone                                                      | 🟡 Frozen at `F1` **except** the item-2 companion; `PORT_SCHEMA_VERSION = 2` is that surface (v0.2 F6/I1 bumped it for `EngineError::Dom`; `PRD-002` §4.2). Any boundary change bumps it + adds a `PRD-002` migration note                                    |
 
 ---
 
@@ -25,13 +25,17 @@ The port is split in two on purpose:
   carrying `where Self: Sized`, so it never breaks object-safety of the core it layers on.
 
 `RuntimeEngine` itself is **not** object-safe: `create_context` returns `Self::Context` by value and `compile` returns
-`Self::CompiledScript` by value. A `dyn`-dispatch companion (`Box<dyn DynRuntimeEngine>` returning
-`Box<dyn ExecutionContext>` and an erased compiled handle) is the documented follow-up — **ADR-0013**, roadmap v0.2.
-Until it exists, consumers monomorphise: `fn run<E: RuntimeEngine>(engine: &E, …)`.
+`Self::CompiledScript` by value. The `dyn`-dispatch companion — **ADR-0013**,
+`core/engine/src/application/dyn_bridge.rs`, delivered in v0.2 F6 — is `DynRuntimeEngine` (returning
+`Box<dyn DynExecutionContext>` and `Box<dyn DynCompiledScript>`), `DynExecutionContext` (the object-safe core of
+`ExecutionContext` verbatim, plus `as_any_mut`), `DynCompiledScript`, and the free `eval_typed::<T>`. Blanket impls give
+every `RuntimeEngine` / `ExecutionContext` the companion with no per-adapter code and no change to any F1 signature.
+`Box<dyn DynRuntimeEngine>` is a usable engine handle; a consumer that prefers monomorphisation still writes
+`fn run<E: RuntimeEngine>(engine: &E, …)`.
 
-This is the one item not fully satisfied at `F1`. It is a deliberate, recorded deferral, not an oversight: no consumer
-in v0.1 needs `dyn RuntimeEngine`, and adding the companion later is purely additive (it introduces new types, changes
-no existing signature).
+`engine::conformance::run_dyn_suite(Box<dyn DynRuntimeEngine>)` is the companion's conformance form; `MockEngine` and
+`RhaiEngine` both pass it alongside `run_core_suite`. This item was deferred at `F1` (no v0.1 consumer needed it) and
+closed additively in v0.2 F6.
 
 ---
 
@@ -95,10 +99,14 @@ Follows the trapping / fallback model of `PRD-003:62-70`:
 1. **Trapped execution** — a script error is a `Result::Err`; a script or native-binding **panic** is caught
    (`std::panic::catch_unwind`) and returned as `EngineError::ScriptPanic`. The host process never aborts. No Cargo
    profile may set `panic = "abort"`.
-2. **Error logging** — reporting the failure to the DevTools event bus is the host's job, not the port's. The `devtools`
-   crate is a stub in v0.1; wiring is `F6` (fallback handler) / `F11` (hot-reload diagnostics).
-3. **Default fallback** — falling back to a built-in Rust implementation is the _subsystem's_ responsibility (`F6`); the
-   port only guarantees the failure is delivered as a typed `EngineError` and the context stays usable.
+2. **Error logging** — reporting the failure is the host's job, not the port's. v0.2 F6 writes a `stderr` diagnostic
+   (script path + `SourceLocation` when the variant carries one + the variant) in
+   `core/runtime/rhai/src/infrastructure/fallback.rs`; a scoped `PanicHookGuard` keeps the default backtrace off
+   `stderr`. The DevTools event bus of `PRD-003:67` stays a stub (`devtools` crate) — `F11` for hot-reload diagnostics.
+3. **Default fallback** — implemented in v0.2 F6 as `rhai_runtime::run_with_fallback`: on **any** `Err`, run the
+   embedded `scripts/default_dom.rhai` in a **new** guarded context over a **clean** `DomTree` (never the partial one),
+   then fall through to the Rust `minimal_document()` (`<html><body></body></html>`) if that also fails. The
+   panic-injection matrix (`core/runtime/rhai/tests/fault_injection.rs`) is a blocking CI gate from v0.2 (roadmap §5).
 4. **Non-corrupting scope reset** — `reset_scope` is available after a fault to re-initialise script-local state
    cleanly.
 
