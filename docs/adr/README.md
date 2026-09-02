@@ -22,3 +22,5 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0011](0011-replaceable-subsystem-ports-and-conformance-contract.md)   | Replaceable Subsystem Ports and Conformance Contract | Accepted | 2026-08-29 |
 | [ADR-0014](0014-structured-logging-with-tracing.md)                        | Structured Logging with `tracing`                    | Accepted | 2026-08-30 |
 | [ADR-0015](0015-typed-errors-with-thiserror.md)                            | Typed Errors with `thiserror`                        | Accepted | 2026-08-30 |
+| [ADR-0016](0016-containerized-cross-browser-benchmark-harness.md)          | Containerized Cross-Browser Benchmark Harness        | Proposed | 2026-09-02 |
+| [ADR-0017](0017-performance-tiers-and-minimum-system-requirements.md)      | Performance Tiers & Minimum System Requirements      | Proposed | 2026-09-02 |

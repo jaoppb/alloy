@@ -9,6 +9,14 @@
 | **Atenção**         | ⚠️ Os cinco PRDs miram `v0.1.0-alpha`. **Não existe documento de escopo para v1.0** — a seção 2 o define       |
 | **Fecha requisito** | PRD-001 a PRD-005 (integral)                                                                                   |
 
+> **Nota de extensão — 2026-09-02.** Este roadmap não previa medição de desempenho além do `criterion` da F13. O
+> `PRD-009` acrescenta a **trilha E (medição)** e as fases **B0–B7** — harness de benchmarks web em container
+> (Speedometer, JetStream, MotionMark, Basemark Web), matriz de tiers de hardware, perfis de uso padrão e avançado e a
+> tabela de requisitos mínimos de sistema. Plano, esforço (51–78 d `[modelado]`) e encaixe por versão:
+> `BENCHMARKS-WEB-E-REQUISITOS-MINIMOS.md`. Decisões em `ADR-0016` (containers e as duas lanes) e `ADR-0017` (tiers,
+> orçamentos e o que pode ser alegado). Critérios novos: **C-19 … C-28**, continuando a numeração da seção 2. Portões
+> novos: `bench-smoke` na v0.3, gate de regressão noturno na v0.5, tabela de requisitos mínimos na v1.0.
+
 ---
 
 ## 1. Estado atual — evidências

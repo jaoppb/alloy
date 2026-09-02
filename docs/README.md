@@ -12,7 +12,8 @@ docs/
 ├── README.md                           # This index
 ├── architecture/                       # System Architecture & Design
 │   ├── overview.md                     # High-level architecture, C4 diagrams, and core patterns
-│   └── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
+│   ├── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
+│   └── benchmark-harness.md            # PRD-009 harness topology, schemas, CLI and CI lanes
 ├── requirements/                       # Product & System Requirements (PRDs)
 │   ├── PRD-001-alloy-core-system.md    # Overall browser system requirements
 │   ├── PRD-002-abstract-runtime-engine.md # Abstract engine & Rhai integration requirements
@@ -21,11 +22,13 @@ docs/
 │   ├── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
 │   ├── PRD-006-web-content-javascript-runtime-port.md # Replaceable content JS engine port
 │   ├── PRD-007-style-cascade-and-layout-engine-ports.md # Replaceable CSS cascade & layout ports
-│   └── PRD-008-html-tokenizer-and-tree-sink-ports.md # Replaceable HTML tokenizer & tree sink ports
+│   ├── PRD-008-html-tokenizer-and-tree-sink-ports.md # Replaceable HTML tokenizer & tree sink ports
+│   └── PRD-009-browser-benchmark-and-performance-harness.md # Cross-browser benchmarks & minimum requirements
 ├── reports/                            # Technical Reports (analysis, audits, roadmaps)
 │   ├── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
 │   ├── IMPLEMENTACAO-DETALHADA-V0-1.md # Detailed F0+F1+F2 implementation plan for v0.1
-│   └── IMPLEMENTACAO-DETALHADA-V0-2.md # Detailed F3+F6+I1 implementation plan for v0.2
+│   ├── IMPLEMENTACAO-DETALHADA-V0-2.md # Detailed F3+F6+I1 implementation plan for v0.2
+│   └── BENCHMARKS-WEB-E-REQUISITOS-MINIMOS.md # Benchmark harness plan, tiers & system requirements
 └── adr/                                # Architecture Decision Records (MADR format)
     ├── README.md                       # ADR index & decision log
     ├── 0001-record-architecture-decisions.md
@@ -38,7 +41,11 @@ docs/
     ├── 0008-git-hooks-and-code-quality-tooling.md
     ├── 0009-vulkan-rendering-with-opengl-fallback.md
     ├── 0010-clean-architecture-ddd-and-object-calisthenics.md
-    └── 0011-replaceable-subsystem-ports-and-conformance-contract.md
+    ├── 0011-replaceable-subsystem-ports-and-conformance-contract.md
+    ├── 0014-structured-logging-with-tracing.md
+    ├── 0015-typed-errors-with-thiserror.md
+    ├── 0016-containerized-cross-browser-benchmark-harness.md
+    └── 0017-performance-tiers-and-minimum-system-requirements.md
 ```
 
 ---
@@ -61,3 +68,6 @@ docs/
    OpenGL (`glow`) and CPU software rendering.
 8. **SPDD-Driven Engineering**: All feature development follows the Structured Prompt-Driven Development (SPDD)
    methodology, using `docs/requirements/` as authoritative input into REASONS-Canvas generation.
+9. **Measured, Not Claimed**: Every performance and system-requirement statement is derived from a reproducible run of
+   the containerized benchmark harness (`PRD-009`, `ADR-0016`, `ADR-0017`), pinned by image digest and suite commit, and
+   is never published from the noisy CI lane.
