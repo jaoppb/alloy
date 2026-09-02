@@ -29,12 +29,11 @@ pub mod domain;
 pub use application::serialize::serialize_html;
 pub use domain::{
     attributes::{AttributeMap, AttributeName, AttributeValue},
-    children::Children,
     entity::HtmlEntity,
     error::DomError,
     node::{ElementData, NodeId, NodeKind},
     tag_name::TagName,
     text::{CommentContent, TextContent},
-    traversal::{Ancestors, Descendants},
+    traversal::{Ancestors, Children, Descendants},
     tree::DomTree,
 };

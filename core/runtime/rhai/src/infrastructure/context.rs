@@ -46,11 +46,11 @@ pub struct RhaiContext {
     /// context holds an `Arc` clone; the host reads the mutated tree after
     /// `eval` returns (`ADR-0003`, contract §5.1).
     dom: Option<Arc<Mutex<DomTree>>>,
-    /// `(name, required)` for every binding installed through
+    /// `name -> required` for every binding installed through
     /// [`RhaiContext::register_guarded_binding`]. The F6 conformance sweep walks
     /// this alongside `NODE_HANDLE_BINDINGS` to prove no DOM binding is
     /// unguarded (C-06).
-    guarded_bindings: Vec<(FunctionName, Capability)>,
+    guarded_bindings: HashMap<FunctionName, Capability>,
 }
 
 impl RhaiContext {
@@ -67,7 +67,7 @@ impl RhaiContext {
             native_functions: HashMap::new(),
             registered_types: Vec::new(),
             dom: None,
-            guarded_bindings: Vec::new(),
+            guarded_bindings: HashMap::new(),
         }
     }
 
@@ -90,14 +90,14 @@ impl RhaiContext {
             handler(arguments)
         });
         self.register_native_fn(name, arity, guarded)?;
-        self.guarded_bindings.push((name.clone(), required));
+        self.guarded_bindings.insert(name.clone(), required);
         Ok(())
     }
 
-    /// `(name, required)` for every binding registered through
+    /// `name -> required` map for every binding registered through
     /// [`register_guarded_binding`](Self::register_guarded_binding).
     #[must_use]
-    pub fn guarded_binding_names(&self) -> &[(FunctionName, Capability)] {
+    pub const fn guarded_bindings(&self) -> &HashMap<FunctionName, Capability> {
         &self.guarded_bindings
     }
 

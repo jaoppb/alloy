@@ -22,7 +22,7 @@ C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `�
 - **F6 — `core/runtime/rhai`**: `infrastructure/sandbox.rs` —
   `RhaiContext::register_guarded_binding(name, arity, required, handler)` is the single capability chokepoint
   (`CapabilitySet` captured by value; guard is `and` of bits + branch); `GuardedBinding` table +
-  `install_guarded_table` + `guarded_binding_names()` for the C-06 sweep. v0.2 ships **no** production top-level guarded
+  `install_guarded_table` + `guarded_bindings()` for the C-06 sweep. v0.2 ships **no** production top-level guarded
   binding (all DOM access is `NodeHandle` methods, which self-guard) — the mechanism is tested and ready.
   `infrastructure/fallback.rs` — `run_with_fallback` (primary → stderr diagnostic + `SourceLocation` → embedded
   `scripts/default_dom.rhai` on a **clean** tree → Rust `minimal_document()`), `PanicHookGuard` scoped around each eval.

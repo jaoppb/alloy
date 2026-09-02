@@ -39,6 +39,11 @@ pub const NODE_HANDLE_BINDINGS: &[(&str, Capability)] = &[
     ("tag", Capability::DOM_READ),
     ("text", Capability::DOM_READ),
     ("children", Capability::DOM_READ),
+    ("first_child", Capability::DOM_READ),
+    ("last_child", Capability::DOM_READ),
+    ("previous_sibling", Capability::DOM_READ),
+    ("next_sibling", Capability::DOM_READ),
+    ("parent", Capability::DOM_READ),
     ("get_attribute", Capability::DOM_READ),
     ("create_element", Capability::DOM_MUTATE),
     ("create_text", Capability::DOM_MUTATE),
@@ -110,15 +115,68 @@ impl NodeHandle {
 
     fn children(&self) -> Result<Array, Box<EvalAltResult>> {
         self.require(Capability::DOM_READ)?;
-        let ids = {
+        let ids: Vec<NodeId> = {
             let tree = self.lock("children")?;
-            tree.child_ids(self.id)
-                .map_err(|error| dom_error("children", &error))?
+            tree.children(self.id).collect()
         };
         Ok(ids
-            .iter()
+            .into_iter()
             .map(|child| Dynamic::from(self.sibling(child)))
             .collect())
+    }
+
+    fn first_child(&self) -> Result<Dynamic, Box<EvalAltResult>> {
+        self.require(Capability::DOM_READ)?;
+        let tree = self.lock("first_child")?;
+        let id = tree
+            .first_child(self.id)
+            .map_err(|error| dom_error("first_child", &error))?;
+        drop(tree);
+        Ok(id.map_or(Dynamic::UNIT, |child| Dynamic::from(self.sibling(child))))
+    }
+
+    fn last_child(&self) -> Result<Dynamic, Box<EvalAltResult>> {
+        self.require(Capability::DOM_READ)?;
+        let tree = self.lock("last_child")?;
+        let id = tree
+            .last_child(self.id)
+            .map_err(|error| dom_error("last_child", &error))?;
+        drop(tree);
+        Ok(id.map_or(Dynamic::UNIT, |child| Dynamic::from(self.sibling(child))))
+    }
+
+    fn previous_sibling(&self) -> Result<Dynamic, Box<EvalAltResult>> {
+        self.require(Capability::DOM_READ)?;
+        let tree = self.lock("previous_sibling")?;
+        let id = tree
+            .previous_sibling(self.id)
+            .map_err(|error| dom_error("previous_sibling", &error))?;
+        drop(tree);
+        Ok(id.map_or(Dynamic::UNIT, |sibling| {
+            Dynamic::from(self.sibling(sibling))
+        }))
+    }
+
+    fn next_sibling(&self) -> Result<Dynamic, Box<EvalAltResult>> {
+        self.require(Capability::DOM_READ)?;
+        let tree = self.lock("next_sibling")?;
+        let id = tree
+            .next_sibling(self.id)
+            .map_err(|error| dom_error("next_sibling", &error))?;
+        drop(tree);
+        Ok(id.map_or(Dynamic::UNIT, |sibling| {
+            Dynamic::from(self.sibling(sibling))
+        }))
+    }
+
+    fn parent(&self) -> Result<Dynamic, Box<EvalAltResult>> {
+        self.require(Capability::DOM_READ)?;
+        let tree = self.lock("parent")?;
+        let id = tree
+            .parent(self.id)
+            .map_err(|error| dom_error("parent", &error))?;
+        drop(tree);
+        Ok(id.map_or(Dynamic::UNIT, |parent| Dynamic::from(self.sibling(parent))))
     }
 
     fn get_attribute(&self, name: &str) -> Result<Dynamic, Box<EvalAltResult>> {
@@ -208,6 +266,13 @@ impl CustomType for NodeHandle {
             .with_fn("tag", |handle: &mut Self| handle.tag())
             .with_fn("text", |handle: &mut Self| handle.text())
             .with_fn("children", |handle: &mut Self| handle.children())
+            .with_fn("first_child", |handle: &mut Self| handle.first_child())
+            .with_fn("last_child", |handle: &mut Self| handle.last_child())
+            .with_fn("previous_sibling", |handle: &mut Self| {
+                handle.previous_sibling()
+            })
+            .with_fn("next_sibling", |handle: &mut Self| handle.next_sibling())
+            .with_fn("parent", |handle: &mut Self| handle.parent())
             .with_fn("get_attribute", |handle: &mut Self, name: &str| {
                 handle.get_attribute(name)
             })

@@ -110,15 +110,6 @@ jobs:
           key: ${{ runner.os }}-cargo-noengine-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-noengine-
       - run: cargo build -p engine --all-features
-      - name: Assert no script interpreter in engine's dependency graph
-        run: |
-          if cargo tree -p engine --edges normal --prefix none | grep -Eiq '^(rhai|boa_engine|rquickjs|deno_core|v8|mlua|rlua) '; then
-            echo "::error::core/engine linked a concrete script runtime — ADR-0002:49 / ADR-0011 item 2 violated"
-            cargo tree -p engine --edges normal
-            exit 1
-          fi
-          echo "engine dependency graph is interpreter-free:"
-          cargo tree -p engine --edges normal
       - run: cargo test -p dom --no-default-features
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------

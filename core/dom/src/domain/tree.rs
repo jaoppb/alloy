@@ -10,12 +10,11 @@
 //! serialization ([`crate::serialize_html`]) are read-only and never recurse.
 
 use crate::domain::attributes::{AttributeName, AttributeValue};
-use crate::domain::children::Children;
 use crate::domain::error::DomError;
 use crate::domain::node::{ElementData, NodeData, NodeId, NodeKind, Slot};
 use crate::domain::tag_name::TagName;
 use crate::domain::text::{CommentContent, TextContent};
-use crate::domain::traversal::{Ancestors, Descendants};
+use crate::domain::traversal::{Ancestors, Children, Descendants};
 
 /// A whole document tree: an arena of slots plus the id of the single
 /// `Document` root.
@@ -136,9 +135,26 @@ impl DomTree {
         self.node(node).map(NodeData::parent)
     }
 
-    /// A snapshot of `node`'s children in document order.
-    pub fn child_ids(&self, node: NodeId) -> Result<Children, DomError> {
-        self.node(node).map(|data| data.children().clone())
+    pub fn first_child(&self, node: NodeId) -> Result<Option<NodeId>, DomError> {
+        self.node(node).map(NodeData::first_child)
+    }
+
+    pub fn last_child(&self, node: NodeId) -> Result<Option<NodeId>, DomError> {
+        self.node(node).map(NodeData::last_child)
+    }
+
+    pub fn previous_sibling(&self, node: NodeId) -> Result<Option<NodeId>, DomError> {
+        self.node(node).map(NodeData::previous_sibling)
+    }
+
+    pub fn next_sibling(&self, node: NodeId) -> Result<Option<NodeId>, DomError> {
+        self.node(node).map(NodeData::next_sibling)
+    }
+
+    /// Lazy iterator over `parent`'s direct children in document order.
+    #[must_use]
+    pub fn children(&self, parent: NodeId) -> Children<'_> {
+        Children::new(self, parent)
     }
 
     pub fn tag(&self, node: NodeId) -> Result<&TagName, DomError> {
@@ -179,12 +195,6 @@ impl DomTree {
     }
 
     // ---- crate-internal helpers for traversal / serialize ----------
-
-    pub(crate) fn child_id_vec(&self, node: NodeId) -> Vec<NodeId> {
-        self.node(node)
-            .map(|data| data.children().iter().collect())
-            .unwrap_or_default()
-    }
 
     pub(crate) fn parent_of(&self, node: NodeId) -> Option<NodeId> {
         self.node(node).ok().and_then(NodeData::parent)
@@ -266,14 +276,29 @@ impl DomTree {
     }
 
     fn detach_from_parent(&mut self, child: NodeId) -> Result<(), DomError> {
-        match self.node(child)?.parent() {
-            None => Ok(()),
-            Some(parent) => {
-                self.node_mut(parent)?.children_mut().remove_value(child);
-                self.node_mut(child)?.set_parent(None);
-                Ok(())
-            }
+        let Some(parent) = self.node(child)?.parent() else {
+            return Ok(());
+        };
+        let prev = self.node(child)?.previous_sibling();
+        let next = self.node(child)?.next_sibling();
+
+        if let Some(prev_id) = prev {
+            self.node_mut(prev_id)?.set_next_sibling(next);
+        } else {
+            self.node_mut(parent)?.set_first_child(next);
         }
+
+        if let Some(next_id) = next {
+            self.node_mut(next_id)?.set_previous_sibling(prev);
+        } else {
+            self.node_mut(parent)?.set_last_child(prev);
+        }
+
+        let child_data = self.node_mut(child)?;
+        child_data.set_parent(None);
+        child_data.set_previous_sibling(None);
+        child_data.set_next_sibling(None);
+        Ok(())
     }
 
     fn place(
@@ -284,14 +309,33 @@ impl DomTree {
     ) -> Result<(), DomError> {
         match position {
             Attachment::End => {
-                self.node_mut(parent)?.children_mut().push(child);
+                let old_last = self.node(parent)?.last_child();
+                if let Some(last_id) = old_last {
+                    self.node_mut(last_id)?.set_next_sibling(Some(child));
+                    self.node_mut(child)?.set_previous_sibling(Some(last_id));
+                } else {
+                    self.node_mut(parent)?.set_first_child(Some(child));
+                    self.node_mut(child)?.set_previous_sibling(None);
+                }
+                self.node_mut(child)?.set_next_sibling(None);
+                self.node_mut(parent)?.set_last_child(Some(child));
                 Ok(())
             }
-            Attachment::Before(anchor) => self
-                .node_mut(parent)?
-                .children_mut()
-                .insert_before_value(anchor, child)
-                .ok_or(DomError::NodeNotFound(anchor)),
+            Attachment::Before(anchor) => {
+                if self.node(anchor)?.parent() != Some(parent) {
+                    return Err(DomError::NodeNotFound(anchor));
+                }
+                let prev = self.node(anchor)?.previous_sibling();
+                self.node_mut(child)?.set_previous_sibling(prev);
+                self.node_mut(child)?.set_next_sibling(Some(anchor));
+                self.node_mut(anchor)?.set_previous_sibling(Some(child));
+                if let Some(prev_id) = prev {
+                    self.node_mut(prev_id)?.set_next_sibling(Some(child));
+                } else {
+                    self.node_mut(parent)?.set_first_child(Some(child));
+                }
+                Ok(())
+            }
         }
     }
 
@@ -303,7 +347,7 @@ impl DomTree {
             let Some(&parent) = collected.get(cursor) else {
                 break;
             };
-            collected.extend(self.node(parent)?.children().iter());
+            collected.extend(self.children(parent));
             cursor = cursor.saturating_add(1);
         }
         Ok(collected)

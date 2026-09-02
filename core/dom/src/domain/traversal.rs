@@ -1,4 +1,4 @@
-//! [`Descendants`] and [`Ancestors`] tree iterators.
+//! [`Children`], [`Descendants`], and [`Ancestors`] tree iterators.
 //!
 //! Non-recursive tree iterators (v0.2 report §2.3). Each keeps an explicit
 //! stack / cursor; neither ever calls itself, so a hostile-depth tree cannot
@@ -6,6 +6,30 @@
 
 use crate::domain::node::NodeId;
 use crate::domain::tree::DomTree;
+
+/// Iterator over the direct children of a node in document order.
+/// Built by [`DomTree::children`].
+pub struct Children<'tree> {
+    tree: &'tree DomTree,
+    current: Option<NodeId>,
+}
+
+impl<'tree> Children<'tree> {
+    pub(crate) fn new(tree: &'tree DomTree, parent: NodeId) -> Self {
+        let current = tree.first_child(parent).ok().flatten();
+        Self { tree, current }
+    }
+}
+
+impl Iterator for Children<'_> {
+    type Item = NodeId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current?;
+        self.current = self.tree.next_sibling(current).ok().flatten();
+        Some(current)
+    }
+}
 
 /// Pre-order (document-order) iterator over the strict descendants of a node.
 /// Built by [`DomTree::descendants`].
@@ -25,8 +49,10 @@ impl<'tree> Descendants<'tree> {
     }
 
     fn push_children_of(&mut self, parent: NodeId) {
-        for child in self.tree.child_id_vec(parent).into_iter().rev() {
+        let mut cursor = self.tree.last_child(parent).ok().flatten();
+        while let Some(child) = cursor {
             self.stack.push(child);
+            cursor = self.tree.previous_sibling(child).ok().flatten();
         }
     }
 }

@@ -8,7 +8,6 @@
 use core::fmt;
 
 use crate::domain::attributes::AttributeMap;
-use crate::domain::children::Children;
 use crate::domain::tag_name::TagName;
 use crate::domain::text::{CommentContent, TextContent};
 
@@ -87,11 +86,17 @@ pub enum NodeKind {
 
 /// The payload of an occupied arena slot: kind + structural links. Every field
 /// is reached through [`crate::DomTree`] methods, never mutated from outside.
+///
+/// Implemented as an intrusive doubly-linked tree with 5 pointers (NodeId/Option<NodeId>),
+/// eliminating dynamic Vec allocations for child tracking.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct NodeData {
     kind: NodeKind,
     parent: Option<NodeId>,
-    children: Children,
+    first_child: Option<NodeId>,
+    last_child: Option<NodeId>,
+    previous_sibling: Option<NodeId>,
+    next_sibling: Option<NodeId>,
 }
 
 impl NodeData {
@@ -99,7 +104,10 @@ impl NodeData {
         Self {
             kind,
             parent: None,
-            children: Children::new(),
+            first_child: None,
+            last_child: None,
+            previous_sibling: None,
+            next_sibling: None,
         }
     }
 
@@ -119,12 +127,36 @@ impl NodeData {
         self.parent = parent;
     }
 
-    pub(crate) const fn children(&self) -> &Children {
-        &self.children
+    pub(crate) const fn first_child(&self) -> Option<NodeId> {
+        self.first_child
     }
 
-    pub(crate) const fn children_mut(&mut self) -> &mut Children {
-        &mut self.children
+    pub(crate) const fn set_first_child(&mut self, first_child: Option<NodeId>) {
+        self.first_child = first_child;
+    }
+
+    pub(crate) const fn last_child(&self) -> Option<NodeId> {
+        self.last_child
+    }
+
+    pub(crate) const fn set_last_child(&mut self, last_child: Option<NodeId>) {
+        self.last_child = last_child;
+    }
+
+    pub(crate) const fn previous_sibling(&self) -> Option<NodeId> {
+        self.previous_sibling
+    }
+
+    pub(crate) const fn set_previous_sibling(&mut self, previous_sibling: Option<NodeId>) {
+        self.previous_sibling = previous_sibling;
+    }
+
+    pub(crate) const fn next_sibling(&self) -> Option<NodeId> {
+        self.next_sibling
+    }
+
+    pub(crate) const fn set_next_sibling(&mut self, next_sibling: Option<NodeId>) {
+        self.next_sibling = next_sibling;
     }
 }
 

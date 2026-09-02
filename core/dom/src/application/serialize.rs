@@ -115,8 +115,10 @@ fn write_comment(output: &mut String, content: &str) {
 }
 
 fn push_children(tree: &DomTree, parent: NodeId, steps: &mut Vec<Step>) {
-    for child in tree.child_id_vec(parent).into_iter().rev() {
+    let mut cursor = tree.last_child(parent).ok().flatten();
+    while let Some(child) = cursor {
         steps.push(Step::Enter(child));
+        cursor = tree.previous_sibling(child).ok().flatten();
     }
 }
 

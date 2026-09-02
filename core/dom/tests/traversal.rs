@@ -50,6 +50,23 @@ fn traversal_from_a_stale_id_yields_nothing() {
     tree.append_child(tree.document(), doomed).unwrap();
     tree.remove(doomed).unwrap();
 
+    assert_eq!(tree.children(doomed).count(), 0);
     assert_eq!(tree.descendants(doomed).count(), 0);
     assert_eq!(tree.ancestors(doomed).count(), 0);
+}
+
+#[test]
+fn children_iterator_yields_direct_children_in_order() {
+    let mut tree = DomTree::new();
+    let parent = element(&mut tree, "ul");
+    let c1 = element(&mut tree, "li");
+    let c2 = element(&mut tree, "li");
+    let c3 = element(&mut tree, "li");
+    tree.append_child(tree.document(), parent).unwrap();
+    tree.append_child(parent, c1).unwrap();
+    tree.append_child(parent, c2).unwrap();
+    tree.append_child(parent, c3).unwrap();
+
+    let children: Vec<NodeId> = tree.children(parent).collect();
+    assert_eq!(children, vec![c1, c2, c3]);
 }

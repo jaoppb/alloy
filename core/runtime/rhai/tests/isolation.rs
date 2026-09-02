@@ -61,6 +61,10 @@ fn a_guarded_binding_follows_each_context_capability_set() {
             handler.clone(),
         )
         .expect("register on granted");
+    assert_eq!(
+        granted.guarded_bindings().get(&touch),
+        Some(&Capability::DOM_MUTATE)
+    );
     let allowed: i64 = engine.eval(&mut granted, "touch()").expect("allowed call");
     assert_eq!(allowed, 7);
 

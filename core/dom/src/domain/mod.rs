@@ -6,7 +6,6 @@
 //! Calisthenics rules apply in full — `core/dom` takes no exception.
 
 pub mod attributes;
-pub mod children;
 pub mod entity;
 pub mod error;
 pub mod node;

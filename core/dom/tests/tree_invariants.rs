@@ -36,8 +36,8 @@ fn attaching_a_node_that_already_has_a_parent_moves_it() {
 
     tree.append_child(second_parent, child).unwrap();
 
-    assert!(!tree.child_ids(first_parent).unwrap().contains(child));
-    assert!(tree.child_ids(second_parent).unwrap().contains(child));
+    assert!(!tree.children(first_parent).any(|c| c == child));
+    assert!(tree.children(second_parent).any(|c| c == child));
     assert_eq!(tree.parent(child).unwrap(), Some(second_parent));
 }
 
@@ -88,7 +88,7 @@ fn remove_tombstones_the_whole_subtree() {
         tree.node_kind(label).unwrap_err(),
         DomError::NodeNotFound(label)
     );
-    assert!(!tree.child_ids(tree.document()).unwrap().contains(list));
+    assert!(!tree.children(tree.document()).any(|c| c == list));
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn insert_before_places_the_new_child_at_the_anchor_position() {
     let second = element(&mut tree, "li");
     tree.insert_before(parent, second, third).unwrap();
 
-    let order: Vec<NodeId> = tree.child_ids(parent).unwrap().iter().collect();
+    let order: Vec<NodeId> = tree.children(parent).collect();
     assert_eq!(order, vec![first, second, third]);
     assert_eq!(tree.parent(second).unwrap(), Some(parent));
 }
@@ -123,8 +123,8 @@ fn insert_before_moves_a_node_that_already_has_a_parent() {
 
     tree.insert_before(new_parent, moved, anchor).unwrap();
 
-    assert!(!tree.child_ids(old_parent).unwrap().contains(moved));
-    let order: Vec<NodeId> = tree.child_ids(new_parent).unwrap().iter().collect();
+    assert!(!tree.children(old_parent).any(|c| c == moved));
+    let order: Vec<NodeId> = tree.children(new_parent).collect();
     assert_eq!(order, vec![moved, anchor]);
 }
 
@@ -155,10 +155,45 @@ fn detach_unlinks_a_node_without_tombstoning_it() {
 
     tree.detach(child).unwrap();
 
-    assert!(!tree.child_ids(parent).unwrap().contains(child));
+    assert!(!tree.children(parent).any(|c| c == child));
     assert_eq!(tree.parent(child).unwrap(), None);
     // still in the arena — detach is not remove
     assert!(tree.node_kind(child).is_ok());
+}
+
+#[test]
+fn doubly_linked_sibling_pointers_are_coherent() {
+    let mut tree = DomTree::new();
+    let parent = element(&mut tree, "ul");
+    let first = element(&mut tree, "li");
+    let second = element(&mut tree, "li");
+    let third = element(&mut tree, "li");
+    tree.append_child(tree.document(), parent).unwrap();
+    tree.append_child(parent, first).unwrap();
+    tree.append_child(parent, second).unwrap();
+    tree.append_child(parent, third).unwrap();
+
+    assert_eq!(tree.first_child(parent).unwrap(), Some(first));
+    assert_eq!(tree.last_child(parent).unwrap(), Some(third));
+
+    assert_eq!(tree.previous_sibling(first).unwrap(), None);
+    assert_eq!(tree.next_sibling(first).unwrap(), Some(second));
+
+    assert_eq!(tree.previous_sibling(second).unwrap(), Some(first));
+    assert_eq!(tree.next_sibling(second).unwrap(), Some(third));
+
+    assert_eq!(tree.previous_sibling(third).unwrap(), Some(second));
+    assert_eq!(tree.next_sibling(third).unwrap(), None);
+
+    // detach middle node
+    tree.detach(second).unwrap();
+    assert_eq!(tree.first_child(parent).unwrap(), Some(first));
+    assert_eq!(tree.last_child(parent).unwrap(), Some(third));
+    assert_eq!(tree.next_sibling(first).unwrap(), Some(third));
+    assert_eq!(tree.previous_sibling(third).unwrap(), Some(first));
+    assert_eq!(tree.previous_sibling(second).unwrap(), None);
+    assert_eq!(tree.next_sibling(second).unwrap(), None);
+    assert_eq!(tree.parent(second).unwrap(), None);
 }
 
 #[test]

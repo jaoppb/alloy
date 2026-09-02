@@ -82,6 +82,11 @@ fn every_node_handle_binding_is_capability_guarded() {
         ("tag", "document.tag()"),
         ("text", "document.text()"),
         ("children", "document.children()"),
+        ("first_child", "document.first_child()"),
+        ("last_child", "document.last_child()"),
+        ("previous_sibling", "document.previous_sibling()"),
+        ("next_sibling", "document.next_sibling()"),
+        ("parent", "document.parent()"),
         ("get_attribute", r#"document.get_attribute("x")"#),
         ("create_element", r#"document.create_element("x")"#),
         ("create_text", r#"document.create_text("x")"#),
@@ -104,6 +109,36 @@ fn every_node_handle_binding_is_capability_guarded() {
             "`{name}` must be denied with no capabilities, got {outcome:?}"
         );
     }
+}
+
+#[test]
+fn script_navigates_dom_via_intrusive_pointer_bindings() {
+    let engine = RhaiEngine::new();
+    let (_tree, mut context) = bound_context(&engine, profiles::dom_parser());
+
+    let script = r#"
+        let html = document.create_element("html");
+        document.append_child(html);
+        let head = html.create_element("head");
+        let body = html.create_element("body");
+        html.append_child(head);
+        html.append_child(body);
+
+        let first = html.first_child();
+        let last = html.last_child();
+        let next = first.next_sibling();
+        let prev = last.previous_sibling();
+        let parent = body.parent();
+
+        first.tag() == "head" &&
+        last.tag() == "body" &&
+        next.tag() == "body" &&
+        prev.tag() == "head" &&
+        parent.tag() == "html"
+    "#;
+
+    let result: bool = engine.eval(&mut context, script).expect("eval navigation");
+    assert!(result);
 }
 
 #[test]
