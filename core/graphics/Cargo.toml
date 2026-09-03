@@ -5,8 +5,19 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
+description = "Declarative display lists and the replaceable RenderBackend port (PRD-005, ADR-0009, ADR-0011)."
+
+# The first `[features]` section in the workspace. `ADR-0011:99-102` item 6 asks
+# every port for a `no-<adapter>` build: `--no-default-features` links no concrete
+# rasterizer at all, leaving the display list, the port and the conformance suite
+# to stand on their own. Note that until this crate existed, the `--all-features`
+# and `--no-default-features` flags already in CI were no-ops.
+[features]
+default = ["software-backend"]
+software-backend = []
 
 [dependencies]
+thiserror = { workspace = true }
 
 [lints]
 workspace = true

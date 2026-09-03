@@ -17,3 +17,9 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Golden-image failure artefacts. `graphics::golden` writes these next to the
+# reference so a reviewer can see what was produced and which pixels moved; they
+# are diagnostics, never inputs.
+*.actual.png
+*.diff.png

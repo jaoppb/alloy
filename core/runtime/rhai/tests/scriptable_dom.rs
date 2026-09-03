@@ -74,6 +74,72 @@ fn a_read_only_context_can_read_but_not_mutate_the_dom() {
 }
 
 #[test]
+fn each_binding_is_denied_by_the_exact_capability_the_manifest_declares() {
+    // The empty-capability sweep above proves every binding is guarded by
+    // *something*. It cannot prove a binding is guarded at the *right level*: a
+    // mutator silently downgraded to DOM_READ is still denied when nothing is
+    // granted, so that sweep stays green while a read-only script gains write
+    // access. This test closes that gap and is what makes the `Capability`
+    // column of NODE_HANDLE_BINDINGS load-bearing instead of documentation.
+    //
+    // Method: grant everything *except* the capability the manifest declares for
+    // the binding, then call it. It must be denied, naming exactly that
+    // capability. A binding requiring less than it claims becomes reachable and
+    // the test fails; a binding requiring more fails on the capability name.
+    let engine = RhaiEngine::new();
+    let every_capability = Capability::all();
+
+    for (name, required) in NODE_HANDLE_BINDINGS {
+        let Some(snippet) = snippet_for(name) else {
+            panic!(
+                "NODE_HANDLE_BINDINGS declares `{name}` but no snippet exercises it — \
+                 add one to `snippet_for` so the sweep covers the new binding"
+            )
+        };
+        let granted = CapabilitySet::new(every_capability.difference(*required));
+        let (_tree, mut context) = bound_context(&engine, granted);
+
+        match engine.eval_value(&mut context, snippet) {
+            Err(EngineError::PermissionDenied { capability }) => assert_eq!(
+                capability, *required,
+                "`{name}` must be denied naming exactly {required:?}, the capability its \
+                 manifest entry declares"
+            ),
+            other => panic!(
+                "`{name}` is reachable without {required:?} — the manifest declares a \
+                 capability the binding does not actually enforce. Got {other:?}"
+            ),
+        }
+    }
+}
+
+/// The call used to exercise each binding, keyed by its manifest name.
+///
+/// `None` for an unknown name, so a binding added to `NODE_HANDLE_BINDINGS`
+/// without a snippet here fails the sweep loudly instead of being skipped.
+fn snippet_for(name: &str) -> Option<&'static str> {
+    let snippet = match name {
+        "tag" => "document.tag()",
+        "text" => "document.text()",
+        "children" => "document.children()",
+        "first_child" => "document.first_child()",
+        "last_child" => "document.last_child()",
+        "previous_sibling" => "document.previous_sibling()",
+        "next_sibling" => "document.next_sibling()",
+        "parent" => "document.parent()",
+        "get_attribute" => r#"document.get_attribute("x")"#,
+        "create_element" => r#"document.create_element("x")"#,
+        "create_text" => r#"document.create_text("x")"#,
+        "append_child" => "document.append_child(document)",
+        "set_text" => r#"document.set_text("x")"#,
+        "set_attribute" => r#"document.set_attribute("a", "b")"#,
+        "remove_attribute" => r#"document.remove_attribute("a")"#,
+        _ => return None,
+    };
+    Some(snippet)
+}
+
+#[test]
 fn every_node_handle_binding_is_capability_guarded() {
     let engine = RhaiEngine::new();
     let (_tree, mut context) = bound_context(&engine, CapabilitySet::empty());

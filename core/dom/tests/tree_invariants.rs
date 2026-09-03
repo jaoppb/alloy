@@ -3,7 +3,9 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use dom::{AttributeName, AttributeValue, DomError, DomTree, NodeId, TagName, TextContent};
+use dom::{
+    AttributeName, AttributeValue, DomError, DomTree, NodeId, TagName, TextContent, serialize_html,
+};
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {
     tree.create_element(TagName::new(tag).expect("valid tag"))
@@ -247,6 +249,115 @@ fn invalid_tag_and_attribute_names_are_rejected() {
         AttributeName::new("bad=name"),
         Err(DomError::InvalidAttributeName(_))
     ));
+}
+
+#[test]
+fn an_attribute_name_rejects_every_character_that_could_break_out_of_a_tag() {
+    // This is a security boundary, not a tidiness rule. `serialize_html` writes
+    // the attribute *name* verbatim (`application/serialize.rs`, `write_attribute`
+    // escapes only the value), so `AttributeName::new` is the sole thing standing
+    // between a `DOM_MUTATE` script calling `set_attribute` and injected markup:
+    // the name `x><img` serializes to `<div x><img="y">`, which terminates the
+    // tag early and introduces an element the host never created.
+    //
+    // Each character class below is a separate rule in `is_forbidden`. Asserting
+    // them one by one is what makes removing any single class fail this test.
+    for forbidden in [
+        "x>y",  // closes the open tag
+        "x<y",  // opens a tag  (control: not forbidden today, see below)
+        "x\"y", // closes an attribute value
+        "x'y",  // closes a single-quoted value
+        "x/y",  // self-closing marker
+        "x=y",  // starts a value
+        "x y",  // splits into two attributes
+        "x\ty", "x\ny", "x\u{0}y", // ASCII control
+        "x\u{7f}y", "", // an empty name would serialize as a bare `="value"`
+    ] {
+        // `x<y` is deliberately in the list as a *documented gap*, asserted
+        // separately below — keep it out of the rejection loop.
+        if forbidden == "x<y" {
+            continue;
+        }
+        assert!(
+            matches!(
+                AttributeName::new(forbidden),
+                Err(DomError::InvalidAttributeName(_))
+            ),
+            "{forbidden:?} must be rejected: it can break out of the serialized tag"
+        );
+    }
+
+    // Documented gap, pinned so it cannot change silently: `<` is *not* in the
+    // forbidden set. It cannot terminate a tag on its own, so it is not an
+    // injection primitive here, but a real HTML5 tokenizer (v0.3 F5) treats it
+    // as one. If `is_forbidden` gains `<`, delete this assertion.
+    assert!(
+        AttributeName::new("x<y").is_ok(),
+        "`<` is currently accepted; revisit when core/html lands (v0.3 F5)"
+    );
+}
+
+#[test]
+fn an_attribute_name_is_lowercased_so_the_same_attribute_is_never_stored_twice() {
+    let node_name = AttributeName::new("DaTa-Id").expect("valid attribute name");
+    assert_eq!(node_name.as_str(), "data-id");
+    assert_eq!(node_name, AttributeName::new("data-id").expect("valid"));
+
+    // The rule exists to keep the map keyed by one canonical name: setting the
+    // same attribute in two casings must update in place, not add a second entry.
+    let mut tree = DomTree::new();
+    let node = tree.create_element(TagName::new("div").expect("valid tag"));
+    tree.append_child(tree.document(), node).expect("append");
+    tree.set_attribute(
+        node,
+        AttributeName::new("ID").expect("valid"),
+        AttributeValue::new("one"),
+    )
+    .expect("set ID");
+    tree.set_attribute(
+        node,
+        AttributeName::new("id").expect("valid"),
+        AttributeValue::new("two"),
+    )
+    .expect("set id");
+
+    assert_eq!(
+        serialize_html(&tree, tree.document()).expect("serialize"),
+        r#"<div id="two"></div>"#,
+        "two casings of one name must collapse to a single attribute"
+    );
+}
+
+#[test]
+fn remove_attribute_deletes_the_entry_and_is_a_no_op_for_an_absent_one() {
+    let mut tree = DomTree::new();
+    let node = tree.create_element(TagName::new("div").expect("valid tag"));
+    tree.append_child(tree.document(), node).expect("append");
+    let class = AttributeName::new("class").expect("valid");
+    let id = AttributeName::new("id").expect("valid");
+    tree.set_attribute(node, class.clone(), AttributeValue::new("box"))
+        .expect("set class");
+    tree.set_attribute(node, id, AttributeValue::new("one"))
+        .expect("set id");
+
+    tree.remove_attribute(node, &class).expect("remove class");
+
+    assert_eq!(tree.attribute(node, &class).expect("read class"), None);
+    assert_eq!(
+        serialize_html(&tree, tree.document()).expect("serialize"),
+        r#"<div id="one"></div>"#,
+        "the removed attribute must not survive into the serialized markup"
+    );
+
+    // Removing an attribute that was never set is not an error and leaves the
+    // rest of the map alone — `document.remove_attribute(...)` is a script
+    // binding, so a missing name must not be a failure path.
+    tree.remove_attribute(node, &class)
+        .expect("removing an absent attribute is a no-op");
+    assert_eq!(
+        serialize_html(&tree, tree.document()).expect("serialize"),
+        r#"<div id="one"></div>"#
+    );
 }
 
 #[test]
