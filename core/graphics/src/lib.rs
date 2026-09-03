@@ -74,3 +74,4 @@ pub use infrastructure::cascade::{
 };
 #[cfg(feature = "software-backend")]
 pub use infrastructure::software::SoftwareCpuBackend;
+pub use infrastructure::{golden, png};

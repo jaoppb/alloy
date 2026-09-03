@@ -10,6 +10,9 @@ exclude = [
     # it `panic!`s / `.expect()`s on the first violation on purpose.
     "core/engine/src/conformance.rs",
     "core/graphics/src/application/conformance.rs",
+    # The golden-image gate is the same kind of code: it panics on mismatch on
+    # purpose, and a missing reference is a test-authoring error.
+    "core/graphics/src/infrastructure/golden.rs",
 ]
 respect_gitignore = true
 
