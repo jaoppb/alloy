@@ -1,14 +1,8 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! `js — web-content ECMAScript runtime for untrusted page script`.
+//!
+//! Not implemented yet — this crate is a placeholder. See CLAUDE.md
+//! ("Current State") for the open conformance criteria that gate it, and follow
+//! the `domain` / `application` / `infrastructure` layering (ADR-0010) that
+//! `core/engine` and `core/runtime/rhai` already demonstrate.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+#![forbid(unsafe_code)]

@@ -11,15 +11,21 @@ web browser.
 docs/
 ├── README.md                           # This index
 ├── architecture/                       # System Architecture & Design
-│   └── overview.md                     # High-level architecture, C4 diagrams, and core patterns
+│   ├── overview.md                     # High-level architecture, C4 diagrams, and core patterns
+│   └── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
 ├── requirements/                       # Product & System Requirements (PRDs)
 │   ├── PRD-001-alloy-core-system.md    # Overall browser system requirements
 │   ├── PRD-002-abstract-runtime-engine.md # Abstract engine & Rhai integration requirements
 │   ├── PRD-003-script-isolation-and-sandboxing.md # Context isolation & capability security
 │   ├── PRD-004-hot-reload-subsystem.md # Runtime script hot-reloading requirements
-│   └── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
+│   ├── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
+│   ├── PRD-006-web-content-javascript-runtime-port.md # Replaceable content JS engine port
+│   ├── PRD-007-style-cascade-and-layout-engine-ports.md # Replaceable CSS cascade & layout ports
+│   └── PRD-008-html-tokenizer-and-tree-sink-ports.md # Replaceable HTML tokenizer & tree sink ports
 ├── reports/                            # Technical Reports (analysis, audits, roadmaps)
 │   ├── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
+│   ├── IMPLEMENTACAO-DETALHADA-V0-1.md # Detailed F0+F1+F2 implementation plan for v0.1
+│   ├── IMPLEMENTACAO-DETALHADA-V0-2.md # Detailed F3+F6+I1 implementation plan for v0.2
 │   ├── IMPLEMENTACAO-DETALHADA-V0-3.md # Detailed F4+F5+I2 implementation plan for v0.3
 │   ├── IMPLEMENTACAO-DETALHADA-V0-5.md # Detailed F8+F9+I4 implementation plan for v0.5
 │   └── VIOLACAO-N02-UNSAFE-NO-RHAI.md  # Audit: PRD-001:97 vs. the unsafe in rhai's binding seam
@@ -34,7 +40,11 @@ docs/
     ├── 0007-spdd-methodology-and-reasons-canvas-integration.md
     ├── 0008-git-hooks-and-code-quality-tooling.md
     ├── 0009-vulkan-rendering-with-opengl-fallback.md
-    └── 0010-clean-architecture-ddd-and-object-calisthenics.md
+    ├── 0010-clean-architecture-ddd-and-object-calisthenics.md
+    ├── 0011-replaceable-subsystem-ports-and-conformance-contract.md
+    ├── 0013-object-safe-runtime-engine-companion.md
+    ├── 0014-structured-logging-with-tracing.md
+    └── 0015-typed-errors-with-thiserror.md
 ```
 
 ---

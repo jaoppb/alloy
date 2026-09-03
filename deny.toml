@@ -1,0 +1,53 @@
+# cargo-deny configuration — supply-chain gate for the Alloy workspace.
+# Runs in CI as `cargo deny check` (roadmap §5, blocking from v0.1).
+# Verified against cargo-deny 0.20.
+
+[graph]
+all-features = true
+
+[advisories]
+yanked = "deny"
+ignore = [
+	# `rhai` (our muscle engine, ADR-0002) depends transitively on `smartstring`,
+	# archived by its author 2026-05-03. This is an *unmaintained* notice, not a
+	# vulnerability, and no safe upgrade exists until `rhai` migrates off it
+	# (upstream: compact_str / smol_str are the suggested replacements). Re-review
+	# on every `rhai` bump.
+	{ id = "RUSTSEC-2026-0249", reason = "unmaintained smartstring, transitive via rhai; no vuln, no upgrade path yet" },
+]
+
+[licenses]
+# Exactly the licenses currently in the dependency graph. Adding a dependency
+# that needs another license fails CI until the license is reviewed and added
+# here — that gate is intentional (roadmap §5).
+allow = [
+	"MIT",
+	"Apache-2.0",
+	"Apache-2.0 WITH LLVM-exception",
+	"BSD-2-Clause",
+	"Unicode-3.0",
+	# Weak copyleft, file-level (the model most browser engines ship under) —
+	# `smartstring`, transitive via `rhai`.
+	"MPL-2.0",
+	# Public-domain dedication — `tiny-keccak`, transitive via `rhai` -> `ahash`.
+	"CC0-1.0",
+]
+confidence-threshold = 0.9
+# The workspace crates carry no `license` key (the repo ships no LICENSE file
+# yet) and are all `publish = false`. Skip license checks for those; every
+# third-party crate is still checked.
+private = { ignore = true }
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+# Internal path deps have no version requirement and read as wildcards; that is
+# expected and fine. Registry wildcards are still denied.
+allow-wildcard-paths = true
+skip = []
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

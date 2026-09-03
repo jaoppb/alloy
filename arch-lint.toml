@@ -1,0 +1,139 @@
+# arch-lint — machine-enforced architecture rules for the Alloy workspace.
+# Docs: https://github.com/ynishi/arch-lint   ·   run: `just arch` (or `arch-lint check`)
+
+[analyzer]
+exclude = [
+    "**/target/**",
+    "**/node_modules/**",
+    # The port conformance suite (ADR-0011 item 6) is assertion code by nature —
+    # it is `pub` (not `#[cfg(test)]`) only so adapter `tests/` can import it, and
+    # it `panic!`s / `.expect()`s on the first violation on purpose.
+    "core/engine/src/conformance.rs",
+]
+respect_gitignore = true
+
+# --- architectural scopes ---------------------------------------------------
+
+[[scopes]]
+name = "domain"
+paths = ["core/engine/src/domain/**"]
+
+[[scopes]]
+name = "application"
+paths = ["core/engine/src/application/**"]
+
+[[scopes]]
+name = "engine"
+paths = ["core/engine/**"]
+
+[[scopes]]
+name = "runtime_rhai"
+paths = ["core/runtime/rhai/**"]
+
+[[scopes]]
+name = "alloy_cli"
+paths = ["alloy/**"]
+
+[[scopes]]
+name = "dom_domain"
+paths = ["core/dom/src/domain/**"]
+
+[[scopes]]
+name = "dom_application"
+paths = ["core/dom/src/application/**"]
+
+[[scopes]]
+name = "dom"
+paths = ["core/dom/**"]
+
+# --- layer dependency rules (hexagonal architecture) ------------------------
+
+# Domain layer must not depend on application, runtime adapters, or CLI
+[[deny-scope-dep]]
+from = "domain"
+to = ["application", "runtime_rhai", "alloy_cli"]
+message = "Domain layer must not depend on application ports or runtime infrastructure (ADR-0011)."
+
+# Engine port abstraction must not depend on concrete runtime adapters or CLI
+[[deny-scope-dep]]
+from = "engine"
+to = ["runtime_rhai", "alloy_cli"]
+message = "Engine abstraction crate must not depend on concrete script runtimes or CLI (ADR-0002 / ADR-0011)."
+
+# DOM domain layer must not depend on application layer or other subsystems
+[[deny-scope-dep]]
+from = "dom_domain"
+to = ["dom_application", "engine", "runtime_rhai", "alloy_cli"]
+message = "DOM domain layer must not depend on application layer, engine ports, runtime, or CLI."
+
+# DOM crate must not depend on engine, runtime adapters, or CLI
+[[deny-scope-dep]]
+from = "dom"
+to = ["engine", "runtime_rhai", "alloy_cli"]
+message = "core/dom must not depend on engine, concrete script runtimes, or CLI."
+
+# --- import restrictions ---------------------------------------------------
+
+# Engine must not import any concrete script runtime crate (ADR-0002:49 / ADR-0011 item 2)
+[[restrict-use]]
+name = "engine-interpreter-free"
+scope = "engine"
+deny = [
+    "rhai::*",
+    "boa_engine::*",
+    "rquickjs::*",
+    "deno_core::*",
+    "v8::*",
+    "mlua::*",
+    "rlua::*",
+]
+message = "core/engine must remain script-interpreter free (ADR-0002:49 / ADR-0011 item 2)."
+
+# Crate preference: prefer tracing over log
+[[require-use]]
+name = "prefer-tracing"
+files = ["core/**", "alloy/**"]
+prefer = "tracing"
+over = ["log"]
+message = "Use tracing instead of log for structured logging (ADR-0014)."
+
+# --- enabled: the rules that map to a concrete review ask --------------------
+
+# G3 / ADR-0008: no `.unwrap()` / `.expect()` in production code. Tests opt out
+# (mirrors clippy.toml `allow-unwrap-in-tests` / `allow-expect-in-tests`).
+[rules.no-unwrap-expect]
+enabled = true
+allow_in_tests = true
+
+# G1 / ADR-0014: the `log` facade is not used here — `tracing` is the only
+# logging surface.
+[rules.require-tracing]
+enabled = true
+
+# G1 / ADR-0014: the subscriber must take its level from the environment
+# (`EnvFilter`), never a hardcoded `Level::INFO`.
+[rules.tracing-env-init]
+enabled = true
+
+# --- disabled: rules that fight a deliberate, documented idiom --------------
+
+# `EngineError` keeps a hand-written `Display` / `Error` on purpose — `core/engine`
+# is the port boundary and takes no proc-macro dependency (see ADR-0015 §scope).
+[rules.require-thiserror]
+enabled = false
+
+# `x.lock().unwrap_or_else(|poison| poison.into_inner())` is the chosen
+# mutex-poison-recovery idiom (a panicked holder must not wedge the host); it is
+# not an error being swallowed.
+[rules.no-silent-result-drop]
+enabled = false
+
+[rules.no-error-swallowing]
+enabled = false
+
+# Not an async codebase yet.
+[rules.no-sync-io]
+enabled = false
+
+[rules.handler-complexity]
+enabled = false

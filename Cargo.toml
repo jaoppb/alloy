@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+	"alloy",
 	"core/css",
 	"core/dom",
 	"core/engine",
@@ -13,3 +14,53 @@ members = [
 	"devtools",
 	"extension",
 ]
+
+# Centralised package metadata. Every crate inherits these with `field.workspace = true`
+# so version, edition and MSRV are declared in exactly one place (roadmap F0, ADR-0006).
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+repository = "https://github.com/jaoppb/alloy"
+# NOTE: no `license` key yet — the repository ships no LICENSE file. Add one here
+# (e.g. "MIT OR Apache-2.0") once the maintainers pick a license; `deny.toml`
+# already expects that pair in its allow-list.
+publish = false
+
+# Centralised, exact-pinned external dependencies. A crate opts in with
+# `<dep> = { workspace = true }`. Versions are pinned exactly so the committed
+# `Cargo.lock` is the single source of truth for `cargo-deny` to audit.
+[workspace.dependencies]
+# `core/engine` uses this for the `Capability` bitflags of PRD-003:35-47. It is the
+# only third-party crate the engine abstraction is allowed to touch.
+bitflags = "=2.13.1"
+# Declared here so `core/runtime/rhai` (F2) is a one-line opt-in. Features are frozen:
+# default `rhai::INT` = i64 and `rhai::FLOAT` = f64 (no `only_i32`, no `f32_float`),
+# `sync` to satisfy `RuntimeEngine: Send + Sync`. Not yet in the dependency graph.
+rhai = { version = "=1.26.0", default-features = false, features = ["std", "sync"] }
+# `alloy` CLI arg parser (F2).
+clap = { version = "=4.5.51", features = ["derive"] }
+# Structured logging (ADR-0014). `alloy` inits the subscriber; libraries only emit.
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json", "fmt"] }
+# Typed errors outside the engine port (ADR-0015); `core/engine` keeps its manual `Display`.
+thiserror = "=2.0.17"
+
+# Strict lint gate (review G3), inherited via `lints.workspace = true`. `priority = -1`
+# lets the specific lints below override the group denies.
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"

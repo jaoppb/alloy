@@ -13,6 +13,10 @@ pre-commit:
       glob: "*.rs"
       run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+    arch-lint:
+      glob: "*.rs"
+      run: arch-lint check
+
     markdown-fmt:
       glob: "*.md"
       run: pnpm prettier --write {staged_files}
