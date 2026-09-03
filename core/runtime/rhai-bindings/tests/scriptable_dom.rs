@@ -15,7 +15,8 @@ use std::sync::{Arc, Mutex};
 
 use dom::{DomTree, serialize_html};
 use engine::{Capability, CapabilitySet, EngineError, RuntimeEngine, profiles};
-use rhai_runtime::{NODE_HANDLE_BINDINGS, RhaiEngine};
+use rhai_bindings::{NODE_HANDLE_BINDINGS, bind_dom};
+use rhai_runtime::RhaiEngine;
 
 const BUILD_SCRIPT: &str = r#"
     let html = document.create_element("html");
@@ -35,7 +36,7 @@ fn bound_context(
 ) -> (Arc<Mutex<DomTree>>, <RhaiEngine as RuntimeEngine>::Context) {
     let tree = Arc::new(Mutex::new(DomTree::new()));
     let mut context = engine.create_context(capabilities).expect("context");
-    context.bind_dom(Arc::clone(&tree)).expect("bind_dom");
+    bind_dom(&mut context, Arc::clone(&tree)).expect("bind_dom");
     (tree, context)
 }
 

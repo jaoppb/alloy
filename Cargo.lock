@@ -31,6 +31,7 @@ dependencies = [
  "clap",
  "dom",
  "engine",
+ "rhai-bindings",
  "rhai-runtime",
  "thiserror",
  "tracing",
@@ -433,10 +434,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "rhai-runtime"
+name = "rhai-bindings"
 version = "0.1.0"
 dependencies = [
  "dom",
+ "engine",
+ "rhai",
+ "rhai-runtime",
+ "tracing",
+]
+
+[[package]]
+name = "rhai-runtime"
+version = "0.1.0"
+dependencies = [
  "engine",
  "rhai",
  "tracing",

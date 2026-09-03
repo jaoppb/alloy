@@ -30,7 +30,7 @@ use dom::{AttributeName, AttributeValue, DomError, DomTree, NodeId, TagName, Tex
 use engine::{Capability, CapabilitySet, EngineError, EngineType, TypeRegistration};
 use rhai::{Array, CustomType, Dynamic, EvalAltResult, TypeBuilder};
 
-use crate::infrastructure::native::to_eval_error;
+use rhai_runtime::to_eval_error;
 
 /// Which capability each [`NodeHandle`] method requires. The F6 conformance
 /// sweep walks this table and asserts every entry is denied when the handle

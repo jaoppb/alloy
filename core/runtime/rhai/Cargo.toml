@@ -5,14 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Rhai backend implementing the core/engine RuntimeEngine / ExecutionContext port (ADR-0002, ADR-0011). The only place a rhai type is named."
+description = "Rhai backend implementing the core/engine RuntimeEngine / ExecutionContext port (ADR-0002, ADR-0011). Names no domain crate — the domain bridges live in rhai-bindings (v0.5 report section 2.12)."
 
 [dependencies]
 engine = { path = "../../engine" }
-# The scriptable-DOM bridge (`infrastructure::dom_bindings`, roadmap I1) needs the
-# real `DomTree`. `core/dom` is a pure domain crate — this edge stays one-way and
-# never lets a `rhai` type reach `core/dom`.
-dom = { path = "../../dom" }
 rhai = { workspace = true }
 tracing = { workspace = true }
 

@@ -5,13 +5,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use dom::DomTree;
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineType, EngineValue, ExecutionContext,
     FunctionName, NativeFn, TypeRegistration, VariableName,
 };
 
-use crate::infrastructure::dom_bindings::NodeHandle;
 use crate::infrastructure::marshal::RhaiValue;
 use crate::infrastructure::native;
 
@@ -42,14 +40,9 @@ pub struct RhaiContext {
     /// from Rust without going through the interpreter.
     native_functions: HashMap<FunctionName, NativeFn>,
     registered_types: Vec<TypeRegistration>,
-    /// The host-owned DOM tree bound by [`RhaiContext::bind_dom`], if any. The
-    /// context holds an `Arc` clone; the host reads the mutated tree after
-    /// `eval` returns (`ADR-0003`, contract §5.1).
-    dom: Option<Arc<Mutex<DomTree>>>,
     /// `name -> required` for every binding installed through
     /// [`RhaiContext::register_guarded_binding`]. The F6 conformance sweep walks
-    /// this alongside `NODE_HANDLE_BINDINGS` to prove no DOM binding is
-    /// unguarded (C-06).
+    /// this to prove no guarded binding is left unguarded (C-06).
     guarded_bindings: HashMap<FunctionName, Capability>,
 }
 
@@ -66,7 +59,6 @@ impl RhaiContext {
             deadline,
             native_functions: HashMap::new(),
             registered_types: Vec::new(),
-            dom: None,
             guarded_bindings: HashMap::new(),
         }
     }
@@ -99,33 +91,6 @@ impl RhaiContext {
     #[must_use]
     pub const fn guarded_bindings(&self) -> &HashMap<FunctionName, Capability> {
         &self.guarded_bindings
-    }
-
-    /// Adapter extension beyond the port (roadmap I1): bind a host-owned
-    /// [`DomTree`] into this context so scripts can read and mutate it through a
-    /// global `document` handle (C-03). Registers [`NodeHandle`] as a script
-    /// type and stamps the `document` handle with this context's capability set
-    /// — `ADR-0004` fixes capabilities at context creation, so baking the set
-    /// into the handle is sound. Every DOM binding then checks that set (C-06);
-    /// a missing capability is [`EngineError::PermissionDenied`] (C-07).
-    pub fn bind_dom(&mut self, tree: Arc<Mutex<DomTree>>) -> Result<(), EngineError> {
-        self.register_custom_type::<NodeHandle>()?;
-        let root = tree
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .document();
-        let document = NodeHandle::new(Arc::clone(&tree), root, self.capabilities);
-        let name = VariableName::parse("document")?;
-        self.set_custom_value(&name, document);
-        self.dom = Some(tree);
-        Ok(())
-    }
-
-    /// The DOM tree bound by [`bind_dom`](Self::bind_dom), if any. The host reads
-    /// the mutated tree through this after an evaluation returns.
-    #[must_use]
-    pub const fn dom(&self) -> Option<&Arc<Mutex<DomTree>>> {
-        self.dom.as_ref()
     }
 
     /// Adapter extension beyond the port: register a type that is both a port

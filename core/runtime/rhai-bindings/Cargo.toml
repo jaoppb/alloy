@@ -1,0 +1,21 @@
+[package]
+name = "rhai-bindings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Rhai <-> domain-crate bridges (DOM now; CSS/graphics/network/window in v0.5). Keeps the domain-coupled bindings out of rhai-runtime so the backend names no domain crate (v0.5 report section 2.12)."
+
+[dependencies]
+rhai-runtime = { path = "../rhai" }
+engine = { path = "../../engine" }
+# The scriptable-DOM bridge (`dom_bindings`, roadmap I1) needs the real `DomTree`.
+# `core/dom` is a pure domain crate — this edge stays one-way and never lets a
+# `rhai` type reach `core/dom`.
+dom = { path = "../../dom" }
+rhai = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

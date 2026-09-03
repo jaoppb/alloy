@@ -111,6 +111,16 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-noengine-
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
+      # v0.5 report §2.12 (R): the pure Rhai backend must name no domain crate —
+      # the domain bridges live in `rhai-bindings`. `just no-engine` also asserts
+      # `rhai-runtime -> !dom` locally; this keeps it green in CI.
+      - name: rhai-runtime links no domain crate
+        run: |
+          if cargo tree -p rhai-runtime --edges normal --prefix none | grep -Eq '^dom '; then
+            echo "✗ core/runtime/rhai depends on core/dom — move the bridge to rhai-bindings"
+            exit 1
+          fi
+          echo "✓ core/runtime/rhai is domain-crate free"
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
   fault-injection:
@@ -132,10 +142,11 @@ jobs:
           key: ${{ runner.os }}-cargo-fault-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-fault-
       # A panic injected into a guarded binding must be trapped as ScriptPanic
-      # with the process alive; run_with_fallback must recover from every error
-      # class. --test-threads=1 keeps the process-global panic hook deterministic.
-      # Fails immediately if any profile sets `panic = "abort"`.
-      - run: cargo test -p rhai-runtime --test fault_injection -- --test-threads=1
+      # with the process alive; run_dom_with_fallback must recover from every
+      # error class. --test-threads=1 keeps the process-global panic hook
+      # deterministic. Fails immediately if any profile sets `panic = "abort"`.
+      # The suite moved to `rhai-bindings` with the DOM bridge (v0.5 report §2.12).
+      - run: cargo test -p rhai-bindings --test fault_injection -- --test-threads=1
 
 
   supply-chain:

@@ -34,6 +34,14 @@ paths = ["core/engine/**"]
 name = "runtime_rhai"
 paths = ["core/runtime/rhai/**"]
 
+# The domain-coupled bridges (DOM now; CSS/graphics/network/window in v0.5) live
+# here, split out of `runtime_rhai` so the backend names no domain crate
+# (v0.5 report §2.12, the "R" step). The glob `core/runtime/rhai/**` does not
+# match `rhai-bindings`, so the two scopes stay disjoint.
+[[scopes]]
+name = "runtime_rhai_bindings"
+paths = ["core/runtime/rhai-bindings/**"]
+
 [[scopes]]
 name = "alloy_cli"
 paths = ["alloy/**"]
@@ -82,11 +90,19 @@ from = "dom_domain"
 to = ["dom_application", "engine", "runtime_rhai", "alloy_cli"]
 message = "DOM domain layer must not depend on application layer, engine ports, runtime, or CLI."
 
-# DOM crate must not depend on engine, runtime adapters, or CLI
+# DOM crate must not depend on engine, runtime adapters, bindings, or CLI
 [[deny-scope-dep]]
 from = "dom"
-to = ["engine", "runtime_rhai", "alloy_cli"]
-message = "core/dom must not depend on engine, concrete script runtimes, or CLI."
+to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "core/dom must not depend on engine, concrete script runtimes, the bindings crate, or CLI."
+
+# core/runtime/rhai is the pure engine-port backend after the R split: it must not
+# name a domain crate, the bindings crate, or the CLI. The DOM bridge and every
+# later CSS/graphics/network/window bridge lives in rhai-bindings (v0.5 §2.12).
+[[deny-scope-dep]]
+from = "runtime_rhai"
+to = ["dom", "runtime_rhai_bindings", "alloy_cli"]
+message = "core/runtime/rhai must name no domain crate — the bridges live in rhai-bindings (v0.5 report §2.12)."
 
 # Graphics domain layer must not depend on application layer or other subsystems
 [[deny-scope-dep]]
