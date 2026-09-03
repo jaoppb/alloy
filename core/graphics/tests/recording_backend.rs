@@ -12,6 +12,9 @@
 //! `core/engine/tests/mock_engine.rs`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+// Also included as a module by `tier_cascade.rs`, which uses the adapter but not
+// every accessor on it.
+#![allow(dead_code)]
 
 use graphics::{
     BackendTier, Color, CommandKind, DisplayList, DisplayListBuilder, FrameOperation, FrameState,

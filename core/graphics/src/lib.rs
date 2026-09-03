@@ -69,5 +69,8 @@ pub use domain::{
     tier::BackendTier,
     unit::{AU_PER_PX, Au, Px},
 };
+pub use infrastructure::cascade::{
+    BackendPreference, BackendSelection, FORCE_TIER_VARIABLE, select_backend, select_backend_with,
+};
 #[cfg(feature = "software-backend")]
 pub use infrastructure::software::SoftwareCpuBackend;

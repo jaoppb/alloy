@@ -28,6 +28,20 @@ impl BackendTier {
         matches!(self, Self::Software)
     }
 
+    /// Where this tier sits in the cascade: `0` is the most preferred.
+    ///
+    /// An explicit rank rather than `self as u8`, so the ordering is a stated
+    /// fact instead of a consequence of declaration order — and so the lint gate
+    /// does not have to be told that this particular cast is safe.
+    #[must_use]
+    pub const fn rank(self) -> u8 {
+        match self {
+            Self::Vulkan => 0,
+            Self::OpenGl => 1,
+            Self::Software => 2,
+        }
+    }
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
