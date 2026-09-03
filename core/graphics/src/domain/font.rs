@@ -93,3 +93,55 @@ impl fmt::Display for GlyphInstance {
         write!(formatter, "{} at {}", self.glyph, self.position)
     }
 }
+
+/// A first-class collection of positioned glyphs — one `DrawText` payload.
+///
+/// A collection type rather than a bare `Vec` (`ADR-0010` rule 3): a run is
+/// built once and read many times, and giving it a name is what lets the
+/// backend take `&GlyphRun` without exposing a mutable vector.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct GlyphRun {
+    glyphs: Vec<GlyphInstance>,
+}
+
+impl GlyphRun {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { glyphs: Vec::new() }
+    }
+
+    /// Collects a run from positioned glyphs.
+    #[must_use]
+    pub fn from_glyphs(glyphs: impl IntoIterator<Item = GlyphInstance>) -> Self {
+        Self {
+            glyphs: glyphs.into_iter().collect(),
+        }
+    }
+
+    pub fn push(&mut self, glyph: GlyphInstance) {
+        self.glyphs.push(glyph);
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.glyphs.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.glyphs.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &GlyphInstance> + '_ {
+        self.glyphs.iter()
+    }
+}
+
+impl<'run> IntoIterator for &'run GlyphRun {
+    type Item = &'run GlyphInstance;
+    type IntoIter = core::slice::Iter<'run, GlyphInstance>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.glyphs.iter()
+    }
+}
