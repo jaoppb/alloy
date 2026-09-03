@@ -9,6 +9,7 @@ pub(crate) mod convert;
 pub mod display_list;
 pub mod error;
 pub mod font;
+pub mod framebuffer;
 pub mod geometry;
 pub mod image;
 pub mod path;

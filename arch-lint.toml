@@ -9,6 +9,7 @@ exclude = [
     # it is `pub` (not `#[cfg(test)]`) only so adapter `tests/` can import it, and
     # it `panic!`s / `.expect()`s on the first violation on purpose.
     "core/engine/src/conformance.rs",
+    "core/graphics/src/application/conformance.rs",
 ]
 respect_gitignore = true
 

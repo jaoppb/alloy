@@ -1,7 +1,7 @@
 //! # `graphics` — declarative display lists and the render-backend port
 //!
 //! The **Skeleton-side** rasterization seam (`ADR-0003`): subsystems describe
-//! *what* to paint as an immutable [`DisplayList`], and a `RenderBackend`
+//! *what* to paint as an immutable [`DisplayList`], and a [`RenderBackend`]
 //! decides *how*. Layout never issues a draw call, and the backend never sees a
 //! DOM node or a style rule — which is what makes the GPU tiers of `F12`
 //! swappable without layout noticing (`PRD-005:62-63`, roadmap point `I6`).
@@ -51,7 +51,8 @@ pub mod domain;
 /// `PRD-005`.
 pub const PORT_SCHEMA_VERSION: u32 = 1;
 
-pub use application::{DisplayListBuilder, PxRect};
+pub use application::conformance;
+pub use application::{DisplayListBuilder, PxRect, RenderBackend};
 pub use domain::{
     color::{Color, Opacity},
     command::DisplayCommand,
@@ -60,6 +61,7 @@ pub use domain::{
     display_list::DisplayList,
     error::{CommandRejection, FrameOperation, FrameState, GraphicsError},
     font::{FontId, GlyphId, GlyphInstance, GlyphRun},
+    framebuffer::{BYTES_PER_PIXEL, Framebuffer},
     geometry::{Point, Rect, Size, SurfaceSize},
     image::ImageId,
     path::{Path, PathSegment, Stroke},
