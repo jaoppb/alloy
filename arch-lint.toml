@@ -46,6 +46,18 @@ paths = ["core/dom/src/application/**"]
 name = "dom"
 paths = ["core/dom/**"]
 
+[[scopes]]
+name = "graphics_domain"
+paths = ["core/graphics/src/domain/**"]
+
+[[scopes]]
+name = "graphics_application"
+paths = ["core/graphics/src/application/**"]
+
+[[scopes]]
+name = "graphics"
+paths = ["core/graphics/**"]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -71,6 +83,20 @@ message = "DOM domain layer must not depend on application layer, engine ports, 
 from = "dom"
 to = ["engine", "runtime_rhai", "alloy_cli"]
 message = "core/dom must not depend on engine, concrete script runtimes, or CLI."
+
+# Graphics domain layer must not depend on application layer or other subsystems
+[[deny-scope-dep]]
+from = "graphics_domain"
+to = ["graphics_application", "engine", "runtime_rhai", "alloy_cli"]
+message = "Graphics domain layer must not depend on application layer, engine ports, runtime, or CLI."
+
+# core/graphics is a pure rasterization domain: no DOM, no CSS, no engine, no runtime.
+# Every script bridge lives in core/runtime/rhai (v0.3 report decision 2.1), which is
+# also why docs/architecture/overview.md no longer lists `graphics -> engine`.
+[[deny-scope-dep]]
+from = "graphics"
+to = ["engine", "runtime_rhai", "alloy_cli", "dom"]
+message = "core/graphics must not depend on engine, DOM, concrete script runtimes, or CLI (PRD-005:62-63)."
 
 # --- import restrictions ---------------------------------------------------
 
