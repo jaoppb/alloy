@@ -15,10 +15,10 @@
 
 ### O que existe
 
-O workspace tem 11 membros declarados explicitamente em `Cargo.toml:1-13`, com o glob `core/runtime/*`
-reservado para futuros backends de script. Todos os 11 crates compilam e todos passam nos testes:
-`cargo test --workspace` produz 22 linhas `test result: ok`, correspondendo a **11 testes reais** — um
-`it_works()` por crate — e 11 suítes vazias de doc-test.
+O workspace tem 11 membros declarados explicitamente em `Cargo.toml:1-13`, com o glob `core/runtime/*` reservado para
+futuros backends de script. Todos os 11 crates compilam e todos passam nos testes: `cargo test --workspace` produz 22
+linhas `test result: ok`, correspondendo a **11 testes reais** — um `it_works()` por crate — e 11 suítes vazias de
+doc-test.
 
 O conteúdo de cada crate é idêntico e tem 14 linhas:
 
@@ -29,15 +29,14 @@ pub fn add(left: u64, right: u64) -> u64 {
 }
 ```
 
-A infraestrutura de qualidade local existe e é séria: `lefthook.yml:1-33` roda `cargo fmt`, `clippy
--D warnings`, `prettier` e `markdownlint-cli2` no pre-commit, e `cargo test` + `cargo check` no
-pre-push. `package.json:7-15` agrega isso em `pnpm check`.
+A infraestrutura de qualidade local existe e é séria: `lefthook.yml:1-33` roda `cargo fmt`, `clippy -D warnings`,
+`prettier` e `markdownlint-cli2` no pre-commit, e `cargo test` + `cargo check` no pre-push. `package.json:7-15` agrega
+isso em `pnpm check`.
 
-A especificação está madura e é utilizável como contrato de implementação — é o ativo mais valioso do
-repositório hoje. As assinaturas de `RuntimeEngine` e `ExecutionContext` estão escritas em
-`PRD-002:31-56`; os nove bitflags de `Capability` em `PRD-003:35-47`; os perfis de capability por
-subsistema em `PRD-003:55-58`; o fluxo de swap atômico em `PRD-004:37-63`; a cascata de três tiers
-gráficos em `PRD-005:37-49`; e os comandos de `DisplayList` em `PRD-005:65-72`.
+A especificação está madura e é utilizável como contrato de implementação — é o ativo mais valioso do repositório hoje.
+As assinaturas de `RuntimeEngine` e `ExecutionContext` estão escritas em `PRD-002:31-56`; os nove bitflags de
+`Capability` em `PRD-003:35-47`; os perfis de capability por subsistema em `PRD-003:55-58`; o fluxo de swap atômico em
+`PRD-004:37-63`; a cascata de três tiers gráficos em `PRD-005:37-49`; e os comandos de `DisplayList` em `PRD-005:65-72`.
 
 ### O que não existe
 
@@ -48,17 +47,17 @@ find . -name "main.rs" -not -path "./target/*"; grep -rn "\[\[bin\]\]" --include
 # → 0 resultados
 ```
 
-**Não existe binário.** O Alloy não é executável de forma alguma hoje: são 11 bibliotecas sem ponto de
-entrada. Este é o item mais subestimado do inventário, porque um browser é uma aplicação, e nenhuma das
-fases seguintes é demonstrável sem um crate `alloy` que amarre janela, event loop e subsistemas.
+**Não existe binário.** O Alloy não é executável de forma alguma hoje: são 11 bibliotecas sem ponto de entrada. Este é o
+item mais subestimado do inventário, porque um browser é uma aplicação, e nenhuma das fases seguintes é demonstrável sem
+um crate `alloy` que amarre janela, event loop e subsistemas.
 
 ```bash
 grep -rn "^\[dependencies\]" -A3 --include=Cargo.toml core devtools extension
 # → única dependência: engine = { path = "../../engine" } em core/runtime/rhai/Cargo.toml:7
 ```
 
-**Zero dependências externas.** Não há `rhai`, `vulkano`, `glow`, `glutin`, `winit`, `bitflags`,
-`notify` nem `boa_engine` declarados. Toda tecnologia citada nos ADRs é, hoje, uma intenção.
+**Zero dependências externas.** Não há `rhai`, `vulkano`, `glow`, `glutin`, `winit`, `bitflags`, `notify` nem
+`boa_engine` declarados. Toda tecnologia citada nos ADRs é, hoje, uma intenção.
 
 ```bash
 ls .github rust-toolchain.toml deny.toml .cargo spdd
@@ -71,15 +70,14 @@ grep -rn "forbid(unsafe_code)\|rust-version\|\[workspace.package\]\|\[workspace.
 # → 0 resultados
 ```
 
-Sem CI, sem toolchain fixada, sem MSRV, sem auditoria de dependências, sem testes de integração, sem
-benchmarks, sem fuzzing, sem versões centralizadas no workspace — e **nenhum script `.rhai`**, nem
-sequer um exemplo. A pasta `spdd/` exigida por `PRD-001:100` também não existe, embora o ADR-0007 a
-declare obrigatória para todo incremento funcional.
+Sem CI, sem toolchain fixada, sem MSRV, sem auditoria de dependências, sem testes de integração, sem benchmarks, sem
+fuzzing, sem versões centralizadas no workspace — e **nenhum script `.rhai`**, nem sequer um exemplo. A pasta `spdd/`
+exigida por `PRD-001:100` também não existe, embora o ADR-0007 a declare obrigatória para todo incremento funcional.
 
 ### ⚠️ Quatro defeitos já presentes no código atual
 
-Nenhum deles é causado por este roadmap — mas os quatro estão no caminho do trabalho da F0, e o custo
-de corrigi-los agora é próximo de zero.
+Nenhum deles é causado por este roadmap — mas os quatro estão no caminho do trabalho da F0, e o custo de corrigi-los
+agora é próximo de zero.
 
 **1. `rustfmt` não está instalado — o portão de qualidade está quebrado hoje.**
 
@@ -90,31 +88,29 @@ cargo fmt --all --check
 # → error: 'cargo-fmt' is not installed for the toolchain 'stable-x86_64-unknown-linux-gnu'
 ```
 
-O hook `rust-fmt` de `lefthook.yml:7-11` roda `cargo fmt` em todo commit que toque `.rs`. Na máquina
-atual, **qualquer commit de código Rust falha**. Correção: `rustup component add rustfmt`, e fixar a
-toolchain para que isso não dependa da máquina de cada dev.
+O hook `rust-fmt` de `lefthook.yml:7-11` roda `cargo fmt` em todo commit que toque `.rs`. Na máquina atual, **qualquer
+commit de código Rust falha**. Correção: `rustup component add rustfmt`, e fixar a toolchain para que isso não dependa
+da máquina de cada dev.
 
-**2. `Cargo.lock` está ignorado.** `.gitignore:4` remove o lockfile do versionamento. Isso é a
-convenção para bibliotecas, e o **oposto** do correto para uma aplicação: destrói a reprodutibilidade
-do build entre devs e CI, e torna impossível auditar supply-chain com `cargo-deny`, porque não há
-árvore de versões congelada para auditar. Com um browser puxando `vulkano`, um motor JS e uma pilha
-TLS, isso deixa de ser detalhe.
+**2. `Cargo.lock` está ignorado.** `.gitignore:4` remove o lockfile do versionamento. Isso é a convenção para
+bibliotecas, e o **oposto** do correto para uma aplicação: destrói a reprodutibilidade do build entre devs e CI, e torna
+impossível auditar supply-chain com `cargo-deny`, porque não há árvore de versões congelada para auditar. Com um browser
+puxando `vulkano`, um motor JS e uma pilha TLS, isso deixa de ser detalhe.
 
-**3. A tabela de dependências entre crates é ficção.** `docs/architecture/overview.md:80-92` documenta
-`dom → engine`, `html → dom, engine`, `window → graphics, engine` e assim por diante. Nenhum
-`Cargo.toml` declara **nenhuma** dessas relações. É o alvo, não o estado — e a distinção precisa ficar
-explícita no documento antes que alguém a leia como descrição.
+**3. A tabela de dependências entre crates é ficção.** `docs/architecture/overview.md:80-92` documenta `dom → engine`,
+`html → dom, engine`, `window → graphics, engine` e assim por diante. Nenhum `Cargo.toml` declara **nenhuma** dessas
+relações. É o alvo, não o estado — e a distinção precisa ficar explícita no documento antes que alguém a leia como
+descrição.
 
-**4. `edition = "2024"` sem `rust-version`.** Os 11 manifestos exigem a edição 2024 e nenhum declara
-MSRV. Um contribuidor com toolchain antiga descobre o problema num erro de compilação obscuro, não numa
-mensagem de requisito.
+**4. `edition = "2024"` sem `rust-version`.** Os 11 manifestos exigem a edição 2024 e nenhum declara MSRV. Um
+contribuidor com toolchain antiga descobre o problema num erro de compilação obscuro, não numa mensagem de requisito.
 
 ---
 
 ## 2. Requisitos × estado, critério a critério
 
-Os cinco PRDs somam **18 critérios de aceite** formais. Todos estão em `❌`. A tabela é o inventário
-completo do que a v1.0 precisa fechar.
+Os cinco PRDs somam **18 critérios de aceite** formais. Todos estão em `❌`. A tabela é o inventário completo do que a
+v1.0 precisa fechar.
 
 | #        | Critério                                                                     | Origem       | Status |
 | -------- | ---------------------------------------------------------------------------- | ------------ | ------ |
@@ -137,8 +133,8 @@ completo do que a v1.0 precisa fechar.
 | **C-17** | Fallback automático para `SoftwareCpuBackend` em headless                    | `PRD-005:90` | ❌     |
 | **C-18** | Serialização de display list e binding com Rhai testados                     | `PRD-005:91` | ❌     |
 
-Somam-se cinco requisitos não-funcionais, que **não têm critério de aceite mensurável escrito** e por
-isso precisam de um número antes de virarem verificáveis — a seção 5 propõe esses números.
+Somam-se cinco requisitos não-funcionais, que **não têm critério de aceite mensurável escrito** e por isso precisam de
+um número antes de virarem verificáveis — a seção 5 propõe esses números.
 
 | NFR      | Texto                                                    | Origem        | Problema para verificar                                         |
 | -------- | -------------------------------------------------------- | ------------- | --------------------------------------------------------------- |
@@ -150,23 +146,22 @@ isso precisam de um número antes de virarem verificáveis — a seção 5 prop�
 
 ### 2.1 O que a v1.0 entrega — definição de pronto
 
-A v1.0 prova a tese do produto: **um browser cuja mecânica é Rust e cuja política é script trocável a
-quente**, capaz de abrir uma página real simples e de ser reconfigurado sem recompilar.
+A v1.0 prova a tese do produto: **um browser cuja mecânica é Rust e cuja política é script trocável a quente**, capaz de
+abrir uma página real simples e de ser reconfigurado sem recompilar.
 
-Entra no escopo: os 18 critérios acima; um binário `alloy` multiplataforma (Linux, macOS, Windows);
-HTML5 tokenizer e tree builder cobrindo o subconjunto de páginas estáticas; CSS com seletores,
-cascata, box model e layout de fluxo normal mais Flexbox; rede com HTTP/1.1 sobre TLS; texto com
-fontes do sistema; imagens raster; e `core/js` executando JavaScript de conteúdo com bindings de DOM.
+Entra no escopo: os 18 critérios acima; um binário `alloy` multiplataforma (Linux, macOS, Windows); HTML5 tokenizer e
+tree builder cobrindo o subconjunto de páginas estáticas; CSS com seletores, cascata, box model e layout de fluxo normal
+mais Flexbox; rede com HTTP/1.1 sobre TLS; texto com fontes do sistema; imagens raster; e `core/js` executando
+JavaScript de conteúdo com bindings de DOM.
 
-Fica **fora** da v1.0, e deve ser dito em voz alta para não voltar como surpresa: HTTP/2 e HTTP/3,
-CSS Grid, animações e transições CSS, WebGL e Canvas 2D, WebAssembly, a ponte WebExtensions do crate
-`extension`, vídeo e áudio, e acessibilidade por API de plataforma. O crate `extension` permanece
-stub na v1.0 — e isso deve constar do release notes.
+Fica **fora** da v1.0, e deve ser dito em voz alta para não voltar como surpresa: HTTP/2 e HTTP/3, CSS Grid, animações e
+transições CSS, WebGL e Canvas 2D, WebAssembly, a ponte WebExtensions do crate `extension`, vídeo e áudio, e
+acessibilidade por API de plataforma. O crate `extension` permanece stub na v1.0 — e isso deve constar do release notes.
 
 ### 2.2 Qual runtime de JavaScript adotar
 
-Incluir `core/js` na v1.0 foi decisão explícita, e é o maior multiplicador de escopo do roadmap. A
-decisão que resta é **não escrever um motor de JavaScript**.
+Incluir `core/js` na v1.0 foi decisão explícita, e é o maior multiplicador de escopo do roadmap. A decisão que resta é
+**não escrever um motor de JavaScript**.
 
 | Opção            | O que é                                     | Custo                                                                                             | Veredito                                                                 |
 | ---------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -175,48 +170,43 @@ decisão que resta é **não escrever um motor de JavaScript**.
 | `rusty_v8`       | Binding para V8 (C++)                       | Build de dezenas de minutos, binário muito grande, toolchain C++ e cross-compile penoso nos 3 SOs | Rejeitada: custo de build e de portabilidade desproporcional para a v1.0 |
 | Motor próprio    | Parser, interpretador e GC escritos do zero | Anos-dev antes do primeiro `alert()`                                                              | Rejeitada: consumiria sozinho o cronograma inteiro                       |
 
-`boa_engine` é a escolha coerente com o projeto: mantém a matriz de CI sem compilador C/C++ e preserva
-**N-02**. O custo assumido é explícito: **páginas com JavaScript moderno pesado não vão funcionar na
-v1.0**, e a taxa de `test262` (seção 5) existe justamente para tornar esse limite visível em vez de
-vergonhoso.
+`boa_engine` é a escolha coerente com o projeto: mantém a matriz de CI sem compilador C/C++ e preserva **N-02**. O custo
+assumido é explícito: **páginas com JavaScript moderno pesado não vão funcionar na v1.0**, e a taxa de `test262`
+(seção 5) existe justamente para tornar esse limite visível em vez de vergonhoso.
 
-O que **não** se deve fazer é encaixar o motor JS na trait `RuntimeEngine` de `PRD-002:31-56`. Essa
-trait é do Muscle — `ADR-0006:63-68` separa "Web Content JavaScript (`core/js`)" de "Browser Muscle
-Engine (`core/engine` + `core/runtime/rhai`)" como responsabilidades distintas, e a seção 2.3 mostra
-que os dois lados nem sequer têm o mesmo modelo de ameaças. A forma de `RuntimeEngine` também não
-serve: `create_context`, `compile` e `eval` não modelam *realm* por aba, `Origin`, fila de microtasks
-nem event loop, que é justamente o que o runtime de conteúdo precisa.
+O que **não** se deve fazer é encaixar o motor JS na trait `RuntimeEngine` de `PRD-002:31-56`. Essa trait é do Muscle —
+`ADR-0006:63-68` separa "Web Content JavaScript (`core/js`)" de "Browser Muscle Engine (`core/engine` +
+`core/runtime/rhai`)" como responsabilidades distintas, e a seção 2.3 mostra que os dois lados nem sequer têm o mesmo
+modelo de ameaças. A forma de `RuntimeEngine` também não serve: `create_context`, `compile` e `eval` não modelam _realm_
+por aba, `Origin`, fila de microtasks nem event loop, que é justamente o que o runtime de conteúdo precisa.
 
-O desacoplamento que interessa é obtido repetindo o **padrão**, não a trait: `core/js` define a sua
-própria porta em `application/`, com `boa_engine` como um adaptador em `infrastructure/`. Trocar de
-motor JS continua sendo trocar um adaptador, e as duas fronteiras de script continuam sem se
-misturar.
+O desacoplamento que interessa é obtido repetindo o **padrão**, não a trait: `core/js` define a sua própria porta em
+`application/`, com `boa_engine` como um adaptador em `infrastructure/`. Trocar de motor JS continua sendo trocar um
+adaptador, e as duas fronteiras de script continuam sem se misturar.
 
 ### 2.3 ⚠️ Lacuna de especificação: JS de conteúdo é código hostil
 
-O modelo de ameaças de `PRD-003:21-24` descreve quatro cenários — script com bug, loop infinito,
-escalada de privilégio e poluição entre abas — e todos pressupõem **um script escrito pelo usuário**,
-isto é, alguém que quer que o browser funcione. JavaScript de página é a categoria oposta: código
-arbitrário de terceiros, potencialmente adversário, executando a cada navegação.
+O modelo de ameaças de `PRD-003:21-24` descreve quatro cenários — script com bug, loop infinito, escalada de privilégio
+e poluição entre abas — e todos pressupõem **um script escrito pelo usuário**, isto é, alguém que quer que o browser
+funcione. JavaScript de página é a categoria oposta: código arbitrário de terceiros, potencialmente adversário,
+executando a cada navegação.
 
-O enum `Capability` de `PRD-003:35-47` **não tem nenhuma flag que distinga conteúdo de muscle**. Pelo
-modelo atual, o script de uma página e o script de customização do usuário são cidadãos do mesmo tipo,
-diferindo apenas nos bits concedidos. Isso é insuficiente: falta *same-origin policy*, falta isolamento
-por aba com mecanismo definido — `PRD-003:24` nomeia o risco mas não prescreve a defesa — e falta
-decidir se abas compartilham processo.
+O enum `Capability` de `PRD-003:35-47` **não tem nenhuma flag que distinga conteúdo de muscle**. Pelo modelo atual, o
+script de uma página e o script de customização do usuário são cidadãos do mesmo tipo, diferindo apenas nos bits
+concedidos. Isso é insuficiente: falta _same-origin policy_, falta isolamento por aba com mecanismo definido —
+`PRD-003:24` nomeia o risco mas não prescreve a defesa — e falta decidir se abas compartilham processo.
 
-A v1.0 precisa de três adições ao PRD-003, e a fase **F7** as implementa: um perfil `WEB_CONTENT` que
-concede apenas `DOM_READ | DOM_MUTATE` sobre a árvore *da própria aba*, uma noção de `Origin` como
-value object carregado no `ExecutionContext`, e um limite de instruções por *task* distinto do limite
-de script muscle. **Atualizar o PRD-003 é entregável de F7**, não trabalho opcional de documentação.
+A v1.0 precisa de três adições ao PRD-003, e a fase **F7** as implementa: um perfil `WEB_CONTENT` que concede apenas
+`DOM_READ | DOM_MUTATE` sobre a árvore _da própria aba_, uma noção de `Origin` como value object carregado no
+`ExecutionContext`, e um limite de instruções por _task_ distinto do limite de script muscle. **Atualizar o PRD-003 é
+entregável de F7**, não trabalho opcional de documentação.
 
 ---
 
 ## 3. Escada de releases e fases
 
-Fase é unidade de trabalho; **release é o que se entrega**. As 14 fases abaixo se agrupam em sete
-versões, e cada versão só sai quando os seus micro-entregáveis rodam de verdade — nada de versão que
-existe só na tabela de planejamento.
+Fase é unidade de trabalho; **release é o que se entrega**. As 14 fases abaixo se agrupam em sete versões, e cada versão
+só sai quando os seus micro-entregáveis rodam de verdade — nada de versão que existe só na tabela de planejamento.
 
 ### 3.1 As sete versões
 
@@ -230,39 +220,37 @@ existe só na tabela de planejamento.
 | **v0.9** | Maleável e acelerado     | F11 + F12 · I5 · I6 | Hot-reload sem perder a página aberta, e Vulkan com cascata de fallback   | C-10 a C-13, C-15, C-16, C-18 | 37–53 d              |
 | **v1.0** | Endurecido               | F13                 | Instalar e usar: todos os portões verdes e pacote nos 3 SOs               | Os 18 critérios               | 15–25 d              |
 
-**Micro-entregáveis por versão** — cada item é uma coisa que alguém consegue rodar e ver. Se não roda,
-a versão não saiu.
+**Micro-entregáveis por versão** — cada item é uma coisa que alguém consegue rodar e ver. Se não roda, a versão não
+saiu.
 
-**v0.1** — `cargo run` abre e fecha o binário nos três SOs · `alloy --script hello.rhai` executa e
-imprime o retorno · um script em laço infinito é abortado por limite de instruções · um engine
-mockado substitui o Rhai sem que nenhum crate de domínio mude uma linha.
+**v0.1** — `cargo run` abre e fecha o binário nos três SOs · `alloy --script hello.rhai` executa e imprime o retorno ·
+um script em laço infinito é abortado por limite de instruções · um engine mockado substitui o Rhai sem que nenhum crate
+de domínio mude uma linha.
 
-**v0.2** — um script Rhai constrói uma árvore DOM e a serializa na saída · um script sem `DOM_MUTATE`
-recebe `PermissionDenied` ao tentar escrever · um script que entra em pânico é contido e o processo
-continua vivo, com o fallback assumindo.
+**v0.2** — um script Rhai constrói uma árvore DOM e a serializa na saída · um script sem `DOM_MUTATE` recebe
+`PermissionDenied` ao tentar escrever · um script que entra em pânico é contido e o processo continua vivo, com o
+fallback assumindo.
 
-**v0.3** — `alloy render pagina.html -o saida.png` produz um PNG byte a byte determinístico · a golden
-image roda em CI sem GPU · o subconjunto declarado da suíte html5lib fica verde.
+**v0.3** — `alloy render pagina.html -o saida.png` produz um PNG byte a byte determinístico · a golden image roda em CI
+sem GPU · o subconjunto declarado da suíte html5lib fica verde.
 
-**v0.5** — `alloy https://example.com` abre janela nativa e renderiza a página real · redimensionar a
-janela refaz o layout · **é a primeira versão apresentável a quem não é do time**, e a primeira
-candidata a release público.
+**v0.5** — `alloy https://example.com` abre janela nativa e renderiza a página real · redimensionar a janela refaz o
+layout · **é a primeira versão apresentável a quem não é do time**, e a primeira candidata a release público.
 
-**v0.7** — uma página com `<script>` altera o DOM e a tela repinta · script de uma origem não alcança
-o DOM de outra aba · a taxa de `test262` do subconjunto passa a ser publicada a cada release.
+**v0.7** — uma página com `<script>` altera o DOM e a tela repinta · script de uma origem não alcança o DOM de outra aba
+· a taxa de `test262` do subconjunto passa a ser publicada a cada release.
 
-**v0.9** — editar um `.rhai` com o browser aberto muda o comportamento sem recarregar a página · com
-Vulkan disponível ele é usado, e forçar a falha derruba para OpenGL e depois para software, sem que
-layout ou DOM percebam.
+**v0.9** — editar um `.rhai` com o browser aberto muda o comportamento sem recarregar a página · com Vulkan disponível
+ele é usado, e forçar a falha derruba para OpenGL e depois para software, sem que layout ou DOM percebam.
 
-**v1.0** — pacote instalável nos três SOs · os 18 critérios verdes · release notes dizendo em voz alta
-o que **não** existe (HTTP/2, Grid, animações, WebGL, Wasm, WebExtensions, vídeo, áudio).
+**v1.0** — pacote instalável nos três SOs · os 18 critérios verdes · release notes dizendo em voz alta o que **não**
+existe (HTTP/2, Grid, animações, WebGL, Wasm, WebExtensions, vídeo, áudio).
 
 ### 3.2 As fases
 
-Quatro trilhas correm em paralelo com 2–4 devs. **A** — runtime e sandbox. **B** — parsing, DOM, CSS
-e layout. **C** — gráficos, janela e rede. **D** — `core/js` e bindings de DOM. As fases são
-sequenciais **dentro** de cada trilha; entre trilhas, o que manda são os pontos de integração.
+Quatro trilhas correm em paralelo com 2–4 devs. **A** — runtime e sandbox. **B** — parsing, DOM, CSS e layout. **C** —
+gráficos, janela e rede. **D** — `core/js` e bindings de DOM. As fases são sequenciais **dentro** de cada trilha; entre
+trilhas, o que manda são os pontos de integração.
 
 | Fase    | Trilha | Conteúdo                                                                                                                                                                    | Entregável verificável                                       | Esforço `[modelado]` |
 | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------- |
@@ -291,23 +279,21 @@ Onde as trilhas obrigatoriamente se encontram — e onde vale marcar reunião:
 | **I2** | B ↔ C     | Árvore DOM vira `DisplayList` e chega ao rasterizador de software: **primeiro pixel**                 | F4 + F5   |
 | **I3** | B ↔ D     | `dom` estável o bastante para os bindings de JS; congelar a API pública de `dom` aqui                 | F5 + F7   |
 | **I4** | C ↔ todos | Binário abre janela real nos 3 SOs, busca URL remota e renderiza: **primeira demo apresentável**      | F8 + I2   |
-| **I5** | A ↔ D     | Event loop de JS convive com o watcher de hot-reload sem deadlock e sem *starvation*                  | F10 + F11 |
+| **I5** | A ↔ D     | Event loop de JS convive com o watcher de hot-reload sem deadlock e sem _starvation_                  | F10 + F11 |
 | **I6** | C ↔ todos | Vulkan e OpenGL entram sem que layout ou DOM percebam — prova de que `DisplayList` desacoplou de fato | F12       |
 
-**Mínimo viável** (a tese provada, headless, sem JS e sem GPU): tudo até a **v0.3** ≈ **92–140 d**.
-**Escopo completo da v1.0:** as sete versões ≈ **239–363 dias-dev**.
+**Mínimo viável** (a tese provada, headless, sem JS e sem GPU): tudo até a **v0.3** ≈ **92–140 d**. **Escopo completo da
+v1.0:** as sete versões ≈ **239–363 dias-dev**.
 
-Traduzir isso em calendário exige assumir a eficiência do paralelismo, que é onde estimativas
-costumam mentir. Com 3 devs e aproveitamento de ~65% `[modelado]` — trilhas que esperam umas pelas
-outras nos pontos de integração, revisão de código, incidentes —, são ~123–186 dias úteis, ou
-**6–9 meses de calendário**. Com 2 devs, o paralelismo de quatro trilhas deixa de existir e o
-intervalo vai para 9–14 meses.
+Traduzir isso em calendário exige assumir a eficiência do paralelismo, que é onde estimativas costumam mentir. Com 3
+devs e aproveitamento de ~65% `[modelado]` — trilhas que esperam umas pelas outras nos pontos de integração, revisão de
+código, incidentes —, são ~123–186 dias úteis, ou **6–9 meses de calendário**. Com 2 devs, o paralelismo de quatro
+trilhas deixa de existir e o intervalo vai para 9–14 meses.
 
-A ordem não é negociável em dois pontos. **F4 antes de F12**: escrever o rasterizador de software
-primeiro dá a CI um backend determinístico e sem GPU para golden images desde o início — inverter isso
-significa não ter como testar renderização até quase o fim. **F7 antes de F10**: definir a fronteira de
-conteúdo hostil antes de existir um motor JS evita retrofit de segurança, que é o modo mais caro e
-mais malsucedido de adicionar isolamento.
+A ordem não é negociável em dois pontos. **F4 antes de F12**: escrever o rasterizador de software primeiro dá a CI um
+backend determinístico e sem GPU para golden images desde o início — inverter isso significa não ter como testar
+renderização até quase o fim. **F7 antes de F10**: definir a fronteira de conteúdo hostil antes de existir um motor JS
+evita retrofit de segurança, que é o modo mais caro e mais malsucedido de adicionar isolamento.
 
 ---
 
@@ -326,7 +312,7 @@ Armadilha é técnica e imediata; risco de cronograma está na seção 7.
 | Reset de escopo do hot-reload apaga estado que o script assumia persistente                                                              | `on_reload()` de `PRD-001` §5.2 é o único caminho de re-hidratação; documentar que scripts são sem estado                                           |
 | `NaN` e coordenadas absurdas chegando ao driver (`PRD-005:80`)                                                                           | Sanitizar em `DisplayListBuilder`, com teste de propriedade alimentando `NaN`, `inf` e valores extremos                                             |
 | Três backends gráficos triplicam manutenção e teste                                                                                      | Software é o backend de referência; Vulkan e OpenGL provam-se contra as golden images dele                                                          |
-| Rasterização de fonte difere entre Linux, macOS e Windows e quebra golden images                                                         | Fonte embarcada e rasterizador próprio nos testes de referência; nunca fonte do sistema em golden image                                             |
+| Rasterização de fonte difere entre Linux, macOS e Windows e quebra golden images                                                         | Port `FontProvider` com provedor sintético/mock para testes de referência; runtime usa fontes do sistema via `SystemFontProvider`                   |
 | `<script>` síncrono bloqueia o tokenizer e `document.write` reentra nele — o pipeline imutável de `ADR-0010:114` não acomoda reentrância | Tratar o tokenizer como máquina de estados suspensível desde a F5; **não** descobrir isso na F10                                                    |
 | `dom` precisa despachar eventos para `js` enquanto `js` depende de `dom` (`overview.md:84`) — ciclo de crates                            | Porta (trait) em `dom/application/` implementada por `js`; o ciclo se quebra por inversão de dependência, não por crate utilitário compartilhado    |
 | Event loop de JS versus watcher de hot-reload de `PRD-004:32-34`: dois laços disputando a thread principal                               | Um único event loop dono da thread; watcher e compilação em worker, comunicando por canal — verificado em **I5**                                    |
@@ -337,9 +323,8 @@ Armadilha é técnica e imediata; risco de cronograma está na seção 7.
 
 ## 5. Portões de qualidade e métricas
 
-Todo portão abaixo é **bloqueante em CI**: falhou, não entra. Números marcados `[modelado]` são alvos
-propostos, ainda não calibrados contra medição real — a primeira execução de cada um vira a linha de
-base e substitui o alvo.
+Todo portão abaixo é **bloqueante em CI**: falhou, não entra. Números marcados `[modelado]` são alvos propostos, ainda
+não calibrados contra medição real — a primeira execução de cada um vira a linha de base e substitui o alvo.
 
 | Portão                         | Instrumento                           | Limite                                                       | O invariante que ele guarda                                                         |
 | ------------------------------ | ------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
@@ -355,16 +340,15 @@ base e substitui o alvo.
 | Conformidade JS                | `test262`, por subconjunto            | Taxa registrada e **monotônica** entre releases              | Torna o limite do `boa_engine` visível e mensurável, e detecta regressão            |
 | Renderização                   | Golden images no `SoftwareCpuBackend` | Diferença de pixel zero contra a referência                  | Prova que Vulkan e OpenGL não divergem do backend de referência — **I6**            |
 | Isolamento de falha            | Injeção de pânico por subsistema      | Host sobrevive em 100% dos casos                             | **N-03** (`PRD-001:98`) só é aferível assim                                         |
-| Domínio sem engine             | *Feature* `no-engine` na CI           | Todo crate de domínio compila e testa sem runtime anexado    | **N-04** (`PRD-001:99`); é a prova viva de que o ADR-0002 foi respeitado            |
+| Domínio sem engine             | _Feature_ `no-engine` na CI           | Todo crate de domínio compila e testa sem runtime anexado    | **N-04** (`PRD-001:99`); é a prova viva de que o ADR-0002 foi respeitado            |
 | Portabilidade                  | Matriz Linux · macOS · Windows        | Verde nos três                                               | Regressão de plataforma aparece no PR, não na véspera do release                    |
 
-Duas métricas de acompanhamento, sem limite bloqueante, revisadas por release: **tempo de build limpo**
-por SO (um browser degrada isso rápido e em silêncio) e **número de exceções ao `forbid(unsafe_code)`**,
-que só deve crescer com justificativa em revisão.
+Duas métricas de acompanhamento, sem limite bloqueante, revisadas por release: **tempo de build limpo** por SO (um
+browser degrada isso rápido e em silêncio) e **número de exceções ao `forbid(unsafe_code)`**, que só deve crescer com
+justificativa em revisão.
 
-Os portões não entram todos de uma vez — cada um passa a bloquear na versão em que o alvo que ele
-guarda passa a existir. Ligar um portão antes disso só produz ruído verde; ligar depois deixa dívida
-entrar sem ser vista.
+Os portões não entram todos de uma vez — cada um passa a bloquear na versão em que o alvo que ele guarda passa a
+existir. Ligar um portão antes disso só produz ruído verde; ligar depois deixa dívida entrar sem ser vista.
 
 | Passa a bloquear em | Portões que entram em vigor                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------------ |
@@ -385,23 +369,20 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 **Automatizável em CI, nos três SOs (`pnpm check` + `cargo test --workspace`):**
 
 - [ ] `cargo fmt --all --check` passa — hoje **falha** por ausência de `rustfmt` na toolchain.
-- [ ] Um crate de domínio compila e testa com a *feature* `no-engine`, provando que **N-04** é real e não
-      aspiracional.
-- [ ] Chamar capability não concedida devolve `EngineError::PermissionDenied` (**C-07**) — o teste falha
-      se alguém alargar um perfil de `PRD-003:55-58` por conveniência.
+- [ ] Um crate de domínio compila e testa com a _feature_ `no-engine`, provando que **N-04** é real e não aspiracional.
+- [ ] Chamar capability não concedida devolve `EngineError::PermissionDenied` (**C-07**) — o teste falha se alguém
+      alargar um perfil de `PRD-003:55-58` por conveniência.
 - [ ] Script Rhai em loop infinito aborta por limite de instruções (**C-04**), em vez de travar a suíte.
 - [ ] Script que entra em pânico não derruba o processo e aciona o fallback (**C-09**).
-- [ ] Edição com erro de sintaxe **não** substitui o AST em execução (**C-12**) — guarda a regra de
-      rollback de `PRD-004:72`.
+- [ ] Edição com erro de sintaxe **não** substitui o AST em execução (**C-12**) — guarda a regra de rollback de
+      `PRD-004:72`.
 - [ ] DOM e estado de janela sobrevivem a dez hot-reloads seguidos (**C-13**).
 - [ ] `DisplayListBuilder` sanitiza `NaN` e infinitos sem chegar ao backend (`PRD-005:80`).
-- [ ] Taxa de `test262` do subconjunto ≥ a do release anterior — falha em regressão, nunca em número
-      absoluto baixo.
+- [ ] Taxa de `test262` do subconjunto ≥ a do release anterior — falha em regressão, nunca em número absoluto baixo.
 
 **Só em headless sem GPU (runner de CI comum):**
 
-- [ ] Sem driver Vulkan nem OpenGL, a inicialização cai em `SoftwareCpuBackend` (**C-17**) e a página
-      ainda renderiza.
+- [ ] Sem driver Vulkan nem OpenGL, a inicialização cai em `SoftwareCpuBackend` (**C-17**) e a página ainda renderiza.
 - [ ] Golden images de uma página estática batem pixel a pixel com a referência.
 
 **Só em hardware com GPU real (não verificável em CI até existir runner com GPU):**
@@ -413,42 +394,37 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 **Só com interação manual, nos três SOs:**
 
 - [ ] Janela abre, redimensiona e fecha em Linux, macOS e Windows.
-- [ ] Editar um `.rhai` com o browser aberto muda o comportamento sem piscar a janela e sem perder a
-      página carregada.
+- [ ] Editar um `.rhai` com o browser aberto muda o comportamento sem piscar a janela e sem perder a página carregada.
 
 ---
 
 ## 7. Riscos
 
-1. **`core/js` é o caminho crítico e o maior risco isolado da v1.0.** Mesmo embarcando `boa_engine`, o
-   trabalho aberto são os bindings de DOM, o event loop, a fila de microtasks e a superfície de Web
-   APIs — historicamente o item que domina o cronograma de qualquer browser. A F10 é a fase com maior
-   variância de todo o roadmap, e o intervalo de 35–55 d é otimista se a superfície de API crescer por
-   demanda das páginas de teste.
+1. **`core/js` é o caminho crítico e o maior risco isolado da v1.0.** Mesmo embarcando `boa_engine`, o trabalho aberto
+   são os bindings de DOM, o event loop, a fila de microtasks e a superfície de Web APIs — historicamente o item que
+   domina o cronograma de qualquer browser. A F10 é a fase com maior variância de todo o roadmap, e o intervalo de 35–55
+   d é otimista se a superfície de API crescer por demanda das páginas de teste.
 
-2. **Parsing HTML5 é rotineiramente subestimado.** A especificação de tokenização e construção de
-   árvore é longa, cheia de casos de recuperação de erro, e não admite "quase certo": páginas reais
-   dependem de cada regra de *foster parenting* e de fechamento implícito. F5 pode estourar sozinha o
-   equivalente a uma fase inteira.
+2. **Parsing HTML5 é rotineiramente subestimado.** A especificação de tokenização e construção de árvore é longa, cheia
+   de casos de recuperação de erro, e não admite "quase certo": páginas reais dependem de cada regra de _foster
+   parenting_ e de fechamento implícito. F5 pode estourar sozinha o equivalente a uma fase inteira.
 
-3. **Três backends gráficos antes de um funcionar bem.** Vulkan e OpenGL na F12 chegam depois do
-   rasterizador de software, e a ordem protege o cronograma — mas se a F12 escorregar, a v1.0 sai com
-   um backend só. Isso é aceitável e deve ser decidido conscientemente, não por acidente na véspera.
+3. **Três backends gráficos antes de um funcionar bem.** Vulkan e OpenGL na F12 chegam depois do rasterizador de
+   software, e a ordem protege o cronograma — mas se a F12 escorregar, a v1.0 sai com um backend só. Isso é aceitável e
+   deve ser decidido conscientemente, não por acidente na véspera.
 
-4. **Quatro trilhas com 2–4 devs significa mais trilhas do que gente.** I3 e I5 são os gargalos: se a
-   API de `dom` não congelar em I3, a trilha D refaz bindings; se o event loop de I5 não for resolvido
-   por um único dono, dois laços disputando a thread principal produzem *deadlock* intermitente — a
-   classe de bug mais cara de diagnosticar.
+4. **Quatro trilhas com 2–4 devs significa mais trilhas do que gente.** I3 e I5 são os gargalos: se a API de `dom` não
+   congelar em I3, a trilha D refaz bindings; se o event loop de I5 não for resolvido por um único dono, dois laços
+   disputando a thread principal produzem _deadlock_ intermitente — a classe de bug mais cara de diagnosticar.
 
-5. **O débito de processo SPDD já existe e cresce em silêncio.** `PRD-001:100` exige prompt SPDD para
-   todo incremento funcional e `spdd/` não existe desde o commit inicial. Ou a F0 cria a pasta e passa
-   a gerar os canvases, ou o ADR-0007 é revisado para descrever o que o time realmente faz. Manter uma
-   regra escrita que ninguém segue corrói a autoridade de todos os outros ADRs.
+5. **O débito de processo SPDD já existe e cresce em silêncio.** `PRD-001:100` exige prompt SPDD para todo incremento
+   funcional e `spdd/` não existe desde o commit inicial. Ou a F0 cria a pasta e passa a gerar os canvases, ou o
+   ADR-0007 é revisado para descrever o que o time realmente faz. Manter uma regra escrita que ninguém segue corrói a
+   autoridade de todos os outros ADRs.
 
-6. **A especificação envelhece mais rápido que o código.** `docs/architecture/overview.md:80-92` já
-   documenta dependências que não existem. Sem a disciplina de atualizar ADR e PRD dentro da fase que
-   os contradiz — como a F7 faz com o PRD-003 —, a documentação vira ficção e o repositório perde seu
-   ativo mais valioso.
+6. **A especificação envelhece mais rápido que o código.** `docs/architecture/overview.md:80-92` já documenta
+   dependências que não existem. Sem a disciplina de atualizar ADR e PRD dentro da fase que os contradiz — como a F7 faz
+   com o PRD-003 —, a documentação vira ficção e o repositório perde seu ativo mais valioso.
 
 ---
 
@@ -469,7 +445,7 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 | `scripts/*.rhai`                      | **novo** — scripts padrão de UI, rede e pipeline, embarcados como fallback                   |
 | `spdd/prompt/`, `spdd/analysis/`      | **novo** — exigido por `PRD-001:100`                                                         |
 | `fuzz/`                               | **novo** — alvos de HTML, CSS e JS                                                           |
-| `core/graphics/tests/golden/`         | **novo** — imagens de referência e fonte embarcada para determinismo                         |
+| `core/graphics/tests/golden/`         | **novo** — imagens de referência e `FontProvider` sintético para determinismo                |
 | `docs/requirements/PRD-003-…`         | Perfil `WEB_CONTENT`, `Origin` e isolamento por aba — entregável de F7                       |
 | `docs/adr/0011-…`                     | **novo** — escolha do motor JS e a exceção de Object Calisthenics no tokenizer               |
 | `docs/architecture/overview.md:80-92` | Marcar a tabela como alvo até que as dependências existam de fato                            |
@@ -477,8 +453,8 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 
 ---
 
-> Nenhum item deste relatório foi executado: não existe binário para executar. Toda a análise vem da
-> leitura do código e da especificação no branch `main` (commit `0599cec`), das buscas com resultado
-> zero reproduzidas na seção 1, e de `cargo test --workspace` e `cargo clippy` rodados nesta máquina.
-> Os esforços em dias-dev são `[modelado]` — não há velocidade histórica deste time para calibrá-los, e
-> a primeira fase concluída deve ser usada para recalibrar todas as seguintes.
+> Nenhum item deste relatório foi executado: não existe binário para executar. Toda a análise vem da leitura do código e
+> da especificação no branch `main` (commit `0599cec`), das buscas com resultado zero reproduzidas na seção 1, e de
+> `cargo test --workspace` e `cargo clippy` rodados nesta máquina. Os esforços em dias-dev são `[modelado]` — não há
+> velocidade histórica deste time para calibrá-los, e a primeira fase concluída deve ser usada para recalibrar todas as
+> seguintes.

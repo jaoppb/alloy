@@ -26,7 +26,9 @@ Quatro decisões de escopo foram tomadas com o solicitante antes deste plano, e 
 1. **O vão entre `DomTree` e geometria é atravessado pelas portas do `PRD-007`, não por layout descartável.** O v0.3
    cria em `core/css` os agregados de fronteira e as traits `CascadeResolver`/`LayoutEngine`, com adaptadores mínimos —
    cascata de folha UA em Rust (sem parser CSS) e layout de fluxo em bloco. F9 troca os miolos atrás das mesmas traits.
-2. **O primeiro pixel inclui texto renderizado**, com fonte embarcada e rasterizador próprio — nunca fonte do sistema
+2. **O primeiro pixel inclui texto renderizado**, via porta `FontProvider` com `SystemFontProvider` (descoberta de
+   fontes do sistema via filesystem pure-Rust + `ttf-parser`), fallback emergencial procedural/bitmap em container bare,
+   e provedor sintético/mock determinístico para testes e goldens sem depender de assets binários
    (`ROADMAP-IMPLEMENTACAO-V1.md:315`).
 3. **A suíte html5lib entra vendorizada**, num recorte declarado por manifesto em `core/html/tests/data/`.
 4. **Entram três fatias além do mínimo**: C-18 antecipado (DisplayList scriptável sob `GRAPHICS_DRAW`), fuzzing de HTML
@@ -76,7 +78,7 @@ que ele deixa implícito em F9/v0.5 — nem as três fatias extras. O delta é e
 | Bloco                                                       | Esforço `[modelado]` | Estava no roadmap?                       |
 | ----------------------------------------------------------- | -------------------- | ---------------------------------------- |
 | F4a — display list, `RenderBackend`, rasterizador de caixas | 12–18 d              | Sim (parte dos 15–22 de F4)              |
-| F4b — texto: fonte embarcada, outlines, rasterizador        | 8–12 d               | Não — decisão de escopo 2                |
+| F4b — texto: `FontProvider`, fontes do SO, rasterizador     | 8–12 d               | Não — decisão de escopo 2                |
 | F4c — `core/css`: agregados + portas + adaptadores UA       | 10–15 d              | Não — antecipa uma fatia de F9           |
 | F5 — `core/html`: tokenizer suspensível + tree builder      | 25–40 d              | Sim, integral                            |
 | I2 — pipeline, `alloy` lib+bin, comando `render`, goldens   | 4–7 d                | Sim (implícito no ponto de integração)   |
@@ -212,22 +214,28 @@ Golden image byte a byte nos três SOs só existe se a aritmética for idêntica
   plataformas; o que não é: `mul_add`/FMA (contração), transcendentais de libm, e ordem de redução variável. Portanto:
   nenhuma chamada a `sin`/`cos`/`exp`, nenhuma `f32::mul_add`, achatamento de Bézier com **contagem fixa** de
   subdivisões derivada de uma estimativa que usa só as quatro operações e `sqrt`.
-- **Nenhuma fonte do sistema em teste algum** (`ROADMAP-IMPLEMENTACAO-V1.md:315`). A fonte é embarcada por
-  `include_bytes!`.
+- **Determinismo em testes via `FontProvider` sintético/mock** (`ROADMAP-IMPLEMENTACAO-V1.md:315`). A suíte de testes e
+  goldens de CI usa métricas e glifos sintéticos determinísticos injetados via trait `FontProvider`, desacoplando os
+  testes de fontes do SO e dispensando assets `.ttf` binários embarcados.
 - **Golden compara o `Framebuffer`, não o PNG.** O arquivo `.png` de referência é decodificado e comparado pixel a
   pixel; assim o portão de determinismo não fica refém do codificador.
 
 Isso vira **ADR-0014** (unidades fixas + política de determinismo de rasterização), que também registra a decisão do
 codec do §2.7.
 
-### 2.6 Texto: fonte embarcada, `ttf-parser`, rasterizador próprio
+### 2.6 Texto: porta `FontProvider`, fontes do sistema, `ttf-parser`, rasterizador próprio
 
-- `infrastructure/font/` — `FontDatabase` guarda faces; `FontId(u16)` indexa. O v0.3 embarca **uma** face
-  (`core/graphics/assets/`, licença OFL/permissiva versionada ao lado do `.ttf`, e citada no `deny.toml` como exceção de
-  asset, já que `cargo-deny` audita crates e não binários).
+- Porta **`FontProvider`** em `application/ports.rs` desacopla a obtenção de faces e métricas. Em runtime,
+  `SystemFontProvider` varre os diretórios padrão do SO (`/usr/share/fonts`, `~/.local/share/fonts`, `/Library/Fonts`,
+  `C:\Windows\Fonts`) em pure-Rust sem FFI, construindo um `FontCatalog` em memória de forma lazy e carregando bytes do
+  arquivo sob demanda.
+- `infrastructure/font/` — `FontDatabase` indexa faces por `FontId(u16)` e resolve famílias genéricas (`sans-serif`,
+  `serif`, `monospace`) mapeando para tabelas de fontes padrão do SO (ex.: DejaVu/Ubuntu no Linux, SF Pro/Helvetica no
+  macOS, Segoe UI/Arial no Windows) e inspecionando tabelas OpenType via `ttf-parser`. Em ambientes bare/containers sem
+  fontes do SO, há um gerador emergencial procedural/bitmap de glifos para evitar falhas em execução headless.
 - **`ttf-parser`** entra como a única dependência externa nova do v0.3: pure Rust, sem `unsafe` (preserva N-02,
-  `PRD-001:97`), faz só parsing de tabelas e contornos — nenhum rasterizador, nenhuma alocação escondida. Versão fixada
-  exata no `[workspace.dependencies]`, como manda a convenção do `Cargo.toml`.
+  `PRD-001:97`), faz parsing de tabelas e contornos de arquivos do sistema — nenhum rasterizador nativo C, nenhuma
+  alocação escondida. Versão fixada exata no `[workspace.dependencies]`, como manda a convenção do `Cargo.toml`.
 - **Shaping do v0.3 é deliberadamente ingênuo**: `cmap` char→glyph 1:1, avanços horizontais, kerning por `kern`/`GPOS`
   simples. **Fora**: ligaduras, BiDi, escritas complexas, quebra de linha por dicionário. Declarado em §2.14, e é o que
   `core/css` (F9) e `core/text` (v0.7+) endereçam depois.
@@ -384,15 +392,15 @@ contract record diz explicitamente que este port **tem** ponto de suspensão, ao
 
 ## 3. Plano de implementação
 
-| Fase    | Conteúdo                                                                             | Entregável verificável                                     | Esforço `[modelado]` |
-| ------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------- | -------------------- |
-| **F4a** | `core/graphics`: display list, builder sanitizador, `RenderBackend`, cascata, raster | **C-14**, **C-17**; golden de caixas em CI sem GPU         | 12–18 d              |
-| **F4b** | Texto: `FontDatabase`, `ttf-parser`, rasterizador de glifo, cache                    | Golden com texto idêntica nos 3 SOs                        | 8–12 d               |
-| **F4c** | `core/css`: agregados, portas do `PRD-007`, `ua_cascade`, `block_layout`             | `DomTree → PNG` sem HTML; troca de `MockCascadeResolver`   | 10–15 d              |
-| **F5**  | `core/html`: `Token`, ports, tokenizer suspensível, tree builder, html5lib           | Recorte html5lib verde; handshake suspend/resume testado   | 25–40 d              |
-| **I2**  | `alloy` lib+bin, `pipeline.rs`, `paint.rs`, comando `render`, goldens de página      | `alloy render pagina.html -o saida.png` determinístico     | 4–7 d                |
-| **I2b** | C-18: `display_list_bindings.rs`, `EngineError::Graphics`, serialização textual      | **C-18**; varredura C-06 e injeção de pânico cobrem o novo | 2–4 d                |
-| **P**   | Portões: fuzz de HTML, determinismo, conformidade, ADR-0014/0015, PRDs, contracts    | Três jobs de CI novos, bloqueantes                         | 2–3 d                |
+| Fase    | Conteúdo                                                                             | Entregável verificável                                       | Esforço `[modelado]` |
+| ------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | -------------------- |
+| **F4a** | `core/graphics`: display list, builder sanitizador, `RenderBackend`, cascata, raster | **C-14**, **C-17**; golden de caixas em CI sem GPU           | 12–18 d              |
+| **F4b** | Texto: port `FontProvider`, `SystemFontProvider`, `ttf-parser`, rasterizador, cache  | Golden com texto determinístico via mock/sintético nos 3 SOs | 8–12 d               |
+| **F4c** | `core/css`: agregados, portas do `PRD-007`, `ua_cascade`, `block_layout`             | `DomTree → PNG` sem HTML; troca de `MockCascadeResolver`     | 10–15 d              |
+| **F5**  | `core/html`: `Token`, ports, tokenizer suspensível, tree builder, html5lib           | Recorte html5lib verde; handshake suspend/resume testado     | 25–40 d              |
+| **I2**  | `alloy` lib+bin, `pipeline.rs`, `paint.rs`, comando `render`, goldens de página      | `alloy render pagina.html -o saida.png` determinístico       | 4–7 d                |
+| **I2b** | C-18: `display_list_bindings.rs`, `EngineError::Graphics`, serialização textual      | **C-18**; varredura C-06 e injeção de pânico cobrem o novo   | 2–4 d                |
+| **P**   | Portões: fuzz de HTML, determinismo, conformidade, ADR-0014/0015, PRDs, contracts    | Três jobs de CI novos, bloqueantes                           | 2–3 d                |
 
 **Ordem, e por que ela é assim.** F4a → F4b → F4c → **primeiro pixel sem HTML** → F5 → I2 → I2b → P. O ponto não óbvio:
 **o primeiro pixel chega antes do parser**. Ao fim de F4c existe um teste que monta um `DomTree` em Rust (ou pelo
@@ -419,10 +427,11 @@ F4 (a+b+c como um canvas de graphics e um de css), F5 e I2.
 6. **PNG + infra de golden (1–2 d)** — `png.rs` (§2.7); helper `assert_golden(framebuffer, path)` que compara pixels e,
    ao falhar, escreve `<nome>.actual.png` e um mapa de diferença.
 
-**F4b — passos (8–12 d):** face embarcada + licença + `FontDatabase`/`FontId` (1–2 d); `ttf-parser` no
-`[workspace.dependencies]` e extração de `cmap`/métricas/contornos (2–3 d); achatamento de Bézier com contagem fixa e
+**F4b — passos (8–12 d):** port `FontProvider`, `SystemFontProvider` com varredura lazy de diretórios do SO,
+`FontCatalog`, fallback emergencial em container e provedor sintético para testes (2–3 d); `ttf-parser` no
+`[workspace.dependencies]` e extração de `cmap`/métricas/contornos (2 d); achatamento de Bézier com contagem fixa e
 varredura scanline com cobertura inteira (3–4 d); cache de glifo + teste frio-vs-quente (1–2 d); `DrawText` no backend
-de software e a primeira golden com letra (1 d).
+de software e a primeira golden com letra sintética/determinística (1 d).
 
 **F4c — passos (10–15 d), em `core/css/`:** os cinco agregados + `CssError` + `PORT_SCHEMA_VERSION` (2–3 d);
 `snapshot(&DomTree)` e a decisão de `dom` como única dependência (1–2 d); `CascadeResolver`/`LayoutEngine` +
@@ -459,7 +468,7 @@ dias-dev `[modelado]`**.
 | Armadilha                                                                              | Mitigação                                                                                                                                |
 | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Golden image diverge entre Linux, macOS e Windows por ponto flutuante                  | `Au(i32)` em toda geometria; float só em contorno de glifo, sem FMA e sem transcendental; achatamento com contagem fixa (§2.5, ADR-0014) |
-| Fonte do sistema entra por descuido num teste e quebra a matriz                        | `FontDatabase` **não tem** API de carregar do sistema no v0.3; a única face é `include_bytes!`                                           |
+| Variação de fontes do SO quebra os testes de golden em CI                              | Testes e goldens utilizam estritamente o `FontProvider` sintético/mock; runtime usa `SystemFontProvider`                                 |
 | Cache de glifo altera o resultado entre execuções                                      | Teste que roda a mesma página com cache frio e quente e exige framebuffer idêntico                                                       |
 | `NaN` chegando ao backend (`PRD-005:80`)                                               | Sanitização no `DisplayListBuilder`, com as duas regras distintas de §2.3; teste de propriedade                                          |
 | Sanitizar clampando tudo esconde bug de layout                                         | Não-finito **recusa** (erro tipado), só o finito-fora-de-envelope clampa                                                                 |
@@ -472,8 +481,8 @@ dias-dev `[modelado]`**.
 | `cargo-fuzz` exige nightly e a toolchain está pinada em 1.97.1                         | Job próprio com `+nightly` e `rustup toolchain install nightly`; o resto da CI não muda                                                  |
 | `MAX_EXTENT` do clamp escolhido pequeno demais corta página legítima                   | Envelope derivado do viewport × fator documentado, com teste de página alta (10.000 px) que **não** é cortada                            |
 | `EngineError::Graphics` (I2b) muda superfície congelada do port de engine              | Aditivo, mas cumpre a formalidade do `ADR-0011:104`: `PORT_SCHEMA_VERSION 2 → 3` + nota de migração em `PRD-002` §4.2 + contract record  |
-| Licença da fonte embarcada não auditada — `cargo-deny` não vê assets                   | `.ttf` + arquivo de licença versionados lado a lado, com nota no `deny.toml` e no `README` do diretório de assets                        |
-| Repo ainda sem `LICENSE` (nota no `Cargo.toml`) e agora com asset de terceiros dentro  | Levantar com os mantenedores nesta entrega; não é bloqueante para o código, é para a distribuição                                        |
+| Ambiente bare container sem nenhuma fonte instalada falha renderização headless        | `SystemFontProvider` possui fallback emergencial procedural/bitmap de glifos embutido                                                    |
+| Repo ainda sem `LICENSE` (nota no `Cargo.toml`) e agora com novas dependências         | Levantar com os mantenedores nesta entrega; não é bloqueante para o código, é para a distribuição                                        |
 | `rhai-runtime` acumulando toda ponte de script                                         | Aceito no v0.3 (dois bridges); quebra em `core/runtime/rhai-bindings` quando chegar ao terceiro (risco §6.4)                             |
 | `spdd/` sem canvas para F4/F5/I2 enquanto `PRD-001:100` os exige                       | `/spdd-analysis` + `/spdd-reasons-canvas` antes do primeiro `/spdd-generate` de cada fase, como foi feito em F3 e F6                     |
 
@@ -553,9 +562,9 @@ Nada aqui foi executado. Nenhum item nasce marcado.
    adaptador de cascata scriptável e F11 o hot-reload. A quebra em `core/runtime/rhai-bindings` precisa ser decidida
    antes do terceiro, não depois do quinto.
 
-5. **A dependência nova (`ttf-parser`) e o asset de fonte abrem duas frentes de licenciamento** num repositório que
-   ainda não tem `LICENSE` (nota no `Cargo.toml`). `cargo-deny` cobre a primeira; a segunda depende de disciplina humana
-   — arquivo de licença versionado ao lado do `.ttf`.
+5. **A dependência nova (`ttf-parser`) abre frente de licenciamento auditável por `cargo-deny`**, eliminando a
+   necessidade de versionar assets binários `.ttf` de terceiros no repositório graças ao uso de fontes do sistema via
+   `SystemFontProvider` e provedores sintéticos em testes.
 
 6. **O v0.3 escreve três ports de uma vez.** É o maior lote de superfície pública do projeto até aqui, e o `ADR-0011`
    exige sete itens para cada um, incluindo suíte de conformidade, adaptador de referência, feature `no-*` e contract
@@ -571,10 +580,9 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 | `Cargo.toml`                                                                                                         | `[workspace.dependencies]` += `ttf-parser` com versão exata                                                                            |
 | `core/graphics/Cargo.toml`                                                                                           | + `ttf-parser`; features `software-backend` (default) e `no-backend`                                                                   |
 | `core/graphics/src/domain/`                                                                                          | **novo** — `Au`, `Rect`/`Point`/`Size`, `Color`, `Opacity`, `FontId`, `DisplayList`, `DisplayCommand`, `GraphicsError`, `CommandIndex` |
-| `core/graphics/src/application/` (`ports.rs`, `builder.rs`, `conformance.rs`)                                        | **novo** — `RenderBackend`, `DisplayListBuilder` sanitizador, `run_backend_suite`                                                      |
-| `core/graphics/src/infrastructure/` (`cascade.rs`, `software/`, `font/`, `png.rs`)                                   | **novo** — cascata de 3 tiers, rasterizador, fonte + glifos, codificador PNG                                                           |
-| `core/graphics/assets/`                                                                                              | **novo** — face `.ttf` embarcada + licença                                                                                             |
-| `core/graphics/tests/` (+ `tests/golden/`)                                                                           | **novo** — conformidade, sanitização, cascata, goldens de referência                                                                   |
+| `core/graphics/src/application/` (`ports.rs`, `builder.rs`, `conformance.rs`)                                        | **novo** — `RenderBackend`, `FontProvider`, `DisplayListBuilder` sanitizador, `run_backend_suite`                                      |
+| `core/graphics/src/infrastructure/` (`cascade.rs`, `software/`, `font/`, `png.rs`)                                   | **novo** — cascata de 3 tiers, rasterizador, `SystemFontProvider`, `FontCatalog`, glifos, codificador PNG                              |
+| `core/graphics/tests/` (+ `tests/golden/`)                                                                           | **novo** — conformidade, sanitização, cascata, goldens de referência com `FontProvider` sintético                                      |
 | `core/css/Cargo.toml`                                                                                                | + `dom = { path = "../dom" }`; features `builtin-adapters` (default) e `no-script`                                                     |
 | `core/css/src/domain/`                                                                                               | **novo** — `DomSnapshot`, `StyleSheetSet`, `StyledTree`, `LayoutBoxTree`, `ViewportConstraints`, `CssError`                            |
 | `core/css/src/application/` (`ports.rs`, `snapshot.rs`, `conformance.rs`)                                            | **novo** — `CascadeResolver`/`LayoutEngine`, `snapshot(&DomTree)`, suítes                                                              |
@@ -592,7 +600,7 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 | `scripts/paint.rhai`                                                                                                 | **novo** — exemplo de C-18                                                                                                             |
 | `fuzz/`                                                                                                              | **novo** — alvos `tokenize` e `tree_build` + corpus semeado                                                                            |
 | `.github/workflows/ci.yml`                                                                                           | **novo** — jobs `golden`, `html-conformance`, `fuzz` (todos bloqueantes); `no-engine` estendido aos 3 crates                           |
-| `deny.toml`                                                                                                          | Licença de `ttf-parser`; nota sobre o asset de fonte                                                                                   |
+| `deny.toml`                                                                                                          | Licença de `ttf-parser`                                                                                                                |
 | `docs/adr/0014-…` (determinismo e unidades), `docs/adr/0015-…` (exceção no tokenizer), `docs/adr/README.md`          | **novo** — dois MADRs + linhas no índice                                                                                               |
 | `docs/requirements/PRD-005-…`                                                                                        | **Retrofit ao `ADR-0011`**: variação, ameaça, ciclo de vida, conformidade, `no-backend`, freeze em F4                                  |
 | `docs/requirements/PRD-007-…`, `PRD-008-…`                                                                           | Emendas: adaptadores UA-only no v0.3; `TreeSink` implementado em `core/html`, não em `core/dom`                                        |

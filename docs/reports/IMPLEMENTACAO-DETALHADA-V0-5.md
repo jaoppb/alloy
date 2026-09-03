@@ -274,8 +274,8 @@ pela regra de §2.1: cripto processa bytes que o atacante escolhe.
 | TLS próprio                     | Handshake e cifra do zero           | Meses, e uma superfície criptográfica não auditada protegendo o usuário                    | Rejeitada: irresponsável                             |
 
 Raízes de confiança por `webpki-roots` (conjunto embarcado, determinístico) e **não** pelo _trust store_ do sistema — o
-mesmo raciocínio de fonte embarcada da v0.3 (`ROADMAP-IMPLEMENTACAO-V1.md:315`): teste que depende do estado da máquina
-não é teste.
+mesmo raciocínio do provedor sintético de fontes da v0.3 (`ROADMAP-IMPLEMENTACAO-V1.md:315`): teste que depende do
+estado da máquina não é teste.
 
 Fora da v0.5, declarado: HTTP/2, HTTP/3, cookies, cache em disco, autenticação, proxy, Brotli. **Dentro**, porque sai
 quase de graça: `Content-Encoding: gzip`/`deflate`, já que o `<img>` (§2.11) obriga um _inflate_ de qualquer forma.
@@ -369,15 +369,17 @@ SOs depois de o layout ficar dez vezes mais complexo.
 esmagadora maioria das páginas usa flex de linha única. Sai por decisão registrada no `MANIFEST.md`, nunca por
 descoberta na véspera.
 
-### 2.10 Fontes: três faces embarcadas, `font-family` com fallback determinístico
+### 2.10 Fontes: resolução de `font-family` com fallback para fontes do sistema
 
-`font-family` só significa alguma coisa com mais de uma face. A v0.3 embarca uma; a v0.5 embarca **três** — uma
-serifada, uma sem serifa e uma monoespaçada — e o `FontDatabase` ganha resolução de lista de famílias com fallback para
-a genérica.
+`font-family` no CSS ganha suporte completo à lista de famílias e mapeamento para as categorias genéricas (`sans-serif`,
+`serif`, `monospace`). Em runtime, o `SystemFontProvider` (introduzido na v0.3) resolve nomes de família através do
+catálogo do sistema (`FontCatalog`), utilizando a tabela de mapeamento por SO (ex.: `sans-serif` → DejaVu Sans/Ubuntu no
+Linux, SF Pro/Helvetica no macOS, Segoe UI/Arial no Windows; `serif` → DejaVu Serif/Times New Roman; `monospace` →
+DejaVu Sans Mono/Menlo/Consolas) combinada com inspeção de tabelas OpenType via `ttf-parser`.
 
-O que **não** entra, e é a decisão que protege a matriz de CI: **carregar fonte do sistema**. `FontDatabase` continua
-sem API para isso (`IMPLEMENTACAO-DETALHADA-V0-3.md:456`). Uma página que pede `font-family: Helvetica` cai na genérica
-embarcada, e a golden image continua idêntica em Linux, macOS e Windows por construção — não por disciplina.
+A separação introduzida na v0.3 é mantida: os testes de golden e conformidade continuam utilizando o `FontProvider`
+sintético/mock para garantir 100% de determinismo entre plataformas nos testes automatizados, enquanto o runtime do
+navegador resolve fontes reais do sistema operacional.
 
 ### 2.11 `<img>`, o _inflate_ que ele obriga, e o relayout que quase ninguém orça
 
@@ -480,8 +482,7 @@ fica escrita como contrato, e não como convenção que a F10 pode desconhecer.
 - **Não** implementar múltiplas abas. A v0.5 tem uma janela e um documento.
 - **Não** adicionar HTTP/2, cookies, cache em disco, proxy ou autenticação (§2.5).
 - **Não** adicionar `float`, `position`, Grid ou `::before`/`::after` (§2.8, §2.9).
-- **Não** carregar fonte do sistema, nem _trust store_ do sistema — as duas quebram determinismo e reprodutibilidade
-  (§2.5, §2.10).
+- **Não** carregar _trust store_ do sistema (§2.5), mantendo raízes TLS via `webpki-roots` para reprodutibilidade.
 - **Não** introduzir runtime assíncrono (§2.3).
 
 ---
@@ -572,7 +573,7 @@ contract records, `overview.md:92-93`, `deny.toml`, `CLAUDE.md` (1,5–2,5 d).
 | Segundo event loop aparece para "tratar rede" e disputa a thread principal                          | ADR-0017 escrito na F8b, antes da F11 e da F10 (`ROADMAP-IMPLEMENTACAO-V1.md:318`); I/O em worker, resultado por canal                 |
 | Colapso de margem tratado como detalhe e implementado por último                                    | É passo 1 da F9c, com asserção de retângulo própria; sem ele nenhuma página real bate                                                  |
 | Golden image quebra em massa quando a cascata real substitui a folha UA da v0.3                     | Regerar as goldens é esperado e deve ser **um commit isolado**, revisável imagem a imagem, nunca misturado com mudança de layout       |
-| `font-family` puxa fonte do sistema e destrói a matriz de 3 SOs                                     | `FontDatabase` continua sem API de carregar do sistema; as três faces são `include_bytes!` (§2.10)                                     |
+| Variação de fontes do SO diverge os testes de renderização                                          | Testes automatizados usam `FontProvider` sintético; resolução de `font-family` do sistema opera no runtime (§2.10)                     |
 | Raízes de confiança do sistema tornam o teste dependente da máquina                                 | `webpki-roots` embarcado; nenhum teste toca o _trust store_ do SO                                                                      |
 | I4 só verificável com internet, e o CI passa a depender de `example.com`                            | `MockTransport` com fixtures + `HeadlessWindowSystem`; a rede real fica em teste manual declarado, nunca em portão                     |
 | Relayout por chegada de imagem entra em laço com a busca de subrecursos                             | Coalescência por quadro no event loop + teste com 50 imagens que exige um número **limitado** de relayouts                             |
@@ -581,7 +582,7 @@ contract records, `overview.md:92-93`, `deny.toml`, `CLAUDE.md` (1,5–2,5 d).
 | Quebra de `rhai-runtime` adiada "para não atrapalhar a F9"                                          | R é o passo 1 do plano; adiar dobra o custo e joga o retrabalho em cima de M (§2.12)                                                   |
 | Recorte de CSS encolhe em silêncio para o CI ficar verde                                            | `MANIFEST.md` + runner que falha nos dois sentidos, no molde do recorte html5lib da v0.3                                               |
 | `PRD-009` e `PRD-010` nunca escritos, e os ports nascem fora do contrato                            | São entregável da fase P, com os sete itens de `ADR-0011:79-105` conferidos um a um na revisão                                         |
-| Repositório ainda sem `LICENSE` (`Cargo.toml:25-27`) e agora com pilha TLS e três fontes dentro     | Levantar com os mantenedores nesta entrega; bloqueia distribuição, não código — e a v0.5 é a primeira versão distribuível              |
+| Repositório ainda sem `LICENSE` (`Cargo.toml:25-27`) e agora com pilha TLS                          | Levantar com os mantenedores nesta entrega; bloqueia distribuição, não código — e a v0.5 é a primeira versão distribuível              |
 | `spdd/` sem canvas para F8/F9/M/I4 enquanto `PRD-001:100` os exige                                  | `/spdd-analysis` + `/spdd-reasons-canvas` antes do primeiro `/spdd-generate` de cada fase                                              |
 
 ---
@@ -706,7 +707,7 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 | `core/window/src/application/` (`ports.rs`, `conformance.rs`)                                            | **novo** — `WindowSystem`, `Presenter`, `run_window_suite`, `HeadlessWindowSystem`                          |
 | `core/window/src/infrastructure/` (`winit_system.rs`, `softbuffer_presenter.rs`)                         | **novo** — adaptadores; nenhum tipo de `winit` em assinatura pública                                        |
 | `core/graphics/src/infrastructure/software/image.rs`                                                     | **novo** — `DrawImage` com amostragem de caixa em inteiros                                                  |
-| `core/graphics/src/infrastructure/png_decode.rs`, `assets/` (2 faces novas)                              | **novo** — decodificador PNG sobre o _inflate_; serifada e monoespaçada + licenças                          |
+| `core/graphics/src/infrastructure/png_decode.rs`                                                         | **novo** — decodificador PNG sobre o _inflate_                                                              |
 | `core/engine/src/domain/error.rs:65`                                                                     | `Subsystem { subsystem, operation, reason }` generalizando `Dom`/`Graphics`; schema 3 → 4                   |
 | `alloy/src/application/` (`navigation.rs`, `subresource.rs`, `event_loop.rs`)                            | **novo** — máquina de navegação, fila de subrecursos, laço único da thread principal                        |
 | `alloy/src/application/paint.rs`                                                                         | Inalterado — a promoção prometida na v0.3 é **reavaliada na F10** (§2.14)                                   |
@@ -715,7 +716,7 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 | `core/runtime/rhai/benches/hook_overhead.rs`                                                             | **novo** — `criterion`, p99 do `on_event`                                                                   |
 | `fuzz/fuzz_targets/` (`css_parse.rs`, `inflate.rs`, `png_decode.rs`)                                     | **novo** — três alvos                                                                                       |
 | `.github/workflows/ci.yml`                                                                               | **novo** — jobs `hook-benchmark`, `unsafe-audit`, `css-conformance`; `no-engine` estendido                  |
-| `deny.toml:19-23`                                                                                        | Licenças da pilha TLS e de `winit`/`softbuffer`; nota sobre as duas fontes novas                            |
+| `deny.toml:19-23`                                                                                        | Licenças da pilha TLS e de `winit`/`softbuffer`                                                             |
 | `docs/adr/0016-…` (`unsafe` por superfície de ameaça), `docs/adr/0017-…` (event loop único), `README.md` | **novo** — dois MADRs + linhas no índice (0012 segue reservado, `ADR-0011:128`)                             |
 | `docs/requirements/PRD-009-…`, `PRD-010-…`                                                               | **novo** — os dois seam PRDs dos ports de rede e de janela                                                  |
 | `docs/requirements/PRD-002-…`                                                                            | Nota de migração do `PORT_SCHEMA_VERSION` 3 → 4 (`EngineError::Subsystem`)                                  |
