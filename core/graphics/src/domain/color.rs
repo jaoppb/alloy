@@ -152,6 +152,16 @@ impl Opacity {
         Some(Self(convert::unit_interval_to_u8(value)))
     }
 
+    /// An opacity from an already-quantised 8-bit level.
+    ///
+    /// The compositor composes opacities that are already `u8`, and sending
+    /// them back through [`Self::from_unit_interval`] would round a second
+    /// time.
+    #[must_use]
+    pub const fn from_level(level: u8) -> Self {
+        Self(level)
+    }
+
     #[must_use]
     pub const fn level(self) -> u8 {
         self.0

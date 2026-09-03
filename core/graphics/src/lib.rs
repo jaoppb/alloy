@@ -43,6 +43,7 @@
 
 pub mod application;
 pub mod domain;
+pub mod infrastructure;
 
 /// The observable version of this port's boundary aggregates.
 ///
@@ -68,3 +69,5 @@ pub use domain::{
     tier::BackendTier,
     unit::{AU_PER_PX, Au, Px},
 };
+#[cfg(feature = "software-backend")]
+pub use infrastructure::software::SoftwareCpuBackend;

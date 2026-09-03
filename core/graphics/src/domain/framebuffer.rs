@@ -62,6 +62,29 @@ impl Framebuffer {
         Some(Color::rgba(red, green, blue, alpha))
     }
 
+    /// Replaces the colour at `(column, row)`.
+    ///
+    /// A coordinate outside the buffer is a no-op, never a panic: the
+    /// rasterizer clips before it draws, and a defect there should show up as a
+    /// wrong picture a golden image catches, not as a crashed render.
+    ///
+    /// Public because composing a buffer by hand is a legitimate need — the
+    /// golden-image difference map does exactly this — and because gating a
+    /// method on the `software-backend` feature would make the type's surface
+    /// depend on which adapter happens to be linked.
+    pub fn set_pixel(&mut self, column: u32, row: u32, color: Color) {
+        let Some(offset) = self.byte_offset(column, row) else {
+            return;
+        };
+        let Some(end) = offset.checked_add(BYTES_PER_PIXEL) else {
+            return;
+        };
+        let Some(slot) = self.pixels.get_mut(offset..end) else {
+            return;
+        };
+        slot.copy_from_slice(&color.to_rgba8());
+    }
+
     /// The raw buffer, for an encoder or a comparison.
     #[must_use]
     pub fn as_rgba8(&self) -> &[u8] {
