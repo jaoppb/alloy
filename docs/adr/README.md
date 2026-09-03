@@ -7,8 +7,6 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 
 ## 📜 ADR Index
 
-<<<<<<< HEAD
-
 | ADR                                                                        | Title                                                    | Status   | Date       |
 | -------------------------------------------------------------------------- | -------------------------------------------------------- | -------- | ---------- |
 | [ADR-0001](0001-record-architecture-decisions.md)                          | Record Architecture Decisions                            | Accepted | 2026-08-22 |
