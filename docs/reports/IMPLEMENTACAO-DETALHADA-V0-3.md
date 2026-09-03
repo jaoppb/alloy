@@ -1,19 +1,19 @@
 # Implementação da v0.3 — plano detalhado de F4 + F5 + I2
 
-| Campo               | Valor                                                                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**          | ❌ Não iniciado — plano. `core/graphics`, `core/html` e `core/css` ainda são o stub `add()`                                              |
-| **Cobertura**       | Fecha 2 dos 18 critérios (**C-14**, **C-17**) + **C-18** antecipado do v0.9; abre os 3 ports do `ADR-0011` que faltavam ter código       |
-| **Esforço**         | 63–99 dias-dev `[modelado]`. `ROADMAP-IMPLEMENTACAO-V1.md:217` orça 40–62 — a diferença é escopo escolhido, e está aberta em §1.3        |
-| **Depende de**      | v0.1 + v0.2 inteiras (`feat/v0-2-implementation`). I2 exige F4 **e** F5 (`ROADMAP-IMPLEMENTACAO-V1.md:279`)                              |
-| **Atenção**         | ⚠️ O v0.3 escreve **três** ports novos de uma vez (`RenderBackend`, `CascadeResolver`/`LayoutEngine`, `TokenSink`/`TreeSink`) — §2.13    |
-| **Fecha requisito** | C-14, C-17, C-18 · `PRD-005` (retrofit ao `ADR-0011`) · `PRD-008` integral · `PRD-007` parcial (adaptadores UA, congelamento fica em I3) |
+| Campo               | Valor                                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Status**          | ❌ Não iniciado — plano. `core/graphics`, `core/html` e `core/css` são placeholders de 8 linhas (doc + `forbid`)                                       |
+| **Cobertura**       | Fecha 2 dos 18 critérios (**C-14**, **C-17**) + **C-18** antecipado do v0.9; abre os 3 ports do `ADR-0011` que faltavam ter código                     |
+| **Esforço**         | 65–101 dias-dev `[modelado]`. `ROADMAP-IMPLEMENTACAO-V1.md:217` orça 40–62 — a diferença é escopo escolhido, e está aberta em §1.3                     |
+| **Depende de**      | v0.1 + v0.2 inteiras — ambas **já em `main`** (`75dc34b`, `0a60036`). I2 exige F4 **e** F5 (`ROADMAP-IMPLEMENTACAO-V1.md:279`)                         |
+| **Atenção**         | ⚠️ O v0.3 escreve **quatro** ports novos de uma vez (`RenderBackend`, `CascadeResolver`/`LayoutEngine`/`TextMeasurer`, `TokenSink`/`TreeSink`) — §2.13 |
+| **Fecha requisito** | C-14, C-17, C-18 · `PRD-005` (retrofit ao `ADR-0011`) · `PRD-008` integral · `PRD-007` parcial (adaptadores UA, congelamento fica em I3)               |
 
-> ⚠️ **Base de referência das citações.** Toda referência `arquivo:linha` deste relatório foi conferida contra
-> `feat/v0-2-implementation` (commit `6536bbc`, PR #5), **não** contra `main`. Em `main` os números de linha do
-> `ROADMAP-IMPLEMENTACAO-V1.md` diferem (largura de reflow anterior), e `PRD-006`/`PRD-007`/`PRD-008`, `ADR-0011`,
-> `ADR-0013`, `core/dom` e `core/engine` sequer existem. Ler este documento contra `main` produz citação pendurada; ele
-> só é verificável sobre as PRs #4 e #5.
+> ✅ **Base de referência das citações — revisada.** Toda referência `arquivo:linha` deste relatório foi reconferida
+> contra **`main`** (commit `b4c3cd3`, árvore limpa). As PRs #4, #5 e #6 estão mergeadas: `6536bbc` é ancestral de
+> `main`, e `PRD-006`/`PRD-007`/`PRD-008`, `ADR-0011`, `ADR-0013`, `core/dom` e `core/engine` existem lá. A revisão
+> corrigiu seis citações penduradas (`overview.md`, `ADR-0010`, duas do `ROADMAP`, `PRD-007` e a numeração de ADR), a
+> descrição dos stubs, e acrescentou §2.15 (portão de clippy) e a porta `TextMeasurer` da §2.8.
 
 ---
 
@@ -42,12 +42,13 @@ Quatro decisões de escopo foram tomadas com o solicitante antes deste plano, e 
 
 `core/engine` com o port completo sob `ADR-0011` (sete itens verdes, `PORT_SCHEMA_VERSION = 2`), o companion object-safe
 do `ADR-0013` e a suíte `engine::conformance`. `core/runtime/rhai` com `RhaiEngine`/`RhaiContext`, o chokepoint
-`register_guarded_binding`, `run_with_fallback` e o `NodeHandle` de I1. `core/dom` como domínio puro de zero
-dependências: arena `DomTree`, os value objects, `serialize_html`. O binário `alloy --script` roda `.rhai` sob sandbox
-com DOM ligado.
+`register_guarded_binding`, `run_with_fallback` e o `NodeHandle` de I1. `core/dom` como domínio puro de dependência
+única (`thiserror`, ADR-0015): arena `DomTree`, os value objects, `serialize_html`. O binário `alloy --script` roda
+`.rhai` sob sandbox com DOM ligado.
 
 O que **não** existe e o v0.3 cria do zero: qualquer noção de geometria, de pintura, de fonte, de pixel e de HTML.
-`core/graphics`, `core/css` e `core/html` são os stubs `add()`/`it_works()` com `#![forbid(unsafe_code)]`.
+`core/graphics`, `core/css` e `core/html` são placeholders de 8 linhas — um doc-comment e `#![forbid(unsafe_code)]`, sem
+nenhuma função (não há `add()` nem `it_works()` em lugar nenhum do workspace).
 
 ### 1.2 O que a v0.3 acrescenta, critério a critério
 
@@ -62,38 +63,43 @@ E o que o v0.3 fecha **sem** ter número de critério, porque os PRDs de port fo
 | Entrega                                                       | Origem            | Como fecha                                                                      |
 | ------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------- |
 | `TokenSink`/`TreeSink` + tokenizer suspensível + html5lib     | `PRD-008:111-119` | F5 integral, incluindo o handshake suspend/resume e `no-default-tree`           |
-| Agregados de fronteira + `CascadeResolver`/`LayoutEngine`     | `PRD-007:92-101`  | F4c parcial: portas e agregados definidos, adaptadores UA-only, freeze só em I3 |
+| Agregados + `CascadeResolver`/`LayoutEngine`/`TextMeasurer`   | `PRD-007:92-100`  | F4c parcial: portas e agregados definidos, adaptadores UA-only, freeze só em I3 |
 | `PRD-005` retrofitado ao contrato de ports                    | `ADR-0011:126`    | Reescrita de `PRD-005` §2/§4/§5 + `render-backend-port-contract.md`             |
 | Portões de golden image, conformidade html5lib e fuzz de HTML | roadmap `:357`    | Três jobs de CI novos, todos bloqueantes                                        |
 
-**Micro-entregáveis da versão** (`ROADMAP-IMPLEMENTACAO-V1.md:235-236`): `alloy render pagina.html -o saida.png` produz
+**Micro-entregáveis da versão** (`ROADMAP-IMPLEMENTACAO-V1.md:234-235`): `alloy render pagina.html -o saida.png` produz
 um PNG byte a byte determinístico; a golden image roda em CI sem GPU; o subconjunto declarado da suíte html5lib fica
 verde.
 
-### 1.3 Por que 63–99 d e não os 40–62 d do roadmap
+### 1.3 Por que 65–101 d e não os 40–62 d do roadmap
 
 O intervalo do roadmap (`:217`) soma F4 (15–22) + F5 (25–40) e não orça nem o texto, nem o estágio de estilo/layout —
-que ele deixa implícito em F9/v0.5 — nem as três fatias extras. O delta é escopo **escolhido**, não estouro:
+que ele deixa implícito em F9/v0.5 — nem as fatias extras. O delta é escopo **escolhido**, não estouro:
 
 | Bloco                                                       | Esforço `[modelado]` | Estava no roadmap?                       |
 | ----------------------------------------------------------- | -------------------- | ---------------------------------------- |
 | F4a — display list, `RenderBackend`, rasterizador de caixas | 12–18 d              | Sim (parte dos 15–22 de F4)              |
 | F4b — texto: `FontProvider`, fontes do SO, rasterizador     | 8–12 d               | Não — decisão de escopo 2                |
-| F4c — `core/css`: agregados + portas + adaptadores UA       | 10–15 d              | Não — antecipa uma fatia de F9           |
+| F4c — `core/css`: agregados + 3 portas + adaptadores UA     | 12–17 d              | Não — antecipa uma fatia de F9           |
 | F5 — `core/html`: tokenizer suspensível + tree builder      | 25–40 d              | Sim, integral                            |
 | I2 — pipeline, `alloy` lib+bin, comando `render`, goldens   | 4–7 d                | Sim (implícito no ponto de integração)   |
 | I2b — C-18 antecipado                                       | 2–4 d                | Não — decisão de escopo 4                |
-| Portões — fuzz, determinismo, conformidade, ADRs e PRDs     | 2–3 d                | Parcial (`:357` liga os portões no v0.3) |
+| Portões — fuzz, determinismo, conformidade, ADRs e PRDs     | 3–5 d                | Parcial (`:357` liga os portões no v0.3) |
 
 Alavanca de alívio, se F5 estourar: adiar `adoption01/02.dat` (algoritmo de adoção) do recorte html5lib para o v0.5 —
 §2.9. É a única fatia do recorte que pode sair sem tornar o parser inútil para páginas estáticas.
 
+> ⚠️ **A unidade "dias-dev" não está calibrada contra este repositório.** As PRs #1 a #6 — roadmap, PRDs de port, v0.1
+> inteira e v0.2 inteira — foram mergeadas entre 2026-08-24 e 2026-08-30: seis dias de calendário. Os intervalos acima
+> são modelo de esforço, não previsão de prazo, e nenhum deles foi derivado da velocidade observada aqui. Tratá-los como
+> cronograma é o erro que este aviso existe para evitar.
+
 ### 1.4 ⚠️ Divergências de documentação a corrigir nesta entrega
 
-`docs/architecture/overview.md:85-89` declara `html → dom, engine`, `css → dom, engine` e `graphics → engine`. A decisão
+`docs/architecture/overview.md:89-91` declara `html → dom, engine`, `css → dom, engine` e `graphics → engine`. A decisão
 2.1 abaixo mantém os três **sem** dependência de `engine` — todo bridge de script vive em `core/runtime/rhai`,
-exatamente como a v0.2 fez com `core/dom`. As três linhas são alvo, não estado (`ROADMAP-IMPLEMENTACAO-V1.md:103-106`),
-e passam a ser corrigidas para `dom` / `dom` / `ttf-parser`.
+exatamente como a v0.2 fez com `core/dom`. As três linhas são alvo, não estado (`ROADMAP-IMPLEMENTACAO-V1.md:100-103`, e
+`overview.md:80-81` já o diz no próprio arquivo), e passam a ser corrigidas para `dom` / `dom` / `ttf-parser`.
 
 ---
 
@@ -137,7 +143,7 @@ Duas escolhas de fronteira que não são óbvias:
 
 **O estágio de pintura (`LayoutBoxTree → DisplayList`) mora em `alloy/src/application/paint.rs`**, não em `css` nem em
 `graphics`. Pôr em `css` criaria `css → graphics`; pôr em `graphics` criaria `graphics → css`. Nenhuma das duas arestas
-existe no grafo-alvo de `overview.md:85-89`, e ambas acoplariam layout a pixels — exatamente o que `ADR-0010:114-117`
+existe no grafo-alvo de `overview.md:89-91`, e ambas acoplariam layout a pixels — exatamente o que `ADR-0010:114-117`
 separa. O raiz de composição é o lugar certo para uma função de mapeamento entre dois agregados de crates distintos
 (`ADR-0010:114-119`). Quando aparecer o segundo consumidor (F8, `core/window`), ela é promovida a crate próprio; é por
 isso que `alloy` vira lib (§2.12), para o mapeamento ser testável hoje.
@@ -150,7 +156,7 @@ no layout.
 
 `domain/`:
 
-- `DisplayList` — **first-class collection** sobre `Vec<DisplayCommand>` (`ADR-0010:130`), imutável depois de
+- `DisplayList` — **first-class collection** sobre `Vec<DisplayCommand>` (`ADR-0010:132`), imutável depois de
   construída, com `len()`/`iter()`/`command(index)`. Nada de `Vec` público.
 - `DisplayCommand` — `#[non_exhaustive]`, os seis comandos de `PRD-005:65-71`: `DrawRect`, `DrawText`, `DrawImage`,
   `DrawPath`, `PushClip`/`PopClip`, `PushOpacity`/`PopOpacity`. `DrawImage` e `DrawPath` são **declarados e recusados**
@@ -202,7 +208,7 @@ software é a queda real do algoritmo, exercitada por um teste que força cada t
 `infrastructure/software/` — o rasterizador: recorte por pilha de clip, preenchimento de retângulo com cobertura
 anti-aliased em inteiros, composição `src-over` premultiplicada em `u8`. Sem `unsafe`, sem SIMD explícito no v0.3.
 
-### 2.5 Determinismo: `Au(i32)` em 1/64 px, e o que isso custa (ADR-0014)
+### 2.5 Determinismo: `Au(i32)` em 1/64 px, e o que isso custa (ADR-0016)
 
 Golden image byte a byte nos três SOs só existe se a aritmética for idêntica nos três. As regras:
 
@@ -220,7 +226,7 @@ Golden image byte a byte nos três SOs só existe se a aritmética for idêntica
 - **Golden compara o `Framebuffer`, não o PNG.** O arquivo `.png` de referência é decodificado e comparado pixel a
   pixel; assim o portão de determinismo não fica refém do codificador.
 
-Isso vira **ADR-0014** (unidades fixas + política de determinismo de rasterização), que também registra a decisão do
+Isso vira **ADR-0016** (unidades fixas + política de determinismo de rasterização), que também registra a decisão do
 codec do §2.7.
 
 ### 2.6 Texto: porta `FontProvider`, fontes do sistema, `ttf-parser`, rasterizador próprio
@@ -233,9 +239,14 @@ codec do §2.7.
   `serif`, `monospace`) mapeando para tabelas de fontes padrão do SO (ex.: DejaVu/Ubuntu no Linux, SF Pro/Helvetica no
   macOS, Segoe UI/Arial no Windows) e inspecionando tabelas OpenType via `ttf-parser`. Em ambientes bare/containers sem
   fontes do SO, há um gerador emergencial procedural/bitmap de glifos para evitar falhas em execução headless.
-- **`ttf-parser`** entra como a única dependência externa nova do v0.3: pure Rust, sem `unsafe` (preserva N-02,
-  `PRD-001:97`), faz parsing de tabelas e contornos de arquivos do sistema — nenhum rasterizador nativo C, nenhuma
-  alocação escondida. Versão fixada exata no `[workspace.dependencies]`, como manda a convenção do `Cargo.toml`.
+- **`ttf-parser = "=0.25.1"`** entra como a única dependência externa nova do v0.3 — versão verificada, pure Rust,
+  MIT/Apache-2.0 (já coberta pela allowlist de `deny.toml:23-34`), fixada exata no `[workspace.dependencies]` como manda
+  a convenção do `Cargo.toml`. O argumento **não** é "preserva N-02": o veredicto §1 (`:27-29`) e o achado **S-01**
+  (`:107-142`) do [`VIOLACAO-N02-UNSAFE-NO-RHAI.md`](./VIOLACAO-N02-UNSAFE-NO-RHAI.md) estabelecem que N-02 está falso
+  na forma escrita desde a v0.1. O argumento que se sustenta é de superfície: parsing de fonte processa **bytes que o
+  autor da página escolhe** a partir da v0.5, e é exatamente a primeira linha da regra proposta em S-01 daquele
+  relatório (`:138-142`) — a fatia da árvore onde `unsafe` de terceiro é proibido pelo critério estrito, não pelo
+  critério de conveniência. Um parser pure-Rust sem rasterizador nativo C é a escolha certa **por esse** motivo.
 - **Shaping do v0.3 é deliberadamente ingênuo**: `cmap` char→glyph 1:1, avanços horizontais, kerning por `kern`/`GPOS`
   simples. **Fora**: ligaduras, BiDi, escritas complexas, quebra de linha por dicionário. Declarado em §2.14, e é o que
   `core/css` (F9) e `core/text` (v0.7+) endereçam depois.
@@ -248,15 +259,27 @@ codec do §2.7.
 `infrastructure/png.rs` — ~120 linhas: assinatura, `IHDR`, `IDAT` com blocos deflate **armazenados** (`BTYPE=00`),
 `IEND`, CRC-32 e Adler-32 escritos à mão. Sem `png`, sem `miniz_oxide`, sem `flate2`.
 
-Razão: a alternativa puxa quatro crates para _escrever_ um arquivo que só serve de saída de CLI e de golden — e uma
-delas (`simd-adler32`) traz `unsafe`, que exigiria exceção ao portão de memória (`PRD-001:97`). O arquivo fica maior;
-como o golden compara framebuffer (§2.5), o tamanho não é portão de nada. **Decodificação** de imagens (v0.5,
-`DrawImage` real) é decisão separada e provavelmente vai adotar um crate auditado — codificar é trivial, decodificar
-formato hostil não é.
+Razão: a alternativa puxa quatro crates para _escrever_ um arquivo que só serve de saída de CLI e de golden, e o único
+artefato de saída de todo o v0.3 não justifica quatro entradas novas no grafo auditado por `cargo-deny`. O arquivo fica
+maior; como o golden compara framebuffer e não o PNG (§2.5), o tamanho não é portão de nada. _(A versão anterior desta
+seção rejeitava `simd-adler32` por "trazer `unsafe`". O achado **S-03** do
+[`VIOLACAO-N02-UNSAFE-NO-RHAI.md`](./VIOLACAO-N02-UNSAFE-NO-RHAI.md) cita nominalmente essa frase como exemplo de um
+critério aplicado só a candidatos e nunca ao incumbente — o `rhai`, que faz `transmute_copy` no despacho de toda função
+nativa. O argumento acima se sustenta sozinho e não depende de um requisito que o projeto já sabe ser falso.)_
+**Decodificação** de imagens (v0.5, `DrawImage` real) é decisão separada e provavelmente vai adotar um crate auditado —
+codificar é trivial, decodificar formato hostil não é.
 
 ### 2.8 `core/css` no v0.3: as portas do `PRD-007` com adaptadores UA-only
 
-`domain/` — os quatro agregados de fronteira de `PRD-007:35-40`, todos `#[non_exhaustive]`, com
+> **Fronteira com a v0.5, explicitada.** O v0.3 **cria** `core/css`: os cinco agregados, as três portas
+> (`CascadeResolver`, `LayoutEngine`, `TextMeasurer`), `ua_cascade` e `block_layout`. A **F9/v0.5** troca os miolos
+> atrás das mesmas traits e traz o que fica de fora aqui: parser de CSS, seletores, especificidade, `<style>` e
+> `style=`, box model completo, IFC e Flexbox. Os agregados são `#[non_exhaustive]` e o freeze é em **I3**
+> (`ADR-0011:123`), então a F9 muda com bump de schema — e o `IMPLEMENTACAO-DETALHADA-V0-5.md` §2.8 herda esta
+> superfície em vez de partir do zero.
+
+`domain/` — os cinco agregados de fronteira (os quatro de `PRD-007:35-40` mais `ViewportConstraints`, que a assinatura
+de `LayoutEngine` em `PRD-007:56-61` exige sem listar em §3.1), todos `#[non_exhaustive]`, com
 `css::PORT_SCHEMA_VERSION = 1`:
 
 | Agregado              | Conteúdo no v0.3                                                                                                   |
@@ -271,6 +294,30 @@ formato hostil não é.
 árvore inteira sai. A granularidade grossa é mandatória (`PRD-007:51`, `:78`) e é o que protege o orçamento de
 `<10μs`/hook — não há callback por nó atravessando costura alguma.
 
+**E uma terceira porta, `TextMeasurer`, que o `PRD-007` não previu.** O `block_layout` precisa de largura de texto para
+resolver caixa de linha, e a fonte mora em `core/graphics` (§2.6) — mas `PRD-007:83-84` (invariante 4) proíbe qualquer
+tipo de `core/graphics` numa assinatura de porta ou agregado de fronteira, e a decisão 2.1 proíbe a aresta
+`css → graphics`. Sem uma terceira porta o plano não fecha: ou `core/css` importa `graphics` (contradizendo §1.4 e o
+PRD), ou o layout não mede e o `LayoutBoxTree` deixa de ter "geometria resolvida em `Au`". A saída:
+
+```rust
+// core/css/src/application/ports.rs — tipos exclusivamente de core/css
+pub trait TextMeasurer: Send + Sync {
+    fn measure(&self, run: &TextRun, style: &TextStyle) -> Result<TextAdvance, CssError>;
+}
+```
+
+- **Nada de `graphics` cruza a assinatura** — `TextRun`, `TextStyle` (família genérica + tamanho em `Au`) e
+  `TextAdvance` são `domain/` de `core/css`. `PRD-007:83-84` fica satisfeito e `css → dom` continua sendo a única
+  aresta.
+- **Granularidade coerente com `PRD-007:78`**: a unidade é o _run_ de texto, não o caractere. Não é callback por nó.
+- **`alloy` implementa o adaptador**, em `alloy/src/application/`, sobre o `FontProvider` de `core/graphics`. É o mesmo
+  argumento que a §2.2 usa para pôr `paint.rs` no raiz de composição: o mapeamento entre dois agregados de crates
+  distintos mora em quem compõe os dois. Quando `core/window` (F8) virar o segundo consumidor, promove-se a crate.
+- **`core/css` traz um `FixedMetricsMeasurer`** de referência (avanço constante por caractere) para os testes, para
+  `run_layout_suite` e para a feature `no-script` — é o que mantém `core/css` testável com `graphics` fora do grafo, que
+  é o portão N-04 (`PRD-001:99`).
+
 `infrastructure/` — dois adaptadores de referência, que são também o **caminho padrão** (`PRD-007:71`, o contrato é
 dogfooded):
 
@@ -278,7 +325,8 @@ dogfooded):
   `span/a/em/strong`, margens de bloco default, tamanhos de heading. Herança de `color`/`font_size`. **Sem parser CSS,
   sem seletores, sem especificidade** — o `<style>` e o `style=` são ignorados no v0.3 (§2.14).
 - `block_layout.rs` — fluxo normal em bloco: largura preenche o contentor menos margens/padding, altura é a soma dos
-  filhos, texto vira caixas de linha por quebra em espaço com medição real de avanço da fonte. **Sem** float, sem
+  filhos, texto vira caixas de linha por quebra em espaço. A medição de avanço vem **injetada** como `&dyn TextMeasurer`
+  — real (fonte do SO, via o adaptador de `alloy`) em runtime, `FixedMetricsMeasurer` nos testes. **Sem** float, sem
   posicionamento, sem flex (F9).
 
 `application/snapshot.rs` — `snapshot(&DomTree) -> DomSnapshot`, a função de mapeamento explícita; é a única razão de
@@ -322,7 +370,11 @@ diferença entre um contrato e um retrofit no F10** — e é a razão principal 
 O runner (`tests/html5lib.rs`) lê o manifesto, e **falha se um arquivo do diretório não estiver listado** — impede que
 alguém adicione dado sem declarar o recorte, e impede o inverso, que é o recorte encolher em silêncio.
 
-### 2.10 A exceção de Object Calisthenics no laço quente do tokenizer (ADR-0015)
+### 2.10 A exceção de Object Calisthenics no laço quente do tokenizer (ADR-0017)
+
+> O `ADR-0017` cobre **duas** exceções no mesmo escopo: as regras de Object Calisthenics desta seção e os lints
+> numéricos de clippy da **§2.15**. São o mesmo problema — código de laço quente sob um padrão escrito para modelo de
+> domínio — e separá-los em dois ADRs produziria dois documentos que se citam.
 
 `ROADMAP-IMPLEMENTACAO-V1.md:310` já prevê: newtype por caractere e "um nível de indentação" dentro de uma máquina de
 estados de ~80 estados é catastrófico em desempenho e ilegível. A exceção é **delimitada e registrada**, não implícita:
@@ -344,6 +396,12 @@ de migração em `PRD-002` §4.2, como manda `ADR-0011:104`). Manifesto `DISPLAY
 que já existe, e na matriz de injeção de pânico de C-09 — é assim que o v0.3 prova que o sandbox vale para um
 **segundo** subsistema, e não só para o DOM.
 
+Onde o chokepoint mora, para o "mesmo molde" não apontar para o arquivo errado: `GuardedBinding` e
+`install_guarded_table` estão em `infrastructure/sandbox.rs`, mas `register_guarded_binding` e `guarded_bindings()` —
+que são a varredura de C-06 — estão em **`infrastructure/context.rs:80` e `:100`**. O `NodeHandle` de I1 não passa por
+nenhum dos dois: cada método se autoguarda com `self.require(...)` e a exposição é via `impl CustomType`
+(`dom_bindings.rs:59` para o struct, `:262` para o `impl CustomType`). `DisplayListHandle` segue esse padrão.
+
 Serialização (a outra metade de `PRD-005:91`): `DisplayList` ganha uma forma textual determinística
 (`display_list_to_text`) usada no teste — não é formato de fio, é o que torna a asserção legível e o diff útil.
 
@@ -351,18 +409,18 @@ Serialização (a outra metade de `PRD-005:91`): `DisplayList` ganha uma forma t
 
 `alloy/src/lib.rs` expõe
 `render_document(source: &str, viewport: ViewportConstraints) -> Result<Framebuffer, AlloyError>` e os estágios em
-`application/` (`pipeline.rs`, `paint.rs`). `main.rs` fica com parsing de argumentos (à mão, como já é) e I/O. Sem isso,
-o teste de golden só consegue chamar o binário por fora — o que transforma toda falha de pipeline em "exit code != 0"
-sem diagnóstico.
+`application/` (`pipeline.rs`, `paint.rs`). `main.rs` fica com parsing de argumentos (`clap` derive, como já é —
+`alloy/src/main.rs:24,38-44`) e I/O. Sem isso, o teste de golden só consegue chamar o binário por fora — o que
+transforma toda falha de pipeline em "exit code != 0" sem diagnóstico.
 
 CLI: `alloy render <arquivo.html> -o <saida.png> [--width 800] [--height 600]`. `--script` continua como está.
 
-### 2.13 Os três ports novos contra os sete itens do `ADR-0011:79-105`
+### 2.13 Os quatro ports novos contra os sete itens do `ADR-0011:79-105`
 
-| Item                             | `RenderBackend` (freeze **F4**)                         | `Cascade`/`Layout` (freeze I3)                               | `TokenSink`/`TreeSink` (freeze I3)                         |
+| Item                             | `RenderBackend` (freeze **F4**)                         | `Cascade`/`Layout`/`TextMeasurer` (freeze I3)                | `TokenSink`/`TreeSink` (freeze I3)                         |
 | -------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| 1 Seam PRD + variação + ameaça   | `PRD-005` **retrofit** — §2/§4/§5 reescritos            | `PRD-007` (existe)                                           | `PRD-008` (existe) + emenda §3.3                           |
-| 2 Traits sem tipo de adaptador   | Object-safe direto; sem companion (§2.4)                | `&self`, `Send + Sync`, árvore inteira                       | `TreeSink` genérico em `Handle`; sink stub                 |
+| 1 Seam PRD + variação + ameaça   | `PRD-005` **retrofit** — §2/§4/§5 reescritos            | `PRD-007` (existe) + emenda: `TextMeasurer`                  | `PRD-008` (existe) + emenda §3.3                           |
+| 2 Traits sem tipo de adaptador   | Object-safe direto; sem companion (§2.4)                | `&self`, `Send + Sync`, árvore inteira; medição por _run_    | `TreeSink` genérico em `Handle`; sink stub                 |
 | 3 Agregados versionados          | `DisplayList`, `Framebuffer`; `PORT_SCHEMA_VERSION=1`   | Os 5 de §2.8; `= 1`                                          | `Token` + value objects; `= 1`                             |
 | 4 Um erro tipado com localização | `GraphicsError` + `CommandIndex`                        | `CssError` + `NodeRef` do snapshot                           | `HtmlError` + `SourceLocation`                             |
 | 5 Ciclo de vida e concorrência   | `docs/architecture/render-backend-port-contract.md`     | `style-layout-port-contract.md`                              | `html-parser-port-contract.md` (suspensão!)                |
@@ -388,6 +446,51 @@ contract record diz explicitamente que este port **tem** ponto de suspensão, ao
   callback por nó na costura de layout (§2.8).
 - **Não** adicionar índice geracional ao `NodeId` nem mexer em `core/dom` — o tree builder usa a API que já existe.
 
+### 2.15 O portão de clippy do workspace, e o que ele custa em código numérico
+
+Isto não estava no plano original e é a omissão mais cara dele. `[workspace.lints.clippy]` (`Cargo.toml:51-66`) não é um
+`pedantic` de fachada — além de `pedantic` e `nursery` em `deny`, ele proíbe exatamente o vocabulário de um
+rasterizador:
+
+```toml
+arithmetic_side_effects = "deny"    as_conversions = "deny"
+indexing_slicing        = "deny"    string_slice   = "deny"
+panic = "deny"   unwrap_used = "deny"   expect_used = "deny"   todo = "deny"
+```
+
+`clippy.toml` afrouxa **só em teste** (`allow-unwrap-in-tests` e os três irmãos). E o workspace hoje tem **zero
+`#[allow(...)]` em código de produção** — v0.1 e v0.2 foram escritas inteiras sob o portão, sem uma única exceção.
+
+Onde isso bate no v0.3:
+
+| Componente                                   | Lint que dispara                              |
+| -------------------------------------------- | --------------------------------------------- |
+| Aritmética de `Au(i32)` (soma/sub de caixas) | `arithmetic_side_effects`                     |
+| Conversão `Px(f32) → Au` (§2.5)              | `as_conversions`                              |
+| Rasterizador scanline, buffer RGBA8 (§2.4)   | `indexing_slicing`, `arithmetic_side_effects` |
+| CRC-32 e Adler-32 à mão (§2.7)               | `arithmetic_side_effects` (shifts e somas)    |
+| Achatamento de Bézier (§2.6)                 | `arithmetic_side_effects`, `as_conversions`   |
+| Laço do tokenizer, índices de byte (§2.9)    | `string_slice`, `indexing_slicing`            |
+
+**A política, registrada no `ADR-0017` junto com a exceção de calisthenics da §2.10:**
+
+- **`domain/` mantém o portão integral, sem exceção.** Aritmética de `Au` usa `checked_*` / `saturating_*`; conversão
+  usa `TryFrom`, nunca `as`; acesso a coleção usa `.get()`. É o padrão que `core/dom` já demonstra
+  (`core/dom/src/domain/tree.rs:351` usa `saturating_add`), e é onde a aritmética errada vira caixa errada — justamente
+  onde o portão paga.
+- **`#[allow]` localizado, comentado e citando o `ADR-0017`, em exatamente três caminhos quentes**:
+  `core/graphics/src/infrastructure/software/`, `core/graphics/src/infrastructure/png.rs` e
+  `core/html/src/infrastructure/tokenizer.rs`. Cada `#[allow]` no menor escopo que resolve — função, não módulo — com
+  uma linha dizendo por que o portão não cabe ali.
+- **O que a exceção não permite**, aqui como na §2.10: `unwrap`/`expect`/`panic!` em caminho alcançável por entrada. O
+  argumento de desempenho vale para `checked_add` num laço de varredura; não vale para tratamento de erro.
+- **Portão do portão**: um teste ou uma linha de CI que conta os `#[allow(clippy::` do workspace e falha se o número
+  crescer fora dos três arquivos acima. Sem isso a exceção vira precedente, que é exatamente o que o `ADR-0017` existe
+  para impedir.
+
+O custo está somado a F4a, F4b e F5 — `checked_*` em todo código numérico não é gratuito em tempo de escrita nem em
+legibilidade, e é parte de por que os intervalos desta versão são o que são (§1.3).
+
 ---
 
 ## 3. Plano de implementação
@@ -396,11 +499,11 @@ contract record diz explicitamente que este port **tem** ponto de suspensão, ao
 | ------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | -------------------- |
 | **F4a** | `core/graphics`: display list, builder sanitizador, `RenderBackend`, cascata, raster | **C-14**, **C-17**; golden de caixas em CI sem GPU           | 12–18 d              |
 | **F4b** | Texto: port `FontProvider`, `SystemFontProvider`, `ttf-parser`, rasterizador, cache  | Golden com texto determinístico via mock/sintético nos 3 SOs | 8–12 d               |
-| **F4c** | `core/css`: agregados, portas do `PRD-007`, `ua_cascade`, `block_layout`             | `DomTree → PNG` sem HTML; troca de `MockCascadeResolver`     | 10–15 d              |
+| **F4c** | `core/css`: agregados, `PRD-007` + `TextMeasurer`, `ua_cascade`, `block_layout`      | `DomTree → PNG` sem HTML; troca de `MockCascadeResolver`     | 12–17 d              |
 | **F5**  | `core/html`: `Token`, ports, tokenizer suspensível, tree builder, html5lib           | Recorte html5lib verde; handshake suspend/resume testado     | 25–40 d              |
 | **I2**  | `alloy` lib+bin, `pipeline.rs`, `paint.rs`, comando `render`, goldens de página      | `alloy render pagina.html -o saida.png` determinístico       | 4–7 d                |
 | **I2b** | C-18: `display_list_bindings.rs`, `EngineError::Graphics`, serialização textual      | **C-18**; varredura C-06 e injeção de pânico cobrem o novo   | 2–4 d                |
-| **P**   | Portões: fuzz de HTML, determinismo, conformidade, ADR-0014/0015, PRDs, contracts    | Três jobs de CI novos, bloqueantes                           | 2–3 d                |
+| **P**   | Portões: fuzz, determinismo, conformidade, contagem de `#[allow]`, ADRs, PRDs        | Quatro jobs de CI novos, bloqueantes                         | 3–5 d                |
 
 **Ordem, e por que ela é assim.** F4a → F4b → F4c → **primeiro pixel sem HTML** → F5 → I2 → I2b → P. O ponto não óbvio:
 **o primeiro pixel chega antes do parser**. Ao fim de F4c existe um teste que monta um `DomTree` em Rust (ou pelo
@@ -433,10 +536,11 @@ F4 (a+b+c como um canvas de graphics e um de css), F5 e I2.
 varredura scanline com cobertura inteira (3–4 d); cache de glifo + teste frio-vs-quente (1–2 d); `DrawText` no backend
 de software e a primeira golden com letra sintética/determinística (1 d).
 
-**F4c — passos (10–15 d), em `core/css/`:** os cinco agregados + `CssError` + `PORT_SCHEMA_VERSION` (2–3 d);
+**F4c — passos (12–17 d), em `core/css/`:** os cinco agregados + `CssError` + `PORT_SCHEMA_VERSION` (2–3 d);
 `snapshot(&DomTree)` e a decisão de `dom` como única dependência (1–2 d); `CascadeResolver`/`LayoutEngine` +
-`run_cascade_suite`/`run_layout_suite` + mocks + feature `no-script` (2–3 d); `ua_cascade` (2–3 d); `block_layout` com
-medição de texto pela fonte (3–4 d).
+`run_cascade_suite`/`run_layout_suite` + mocks + feature `no-script` (2–3 d); **porta `TextMeasurer` +
+`FixedMetricsMeasurer` + o adaptador em `alloy` sobre o `FontProvider`** (2 d, §2.8); `ua_cascade` (2–3 d);
+`block_layout` com a medição injetada (3–4 d).
 
 **F5 — passos (25–40 d), em `core/html/`:** `Token` e value objects (2–3 d); `TokenSink`/`TreeSink`/`TokenSinkResult` +
 `MockTreeSink` + feature `no-default-tree` (2–3 d); **máquina de estados resumível** — estados de dados, tag, atributo,
@@ -453,38 +557,42 @@ de golden (uma de caixas, uma de texto, uma de aninhamento + entidades) e o job 
 `display_list_bindings.rs` + manifesto + entrada na varredura C-06 e na matriz de pânico (1,5–2,5 d);
 `display_list_to_text` + `scripts/paint.rhai` de exemplo (0,5–1 d).
 
-**P — passos (2–3 d):** alvos `fuzz/fuzz_targets/{tokenize,tree_build}.rs` com corpus semeado pelo html5lib e job de CI
+**P — passos (3–5 d):** alvos `fuzz/fuzz_targets/{tokenize,tree_build}.rs` com corpus semeado pelo html5lib e job de CI
 em nightly, 10 min por alvo, bloqueante (1–1,5 d); job de determinismo (render 100× no Linux, comparação cruzada de
-framebuffer nos 3 SOs) (0,5 d); ADR-0014, ADR-0015, linhas no `docs/adr/README.md`, retrofit de `PRD-005`, emendas em
+framebuffer nos 3 SOs) (0,5 d); ADR-0016, ADR-0017, linhas no `docs/adr/README.md`, retrofit de `PRD-005`, emendas em
 `PRD-007`/`PRD-008`, três contract records, `overview.md`, `CLAUDE.md` (1 d).
 
-**Mínimo viável** (só C-14 + C-17, sem texto, sem HTML, sem CSS): F4a ≈ **12–18 d**. **Escopo completo:** ≈ **63–99
+**Mínimo viável** (só C-14 + C-17, sem texto, sem HTML, sem CSS): F4a ≈ **12–18 d**. **Escopo completo:** ≈ **65–101
 dias-dev `[modelado]`**.
 
 ---
 
 ## 4. Armadilhas
 
-| Armadilha                                                                              | Mitigação                                                                                                                                |
-| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Golden image diverge entre Linux, macOS e Windows por ponto flutuante                  | `Au(i32)` em toda geometria; float só em contorno de glifo, sem FMA e sem transcendental; achatamento com contagem fixa (§2.5, ADR-0014) |
-| Variação de fontes do SO quebra os testes de golden em CI                              | Testes e goldens utilizam estritamente o `FontProvider` sintético/mock; runtime usa `SystemFontProvider`                                 |
-| Cache de glifo altera o resultado entre execuções                                      | Teste que roda a mesma página com cache frio e quente e exige framebuffer idêntico                                                       |
-| `NaN` chegando ao backend (`PRD-005:80`)                                               | Sanitização no `DisplayListBuilder`, com as duas regras distintas de §2.3; teste de propriedade                                          |
-| Sanitizar clampando tudo esconde bug de layout                                         | Não-finito **recusa** (erro tipado), só o finito-fora-de-envelope clampa                                                                 |
-| `css → graphics` ou `graphics → css` entrando "só para o paint"                        | Pintura no raiz de composição (`alloy/application/paint.rs`, §2.2); promovida a crate quando houver segundo consumidor                   |
-| Domínio novo dependendo de `engine` porque `overview.md:85-89` diz que sim             | Decisão 2.1: bridges em `rhai-runtime`; corrigir as três linhas do `overview.md` **nesta** entrega                                       |
-| `TreeSink` implementado dentro de `core/dom`, como `PRD-008:64` sugere                 | Adaptador em `core/html/infrastructure/dom_sink.rs`; emenda em `PRD-008` §3.3 (§2.9)                                                     |
-| Tokenizer escrito não-resumível "para simplificar", com suspensão prometida para o F10 | `Run::Suspended`/`resume` na primeira implementação, com teste de injeção de entrada — `PRD-008:98-99`, roadmap `:316`                   |
-| Object Calisthenics regra 3/4 no laço quente do tokenizer                              | Exceção delimitada e registrada em **ADR-0015**, válida só para `infrastructure/tokenizer.rs` (§2.10)                                    |
-| Recorte html5lib encolhe em silêncio para o CI ficar verde                             | `MANIFEST.md` + runner que falha se houver arquivo não listado **ou** listado e ausente                                                  |
-| `cargo-fuzz` exige nightly e a toolchain está pinada em 1.97.1                         | Job próprio com `+nightly` e `rustup toolchain install nightly`; o resto da CI não muda                                                  |
-| `MAX_EXTENT` do clamp escolhido pequeno demais corta página legítima                   | Envelope derivado do viewport × fator documentado, com teste de página alta (10.000 px) que **não** é cortada                            |
-| `EngineError::Graphics` (I2b) muda superfície congelada do port de engine              | Aditivo, mas cumpre a formalidade do `ADR-0011:104`: `PORT_SCHEMA_VERSION 2 → 3` + nota de migração em `PRD-002` §4.2 + contract record  |
-| Ambiente bare container sem nenhuma fonte instalada falha renderização headless        | `SystemFontProvider` possui fallback emergencial procedural/bitmap de glifos embutido                                                    |
-| Repo ainda sem `LICENSE` (nota no `Cargo.toml`) e agora com novas dependências         | Levantar com os mantenedores nesta entrega; não é bloqueante para o código, é para a distribuição                                        |
-| `rhai-runtime` acumulando toda ponte de script                                         | Aceito no v0.3 (dois bridges); quebra em `core/runtime/rhai-bindings` quando chegar ao terceiro (risco §6.4)                             |
-| `spdd/` sem canvas para F4/F5/I2 enquanto `PRD-001:100` os exige                       | `/spdd-analysis` + `/spdd-reasons-canvas` antes do primeiro `/spdd-generate` de cada fase, como foi feito em F3 e F6                     |
+| Armadilha                                                                                               | Mitigação                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Golden image diverge entre Linux, macOS e Windows por ponto flutuante                                   | `Au(i32)` em toda geometria; float só em contorno de glifo, sem FMA e sem transcendental; achatamento com contagem fixa (§2.5, ADR-0016) |
+| Variação de fontes do SO quebra os testes de golden em CI                                               | Testes e goldens utilizam estritamente o `FontProvider` sintético/mock; runtime usa `SystemFontProvider`                                 |
+| Cache de glifo altera o resultado entre execuções                                                       | Teste que roda a mesma página com cache frio e quente e exige framebuffer idêntico                                                       |
+| `NaN` chegando ao backend (`PRD-005:80`)                                                                | Sanitização no `DisplayListBuilder`, com as duas regras distintas de §2.3; teste de propriedade                                          |
+| Sanitizar clampando tudo esconde bug de layout                                                          | Não-finito **recusa** (erro tipado), só o finito-fora-de-envelope clampa                                                                 |
+| `css → graphics` ou `graphics → css` entrando "só para o paint"                                         | Pintura no raiz de composição (`alloy/application/paint.rs`, §2.2); promovida a crate quando houver segundo consumidor                   |
+| Domínio novo dependendo de `engine` porque `overview.md:89-91` diz que sim                              | Decisão 2.1: bridges em `rhai-runtime`; corrigir as três linhas do `overview.md` **nesta** entrega                                       |
+| `TreeSink` implementado dentro de `core/dom`, como `PRD-008:64` sugere                                  | Adaptador em `core/html/infrastructure/dom_sink.rs`; emenda em `PRD-008` §3.3 (§2.9)                                                     |
+| Tokenizer escrito não-resumível "para simplificar", com suspensão prometida para o F10                  | `Run::Suspended`/`resume` na primeira implementação, com teste de injeção de entrada — `PRD-008:98-99`, roadmap `:316`                   |
+| Object Calisthenics regra 3/4 no laço quente do tokenizer                                               | Exceção delimitada e registrada em **ADR-0017**, válida só para `infrastructure/tokenizer.rs` (§2.10)                                    |
+| `arithmetic_side_effects`/`as_conversions`/`indexing_slicing` param o rasterizador, o PNG e o tokenizer | `domain/` integral com `checked_*` e `TryFrom`; `#[allow]` por função, comentado, só nos três caminhos quentes do **ADR-0017** (§2.15)   |
+| Os `#[allow]` da §2.15 viram precedente e se espalham                                                   | Linha de CI que conta `#[allow(clippy::` no workspace e falha se crescer fora dos três arquivos declarados (§2.15)                       |
+| Recorte html5lib encolhe em silêncio para o CI ficar verde                                              | `MANIFEST.md` + runner que falha se houver arquivo não listado **ou** listado e ausente                                                  |
+| `cargo-fuzz` exige nightly e a toolchain está pinada em 1.97.1                                          | Job próprio com `+nightly` e `rustup toolchain install nightly`; o resto da CI não muda                                                  |
+| `MAX_EXTENT` do clamp escolhido pequeno demais corta página legítima                                    | Envelope derivado do viewport × fator documentado, com teste de página alta (10.000 px) que **não** é cortada                            |
+| `EngineError::Graphics` (I2b) muda superfície congelada do port de engine                               | Aditivo, mas cumpre a formalidade do `ADR-0011:104`: `PORT_SCHEMA_VERSION 2 → 3` + nota de migração em `PRD-002` §4.2 + contract record  |
+| Ambiente bare container sem nenhuma fonte instalada falha renderização headless                         | `SystemFontProvider` possui fallback emergencial procedural/bitmap de glifos embutido                                                    |
+| Repo ainda sem `LICENSE` (`Cargo.toml:25-27`) e agora com nova dependência                              | Levantar com os mantenedores nesta entrega; não é bloqueante para o código, é para a distribuição                                        |
+| Dados vendorizados do html5lib entram sem passar por portão nenhum                                      | `cargo-deny` audita dependência Cargo, não dado de teste no repo: registrar a licença upstream (MIT) no `MANIFEST.md` da §2.9            |
+| `ttf-parser` fixado antes de o critério de `unsafe` ser consertado                                      | Backlog do `VIOLACAO-N02` itens 1 e 2 primeiro, ou `cargo-geiger` rodado uma vez com a saída registrada (risco §6.5)                     |
+| `rhai-runtime` acumulando toda ponte de script                                                          | Aceito no v0.3 (dois bridges); quebra em `core/runtime/rhai-bindings` quando chegar ao terceiro (risco §6.4)                             |
+| `spdd/` sem canvas para F4/F5/I2 enquanto `PRD-001:100` os exige                                        | `/spdd-analysis` + `/spdd-reasons-canvas` antes do primeiro `/spdd-generate` de cada fase, como foi feito em F3 e F6                     |
 
 ---
 
@@ -562,11 +670,17 @@ Nada aqui foi executado. Nenhum item nasce marcado.
    adaptador de cascata scriptável e F11 o hot-reload. A quebra em `core/runtime/rhai-bindings` precisa ser decidida
    antes do terceiro, não depois do quinto.
 
-5. **A dependência nova (`ttf-parser`) abre frente de licenciamento auditável por `cargo-deny`**, eliminando a
-   necessidade de versionar assets binários `.ttf` de terceiros no repositório graças ao uso de fontes do sistema via
-   `SystemFontProvider` e provedores sintéticos em testes.
+5. **A dependência nova (`ttf-parser = "=0.25.1"`) abre frente de licenciamento auditável por `cargo-deny`**, eliminando
+   a necessidade de versionar assets binários `.ttf` de terceiros no repositório graças ao uso de fontes do sistema via
+   `SystemFontProvider` e provedores sintéticos em testes. **Dependência de ordem, declarada:** o backlog do
+   [`VIOLACAO-N02-UNSAFE-NO-RHAI.md`](./VIOLACAO-N02-UNSAFE-NO-RHAI.md) (`:206-215`) põe o job `unsafe-audit` (item 1) e
+   a reescrita de `PRD-001:97` por superfície de ameaça (item 2) **antes** de qualquer decisão nova de dependência — e o
+   risco 7.1 daquele relatório é explícito: rodar `cargo-geiger` na árvore de hoje antes de fixar dependência nova,
+   senão a allowlist nasce descrevendo uma árvore que ninguém mediu. Fixar `ttf-parser` sem isso é repetir a assimetria
+   que S-03 documenta. O `ADR-0018` da v0.5 é onde essa regra é escrita; **se ele não vier antes da F4b, a alternativa
+   mínima é rodar `cargo-geiger` uma vez e registrar a saída aqui.**
 
-6. **O v0.3 escreve três ports de uma vez.** É o maior lote de superfície pública do projeto até aqui, e o `ADR-0011`
+6. **O v0.3 escreve quatro ports de uma vez.** É o maior lote de superfície pública do projeto até aqui, e o `ADR-0011`
    exige sete itens para cada um, incluindo suíte de conformidade, adaptador de referência, feature `no-*` e contract
    record. Subestimar a papelada é o jeito mais provável de o "P" de 2–3 d virar uma semana — ou, pior, de os contract
    records nunca serem escritos e o contrato de ports perder autoridade, que é o risco §6 do próprio roadmap.
@@ -575,50 +689,56 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 
 ## 7. Arquivos tocados
 
-| Arquivo                                                                                                              | Mudança                                                                                                                                |
-| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `Cargo.toml`                                                                                                         | `[workspace.dependencies]` += `ttf-parser` com versão exata                                                                            |
-| `core/graphics/Cargo.toml`                                                                                           | + `ttf-parser`; features `software-backend` (default) e `no-backend`                                                                   |
-| `core/graphics/src/domain/`                                                                                          | **novo** — `Au`, `Rect`/`Point`/`Size`, `Color`, `Opacity`, `FontId`, `DisplayList`, `DisplayCommand`, `GraphicsError`, `CommandIndex` |
-| `core/graphics/src/application/` (`ports.rs`, `builder.rs`, `conformance.rs`)                                        | **novo** — `RenderBackend`, `FontProvider`, `DisplayListBuilder` sanitizador, `run_backend_suite`                                      |
-| `core/graphics/src/infrastructure/` (`cascade.rs`, `software/`, `font/`, `png.rs`)                                   | **novo** — cascata de 3 tiers, rasterizador, `SystemFontProvider`, `FontCatalog`, glifos, codificador PNG                              |
-| `core/graphics/tests/` (+ `tests/golden/`)                                                                           | **novo** — conformidade, sanitização, cascata, goldens de referência com `FontProvider` sintético                                      |
-| `core/css/Cargo.toml`                                                                                                | + `dom = { path = "../dom" }`; features `builtin-adapters` (default) e `no-script`                                                     |
-| `core/css/src/domain/`                                                                                               | **novo** — `DomSnapshot`, `StyleSheetSet`, `StyledTree`, `LayoutBoxTree`, `ViewportConstraints`, `CssError`                            |
-| `core/css/src/application/` (`ports.rs`, `snapshot.rs`, `conformance.rs`)                                            | **novo** — `CascadeResolver`/`LayoutEngine`, `snapshot(&DomTree)`, suítes                                                              |
-| `core/css/src/infrastructure/` (`ua_cascade.rs`, `block_layout.rs`)                                                  | **novo** — adaptadores de referência, que são o caminho padrão                                                                         |
-| `core/css/tests/`                                                                                                    | **novo** — asserção de retângulo, determinismo, troca por mock                                                                         |
-| `core/html/Cargo.toml`                                                                                               | + `dom` **opcional**; features `default-tree` (default) e `no-default-tree`                                                            |
-| `core/html/src/domain/`                                                                                              | **novo** — `Token`, `TagToken`, `Attribute`, `QualifiedName`, `RawKind`, `HtmlError`, `SourceLocation`                                 |
-| `core/html/src/application/` (`ports.rs`, `conformance.rs`)                                                          | **novo** — `TokenSink`, `TokenSinkResult`, `TreeSink`, `run_tree_sink_suite`                                                           |
-| `core/html/src/infrastructure/` (`tokenizer.rs`, `tree_builder.rs`, `dom_sink.rs`)                                   | **novo** — máquina de estados resumível, construção de árvore, adaptador sobre `DomTree`                                               |
-| `core/html/tests/` + `tests/data/MANIFEST.md`                                                                        | **novo** — runner html5lib, recorte vendorizado, `MockTreeSink`, teste de suspend/resume                                               |
-| `core/engine/src/domain/error.rs`                                                                                    | + variante `Graphics { operation, reason }`; `PORT_SCHEMA_VERSION` 2 → 3                                                               |
-| `core/runtime/rhai/Cargo.toml` + `src/infrastructure/display_list_bindings.rs`                                       | **novo** — + `graphics`; `DisplayListHandle` sob `GRAPHICS_DRAW`, manifesto `DISPLAY_LIST_BINDINGS`                                    |
-| `alloy/src/lib.rs`, `alloy/src/application/` (`pipeline.rs`, `paint.rs`), `alloy/src/main.rs`                        | **novo/refatorado** — lib + binário fino, comando `render`, mapeamento `LayoutBoxTree → DisplayList`                                   |
-| `alloy/tests/`                                                                                                       | **novo** — golden de página fim a fim, determinismo                                                                                    |
-| `scripts/paint.rhai`                                                                                                 | **novo** — exemplo de C-18                                                                                                             |
-| `fuzz/`                                                                                                              | **novo** — alvos `tokenize` e `tree_build` + corpus semeado                                                                            |
-| `.github/workflows/ci.yml`                                                                                           | **novo** — jobs `golden`, `html-conformance`, `fuzz` (todos bloqueantes); `no-engine` estendido aos 3 crates                           |
-| `deny.toml`                                                                                                          | Licença de `ttf-parser`                                                                                                                |
-| `docs/adr/0014-…` (determinismo e unidades), `docs/adr/0015-…` (exceção no tokenizer), `docs/adr/README.md`          | **novo** — dois MADRs + linhas no índice                                                                                               |
-| `docs/requirements/PRD-005-…`                                                                                        | **Retrofit ao `ADR-0011`**: variação, ameaça, ciclo de vida, conformidade, `no-backend`, freeze em F4                                  |
-| `docs/requirements/PRD-007-…`, `PRD-008-…`                                                                           | Emendas: adaptadores UA-only no v0.3; `TreeSink` implementado em `core/html`, não em `core/dom`                                        |
-| `docs/requirements/PRD-002-…`                                                                                        | Nota de migração do `PORT_SCHEMA_VERSION` 2 → 3 (`EngineError::Graphics`)                                                              |
-| `docs/architecture/render-backend-port-contract.md`, `style-layout-port-contract.md`, `html-parser-port-contract.md` | **novo** — os três contract records dos sete itens                                                                                     |
-| `docs/architecture/overview.md:85-89`, `CLAUDE.md`                                                                   | `html`/`css`/`graphics` sem `engine`; "Current State" reescrito                                                                        |
-| `spdd/analysis/`, `spdd/prompt/`                                                                                     | **novo** — canvases de F4, F5 e I2 (`PRD-001:100`)                                                                                     |
-| `docs/reports/IMPLEMENTACAO-DETALHADA-V0-3.md`, `docs/README.md`                                                     | **novo** — este relatório + linha na árvore de `reports/`                                                                              |
+| Arquivo                                                                                                              | Mudança                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cargo.toml`                                                                                                         | `[workspace.dependencies]` += `ttf-parser = "=0.25.1"` (versão verificada)                                                                                                                                                                                                                                                                                                             |
+| `core/graphics/Cargo.toml`                                                                                           | + `ttf-parser`; features `software-backend` (default) e `no-backend`                                                                                                                                                                                                                                                                                                                   |
+| `core/graphics/src/domain/`                                                                                          | **novo** — `Au`, `Rect`/`Point`/`Size`, `Color`, `Opacity`, `FontId`, `DisplayList`, `DisplayCommand`, `GraphicsError`, `CommandIndex`                                                                                                                                                                                                                                                 |
+| `core/graphics/src/application/` (`ports.rs`, `builder.rs`, `conformance.rs`)                                        | **novo** — `RenderBackend`, `FontProvider`, `DisplayListBuilder` sanitizador, `run_backend_suite`                                                                                                                                                                                                                                                                                      |
+| `core/graphics/src/infrastructure/` (`cascade.rs`, `software/`, `font/`, `png.rs`)                                   | **novo** — cascata de 3 tiers, rasterizador, `SystemFontProvider`, `FontCatalog`, glifos, codificador PNG                                                                                                                                                                                                                                                                              |
+| `core/graphics/tests/` (+ `tests/golden/`)                                                                           | **novo** — conformidade, sanitização, cascata, goldens de referência com `FontProvider` sintético                                                                                                                                                                                                                                                                                      |
+| `core/css/Cargo.toml`                                                                                                | + `dom = { path = "../dom" }`; features `builtin-adapters` (default) e `no-script`                                                                                                                                                                                                                                                                                                     |
+| `core/css/src/domain/`                                                                                               | **novo** — `DomSnapshot`, `StyleSheetSet`, `StyledTree`, `LayoutBoxTree`, `ViewportConstraints`, `CssError`                                                                                                                                                                                                                                                                            |
+| `core/css/src/application/` (`ports.rs`, `snapshot.rs`, `conformance.rs`)                                            | **novo** — `CascadeResolver`/`LayoutEngine`, `snapshot(&DomTree)`, suítes                                                                                                                                                                                                                                                                                                              |
+| `core/css/src/infrastructure/` (`ua_cascade.rs`, `block_layout.rs`)                                                  | **novo** — adaptadores de referência, que são o caminho padrão                                                                                                                                                                                                                                                                                                                         |
+| `core/css/tests/`                                                                                                    | **novo** — asserção de retângulo, determinismo, troca por mock                                                                                                                                                                                                                                                                                                                         |
+| `core/html/Cargo.toml`                                                                                               | + `dom` **opcional**; features `default-tree` (default) e `no-default-tree`                                                                                                                                                                                                                                                                                                            |
+| `core/html/src/domain/`                                                                                              | **novo** — `Token`, `TagToken`, `Attribute`, `QualifiedName`, `RawKind`, `HtmlError`, `SourceLocation`                                                                                                                                                                                                                                                                                 |
+| `core/html/src/application/` (`ports.rs`, `conformance.rs`)                                                          | **novo** — `TokenSink`, `TokenSinkResult`, `TreeSink`, `run_tree_sink_suite`                                                                                                                                                                                                                                                                                                           |
+| `core/html/src/infrastructure/` (`tokenizer.rs`, `tree_builder.rs`, `dom_sink.rs`)                                   | **novo** — máquina de estados resumível, construção de árvore, adaptador sobre `DomTree`                                                                                                                                                                                                                                                                                               |
+| `core/html/tests/` + `tests/data/MANIFEST.md`                                                                        | **novo** — runner html5lib, recorte vendorizado, `MockTreeSink`, teste de suspend/resume                                                                                                                                                                                                                                                                                               |
+| `core/engine/src/domain/error.rs`                                                                                    | + variante `Graphics { operation, reason }`; `PORT_SCHEMA_VERSION` 2 → 3                                                                                                                                                                                                                                                                                                               |
+| `core/runtime/rhai/Cargo.toml` + `src/infrastructure/display_list_bindings.rs`                                       | **novo** — + `graphics`; `DisplayListHandle` sob `GRAPHICS_DRAW`, manifesto `DISPLAY_LIST_BINDINGS`                                                                                                                                                                                                                                                                                    |
+| `alloy/src/lib.rs`, `alloy/src/application/` (`pipeline.rs`, `paint.rs`), `alloy/src/main.rs`                        | **novo/refatorado** — lib + binário fino, comando `render`, mapeamento `LayoutBoxTree → DisplayList`                                                                                                                                                                                                                                                                                   |
+| `alloy/tests/`                                                                                                       | **novo** — golden de página fim a fim, determinismo                                                                                                                                                                                                                                                                                                                                    |
+| `scripts/paint.rhai`                                                                                                 | **novo** — exemplo de C-18                                                                                                                                                                                                                                                                                                                                                             |
+| `fuzz/`                                                                                                              | **novo** — alvos `tokenize` e `tree_build` + corpus semeado                                                                                                                                                                                                                                                                                                                            |
+| `.github/workflows/ci.yml`                                                                                           | **novo** — jobs `golden`, `html-conformance`, `fuzz`, `allow-count` (todos bloqueantes). ⚠️ O job `no-engine` (`:94-113`) hoje roda `cargo build -p engine` + `cargo test -p dom --no-default-features` e **não usa `cargo tree`** — quem usa é `just no-engine` (`justfile:118`), que não está no `gate` nem na CI. Estender aos 3 crates é **criar** o mecanismo, não reaproveitá-lo |
+| `.github/workflows/ci.yml` (job `coverage`, `:177`) e `justfile:102`                                                 | Hoje `-p engine --fail-under-lines 85`, hard-coded. Vira multi-crate para cobrir `domain/` de `graphics`, `css` e `html` (§5)                                                                                                                                                                                                                                                          |
+| `arch-lint.toml`                                                                                                     | **não estava listado** — 8 escopos, nenhum para `graphics`/`css`/`html`; 4 regras `deny-scope-dep`, nenhuma cobrindo os crates novos. Três crates em camadas entrariam sem regra arquitetural                                                                                                                                                                                          |
+| `justfile`                                                                                                           | Recipes `golden`, `fuzz`, `html-conformance`, `allow-count`; `gate` (`:85`) passa a incluí-los; `no-engine` entra no `gate`                                                                                                                                                                                                                                                            |
+| `lefthook.yml`                                                                                                       | pre-push roda `cargo test --workspace` — decidir se golden e fuzz entram no hook ou ficam só na CI                                                                                                                                                                                                                                                                                     |
+| `deny.toml`                                                                                                          | Licença de `ttf-parser` (MIT/Apache-2.0 — **já na allowlist** `:23-34`, nada a fazer). Atenção a `bans.multiple-versions = "deny"` (`:42`)                                                                                                                                                                                                                                             |
+| `core/{graphics,css,html}/Cargo.toml` — nota transversal                                                             | **Nenhum crate do workspace define `[features]` hoje.** As quatro features do v0.3 (`software-backend`/`no-backend`, `builtin-adapters`/`no-script`, `default-tree`/`no-default-tree`) são a estreia do mecanismo — e a CI já roda `cargo test -p dom --no-default-features` contra um crate sem features, hoje um no-op                                                               |
+| `docs/adr/0016-…` (determinismo e unidades), `docs/adr/0017-…` (exceção no tokenizer), `docs/adr/README.md`          | **novo** — dois MADRs + linhas no índice                                                                                                                                                                                                                                                                                                                                               |
+| `docs/requirements/PRD-005-…`                                                                                        | **Retrofit ao `ADR-0011`**: variação, ameaça, ciclo de vida, conformidade, `no-backend`, freeze em F4                                                                                                                                                                                                                                                                                  |
+| `docs/requirements/PRD-007-…`, `PRD-008-…`                                                                           | Emendas: adaptadores UA-only no v0.3; `TreeSink` implementado em `core/html`, não em `core/dom`                                                                                                                                                                                                                                                                                        |
+| `docs/requirements/PRD-002-…`                                                                                        | Nota de migração do `PORT_SCHEMA_VERSION` 2 → 3 (`EngineError::Graphics`)                                                                                                                                                                                                                                                                                                              |
+| `docs/architecture/render-backend-port-contract.md`, `style-layout-port-contract.md`, `html-parser-port-contract.md` | **novo** — os três contract records dos sete itens                                                                                                                                                                                                                                                                                                                                     |
+| `docs/architecture/overview.md:89-91`, `CLAUDE.md`                                                                   | `html`/`css`/`graphics` sem `engine`; "Current State" reescrito                                                                                                                                                                                                                                                                                                                        |
+| `spdd/analysis/`, `spdd/prompt/`                                                                                     | **novo** — canvases de F4, F5 e I2 (`PRD-001:100`)                                                                                                                                                                                                                                                                                                                                     |
+| `docs/reports/IMPLEMENTACAO-DETALHADA-V0-3.md`, `docs/README.md`                                                     | **novo** — este relatório + linha na árvore de `reports/`                                                                                                                                                                                                                                                                                                                              |
 
 ---
 
 > Nenhuma linha deste plano foi implementada. O que **foi** feito nesta rodada: leitura de
 > `ROADMAP-IMPLEMENTACAO-V1.md`, `IMPLEMENTACAO-DETALHADA-V0-2.md`, `PRD-005`, `PRD-007`, `PRD-008`, `ADR-0011`,
 > `ADR-0013`, `docs/architecture/overview.md`, `runtime-engine-port-contract.md`, e inspeção do estado real do workspace
-> no branch `feat/v0-2-implementation` (`core/graphics`, `core/css` e `core/html` ainda são o stub `add()`; a API
-> pública de `DomTree` foi lida de `core/dom/src/domain/tree.rs`). Todas as referências `arquivo:linha` foram conferidas
-> contra esses arquivos. **Não verificado**: a disponibilidade e a versão exata de `ttf-parser` a fixar (checar no
-> momento da implementação) e o conteúdo exato dos arquivos do upstream html5lib-tests, cujo recorte da §2.9 é declarado
-> por capacidade e vira lista nominal no `MANIFEST.md` no ato do vendoring. Os esforços em dias-dev são `[modelado]`; os
+> no branch `feat/v0-2-implementation` (`core/graphics`, `core/css` e `core/html` são placeholders de 8 linhas; a API
+> pública de `DomTree` foi lida de `core/dom/src/domain/tree.rs`). **Revisão de 2026-09-03** reconferiu tudo contra
+> `main` (`b4c3cd3`), corrigiu seis citações penduradas e a numeração de ADR, e fixou `ttf-parser` em **`=0.25.1`**
+> (verificado por `cargo search`: pure-Rust, licença MIT/Apache-2.0, já na allowlist do `deny.toml:23-34`). **Não
+> verificado**: o conteúdo exato dos arquivos do upstream html5lib-tests, cujo recorte da §2.9 é declarado por
+> capacidade e vira lista nominal no `MANIFEST.md` no ato do vendoring. Os esforços em dias-dev são `[modelado]`; os
 > blocos que existem no roadmap reaproveitam `ROADMAP-IMPLEMENTACAO-V1.md:261-262`, e os demais não têm velocidade
 > histórica para calibrá-los.

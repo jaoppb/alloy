@@ -1,13 +1,13 @@
 # Implementação da v0.5 — plano detalhado de F8 + F9 · I4
 
-| Campo               | Valor                                                                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Status**          | ❌ Não iniciado — plano. `core/css`, `core/window` e `core/network` são o stub `add()` de 16 linhas                                  |
-| **Cobertura**       | Fecha **0** dos 18 critérios numerados — e é a versão que mais fecha requisito: `PRD-007` integral, `PRD-003` §3.2 pela primeira vez |
-| **Esforço**         | 84–126 dias-dev `[modelado]`. `ROADMAP-IMPLEMENTACAO-V1.md:218` orça 50–75 — a diferença é escopo escolhido, aberta em §1.3          |
-| **Depende de**      | v0.1 + v0.2 + **v0.3 inteira**. I4 exige F8 **e** I2 (`ROADMAP-IMPLEMENTACAO-V1.md:281`)                                             |
-| **Atenção**         | ⚠️ A v0.5 escreve **dois** ports novos (`core/network`, `core/window`) e é a primeira a executar política em `.rhai` — §2.4          |
-| **Fecha requisito** | `PRD-007` integral · `PRD-003` §3.2 (perfis de rede e de UI) · N-01 (`<10μs`) vira medida · `PRD-009`/`PRD-010` **novos**            |
+| Campo               | Valor                                                                                                                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**          | ❌ Não iniciado — plano. `core/window` e `core/network` são placeholders de 8 linhas; `core/css` é criado pela **v0.3 F4c** (portas + adaptadores UA), e a F9 troca os miolos atrás das mesmas traits |
+| **Cobertura**       | Fecha **0** dos 18 critérios numerados — e é a versão que mais fecha requisito: `PRD-007` integral, `PRD-003` §3.2 pela primeira vez                                                                  |
+| **Esforço**         | 84–126 dias-dev `[modelado]`. `ROADMAP-IMPLEMENTACAO-V1.md:218` orça 50–75 — a diferença é escopo escolhido, aberta em §1.3                                                                           |
+| **Depende de**      | v0.1 + v0.2 + **v0.3 inteira**. I4 exige F8 **e** I2 (`ROADMAP-IMPLEMENTACAO-V1.md:281`)                                                                                                              |
+| **Atenção**         | ⚠️ A v0.5 escreve **dois** ports novos (`core/network`, `core/window`) e é a primeira a executar política em `.rhai` — §2.4                                                                           |
+| **Fecha requisito** | `PRD-007` integral · `PRD-003` §3.2 (perfis de rede e de UI) · N-01 (`<10μs`) vira medida · `PRD-009`/`PRD-010` **novos**                                                                             |
 
 > ⚠️ **Base de referência das citações.** Toda referência `arquivo:linha` deste relatório foi conferida contra
 > `feat/v0-2-implementation` (commit `6536bbc`, PR #5), **não** contra `main`. Em `main` os números de linha do
@@ -116,15 +116,17 @@ contrariam a decisão 2.1 da v0.3 (`IMPLEMENTACAO-DETALHADA-V0-3.md:94-107`), qu
 crate de domínio nomeia `engine`**. E `window → graphics` é evitável sem custo — §2.7. As linhas viram `window → nada` e
 `network → nada`, e a correção é entregável desta versão, não dívida.
 
-O índice de ADRs (`docs/adr/README.md:12-23`) pula o **ADR-0012**. Não é lacuna: `ADR-0011:128` o reserva para a escolha
-do motor de JS de conteúdo, que é decisão da v0.7. Os ADRs novos da v0.5 são o **0016** e o **0017** — a v0.3 já
-reivindicou 0014 e 0015 (`IMPLEMENTACAO-DETALHADA-V0-3.md:590`).
+O índice de ADRs (`docs/adr/README.md:12-25`) pula o **ADR-0012**. Não é lacuna: `ADR-0011:128` o reserva para a escolha
+do motor de JS de conteúdo, que é decisão da v0.7. Os ADRs novos da v0.5 são o **0018** e o **0019**: `0014` e `0015` já
+existem em `main` (`tracing` e `thiserror`, ambos `Accepted` 2026-08-30), e `0016`/`0017` são da v0.3
+(`IMPLEMENTACAO-DETALHADA-V0-3.md` §2.5 e §2.10). A tabela de reservas em `docs/adr/README.md` é agora o registro
+autoritativo — consultá-la antes de numerar é o que impede a colisão de voltar.
 
 ---
 
 ## 2. As decisões de design
 
-### 2.1 `unsafe` é decidido por superfície de ameaça, não por conveniência (ADR-0016)
+### 2.1 `unsafe` é decidido por superfície de ameaça, não por conveniência (ADR-0018)
 
 A escolha de um provider de cripto em Rust puro (§2.5) só é coerente se a regra que a motiva for escrita — porque a
 mesma versão precisa de `winit` e `softbuffer`, e chamar a API de janela do sistema operacional é FFI.
@@ -160,14 +162,14 @@ A regra honesta é por superfície de ameaça, e ela descreve o que o projeto **
 | Conveniência — SIMD, alocação, otimização                          | **Proibido**           | Foi o critério que a v0.3 usou para rejeitar `simd-adler32` (`IMPLEMENTACAO-DETALHADA-V0-3.md:239-241`)         |
 
 A linha 2 tem prazo de validade: na v0.7, `core/js` executa script **adversário**, e o motor de conteúdo cai na linha 1,
-não na 2. O `ADR-0016` deve escrever isso agora, para que a escolha do motor de JS (reservada ao `ADR-0012`,
+não na 2. O `ADR-0018` deve escrever isso agora, para que a escolha do motor de JS (reservada ao `ADR-0012`,
 `ADR-0011:128`) nasça sabendo que o critério de `unsafe` dela é o estrito.
 
 `#![forbid(unsafe_code)]` continua em **todo** crate nosso, sem exceção. O que a regra governa é a árvore de
 dependências, que `cargo-deny` não inspeciona — ele audita CVE e licença, não blocos `unsafe`. Portanto **portão novo**:
 job de CI `unsafe-audit` que roda `cargo-geiger` sobre o workspace e falha se aparecer `unsafe` em crate fora de uma
 _allowlist_ nominal e comentada — que nasce com `rhai` dentro, e com o comentário dizendo por quê. A allowlist é o
-registro revisável das linhas 2 e 3 da tabela; ela cresce por revisão, nunca por acidente. Isso vira o **ADR-0016**, e
+registro revisável das linhas 2 e 3 da tabela; ela cresce por revisão, nunca por acidente. Isso vira o **ADR-0018**, e
 `PRD-001:97` é **reescrito** na mesma entrega: um requisito que nunca foi verdade corrói os outros quatro.
 
 ### As alternativas sem `unsafe`, e o que cada uma custa
@@ -207,7 +209,7 @@ integração que só se verifica à mão regride em silêncio.
 `RequestPolicy` é o port de **política** no sentido de `ADR-0011:107-113`: pode ser dirigido em tempo de execução por
 `.rhai` (§2.4). `HttpTransport` e `WindowSystem` são mecanismo, trocados em tempo de compilação.
 
-### 2.3 Um único event loop dono da thread principal (ADR-0017)
+### 2.3 Um único event loop dono da thread principal (ADR-0019)
 
 O roadmap marca isso como armadilha de I5 (`:318`) — _"dois laços disputando a thread principal"_ — e I5 é v0.9. Mas a
 v0.5 é a primeira versão a **ter** um laço: `winit` toma posse da thread principal, e é irreversível depois que rede,
@@ -219,7 +221,7 @@ evento do mesmo laço. Sem runtime assíncrono, sem `tokio`: a assinatura do `Ru
 um executor para depois ter de atravessá-lo a cada hook é comprar um problema que ninguém pediu.
 
 Consequências que já ficam pagas para I5: o _watcher_ de hot-reload da F11 é mais um produtor no mesmo canal; o event
-loop de JS da F10 é mais um consumidor no mesmo laço. Vira **ADR-0017**.
+loop de JS da F10 é mais um consumidor no mesmo laço. Vira **ADR-0019**.
 
 ### 2.4 A política vai para o muscle — e é aqui que a tese do ADR-0003 é provada ou não
 
@@ -270,7 +272,7 @@ pela regra de §2.1: cripto processa bytes que o atacante escolhe.
 | ------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
 | `rustls` + provider RustCrypto  | Handshake e AEAD em Rust puro       | Provider menos maduro que o padrão; handshake e _bulk crypto_ mais lentos; menos auditoria | **Escolhida** — decisão de escopo 1                  |
 | `rustls` + `aws-lc-rs` / `ring` | Provider padrão, assembly otimizado | `unsafe` na superfície que decifra bytes do atacante                                       | Rejeitada pela regra de §2.1                         |
-| `reqwest` / `hyper`             | Cliente HTTP completo               | Puxa `tokio` e um executor assíncrono que colide com o laço único de §2.3                  | Rejeitada: contradiz o ADR-0017 antes de ele existir |
+| `reqwest` / `hyper`             | Cliente HTTP completo               | Puxa `tokio` e um executor assíncrono que colide com o laço único de §2.3                  | Rejeitada: contradiz o ADR-0019 antes de ele existir |
 | TLS próprio                     | Handshake e cifra do zero           | Meses, e uma superfície criptográfica não auditada protegendo o usuário                    | Rejeitada: irresponsável                             |
 
 Raízes de confiança por `webpki-roots` (conjunto embarcado, determinístico) e **não** pelo _trust store_ do sistema — o
@@ -313,12 +315,19 @@ aresta a menos no grafo, e o item 3 do `ADR-0011` respeitado ao pé da letra.
 
 A apresentação em si é `softbuffer`: _blit_ dos pixels para a superfície da janela, sem GPU. O `SoftwareCpuBackend` da
 v0.3 continua sendo o **único** produtor de pixels, o que preserva intacto o portão de golden image e o determinismo do
-ADR-0014 — a janela mostra exatamente o que o PNG de referência contém. Antecipar o `OpenGLBackend` da F12 daria janela
+ADR-0016 — a janela mostra exatamente o que o PNG de referência contém. Antecipar o `OpenGLBackend` da F12 daria janela
 acelerada e quebraria as duas coisas, além de inverter a ordem que o roadmap declara não-negociável (`:293`).
 
 `HeadlessWindowSystem` é o adaptador de referência que o item 6 exige, e o que faz I4 rodar em CI.
 
 ### 2.8 `core/css`: o parser, os seletores e a cascata que a v0.3 deliberadamente não escreveu
+
+> **Herdado da v0.3, não criado aqui.** A F4c da v0.3 já entrega `core/css` com os cinco agregados e as três portas
+> (`CascadeResolver`, `LayoutEngine`, `TextMeasurer`), mais `ua_cascade` e `block_layout` como adaptadores de
+> referência. A F9 **troca os miolos atrás das mesmas traits** — é o teste de troca do `ADR-0011:99-102` sendo exercido
+> de verdade. O que a F9 acrescenta é o que a v0.3 declarou fora (`IMPLEMENTACAO-DETALHADA-V0-3.md` §2.14): parser de
+> CSS, seletores, especificidade, `<style>`/`style=`, box model completo, IFC e Flexbox. O freeze dos agregados é em
+> **I3**, então a mudança é livre até lá, com bump de `css::PORT_SCHEMA_VERSION`.
 
 A v0.3 entrega os agregados de fronteira e as portas do `PRD-007` com adaptadores UA-only, **sem parser**
 (`IMPLEMENTACAO-DETALHADA-V0-3.md:243-274`). A v0.5 troca os miolos atrás das mesmas traits — que é a prova de que a
@@ -362,7 +371,7 @@ que impede o recorte de encolher em silêncio para o CI ficar verde.
 Fora, declarado: `float`, `position: absolute/fixed/sticky`, Grid, `writing-mode`, BiDi, tabelas com algoritmo de
 largura automática, `z-index` com contexto de empilhamento completo.
 
-Toda geometria continua em `Au(i32)` (ADR-0014 da v0.3), sem exceção: é o que mantém a golden image idêntica nos três
+Toda geometria continua em `Au(i32)` (ADR-0016 da v0.3), sem exceção: é o que mantém a golden image idêntica nos três
 SOs depois de o layout ficar dez vezes mais complexo.
 
 **A alavanca de alívio de §1.3 é aqui**: `flex-wrap` é a única sub-fatia que sai sem tornar Flexbox inútil, porque a
@@ -391,7 +400,7 @@ A v0.5 o implementa. O trabalho tem três partes, e a terceira é a que costuma 
    condicionados ao portão de §2.1: entram **se** o `unsafe-audit` passar; caso contrário o decodificador próprio é a
    alavanca declarada (+4–6 d `[modelado]`). JPEG fica fora da v0.5, declarado.
 2. **Rasterização** — `DrawImage` no `SoftwareCpuBackend`, com escala por amostragem de caixa em inteiros. Nada de
-   filtro em ponto flutuante: o determinismo do ADR-0014 vale para pixel de imagem como vale para glifo.
+   filtro em ponto flutuante: o determinismo do ADR-0016 vale para pixel de imagem como vale para glifo.
 3. **Sizing intrínseco e o segundo layout** — a largura e a altura da imagem só são conhecidas depois do download. O
    layout roda primeiro com a caixa vazia (ou com `width`/`height` do autor, se houver), e a chegada de cada imagem
    dispara **re-cascata e re-layout da árvore inteira**, porque `PRD-007:51` manda granularidade grossa. Isso é correto
@@ -467,7 +476,7 @@ documentação, que é o risco §6 do próprio roadmap (`:425-427`).
 | 6 Conformidade + ref + `no-*`    | `run_transport_suite` · `MockTransport` · `no-transport`      | `run_window_suite` · `HeadlessWindowSystem` · `no-window` |
 | 7 Congelamento                   | Congela em **I4**                                             | Congela em **I4**                                         |
 
-O item 5 do port de janela é o mais carregado: é onde a regra "um único event loop dono da thread principal" do ADR-0017
+O item 5 do port de janela é o mais carregado: é onde a regra "um único event loop dono da thread principal" do ADR-0019
 fica escrita como contrato, e não como convenção que a F10 pode desconhecer.
 
 ### 2.16 O que NÃO fazer na v0.5
@@ -500,7 +509,7 @@ fica escrita como contrato, e não como convenção que a F10 pode desconhecer.
 | **M**   | Muscle: `default_ui.rhai`, `default_network.rhai`, bindings guardados, perfis            | Script sem `NETWORK_FETCH` recebe `PermissionDenied`           | 8–12 d               |
 | **X**   | `<img>`: _inflate_, decodificador PNG, `DrawImage`, sizing intrínseco, relayout          | Golden com imagem; _fuzz_ do decodificador verde               | 5–8 d                |
 | **I4**  | `alloy <url>`, navegação, resize → relayout, subrecursos, `<link rel=stylesheet>`        | `alloy https://example.com` renderiza; golden fim a fim em CI  | 8–12 d               |
-| **P**   | Portões: `criterion`, `unsafe-audit`, _fuzz_ de CSS, ADR-0016/0017, PRD-009/010, records | Três jobs de CI novos, bloqueantes                             | 5–8 d                |
+| **P**   | Portões: `criterion`, `unsafe-audit`, _fuzz_ de CSS, ADR-0018/0019, PRD-009/010, records | Três jobs de CI novos, bloqueantes                             | 5–8 d                |
 
 **Ordem, e por que ela é assim.** R → (F9a → F9b → F9c ‖ F8a → F8b) → M → X → I4 → P. As trilhas B e C do roadmap
 (`:251-253`) rodam em paralelo; R e P são compartilhados.
@@ -554,7 +563,7 @@ e `<img>` — com fila e coalescência (2–3 d); resize → re-cascata → rela
 
 **P — passos (5–8 d):** benchmark `criterion` do hook + linha de base + portão bloqueante (1–1,5 d); job `unsafe-audit`
 com `cargo-geiger` e allowlist nominal (1–1,5 d); alvos de _fuzz_ de CSS e do decodificador PNG (1 d); generalização do
-`EngineError` para `Subsystem` + bump 3 → 4 + nota de migração (0,5 d); ADR-0016, ADR-0017, `PRD-009`, `PRD-010`, dois
+`EngineError` para `Subsystem` + bump 3 → 4 + nota de migração (0,5 d); ADR-0018, ADR-0019, `PRD-009`, `PRD-010`, dois
 contract records, `overview.md:92-93`, `deny.toml`, `CLAUDE.md` (1,5–2,5 d).
 
 **Mínimo viável** (só o que o roadmap literalmente pede — F9 + F8 + I4, sem muscle, sem `<img>`, sem quebra de crate): ≈
@@ -567,10 +576,10 @@ contract records, `overview.md:92-93`, `deny.toml`, `CLAUDE.md` (1,5–2,5 d).
 | Armadilha                                                                                           | Mitigação                                                                                                                              |
 | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Provider RustCrypto do `rustls` não existe na forma esperada, ou é incompatível com a versão fixada | Verificar **no primeiro dia da F8a**, antes de qualquer código de HTTP; a decisão de §2.5 tem um segundo lugar declarado e um custo    |
-| `winit` e `softbuffer` trazem `unsafe` e contradizem a escolha de §2.5 se a regra não for escrita   | ADR-0016 primeiro, código depois: a allowlist nominal do `unsafe-audit` é o que torna a exceção revisável em vez de precedente         |
-| `PRD-001:97` exige "zero unsafe" enquanto o `rhai` transmuta na costura de binding desde a v0.1     | Reescrever N-02 na fase P junto com o ADR-0016, e rodar o `unsafe-audit` na árvore **de hoje** antes de fixar qualquer dep nova (§2.1) |
+| `winit` e `softbuffer` trazem `unsafe` e contradizem a escolha de §2.5 se a regra não for escrita   | ADR-0018 primeiro, código depois: a allowlist nominal do `unsafe-audit` é o que torna a exceção revisável em vez de precedente         |
+| `PRD-001:97` exige "zero unsafe" enquanto o `rhai` transmuta na costura de binding desde a v0.1     | Reescrever N-02 na fase P junto com o ADR-0018, e rodar o `unsafe-audit` na árvore **de hoje** antes de fixar qualquer dep nova (§2.1) |
 | `tokio` entra pela porta dos fundos junto com um cliente HTTP pronto                                | HTTP/1.1 escrito à mão sobre `std::net`; o job `unsafe-audit` e o `cargo tree` do portão de rede tornam a entrada visível no PR        |
-| Segundo event loop aparece para "tratar rede" e disputa a thread principal                          | ADR-0017 escrito na F8b, antes da F11 e da F10 (`ROADMAP-IMPLEMENTACAO-V1.md:318`); I/O em worker, resultado por canal                 |
+| Segundo event loop aparece para "tratar rede" e disputa a thread principal                          | ADR-0019 escrito na F8b, antes da F11 e da F10 (`ROADMAP-IMPLEMENTACAO-V1.md:318`); I/O em worker, resultado por canal                 |
 | Colapso de margem tratado como detalhe e implementado por último                                    | É passo 1 da F9c, com asserção de retângulo própria; sem ele nenhuma página real bate                                                  |
 | Golden image quebra em massa quando a cascata real substitui a folha UA da v0.3                     | Regerar as goldens é esperado e deve ser **um commit isolado**, revisável imagem a imagem, nunca misturado com mudança de layout       |
 | Variação de fontes do SO diverge os testes de renderização                                          | Testes automatizados usam `FontProvider` sintético; resolução de `font-family` do sistema opera no runtime (§2.10)                     |
@@ -717,7 +726,7 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 | `fuzz/fuzz_targets/` (`css_parse.rs`, `inflate.rs`, `png_decode.rs`)                                     | **novo** — três alvos                                                                                       |
 | `.github/workflows/ci.yml`                                                                               | **novo** — jobs `hook-benchmark`, `unsafe-audit`, `css-conformance`; `no-engine` estendido                  |
 | `deny.toml:19-23`                                                                                        | Licenças da pilha TLS e de `winit`/`softbuffer`                                                             |
-| `docs/adr/0016-…` (`unsafe` por superfície de ameaça), `docs/adr/0017-…` (event loop único), `README.md` | **novo** — dois MADRs + linhas no índice (0012 segue reservado, `ADR-0011:128`)                             |
+| `docs/adr/0018-…` (`unsafe` por superfície de ameaça), `docs/adr/0019-…` (event loop único), `README.md` | **novo** — dois MADRs + linhas no índice (0012 segue reservado, `ADR-0011:128`)                             |
 | `docs/requirements/PRD-009-…`, `PRD-010-…`                                                               | **novo** — os dois seam PRDs dos ports de rede e de janela                                                  |
 | `docs/requirements/PRD-002-…`                                                                            | Nota de migração do `PORT_SCHEMA_VERSION` 3 → 4 (`EngineError::Subsystem`)                                  |
 | `docs/requirements/PRD-001-…:97`                                                                         | **Reescrita de N-02** — "zero unsafe" nunca foi verdade (§2.1); vira o critério por superfície de ameaça    |

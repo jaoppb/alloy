@@ -11,24 +11,25 @@ not the "PRD-002 verbatim / `core/engine → rhai`" path the v0.1 report origina
 (ADR-0014), `thiserror` outside `core/engine` (ADR-0015), and the object-calisthenics VOs `FunctionName` /
 `VariableName` / `Line` / `Column` (port schema **v2** — every name on the port is a validated newtype).
 
-**v0.2 ("DOM scriptável e contido") delivered on `feat/v0-2-implementation` — F3 + I1 + F6.** Closes C-03, C-06, C-07,
-C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `…320-*-f6-i1.md`. Not yet merged to `main`
-(neither is v0.1).
+**v0.2 ("DOM scriptável e contido") delivered — F3 + I1 + F6.** Closes C-03, C-06, C-07, C-08, C-09. SPDD canvases:
+`spdd/{analysis,prompt}/202608300315-*-f3.md` and `…320-*-f6-i1.md`. **Both v0.1 and v0.2 are merged to `main`**
+(`75dc34b`, `0a60036`; PRs #4, #5, #6 all merged).
 
 - **F6 — `core/engine`**: `application/dyn_bridge.rs` (ADR-0013) — the object-safe `dyn` companion: `DynRuntimeEngine` /
   `DynExecutionContext` / `DynCompiledScript` + free `eval_typed`, all blanket-impl'd, no F1 signature change.
   `engine::conformance::run_dyn_suite` — `MockEngine` and `RhaiEngine` pass it alongside `run_core_suite`. Contract
   record item 2 → ✅.
-- **F6 — `core/runtime/rhai`**: `infrastructure/sandbox.rs` —
+- **F6 — `core/runtime/rhai`**: `infrastructure/context.rs:80` —
   `RhaiContext::register_guarded_binding(name, arity, required, handler)` is the single capability chokepoint
-  (`CapabilitySet` captured by value; guard is `and` of bits + branch); `GuardedBinding` table +
-  `install_guarded_table` + `guarded_bindings()` for the C-06 sweep. v0.2 ships **no** production top-level guarded
-  binding (all DOM access is `NodeHandle` methods, which self-guard) — the mechanism is tested and ready.
-  `infrastructure/fallback.rs` — `run_with_fallback` (primary → stderr diagnostic + `SourceLocation` → embedded
-  `scripts/default_dom.rhai` on a **clean** tree → Rust `minimal_document()`), `PanicHookGuard` scoped around each eval.
-  Tests: `dyn_conformance`, `isolation` (C-08: scope / capability / trapped-panic isolation), `fault_injection` (C-09:
-  panic in a guarded binding trapped for every capability; `run_with_fallback` recovers from every error class incl. the
-  default script failing). CI job `fault-injection` (`--test-threads=1`) is **blocking**.
+  (`CapabilitySet` captured by value; guard is `and` of bits + branch); `guarded_bindings()` (`context.rs:100`) is the
+  C-06 sweep; `infrastructure/sandbox.rs` holds the `GuardedBinding` table type and `install_guarded_table`. v0.2 ships
+  **no** production top-level guarded binding (all DOM access is `NodeHandle` methods, which self-guard) — the mechanism
+  is tested and ready. `infrastructure/fallback.rs` — `run_with_fallback` (primary → stderr diagnostic +
+  `SourceLocation` → embedded `scripts/default_dom.rhai` on a **clean** tree → Rust `minimal_document()`),
+  `PanicHookGuard` scoped around each eval. Tests: `dyn_conformance`, `isolation` (C-08: scope / capability /
+  trapped-panic isolation), `fault_injection` (C-09: panic in a guarded binding trapped for every capability;
+  `run_with_fallback` recovers from every error class incl. the default script failing). CI job `fault-injection`
+  (`--test-threads=1`) is **blocking**.
 - **F6 — `alloy`**: `--script` runs through `run_with_fallback` — a failing script writes a diagnostic, the fallback DOM
   is printed, and the process exits 0.
 
@@ -47,15 +48,15 @@ C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `�
   `EngineValue ⇄ rhai::Dynamic` marshaling; `set_max_operations`/`set_max_call_levels`/`set_max_expr_depths` + a
   wall-clock `on_progress` guard → `ExecutionLimitExceeded` (**C-04**); `catch_unwind` → `ScriptPanic` (mechanism of
   C-09); `RhaiContext::register_custom_type::<T: EngineType + rhai::CustomType>` bridge. **The only crate that names a
-  `rhai` type.** `PORT_SCHEMA_VERSION = 2` (v0.2 added `EngineError::Dom`). `tests/` run the shared conformance suite +
-  `FixtureNode` (**C-02**) + `scriptable_dom` (**C-03** and the I1 slice of C-06/C-07).
-- **`core/dom`** (v0.2 F3): pure domain crate, **zero dependencies**, `#![forbid(unsafe_code)]`, all nine Object
-  Calisthenics rules (no exception). `domain/` — arena `DomTree` (`Vec<Slot>` by `NodeId(u32)`; removal → `Tombstone`,
-  index never reused) enforcing the five invariants of report §2.2 through its methods only; value objects (`TagName` /
-  `AttributeName` validated + lowercased, `TextContent`, `CommentContent`, `AttributeValue`); first-class `Children` /
-  `AttributeMap` (insertion order); one `#[non_exhaustive]` `DomError` (9 variants; never names `EngineError`);
-  non-recursive `Descendants` / `Ancestors`. `application/serialize.rs` — deterministic `serialize_html` (escapes `&<>`,
-  void elements). 15 tests.
+  `rhai` type.** (`PORT_SCHEMA_VERSION` lives only in `core/engine/src/lib.rs:65`; this crate consumes it.) `tests/` run
+  the shared conformance suite + `FixtureNode` (**C-02**) + `scriptable_dom` (**C-03** and the I1 slice of C-06/C-07).
+- **`core/dom`** (v0.2 F3): pure domain crate, **one dependency** (`thiserror`, ADR-0015), `#![forbid(unsafe_code)]`,
+  all nine Object Calisthenics rules (no exception). `domain/` — arena `DomTree` (`Vec<Slot>` by `NodeId(u32)`; removal
+  → `Tombstone`, index never reused) enforcing the five invariants of report §2.2 through its methods only; value
+  objects (`TagName` / `AttributeName` validated + lowercased, `TextContent`, `CommentContent`, `AttributeValue`);
+  first-class `Children` / `AttributeMap` (insertion order); one `#[non_exhaustive]` `DomError` (9 variants; never names
+  `EngineError`); non-recursive `Descendants` / `Ancestors`. `application/serialize.rs` — deterministic `serialize_html`
+  (escapes `&<>`, void elements). 15 tests.
 - **`core/runtime/rhai` I1**: `infrastructure/dom_bindings.rs` — `NodeHandle` (`EngineType` + `rhai::CustomType`, script
   name `Node`) holding `Arc<Mutex<DomTree>>` + `NodeId` + a baked-in `CapabilitySet`; each method self-guards
   (`DOM_READ` reads, `DOM_MUTATE` mutators) and maps `DomError` → `EngineError::Dom`. `NODE_HANDLE_BINDINGS` is the
@@ -69,10 +70,10 @@ C-08, C-09. SPDD canvases: `spdd/{analysis,prompt}/202608300315-*-f3.md` and `�
   falls back safely on script error. `clap` derive for args, typed `AlloyError` (`thiserror`) for failures, `tracing`
   (ADR-0014) for structured diagnostics. Examples: `scripts/hello.rhai`, `scripts/hello_dom.rhai`.
 
-Still **stubs** (`add()` / `it_works()`, `#![forbid(unsafe_code)]` only): `core/html`, `core/css`, `core/graphics`,
-`core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-10 … C-18 (v0.3+). Follow the
-`domain/` / `application/` / `infrastructure/` layering that `core/engine`, `core/runtime/rhai`, and `core/dom` now
-demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
+Still **stubs** (8 lines: a doc comment and `#![forbid(unsafe_code)]` — no functions at all): `core/html`, `core/css`,
+`core/graphics`, `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-10 … C-18 (v0.3+).
+Follow the `domain/` / `application/` / `infrastructure/` layering that `core/engine`, `core/runtime/rhai`, and
+`core/dom` now demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
 
 ## Commands
 

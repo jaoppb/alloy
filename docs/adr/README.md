@@ -23,3 +23,23 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0013](0013-object-safe-runtime-engine-companion.md)                   | Object-Safe `dyn` Companion for the `RuntimeEngine` Port | Accepted | 2026-08-30 |
 | [ADR-0014](0014-structured-logging-with-tracing.md)                        | Structured Logging with `tracing`                        | Accepted | 2026-08-30 |
 | [ADR-0015](0015-typed-errors-with-thiserror.md)                            | Typed Errors with `thiserror`                            | Accepted | 2026-08-30 |
+
+---
+
+## 🔒 Números reservados
+
+Os planos de implementação em `docs/reports/` reivindicam números de ADR antes de os arquivos existirem, e três
+documentos já colidiram em `0014`–`0017`. Esta tabela é o registro de reserva: **consulte-a antes de numerar um ADR
+novo**, e adicione a linha aqui no mesmo commit em que o plano reivindica o número.
+
+| Número       | Reservado para                                                            | Origem da reserva                              |
+| ------------ | ------------------------------------------------------------------------- | ---------------------------------------------- |
+| **ADR-0012** | Escolha do motor de JavaScript de conteúdo (`core/js`)                    | `ADR-0011:128`                                 |
+| **ADR-0016** | Unidades fixas (`Au`) e política de determinismo de rasterização          | `IMPLEMENTACAO-DETALHADA-V0-3.md` §2.5         |
+| **ADR-0017** | Exceção medida de Object Calisthenics e de lints numéricos no laço quente | `IMPLEMENTACAO-DETALHADA-V0-3.md` §2.10, §2.15 |
+| **ADR-0018** | `unsafe` por superfície de ameaça (reescrita de N-02)                     | `IMPLEMENTACAO-DETALHADA-V0-5.md` §2.1         |
+| **ADR-0019** | Event loop único                                                          | `IMPLEMENTACAO-DETALHADA-V0-5.md` §2.3         |
+
+> ⚠️ O branch **`docs/benchmark-harness-prd-009`** (`e2f5f1f`, sem PR aberto) tem `0016-…benchmark-harness.md` e
+> `0017-…performance-tiers….md` escritos, ambos `Proposed`. Eles colidem com as reservas acima e **renumeram para
+> `0020`/`0021` ao rebasear** — a v0.3 tem prioridade de fila por ser a próxima versão.
