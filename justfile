@@ -82,7 +82,7 @@ fix:
 # --- quality gates -------------------------------------------------
 
 # Full local gate (CI minus the 3-OS matrix)
-gate: fmt-check lint check test deny coverage arch
+gate: fmt-check lint check test deny coverage arch no-engine
     @echo "✓ all local gates passed"
 
 # Alias for `gate`
@@ -136,6 +136,11 @@ no-engine:
         echo "✗ core/runtime/rhai depends on core/dom — the bridge belongs in rhai-bindings"; exit 1; \
     else \
         echo "✓ core/runtime/rhai is domain-crate free"; \
+    fi
+    @if {{cargo}} tree -p css --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then \
+        echo "✗ core/css linked the engine or a script runtime"; exit 1; \
+    else \
+        echo "✓ core/css is engine/rhai free"; \
     fi
 
 # --- misc -------------------------------------------------------------

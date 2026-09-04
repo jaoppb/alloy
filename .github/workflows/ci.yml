@@ -111,6 +111,17 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-noengine-
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
+      - run: cargo test -p css --no-default-features
+      # PRD-007: core/css realises the cascade/layout ports without linking the
+      # engine or a script runtime — the scriptable adapter lives in
+      # rhai-bindings. It may depend on dom and graphics, and nothing else.
+      - name: css links no engine or script runtime
+        run: |
+          if cargo tree -p css --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then
+            echo "✗ core/css linked the engine or a script runtime"
+            exit 1
+          fi
+          echo "✓ core/css is engine/rhai free"
       # v0.5 report §2.12 (R): the pure Rhai backend must name no domain crate —
       # the domain bridges live in `rhai-bindings`. `just no-engine` also asserts
       # `rhai-runtime -> !dom` locally; this keeps it green in CI.

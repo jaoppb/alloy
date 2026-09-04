@@ -5,8 +5,28 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
+description = "Style-cascade and layout boundary aggregates and the replaceable CascadeResolver / LayoutEngine / TextMeasurer ports (PRD-007, ADR-0011)."
+
+# `ADR-0011:99-102` item 6 asks every port for a `no-<adapter>` build. The only
+# adapters this crate ships are Rust — `UaCascade`, `BlockLayout`,
+# `MonospaceMetrics` and the port mocks — and every one of them is always
+# compiled. The scriptable `.rhai` cascade adapter of `PRD-007` §3.4 lives in
+# `core/runtime/rhai-bindings`, never here, so the `no-script` build is
+# trivially satisfied: `--no-default-features` links exactly the same code as
+# `--all-features` in B0. `builtin-adapters` is the switch a later phase (B1+)
+# uses once there is script-facing content to gate; today it gates nothing.
+# Same shape and reason as `core/graphics/Cargo.toml`'s `[features]` block.
+[features]
+default = ["builtin-adapters"]
+builtin-adapters = []
 
 [dependencies]
+dom = { path = "../dom" }
+# `graphics` is imported for its shared fixed-point units only — `Au` / `Px` /
+# `Color` / `Rect` / `Point` / `Size` (`ADR-0016`, plan §1.4). No rasterizer
+# type crosses into `css`.
+graphics = { path = "../graphics" }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true

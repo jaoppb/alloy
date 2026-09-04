@@ -13,6 +13,11 @@ exclude = [
     # The golden-image gate is the same kind of code: it panics on mismatch on
     # purpose, and a missing reference is a test-authoring error.
     "core/graphics/src/infrastructure/golden.rs",
+    # The CSS port conformance suite is the same assertion-code carve-out
+    # (ADR-0011 item 6), and the manifest runner is a two-way-consistency gate
+    # that panics on divergence by design.
+    "core/css/src/application/conformance.rs",
+    "core/css/tests/manifest_runner.rs",
 ]
 respect_gitignore = true
 
@@ -70,6 +75,18 @@ paths = ["core/graphics/src/application/**"]
 name = "graphics"
 paths = ["core/graphics/**"]
 
+[[scopes]]
+name = "css_domain"
+paths = ["core/css/src/domain/**"]
+
+[[scopes]]
+name = "css_application"
+paths = ["core/css/src/application/**"]
+
+[[scopes]]
+name = "css"
+paths = ["core/css/**"]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -117,6 +134,21 @@ message = "Graphics domain layer must not depend on application layer, engine po
 from = "graphics"
 to = ["engine", "runtime_rhai", "alloy_cli", "dom"]
 message = "core/graphics must not depend on engine, DOM, concrete script runtimes, or CLI (PRD-005:62-63)."
+
+# CSS domain layer must not depend on the application layer or any adapter crate.
+[[deny-scope-dep]]
+from = "css_domain"
+to = ["css_application", "engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "CSS domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+
+# core/css realises the cascade/layout ports without naming the engine or a
+# script runtime — the scriptable adapter lives in rhai-bindings (PRD-007:64-67).
+# It MAY depend on core/dom and core/graphics (shared units, ADR-0016), so those
+# are deliberately absent from this list.
+[[deny-scope-dep]]
+from = "css"
+to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "core/css must not depend on engine, concrete script runtimes, the bindings crate, or CLI (PRD-007). It may depend on dom and graphics."
 
 # --- import restrictions ---------------------------------------------------
 
