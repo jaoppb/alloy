@@ -1,12 +1,15 @@
 //! Component-value parsing: the tokens of a declaration's value turned into the
 //! computed-value vocabulary the cascade applies.
 //!
-//! The v0.5 B1 slice is deliberately narrow — the lengths `px` / `em` / `rem` /
-//! `%` / `pt`, the colour forms `#rgb` / `#rrggbb` plus a handful of names, and
-//! the `display` keywords `ComputedStyle` already carries. `rgb()` / `rgba()`
-//! and the full CSS colour name table are B2's slice (`plano:420-434`); a value
-//! outside this set makes the declaration drop with a note, never a silently
-//! wrong colour.
+//! The v0.5 B1 slice was deliberately narrow — the lengths `px` / `em` /
+//! `rem` / `%` / `pt`, the colour forms `#rgb` / `#rrggbb` plus a handful of
+//! names, and the `display` keywords `ComputedStyle` already carries. B2
+//! (`plano:435-443`) adds the functional colour notation `rgb()` / `rgba()`
+//! (CSS Color L4 §5.1, legacy comma syntax); the full CSS colour name table
+//! remains out of the cut. A value outside this set makes the declaration
+//! drop with a note, never a silently wrong colour.
+
+use graphics::Opacity;
 
 use crate::domain::color::CssColor;
 use crate::domain::computed::display::Display;
@@ -20,6 +23,8 @@ use crate::infrastructure::parser::tokenizer::tokenize;
 const LONG_HEX_DIGITS: usize = 6;
 /// How many a `#rgb` colour carries.
 const SHORT_HEX_DIGITS: usize = 3;
+/// A percentage's divisor, turning `50%` into the unit fraction `0.5`.
+const PERCENT_DIVISOR: f32 = 100.0;
 
 /// The non-whitespace tokens of a declaration's value.
 #[must_use]
@@ -80,13 +85,102 @@ fn expand_edges(lengths: &[Length]) -> Option<LengthEdges> {
     }
 }
 
-/// A colour: `#rgb`, `#rrggbb`, `transparent`, or one of the basic named
-/// colours. Anything else — including `rgb()`, which arrives in B2 — is `None`.
+/// A colour: `#rgb`, `#rrggbb`, `transparent`, one of the basic named
+/// colours, or `rgb()` / `rgba()`. Anything else is `None`.
 #[must_use]
 pub(crate) fn parse_color(tokens: &[Token]) -> Option<CssColor> {
     match tokens {
         [Token::Hash(digits)] => hex_color(digits),
         [Token::Ident(name)] => named_color(&name.to_ascii_lowercase()),
+        _ => functional_color(tokens),
+    }
+}
+
+/// `rgb(r, g, b)` / `rgba(r, g, b, a)` — CSS Color L4 §5.1's legacy,
+/// comma-separated syntax. The modern space-separated syntax is outside this
+/// cut, same as the full colour name table.
+fn functional_color(tokens: &[Token]) -> Option<CssColor> {
+    let (name, arguments) = function_call(tokens)?;
+    match name.to_ascii_lowercase().as_str() {
+        "rgb" => rgb_color(arguments),
+        "rgba" => rgba_color(arguments),
+        _ => None,
+    }
+}
+
+/// A function token's name and its arguments, stripped of the closing `)` —
+/// `value_tokens` already dropped every whitespace token, so the opening `(`
+/// is folded into [`Token::Function`] and never appears on its own.
+fn function_call(tokens: &[Token]) -> Option<(&str, &[Token])> {
+    let [
+        Token::Function(name),
+        arguments @ ..,
+        Token::CloseParenthesis,
+    ] = tokens
+    else {
+        return None;
+    };
+    Some((name.as_str(), arguments))
+}
+
+/// `rgb(r, g, b)`: three integers, each clamped into `[0, 255]`
+/// (CSS Color L4 §5.1) — a malformed component (not a bare number) refuses
+/// the whole colour, an out-of-range one clamps rather than refusing.
+fn rgb_color(arguments: &[Token]) -> Option<CssColor> {
+    let parts = comma_separated(arguments);
+    let [red, green, blue] = parts.as_slice() else {
+        return None;
+    };
+    Some(CssColor::rgb(
+        channel(red)?,
+        channel(green)?,
+        channel(blue)?,
+    ))
+}
+
+/// `rgba(r, g, b, a)`: the same three components as [`rgb_color`], plus an
+/// alpha given as `0`–`1` or a percentage.
+fn rgba_color(arguments: &[Token]) -> Option<CssColor> {
+    let parts = comma_separated(arguments);
+    let [red, green, blue, alpha] = parts.as_slice() else {
+        return None;
+    };
+    Some(CssColor::rgba(
+        channel(red)?,
+        channel(green)?,
+        channel(blue)?,
+        alpha_channel(alpha)?,
+    ))
+}
+
+fn comma_separated(tokens: &[Token]) -> Vec<&[Token]> {
+    tokens
+        .split(|token| matches!(token, Token::Comma))
+        .collect()
+}
+
+/// One `r` / `g` / `b` component: a bare integer, clamped into `[0, 255]`.
+///
+/// Reuses [`graphics::Opacity`]'s clamp-then-round rather than writing a
+/// second float→`u8` narrowing: `core/graphics/src/domain/convert.rs` is this
+/// workspace's one sanctioned place for that conversion (`ADR-0016`), and
+/// `core/css` has no carve-out of its own to duplicate it. Scaling the
+/// `[0, 255]` component onto `Opacity`'s `[0, 1]` unit interval and back is
+/// exact for the integers this cut accepts.
+fn channel(tokens: &[Token]) -> Option<u8> {
+    let [Token::Number(value)] = tokens else {
+        return None;
+    };
+    Opacity::from_unit_interval(*value / f32::from(u8::MAX)).map(Opacity::level)
+}
+
+/// The alpha component of `rgba()`: `0`–`1` as a bare number, or a percentage.
+fn alpha_channel(tokens: &[Token]) -> Option<u8> {
+    match tokens {
+        [Token::Number(value)] => Opacity::from_unit_interval(*value).map(Opacity::level),
+        [Token::Percentage(value)] => {
+            Opacity::from_unit_interval(*value / PERCENT_DIVISOR).map(Opacity::level)
+        }
         _ => None,
     }
 }

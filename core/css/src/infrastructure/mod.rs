@@ -2,9 +2,10 @@
 //! (`ADR-0010` §1).
 //!
 //! `UaCascade`, `BlockLayout` and `MonospaceMetrics` are deliberately minimal —
-//! B2 replaces the cascade, B4 replaces the layout engine. They exist so the
-//! contract is dogfooded from B0 (`PRD-007` §3.5). The mocks prove the ports
-//! swap (`PRD-007:94`).
+//! B2 grew `UaCascade` into the real three-origin cascade (`!important`, a
+//! real `assets/ua.css`, `initial`/`inherit`), B4 replaces the layout engine.
+//! They exist so the contract is dogfooded from B0 (`PRD-007` §3.5). The
+//! mocks prove the ports swap (`PRD-007:94`).
 
 pub mod cascade;
 pub mod layout;

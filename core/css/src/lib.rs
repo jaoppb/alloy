@@ -13,7 +13,7 @@
 //! cascade adapter of `PRD-007` §3.4 is `core/runtime/rhai-bindings`' job, the
 //! same way making a DOM node scriptable was at roadmap point I1. Its only
 //! dependencies are `dom`, `thiserror`, and — for the shared fixed-point units
-//! `Au` / `Px` / `Color` / `Rect` alone (`ADR-0016`) — `graphics`.
+//! `Au` / `Px` / `Color` / `Opacity` / `Rect` alone (`ADR-0016`) — `graphics`.
 //!
 //! ## Layout (`ADR-0010` §1)
 //!

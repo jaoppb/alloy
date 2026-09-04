@@ -22,26 +22,31 @@ the runner — all three, or CI is red.
 The CSS properties the parser accepts inside a declaration block and the cascade resolves to a computed value. A
 declaration naming anything else is dropped on its own, with a note, leaving the rest of its rule intact.
 
-| token              | since | notes                                                                                  |
-| ------------------ | ----- | -------------------------------------------------------------------------------------- |
-| `display`          | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4  |
-| `color`            | B1    | inherited; `#rgb`, `#rrggbb` and the 17 basic colour names — `rgb()` / `rgba()` are B2 |
-| `background-color` | B1    | not inherited; same value grammar as `color`                                           |
-| `margin`           | B1    | the 1–4 component shorthand (CSS Box Model §8.3)                                       |
-| `margin-top`       | B1    | longhand; overwrites only its own side                                                 |
-| `margin-right`     | B1    | longhand                                                                               |
-| `margin-bottom`    | B1    | longhand                                                                               |
-| `margin-left`      | B1    | longhand                                                                               |
-| `padding`          | B1    | the 1–4 component shorthand                                                            |
-| `padding-top`      | B1    | longhand                                                                               |
-| `padding-right`    | B1    | longhand                                                                               |
-| `padding-bottom`   | B1    | longhand                                                                               |
-| `padding-left`     | B1    | longhand                                                                               |
-| `font-size`        | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                      |
+| token              | since | notes                                                                                 |
+| ------------------ | ----- | ------------------------------------------------------------------------------------- |
+| `display`          | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4 |
+| `color`            | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)  |
+| `background-color` | B1    | not inherited; same value grammar as `color`                                          |
+| `margin`           | B1    | the 1–4 component shorthand (CSS Box Model §8.3)                                      |
+| `margin-top`       | B1    | longhand; overwrites only its own side                                                |
+| `margin-right`     | B1    | longhand                                                                              |
+| `margin-bottom`    | B1    | longhand                                                                              |
+| `margin-left`      | B1    | longhand                                                                              |
+| `padding`          | B1    | the 1–4 component shorthand                                                           |
+| `padding-top`      | B1    | longhand                                                                              |
+| `padding-right`    | B1    | longhand                                                                              |
+| `padding-bottom`   | B1    | longhand                                                                              |
+| `padding-left`     | B1    | longhand                                                                              |
+| `font-size`        | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                     |
 
-Declared **out** for v0.5 B1, and refused with a note: `float`, `position`, `width`, `height`, `border`, `z-index`,
-`box-sizing`, `flex-direction` and every other property. `!important` is _parsed and preserved_ on the declaration but
-does not yet win the cascade — that is B2 (`plano:435-443`).
+Every property above also accepts the CSS-wide keywords `initial` and `inherit` (B2, CSS Cascade L4 §7.1): `initial`
+resets to the value `ComputedStyle::initial()` gives it, `inherit` copies the parent's computed value even for a
+property that does not normally inherit. `unset` and `revert` are not recognised.
+
+Declared **out** for v0.5, and refused with a note: `float`, `position`, `width`, `height`, `border`, `z-index`,
+`box-sizing`, `flex-direction` and every other property. `!important` is parsed, preserved on the declaration, **and**
+wins the cascade as of B2 (`plano:435-443`): CSS Cascade L4 §4.2's origin/importance ordering, `User` origin included by
+construction even though nothing sources it yet.
 
 ## Selectors
 

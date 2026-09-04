@@ -1,6 +1,8 @@
 //! Guards the B1 deliverable of `plano:430-431`: a `<style>` element and a
 //! `style=` attribute are **observable** in the `StyledTree` a
-//! `CascadeResolver` returns, ordered by specificity.
+//! `CascadeResolver` returns, ordered by specificity. B2 (`plano:435-443`)
+//! extends the same chain: `!important`, `rgb()` / `rgba()`, and the parsed
+//! `assets/ua.css` base layer.
 //!
 //! The chain under test is the whole one — `dom::DomTree → snapshot →
 //! collect_style_sheets → UaCascade::resolve` — because every link of it is new
@@ -188,6 +190,133 @@ fn a_media_gated_rule_only_applies_once_the_producer_has_discharged_it() {
 
 const fn whole_px(pixels: i32) -> graphics::Au {
     graphics::Au::from_whole_px(pixels).expect("a small pixel count fits")
+}
+
+// ---- B2: `!important`, `rgb()` / `rgba()`, `assets/ua.css` ---------------
+
+#[test]
+fn an_important_declaration_wins_over_a_higher_specificity_normal_one() {
+    // `#first.lead` is `(1,1,0)`, strictly stronger than the bare-type `p`
+    // rule's `(0,0,1)` — and it still loses, because `!important` is a
+    // separate, stronger precedence tier (CSS Cascade L4 §4.2).
+    let style = paragraph_style(
+        "p { color: #0000ff !important } #first.lead { color: #ff0000 }",
+        None,
+    );
+
+    assert_eq!(
+        style.color(),
+        BLUE,
+        "the `!important` type-selector rule outranks a normal id+class rule"
+    );
+}
+
+#[test]
+fn important_only_beats_important_by_the_normal_cascade_rules() {
+    // Two `!important` declarations still order by specificity, exactly like
+    // two normal ones do — `!important` moves a declaration to a stronger
+    // tier, it does not disable ordering within that tier.
+    let style = paragraph_style(
+        "p { color: #0000ff !important } #first.lead { color: #ff0000 !important }",
+        None,
+    );
+
+    assert_eq!(
+        style.color(),
+        RED,
+        "both declarations are `!important`, so specificity decides again"
+    );
+}
+
+#[test]
+fn rgb_and_rgba_colours_apply_through_the_cascade_resolver() {
+    let style = paragraph_style(
+        "p { color: rgb(0, 0, 255); background-color: rgba(255, 0, 0, 0.5) }",
+        None,
+    );
+
+    assert_eq!(style.color(), BLUE, "`rgb()` parses and applies");
+    assert_eq!(
+        style.background_color(),
+        CssColor::rgba(0xFF, 0x00, 0x00, 0x80),
+        "`rgba()`'s float alpha resolves to the nearest 8-bit level"
+    );
+}
+
+#[test]
+fn rgb_clamps_an_out_of_range_component_instead_of_refusing_it() {
+    let style = paragraph_style("p { color: rgb(300, -10, 128) }", None);
+
+    assert_eq!(
+        style.color(),
+        CssColor::rgb(0xFF, 0x00, 0x80),
+        "300 clamps to 255 and -10 clamps to 0 (CSS Color L4 §5.1), never a refusal"
+    );
+}
+
+#[test]
+fn the_initial_keyword_resets_a_property_ignoring_inheritance() {
+    let style = paragraph_style("body { color: #008000 } p { color: initial }", None);
+
+    assert_eq!(
+        style.color(),
+        CssColor::BLACK,
+        "`initial` takes the CSS initial value, not the inherited body colour"
+    );
+}
+
+#[test]
+fn the_inherit_keyword_forces_inheritance_of_a_non_inherited_property() {
+    let style = paragraph_style(
+        "body { background-color: #008000 } p { background-color: inherit }",
+        None,
+    );
+
+    assert_eq!(
+        style.background_color(),
+        GREEN,
+        "`background-color` does not normally inherit, but `inherit` forces it"
+    );
+}
+
+#[test]
+fn the_ua_sheet_still_gives_a_heading_and_a_paragraph_their_classic_shape() {
+    // Proves `assets/ua.css`, parsed by `UaCascade::new`, reproduces exactly
+    // what B1's hard-coded `style_for_tag` used to set — with no author CSS
+    // at all.
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let html = child(&mut tree, root, "html");
+    let body = child(&mut tree, html, "body");
+    let heading = child(&mut tree, body, "h1");
+    text(&mut tree, heading, "Alloy");
+    let paragraph = child(&mut tree, body, "p");
+    text(&mut tree, paragraph, "Hi");
+
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+
+    let heading_style = styled.node(styled_id(&dom, "h1")).expect("styled").style();
+    assert_eq!(heading_style.display(), css::Display::Block);
+    assert_eq!(heading_style.font_size(), Length::Em(2.0));
+    assert_eq!(
+        heading_style.margin(),
+        LengthEdges::vertical(Length::Em(0.67))
+    );
+
+    let paragraph_style = styled.node(styled_id(&dom, "p")).expect("styled").style();
+    assert_eq!(
+        paragraph_style.margin(),
+        LengthEdges::vertical(Length::Pixels(16.0)),
+        "the UA `<p>` margin still comes through, now from assets/ua.css"
+    );
+}
+
+fn styled_id(dom: &DomSnapshot, tag: &str) -> css::SnapshotId {
+    dom.nodes_in_document_order()
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(tag))
+        .expect("the document has the requested tag")
 }
 
 // ---- collection itself ---------------------------------------------------

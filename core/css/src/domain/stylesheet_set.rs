@@ -13,7 +13,7 @@
 
 use core::fmt;
 
-use crate::domain::declaration::DeclarationBlock;
+use crate::domain::declaration::{DeclarationBlock, Importance};
 use crate::domain::dom_snapshot::SnapshotId;
 use crate::domain::media::MediaQuery;
 use crate::domain::parse_notes::{ParseNote, ParseNotes};
@@ -32,6 +32,11 @@ pub enum Origin {
     Author,
 }
 
+/// Twice the origin count, minus one: the smallest base that lets
+/// [`Origin::cascade_precedence`] mirror the normal order (`0..=2`) into a
+/// disjoint, reversed `!important` band (`3..=5`) with plain subtraction.
+const IMPORTANT_PRECEDENCE_BASE: u8 = 5;
+
 impl Origin {
     /// The cascade precedence of this origin: lower sorts first (weaker).
     #[must_use]
@@ -40,6 +45,23 @@ impl Origin {
             Self::UserAgent => 0,
             Self::User => 1,
             Self::Author => 2,
+        }
+    }
+
+    /// The cascade precedence of this origin **with** `!important` folded in
+    /// (CSS Cascade L4 §4.2, `plano:435-443`). A normal declaration orders by
+    /// [`Self::precedence`] alone; `!important` reverses the origin order
+    /// entirely, so a user-agent `!important` declaration outranks every
+    /// other layer, including an author `!important` one.
+    ///
+    /// `User` has no source in this workspace yet, but the arithmetic already
+    /// gives it the right rank (between `UserAgent` and `Author` in both
+    /// bands) the day one exists — no rewrite needed here.
+    #[must_use]
+    pub const fn cascade_precedence(self, importance: Importance) -> u8 {
+        match importance {
+            Importance::Normal => self.precedence(),
+            Importance::Important => IMPORTANT_PRECEDENCE_BASE.saturating_sub(self.precedence()),
         }
     }
 
