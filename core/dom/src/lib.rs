@@ -8,8 +8,9 @@
 //!
 //! This crate has **zero dependencies** and names no engine type (v0.2 report
 //! decision 2.1). Making a node scriptable — the `NodeHandle` bridge and the
-//! `DomError` → `EngineError::Dom` mapping — is `core/runtime/rhai`'s job at
-//! roadmap point I1, not this crate's.
+//! `DomError` → `EngineError::Subsystem { subsystem: SubsystemName::Dom, .. }`
+//! mapping — is `core/runtime/rhai`'s job at roadmap point I1, not this
+//! crate's.
 //!
 //! ## Layout (`ADR-0010` §1)
 //!

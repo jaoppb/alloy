@@ -14,7 +14,7 @@
 use std::sync::{Arc, Mutex};
 
 use dom::{DomTree, serialize_html};
-use engine::{Capability, CapabilitySet, EngineError, RuntimeEngine, profiles};
+use engine::{Capability, CapabilitySet, EngineError, RuntimeEngine, SubsystemName, profiles};
 use rhai_bindings::{NODE_HANDLE_BINDINGS, bind_dom};
 use rhai_runtime::RhaiEngine;
 
@@ -214,10 +214,14 @@ fn a_dom_invariant_violation_from_script_maps_to_engine_error_dom() {
     let (_tree, mut context) = bound_context(&engine, profiles::dom_parser());
 
     match engine.eval_value(&mut context, r#"document.create_element("1bad")"#) {
-        Err(EngineError::Dom { operation, reason }) => {
+        Err(EngineError::Subsystem {
+            subsystem: SubsystemName::Dom,
+            operation,
+            reason,
+        }) => {
             assert_eq!(operation, "create_element");
             assert!(reason.contains("tag name"), "reason was: {reason}");
         }
-        other => panic!("expected EngineError::Dom, got {other:?}"),
+        other => panic!("expected EngineError::Subsystem(Dom), got {other:?}"),
     }
 }

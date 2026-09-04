@@ -11,6 +11,42 @@ use crate::domain::capability::Capability;
 use crate::domain::limits::ExecutionLimit;
 use crate::domain::source::SourceLocation;
 
+/// Which domain crate a [`EngineError::Subsystem`] failure came from.
+///
+/// One name per subsystem that binds into a muscle script, so the error enum
+/// does not grow a bespoke variant per subsystem (v0.5 Phase EE; see
+/// `PORT_SCHEMA_VERSION` and PRD-002 §4.5). Naming a subsystem here is not a
+/// claim it has production bindings yet — `Css` / `Graphics` / `Network` /
+/// `Window` are named ahead of Phase M wiring them, the same way `Capability`
+/// has always carried more flags than v0.1 used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SubsystemName {
+    /// `core/dom`, bound by `core/runtime/rhai-bindings::dom_bindings`.
+    Dom,
+    /// `core/css`, bound by the scriptable cascade adapter (Phase M).
+    Css,
+    /// `core/graphics`, bound by the display-list bindings (Phase M).
+    Graphics,
+    /// `core/network`, bound by the scriptable `RequestPolicy` (Phase M).
+    Network,
+    /// `core/window`, bound by the UI/window bindings (Phase M).
+    Window,
+}
+
+impl fmt::Display for SubsystemName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            Self::Dom => "dom",
+            Self::Css => "css",
+            Self::Graphics => "graphics",
+            Self::Network => "network",
+            Self::Window => "window",
+        };
+        formatter.write_str(text)
+    }
+}
+
 /// A failure raised while compiling or running a muscle script, or while moving
 /// a value across the boundary.
 #[derive(Clone, Debug, PartialEq)]
@@ -62,7 +98,24 @@ pub enum EngineError {
     /// tree. Carries the `operation` that was attempted and a `reason` string
     /// mapped from the domain crate's own error (v0.2 F6/I1; keeps `Binding`
     /// free to mean "bad native-binding name / arity").
+    #[deprecated(
+        since = "0.5.0",
+        note = "use EngineError::Subsystem { subsystem: SubsystemName::Dom, .. } instead (v0.5 Phase EE, PRD-002 §4.5)"
+    )]
     Dom { operation: String, reason: String },
+
+    /// A subsystem operation invoked from a script failed for a reason other
+    /// than a missing capability — an invariant violation, a stale handle, a
+    /// busy resource. Generalizes [`Self::Dom`] to every subsystem a muscle
+    /// script binds into, so a new subsystem never needs its own variant (v0.5
+    /// Phase EE, PRD-002 §4.5). Carries the `subsystem` the failure came from,
+    /// the `operation` that was attempted, and a `reason` mapped from the
+    /// domain crate's own error.
+    Subsystem {
+        subsystem: SubsystemName,
+        operation: String,
+        reason: String,
+    },
 }
 
 impl EngineError {
@@ -118,9 +171,22 @@ impl EngineError {
         }
     }
 
+    /// Delegates to [`Self::subsystem`] with [`SubsystemName::Dom`] — kept so
+    /// every existing caller (the DOM bindings) gets the generalized variant
+    /// with no source change (v0.5 Phase EE).
     #[must_use]
     pub fn dom(operation: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self::Dom {
+        Self::subsystem(SubsystemName::Dom, operation, reason)
+    }
+
+    #[must_use]
+    pub fn subsystem(
+        subsystem: SubsystemName,
+        operation: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self::Subsystem {
+            subsystem,
             operation: operation.into(),
             reason: reason.into(),
         }
@@ -158,8 +224,20 @@ impl fmt::Display for EngineError {
                 write!(formatter, ": {message}")
             }
             Self::ScriptPanic { message } => write!(formatter, "script panic (trapped): {message}"),
+            #[allow(deprecated)]
+            // the deprecated variant is still constructible; exhaustive match must still name it
             Self::Dom { operation, reason } => {
                 write!(formatter, "dom operation `{operation}` failed: {reason}")
+            }
+            Self::Subsystem {
+                subsystem,
+                operation,
+                reason,
+            } => {
+                write!(
+                    formatter,
+                    "{subsystem} operation `{operation}` failed: {reason}"
+                )
             }
         }
     }

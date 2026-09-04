@@ -6,8 +6,9 @@
 //! every method checks its own capability before touching the tree, so no path
 //! from a script to the DOM skips the guard (C-06), and a missing capability
 //! surfaces as [`EngineError::PermissionDenied`] (C-07). Every [`dom::DomError`]
-//! is mapped to [`EngineError::Dom`] at this boundary; `core/dom` never names an
-//! engine type.
+//! is mapped to `EngineError::Subsystem { subsystem: SubsystemName::Dom, .. }`
+//! (via [`EngineError::dom`], v0.5 Phase EE) at this boundary; `core/dom` never
+//! names an engine type.
 //!
 //! ## Deviation from v0.2 report §2.5 / §2.7
 //!
@@ -16,9 +17,9 @@
 //! `RuntimeEngine: Send + Sync`, `PRD-002:35`), which forces every
 //! `rhai::CustomType` to be `Send + Sync`. `NodeHandle` therefore holds
 //! `Arc<Mutex<DomTree>>`; `RhaiContext` stays `Send + Sync`. A borrow clash
-//! (`try_lock` fails) becomes `EngineError::Dom { reason: "DOM is busy" }`
-//! rather than a `RefCell`/`Mutex` panic — the same safety net the report
-//! intends.
+//! (`try_lock` fails) becomes `EngineError::Subsystem { subsystem:
+//! SubsystemName::Dom, reason: "DOM is busy", .. }` rather than a
+//! `RefCell`/`Mutex` panic — the same safety net the report intends.
 //!
 //! Reads are exposed as methods (`node.tag()`), not property getters:
 //! `rhai::TypeBuilder::with_get` cannot return a `Result`, and a getter that
