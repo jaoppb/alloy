@@ -1,9 +1,10 @@
 //! [`DomError`] — the one typed error for `core/dom`.
 //!
 //! (`ADR-0011` item 4 applied to a domain crate). `core/dom` never names
-//! `EngineError`; the `DomError` → `EngineError::Dom` mapping is the
-//! `core/runtime/rhai` adapter's job at roadmap I1. `#[non_exhaustive]` so that
-//! mapping keeps compiling as variants are added.
+//! `EngineError`; the `DomError` → `EngineError::Subsystem { subsystem:
+//! SubsystemName::Dom, .. }` mapping is the `core/runtime/rhai` adapter's job
+//! at roadmap I1. `#[non_exhaustive]` so that mapping keeps compiling as
+//! variants are added.
 
 use crate::domain::node::NodeId;
 

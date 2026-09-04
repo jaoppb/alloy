@@ -61,8 +61,12 @@ pub mod domain;
 /// note to PRD-002. `1` was frozen at roadmap point F1; `2` is the review
 /// response & v0.2 I1 — `FunctionName` / `VariableName` on binding and scope
 /// methods, `SourceLocation` as an enum over `Line` / `Column`, and additive
-/// `EngineError::Dom { operation, reason }` (see PRD-002 §4.2).
-pub const PORT_SCHEMA_VERSION: u32 = 2;
+/// `EngineError::Dom { operation, reason }` (see PRD-002 §4.2). `3` is v0.5
+/// Phase EE — `EngineError::Subsystem { subsystem: SubsystemName, operation,
+/// reason }` generalizes `Dom` so `Css` / `Graphics` / `Network` / `Window`
+/// don't each need their own variant; `Dom` is `#[deprecated]`, not removed
+/// (full removal is a v0.7 schema-4 change, see PRD-002 §4.5).
+pub const PORT_SCHEMA_VERSION: u32 = 3;
 
 pub use application::{
     DynCompiledScript, DynExecutionContext, DynRuntimeEngine, ExecutionContext, FromEngineValue,
@@ -74,7 +78,7 @@ pub use application::{
 };
 pub use domain::{
     capability::{Capability, CapabilitySet, profiles},
-    error::EngineError,
+    error::{EngineError, SubsystemName},
     function_name::FunctionName,
     limits::{ExecutionLimit, ExecutionLimits},
     source::{Column, Line, SourceLocation},
