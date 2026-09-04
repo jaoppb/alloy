@@ -1,0 +1,43 @@
+# unsafe-allowlist.toml — the reviewed record of every dependency permitted to
+# contain `unsafe`, per ADR-0018 ("`unsafe` governed by threat surface").
+#
+# Every hand-written crate in this workspace keeps `#![forbid(unsafe_code)]`
+# without exception. This file governs the *dependency tree*. It grows ONLY by
+# review, never by accident, and MUST NEVER contain a crate that decodes bytes
+# coming from the network (ADR-0018 rule, row 1) — the `unsafe-audit` CI job
+# asserts that.
+#
+# `reason` must name the ADR-0018 row it invokes:
+#   row 2 — trusted muscle script (Rhai binding dispatch); nominal
+#   row 3 — platform FFI with no alternative; nominal
+#
+# Convenience `unsafe` (SIMD, custom allocators) is NEVER allowlisted (row 4).
+
+[[allow]]
+crate = "rhai"
+row = 2
+reason = """
+`rhai =1.26.0` has four `unsafe` blocks, three on the binding-registration /
+native-call seam (transmute_copy behind a TypeId check — the standard dynamic
+dispatch pattern). The muscle script is modelled as buggy, not adversarial
+(PRD-003:21-24); the author is the user. This entry is time-limited: in v0.7
+`core/js` runs adversarial script and its engine choice (ADR-0012) falls under
+row 1, not row 2. See docs/reports/VIOLACAO-N02-UNSAFE-NO-RHAI.md.
+"""
+
+# --- Reserved, added when the v0.5 network + window tracks land -------------
+# [[allow]]
+# crate = "winit"        # row 3 — OS windowing FFI, no unsafe-free 3-OS alternative
+# [[allow]]
+# crate = "softbuffer"   # row 3 — OS surface blit FFI
+# [[allow]]
+# crate = "<rustls default provider>"  # row 1 EXCEPTION — only if the Phase C0
+#   RustCrypto spike fails; recorded explicitly in ADR-0018 + PRD-009, temporary.
+
+# --- Spike finding (v0.5 Phase 0) -----------------------------------------------
+# `cargo-geiger 0.13` installs and runs under toolchain 1.97.1, but its full
+# `unsafe`-counting scan hits a target-resolution bug on this workspace
+# (phantom `core/engine/tests/engine_conformance.rs`). `cargo geiger
+# --forbid-only` works. Phase P must settle the enforcement mechanism: pin a
+# working cargo-geiger, curate a `--forbid-only` baseline, or switch to
+# `cargo-acl` / a dylint. Until then the `unsafe-audit` job is advisory.

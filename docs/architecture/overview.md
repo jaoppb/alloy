@@ -19,7 +19,8 @@ graph TB
     end
 
     subgraph Runtime ["Execution Engine (Muscle)"]
-        RhaiBackend["core/runtime/rhai<br/>(Rhai Script Engine)"]
+        RhaiBackend["core/runtime/rhai<br/>(Rhai Script Engine — names no domain crate)"]
+        RhaiBindings["core/runtime/rhai-bindings<br/>(DOM / CSS / graphics / net / window bridges)"]
         FutureBackend["[Future: QuickJS / Wasm]"]
     end
 
@@ -35,19 +36,23 @@ graph TB
         ExtensionHost["extension<br/>(WebExtensions Bridge)"]
     end
 
-    Window --> EngineTrait
-    Graphics --> EngineTrait
-    Network --> EngineTrait
-    DOM --> EngineTrait
-    CSS --> EngineTrait
+    %% Domain crates do NOT depend on core/engine — every script bridge lives in
+    %% core/runtime/rhai-bindings (v0.3 report decision 2.1, generalised in v0.5 §1.4).
+    RhaiBindings --> EngineTrait
+    RhaiBindings --> Window
+    RhaiBindings --> Graphics
+    RhaiBindings --> Network
+    RhaiBindings --> DOM
+    RhaiBindings --> CSS
 
     EngineTrait --> RhaiBackend
+    RhaiBindings --> RhaiBackend
     EngineTrait -.-> FutureBackend
 
     RhaiBackend --> ScriptUI
-    RhaiBackend --> ScriptNet
-    RhaiBackend --> ScriptRender
-    RhaiBackend --> ScriptDOM
+    RhaiBindings --> ScriptNet
+    RhaiBindings --> ScriptRender
+    RhaiBindings --> ScriptDOM
 
     DevTools -.-> EngineTrait
     ExtensionHost -.-> EngineTrait
@@ -78,21 +83,26 @@ graph TB
 ## 3. Cargo Workspace Crate Map
 
 Dependencies below are the **target** graph, not today's `Cargo.toml` — except where a crate is implemented. Implemented
-so far: `engine`, `rhai-runtime`, `dom` (v0.1 + v0.2 F3/I1).
+so far: `engine`, `rhai-runtime`, `rhai-bindings`, `dom` (v0.1 + v0.2), `graphics` (v0.3 F4a).
 
-| Crate Path          | Package Name   | Primary Responsibility                                    | Dependencies            |
-| ------------------- | -------------- | --------------------------------------------------------- | ----------------------- |
-| `core/engine`       | `engine`       | Engine traits, Contexts, Capability Bitflags, EngineValue | None (Pure abstraction) |
-| `core/runtime/rhai` | `rhai-runtime` | Concrete Rhai engine implementation for browser muscle    | `engine`, `dom`, `rhai` |
-| `core/js`           | `js`           | Web content ECMAScript runtime & DOM script execution     | `dom`                   |
-| `core/dom`          | `dom`          | DOM Node hierarchy, Element nodes, mutations              | None (Pure domain)      |
-| `core/html`         | `html`         | HTML5 tokenization and tree construction                  | `dom`, `engine`         |
-| `core/css`          | `css`          | CSS syntax parser, rule sets, cascade calculator          | `dom`, `engine`         |
-| `core/graphics`     | `graphics`     | 2D display lists, Vulkan (`vulkano`) & OpenGL renderers   | `engine`                |
-| `core/window`       | `window`       | Window creation, event loop dispatch, surface binding     | `graphics`, `engine`    |
-| `core/network`      | `network`      | Sockets, DNS resolution, HTTP/1.1 & HTTP/2, cache         | `engine`                |
-| `devtools`          | `devtools`     | Remote debugging protocol, AST inspector, hot-reloader    | `engine`                |
-| `extension`         | `extension`    | WebExtensions and native script extension runtime         | `engine`, `dom`         |
+**Rule (v0.3 report decision 2.1, generalised in the v0.5 plan §1.4):** no domain crate depends on `engine`. Every
+script bridge lives in `core/runtime/rhai-bindings`, which is the one crate that may name both a `rhai` type and a
+domain crate. `core/runtime/rhai` itself names no domain crate.
+
+| Crate Path                   | Package Name    | Primary Responsibility                                     | Dependencies                                                                                 |
+| ---------------------------- | --------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `core/engine`                | `engine`        | Engine traits, Contexts, Capability Bitflags, EngineValue  | None (Pure abstraction)                                                                      |
+| `core/runtime/rhai`          | `rhai-runtime`  | Concrete Rhai engine implementation for browser muscle     | `engine`, `rhai`                                                                             |
+| `core/runtime/rhai-bindings` | `rhai-bindings` | Rhai ⇄ domain-crate bridges (DOM; CSS/graphics/net/window) | `rhai-runtime`, `engine`, `rhai`, `dom` (+ `css`/`graphics`/`network`/`window` as they land) |
+| `core/js`                    | `js`            | Web content ECMAScript runtime & DOM script execution      | `dom`                                                                                        |
+| `core/dom`                   | `dom`           | DOM Node hierarchy, Element nodes, mutations               | None (Pure domain)                                                                           |
+| `core/html`                  | `html`          | HTML5 tokenization and tree construction                   | `dom`                                                                                        |
+| `core/css`                   | `css`           | CSS syntax parser, rule sets, cascade + layout ports       | `dom`, `graphics` (for `Au`/`Px`/`Color`/`Rect` only)                                        |
+| `core/graphics`              | `graphics`      | 2D display lists, software rasterizer, later Vulkan/OpenGL | None (Pure domain)                                                                           |
+| `core/window`                | `window`        | Window creation, event loop dispatch, surface binding      | None (`FrameView` borrows pixels — no `graphics` edge)                                       |
+| `core/network`               | `network`       | Sockets, DNS resolution, HTTP/1.1, TLS, cache              | None (Pure domain)                                                                           |
+| `devtools`                   | `devtools`      | Remote debugging protocol, AST inspector, hot-reloader     | `engine`                                                                                     |
+| `extension`                  | `extension`     | WebExtensions and native script extension runtime          | `engine`, `dom`                                                                              |
 
 ---
 

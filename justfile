@@ -88,6 +88,14 @@ gate: fmt-check lint check test deny coverage arch
 # Alias for `gate`
 ci: gate
 
+# unsafe-by-threat-surface audit (ADR-0018). Advisory until Phase P settles the
+# enforcement mechanism — cargo-geiger 0.13 full scan is buggy on this tree.
+unsafe-audit:
+    @command -v cargo-geiger >/dev/null || {{cargo}} install cargo-geiger --locked
+    {{cargo}} geiger --manifest-path "$PWD/alloy/Cargo.toml" --forbid-only --output-format Ascii
+    @test -s unsafe-allowlist.toml && grep -q '\[\[allow\]\]' unsafe-allowlist.toml \
+        && echo "✓ unsafe-allowlist.toml present"
+
 # Supply-chain audit: licenses, advisories, bans, sources
 deny:
     @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: just setup"; exit 1; }
