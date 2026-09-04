@@ -5,8 +5,40 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
+description = "Hand-written HTTP/1.1 over TLS and the replaceable HttpTransport / RequestPolicy ports (PRD-009, ADR-0011, ADR-0019)."
+
+# `ADR-0011:99-102` item 6 asks every port for a `no-<adapter>` build.
+# `--no-default-features` is the `no-transport` build: it links **no socket and
+# no crypto code at all** — no `rustls`, no `ring`, no `webpki-roots`, no
+# `std::net` — leaving the domain aggregates, the two ports, the conformance
+# suite, the pure byte codecs (`inflate`, `charset`, the HTTP/1.1 message
+# parser) and `MockTransport` / `AllowAllPolicy` standing on their own.
+#
+# Deviation from the C1 brief, deliberate: the brief gates *all* of
+# `infrastructure/` behind `real-transport` except `mock.rs`. The pure byte
+# codecs are ungated instead, because (a) they open no socket and link no
+# crypto, so the "no-transport links no socket/crypto code" guarantee still
+# holds verbatim, (b) `MockTransport::from_wire` needs the message parser to
+# build a response out of a raw fixture, and (c) Phase X re-exports
+# `network::inflate` for the PNG decoder and must not have to turn a transport
+# feature on to get it. The rule is therefore precise: *anything that opens a
+# socket or links crypto* is gated; a pure `&[u8] -> Result<_, NetworkError>`
+# transform is not.
+[features]
+default = ["real-transport"]
+real-transport = ["dep:rustls", "dep:webpki-roots", "dep:ring"]
 
 [dependencies]
+thiserror = { workspace = true }
+# The TLS stack finalised by the Phase C0 spike
+# (`docs/reports/SPIKE-C0-TLS-PROVIDER.md` §6). Optional: only the
+# `real-transport` build links crypto.
+rustls = { workspace = true, optional = true }
+webpki-roots = { workspace = true, optional = true }
+# Named directly so the ADR-0018 row-1 EXCEPTION is visible in this manifest and
+# in `cargo tree -p network`, not buried as a `rustls` feature. Used through
+# `rustls::crypto::ring::default_provider()` in `infrastructure/tls.rs`.
+ring = { workspace = true, optional = true }
 
 [lints]
 workspace = true

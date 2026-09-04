@@ -53,7 +53,11 @@ wildcards = "deny"
 # Internal path deps have no version requirement and read as wildcards; that is
 # expected and fine. Registry wildcards are still denied.
 allow-wildcard-paths = true
-skip = []
+# `windows-sys` is the Windows API shim: `ring` (the TLS crypto provider, v0.5
+# C0 spike) pins `0.52` for its build script while `clap` / `tracing-subscriber`
+# carry `0.61`. Both are thin platform bindings compiled only on Windows; a
+# duplicate is inert on Linux/macOS CI and unavoidable without patching `ring`.
+skip = [{ name = "windows-sys" }]
 deny = []
 
 [sources]

@@ -142,6 +142,11 @@ no-engine:
     else \
         echo "✓ core/css is engine/rhai free"; \
     fi
+    @if {{cargo}} tree -p network --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics) '; then \
+        echo "✗ core/network linked the engine, a script runtime or another subsystem"; exit 1; \
+    else \
+        echo "✓ core/network is engine/rhai/subsystem free"; \
+    fi
 
 # --- misc -------------------------------------------------------------
 
