@@ -1,11 +1,17 @@
-//! [`UaCascade`] — a placeholder [`CascadeResolver`] whose rules are hard-coded
-//! in Rust.
+//! [`UaCascade`] — the [`CascadeResolver`] of B1: a hard-coded user-agent base
+//! per tag, with the document's own parsed rules cascaded on top.
 //!
-//! Origins and `!important` are stubbed to user-agent-only; the author
-//! `StyleSheetSet` is ignored. Inheritance covers exactly the two properties
-//! the placeholder [`crate::BlockLayout`] and the painter read (`color`,
-//! `font-size`). B2 replaces this with a real three-origin cascade over parsed
-//! rules.
+//! B0 shipped this adapter ignoring its `StyleSheetSet` entirely. B1 is the
+//! phase that makes the aggregate *do* something (`plano:430-431`): the UA
+//! defaults below are the base, `infrastructure/cascade/author_rules.rs` applies
+//! every rule that selects the node in `(origin, specificity, source order)`,
+//! and the node's `style=` block lands last.
+//!
+//! Still stubbed, and B2's (`plano:435-443`): `!important` is parsed but does
+//! not yet win, the user origin has no source, and the UA defaults live in Rust
+//! rather than in a real `assets/ua.css` parsed by B1's own parser.
+//! Inheritance covers exactly the two properties the placeholder
+//! [`crate::BlockLayout`] and the painter read (`color`, `font-size`).
 
 use crate::application::ports::CascadeResolver;
 use crate::domain::computed::display::Display;
@@ -16,6 +22,7 @@ use crate::domain::error::CssError;
 use crate::domain::length::Length;
 use crate::domain::styled_tree::StyledTree;
 use crate::domain::stylesheet_set::StyleSheetSet;
+use crate::infrastructure::cascade::author_rules::apply_author_rules;
 
 /// The user-agent cascade.
 #[derive(Clone, Copy, Debug, Default)]
@@ -29,9 +36,24 @@ impl UaCascade {
 }
 
 impl CascadeResolver for UaCascade {
-    fn resolve(&self, dom: &DomSnapshot, _sheets: &StyleSheetSet) -> Result<StyledTree, CssError> {
-        Ok(StyledTree::recompute_in_document_order(dom, ua_style))
+    fn resolve(&self, dom: &DomSnapshot, sheets: &StyleSheetSet) -> Result<StyledTree, CssError> {
+        Ok(StyledTree::recompute_in_document_order(
+            dom,
+            |node_ref, parent| cascade_style(node_ref, parent, dom, sheets),
+        ))
     }
+}
+
+/// One node's finished style: the UA base, then the author rules that select
+/// it, then its `style=` block.
+fn cascade_style(
+    node_ref: NodeRef<'_>,
+    parent: Option<&ComputedStyle>,
+    dom: &DomSnapshot,
+    sheets: &StyleSheetSet,
+) -> ComputedStyle {
+    let base = ua_style(node_ref, parent);
+    apply_author_rules(base, node_ref, dom, sheets)
 }
 
 /// The computed style for one node: inherit from the parent, then apply the UA

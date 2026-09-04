@@ -6,9 +6,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
 use css::{
-    ComputedStyle, CssColor, CssError, CssStage, DeclarationBlock, Display, EdgeSizes, Length,
-    LengthEdges, Origin, PORT_SCHEMA_VERSION, SUPPORTED_PROPERTIES, SUPPORTED_SELECTORS,
-    SourceSpan, StyleRule, StyleSheetSet, ViewportConstraints,
+    Combinator, ComplexSelector, CompoundSelector, ComputedStyle, CssColor, CssError, CssStage,
+    DeclarationBlock, Display, EdgeSizes, Identifier, Length, LengthEdges, Origin,
+    PORT_SCHEMA_VERSION, SUPPORTED_PROPERTIES, SUPPORTED_SELECTORS, SelectorList, SelectorStep,
+    SourceSpan, StyleRule, StyleSheetSet, TypeSelector, ViewportConstraints,
 };
 use css::{ComputedText, TextMetrics, TextRun};
 use graphics::{Au, Color};
@@ -165,13 +166,30 @@ fn a_stylesheet_set_orders_rules_by_origin_and_stays_a_first_class_collection() 
     block.declare("color", "red");
     let mut sheets = StyleSheetSet::new();
     assert!(sheets.is_empty());
-    sheets.push_rule(Origin::Author, StyleRule::new("p", block));
+    sheets.push_rule(
+        Origin::Author,
+        StyleRule::new(type_selector_list("p"), block),
+    );
 
     assert_eq!(sheets.len(), 1);
     let (origin, rule) = sheets.rules().next().expect("one rule");
     assert_eq!(origin, Origin::Author);
-    assert_eq!(rule.selector_text(), "p");
+    assert_eq!(rule.selectors().to_string(), "p");
     assert_eq!(rule.declarations().len(), 1);
+    assert!(
+        rule.media().is_always(),
+        "a rule outside @media is unconditional"
+    );
+}
+
+/// The one-element selector list `tag`, built through the domain constructors
+/// rather than the parser — this file guards the value objects themselves.
+fn type_selector_list(tag: &str) -> SelectorList {
+    let mut compound = CompoundSelector::universal();
+    let name = Identifier::lowercased(tag).expect("a tag is a valid identifier");
+    compound.set_type_selector(TypeSelector::Named(name));
+    let step = SelectorStep::new(Combinator::Descendant, compound);
+    SelectorList::from_iter([ComplexSelector::new([step])])
 }
 
 // ---- Typed error with location metadata (ADR-0011 items 3 & 4) ----
@@ -215,8 +233,13 @@ fn source_span_and_stage_print_readably() {
 
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
-    assert_eq!(PORT_SCHEMA_VERSION, 1);
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 6);
+    assert_eq!(
+        PORT_SCHEMA_VERSION, 2,
+        "B1 reshaped StyleRule, DeclarationBlock and StyleSheetSet (ADR-0011 item 3)"
+    );
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 14);
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));
-    assert_eq!(SUPPORTED_SELECTORS.len(), 0);
+    assert!(SUPPORTED_PROPERTIES.contains(&"margin-left"));
+    assert_eq!(SUPPORTED_SELECTORS.len(), 19);
+    assert!(SUPPORTED_SELECTORS.contains(&":nth-child()"));
 }

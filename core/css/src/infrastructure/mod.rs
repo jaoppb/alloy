@@ -9,6 +9,7 @@
 pub mod cascade;
 pub mod layout;
 pub mod mock;
+pub mod parser;
 pub mod text_metrics;
 pub mod ua_sheet;
 

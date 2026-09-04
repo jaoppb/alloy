@@ -143,6 +143,32 @@ jobs:
           fi
           echo "✓ core/runtime/rhai is domain-crate free"
 
+  # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
+  css-conformance:
+    name: CSS support manifest
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-cssconf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-cssconf-
+      # Three statements of the same cut — core/css/tests/data/MANIFEST.md, the
+      # SUPPORTED_PROPERTIES / SUPPORTED_SELECTORS registries, and what the
+      # parser really accepts — must agree in every direction. There is no bless
+      # path: a generated manifest would agree by construction. B5 adds
+      # `-p html --test manifest_runner` here for the html5lib cut.
+      - run: cargo test -p css --test manifest_runner
+
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
   fault-injection:
     name: Panic-injection fault isolation
