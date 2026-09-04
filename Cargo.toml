@@ -62,6 +62,15 @@ webpki-roots = "=1.0.9"
 # stable pure-Rust RustCrypto provider pins against current `rustls-webpki`.
 ring = "=0.17.14"
 
+# --- window stack for `core/window` (v0.5 C2) -----------------------------------------------
+# core/window C2 — native window creation and the OS event loop (ADR-0019); `EventLoopExtPumpEvents`
+# is what lets `WindowSystem::pump_events` be pull-driven instead of handing the thread to `run_app`.
+# Row-3 nominal `unsafe` exception (ADR-0018): OS windowing FFI, no unsafe-free 3-OS alternative.
+winit = "=0.30.13"
+# core/window C2 — CPU blit of a `FrameView` onto the window's surface (no GPU driver required,
+# matching the software tier `graphics` already ships). Same ADR-0018 row-3 exception as `winit`.
+softbuffer = "=0.4.8"
+
 # Strict lint gate (review G3), inherited via `lints.workspace = true`. `priority = -1`
 # lets the specific lints below override the group denies.
 [workspace.lints.clippy]

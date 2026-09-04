@@ -4,6 +4,19 @@
 
 [graph]
 all-features = true
+# v0.5 C2 adds `winit`: its `Cargo.toml` declares dependencies for platforms
+# this workspace never targets (Android, iOS, wasm32, UEFI). Without this,
+# `cargo deny check bans` audits the *whole* resolved graph — every platform
+# `winit` supports — and flags duplicate-version "conflicts" that only exist
+# on a target this repo never builds for (`jni-sys`, `r-efi`, `objc2*`, …).
+# Restricting to the CI matrix (`ci.yml` `test` job) makes the audit match
+# what actually ships.
+targets = [
+	"x86_64-unknown-linux-gnu",
+	"x86_64-apple-darwin",
+	"aarch64-apple-darwin",
+	"x86_64-pc-windows-msvc",
+]
 
 [advisories]
 yanked = "deny"
@@ -14,6 +27,14 @@ ignore = [
 	# (upstream: compact_str / smol_str are the suggested replacements). Re-review
 	# on every `rhai` bump.
 	{ id = "RUSTSEC-2026-0249", reason = "unmaintained smartstring, transitive via rhai; no vuln, no upgrade path yet" },
+	# `winit` (v0.5 C2) depends on `sctk-adwaita` for Wayland client-side
+	# window-titlebar decoration, which depends transitively on `ttf-parser`
+	# (via `ab_glyph`/`owned_ttf_parser`) to render the titlebar text.
+	# Unmaintained notice, not a vulnerability; this workspace never parses an
+	# untrusted font through this path (that surface is `ADR-0018` row 1 and
+	# belongs to `F4b`'s `core/graphics` font stack, unrelated to this chain).
+	# No safe upgrade exists until `winit`/`sctk-adwaita` migrate off it.
+	{ id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser, transitive via winit -> sctk-adwaita (Wayland CSD titlebar text); no vuln, no untrusted input on this path" },
 ]
 
 [licenses]
@@ -57,7 +78,40 @@ allow-wildcard-paths = true
 # C0 spike) pins `0.52` for its build script while `clap` / `tracing-subscriber`
 # carry `0.61`. Both are thin platform bindings compiled only on Windows; a
 # duplicate is inert on Linux/macOS CI and unavoidable without patching `ring`.
-skip = [{ name = "windows-sys" }]
+#
+# v0.5 C2 (`core/window`) adds `winit` + `softbuffer`. Both carry their own,
+# independently-versioned dependency trees across the 3-OS matrix
+# (`smithay-client-toolkit`/`calloop` on Linux Wayland, `objc2*` on macOS,
+# `rustix`/`linux-raw-sys` pulled by more than one of `winit`'s own Linux
+# backends). None of these are workspace-controlled — bumping the pin on any
+# one is upstream's call, not this repo's — so they are skipped the same way
+# `windows-sys` is, each with the chain `cargo tree -i <crate> --all-features`
+# showed at review time.
+skip = [
+	{ name = "windows-sys" },
+	# macOS: `winit` -> `core-graphics` 0.23 (bitflags 1.3) vs everything else
+	# on bitflags 2.
+	{ name = "bitflags" },
+	# `ahash` (via `rhai`) and `winit`/`ring` each pin their own `getrandom`
+	# major version.
+	{ name = "getrandom" },
+	# Linux: `winit`'s Wayland stack (`calloop`, `smithay-client-toolkit`,
+	# `wayland-*`) and its X11/`drm` stack resolve different `rustix` /
+	# `linux-raw-sys` majors from each other.
+	{ name = "rustix" },
+	{ name = "linux-raw-sys" },
+	# macOS: `winit`'s own AppKit bindings and `softbuffer`'s Core
+	# Graphics/Metal bindings pin different `objc2` generations.
+	{ name = "objc2" },
+	{ name = "objc2-foundation" },
+	# `syn` 2 (most of the graph) vs `syn` 3 (`bytemuck_derive`, via
+	# `softbuffer`'s `bytemuck` feature).
+	{ name = "syn" },
+	# `calloop` (Linux Wayland, via `winit`) still pins `thiserror` 1; the rest
+	# of this workspace and the rest of `winit`'s own tree are on `thiserror` 2.
+	{ name = "thiserror" },
+	{ name = "thiserror-impl" },
+]
 deny = []
 
 [sources]

@@ -5,8 +5,24 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
+description = "The replaceable WindowSystem / Presenter ports, a winit + softbuffer adapter, and a headless reference (PRD-010, ADR-0011, ADR-0018, ADR-0019)."
+
+# `ADR-0011:99-102` item 6 asks every port for a `no-<adapter>` build.
+# `--no-default-features` is the `no-window` build: it links **no** `winit` and
+# **no** `softbuffer` at all — only the domain, the two ports, the conformance
+# suite and the headless reference (`HeadlessWindowSystem` / `RecordingPresenter`)
+# stand on their own. Mirrors `core/network`'s `real-transport` gating pattern.
+[features]
+default = ["winit-system"]
+winit-system = ["dep:winit", "dep:softbuffer"]
 
 [dependencies]
+thiserror = { workspace = true }
+# The native window + OS event loop adapter (`ADR-0019`). Optional: only the
+# `winit-system` build links it.
+winit = { workspace = true, optional = true }
+# Blits a `FrameView` onto the `winit` window's surface. Optional, same gate.
+softbuffer = { workspace = true, optional = true }
 
 [lints]
 workspace = true
