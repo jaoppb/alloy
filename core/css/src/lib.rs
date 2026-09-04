@@ -144,6 +144,7 @@ pub use domain::stylesheet_set::{InlineStyles, Origin, StyleRule, StyleSheetSet}
 pub use domain::text::{ComputedText, TextMetrics, TextRun};
 pub use domain::viewport::ViewportConstraints;
 pub use infrastructure::cascade::UaCascade;
+pub use infrastructure::font_backed_measurer::FontBackedMeasurer;
 pub use infrastructure::layout::BlockLayout;
 pub use infrastructure::mock::{MockCascadeResolver, MockLayoutEngine, MockTextMeasurer};
 pub use infrastructure::parser::{

@@ -15,11 +15,13 @@
 //!
 //! - [`domain`] — zero-I/O value objects: [`Au`] / [`Px`], [`Point`] / [`Size`]
 //!   / [`Rect`] / [`SurfaceSize`], [`Color`] / [`Opacity`], [`FontId`] /
-//!   [`GlyphId`] / [`GlyphInstance`], [`ImageId`], [`BackendTier`],
-//!   [`CommandIndex`] / [`CommandKind`], and the typed [`GraphicsError`].
-//! - `application` — the ports themselves and the sanitizing builder (`F4a`).
-//! - `infrastructure` — the tier cascade, the CPU rasterizer, font discovery
-//!   and the PNG encoder (`F4a`/`F4b`).
+//!   [`GlyphId`] / [`GlyphInstance`] / [`FaceMetrics`] / [`GlyphBitmap`],
+//!   [`ImageId`], [`BackendTier`], [`CommandIndex`] / [`CommandKind`], and the
+//!   typed [`GraphicsError`].
+//! - `application` — the two ports ([`RenderBackend`], [`FontProvider`]) and
+//!   the sanitizing builder (`F4a`).
+//! - `infrastructure` — the tier cascade, the CPU rasterizer, the three
+//!   [`FontProvider`] adapters (`F4a`/`B3`), and the PNG encoder.
 //!
 //! ## Determinism (`ADR-0016`)
 //!
@@ -49,11 +51,14 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Bumped on any change a backend or a producer could
 /// notice; frozen at `F4`, after which a change also needs a migration note in
-/// `PRD-005`.
-pub const PORT_SCHEMA_VERSION: u32 = 1;
+/// `PRD-005`. `2` is v0.5 Phase B3 — `GraphicsError` gains additive
+/// `FontUnavailable { font }` (`#[non_exhaustive]`, so a `match` with a
+/// wildcard arm needed no change), and the new [`FontProvider`] port sits
+/// alongside `RenderBackend`, not inside it.
+pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::conformance;
-pub use application::{DisplayListBuilder, PxRect, RenderBackend};
+pub use application::{DisplayListBuilder, FontProvider, PxRect, RenderBackend};
 pub use domain::{
     color::{Color, Opacity},
     command::DisplayCommand,
@@ -61,7 +66,7 @@ pub use domain::{
     command_kind::CommandKind,
     display_list::DisplayList,
     error::{CommandRejection, FrameOperation, FrameState, GraphicsError},
-    font::{FontId, GlyphId, GlyphInstance, GlyphRun},
+    font::{FaceMetrics, FontId, GlyphBitmap, GlyphId, GlyphInstance, GlyphRun},
     framebuffer::{BYTES_PER_PIXEL, Framebuffer},
     geometry::{Point, Rect, Size, SurfaceSize},
     image::ImageId,
@@ -71,6 +76,9 @@ pub use domain::{
 };
 pub use infrastructure::cascade::{
     BackendPreference, BackendSelection, FORCE_TIER_VARIABLE, select_backend, select_backend_with,
+};
+pub use infrastructure::font::{
+    FontCatalog, GenericFamily, SyntheticFontProvider, SystemFontProvider, TtfParserProvider,
 };
 #[cfg(feature = "software-backend")]
 pub use infrastructure::software::SoftwareCpuBackend;
