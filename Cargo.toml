@@ -71,6 +71,13 @@ winit = "=0.30.13"
 # matching the software tier `graphics` already ships). Same ADR-0018 row-3 exception as `winit`.
 softbuffer = "=0.4.8"
 
+# --- font parsing for `core/graphics` (v0.5 B3) ---------------------------------------------
+# core/graphics B3 — reads font-file bytes (an attacker-controlled surface, ADR-0018 row 1), so it
+# must be `unsafe`-free and stays OFF `unsafe-allowlist.toml`; `#![forbid(unsafe_code)]` verified
+# against the pinned version via `cargo geiger --forbid-only` before this pin was accepted.
+# Trimmed to what outline + metrics extraction needs; no layout-table features.
+ttf-parser = { version = "=0.25.1", default-features = false, features = ["std"] }
+
 # Strict lint gate (review G3), inherited via `lints.workspace = true`. `priority = -1`
 # lets the specific lints below override the group denies.
 [workspace.lints.clippy]
