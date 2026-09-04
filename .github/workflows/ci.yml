@@ -113,12 +113,22 @@ jobs:
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
       - run: cargo test -p network --no-default-features
-      # PRD-007 / PRD-009 / v0.5 report §2.12 (R): core/css, core/network and
-      # core/runtime/rhai must each stay free of the engine, a script runtime
-      # or another subsystem — arch-lint.toml's deny-scope-dep and
+      - run: cargo test -p window --no-default-features
+      # PRD-007 / PRD-009 / PRD-010 / v0.5 report §2.12 (R): core/css, core/network,
+      # core/window and core/runtime/rhai must each stay free of the engine, a script
+      # runtime or another subsystem — arch-lint.toml's deny-scope-dep and
       # restrict-use rules hold this line and the `arch-lint` job below
       # enforces them on every push, so no manual `cargo tree` grep is needed
       # here.
+      # ADR-0011 item 6: --no-default-features is the no-window build — it must
+      # link neither winit nor softbuffer at all.
+      - name: window --no-default-features links neither winit nor softbuffer
+        run: |
+          if cargo tree -p window --no-default-features --edges normal --prefix none | grep -Eiq '^(winit|softbuffer) '; then
+            echo "✗ core/window --no-default-features still links winit/softbuffer"
+            exit 1
+          fi
+          echo "✓ core/window --no-default-features (no-window) links neither winit nor softbuffer"
 
   # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
   css-conformance:
