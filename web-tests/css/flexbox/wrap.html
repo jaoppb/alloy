@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Flexbox Wrap</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .wrap-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .flex-nowrap {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      background-color: #ecf0f1;
+      width: 250px;
+      padding: 8px;
+      margin-bottom: 16px;
+    }
+    .flex-wrap {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      background-color: #ecf0f1;
+      width: 250px;
+      padding: 8px;
+      margin-bottom: 16px;
+    }
+    .item {
+      width: 100px;
+      height: 40px;
+      background-color: #3498db;
+      color: #ffffff;
+      margin: 4px;
+      text-align: center;
+      padding: 4px;
+    }
+    .item-a { background-color: #e74c3c; }
+    .item-b { background-color: #f39c12; }
+    .item-c { background-color: #2ecc71; }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Flexbox Multi-line Wrap</h1>
+    <span class="badge">SPEC: CSS Flexbox L1 §9 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: Em um contêiner de 250px de largura com itens de 100px: flex-wrap: nowrap mantém todos os 3 itens na mesma linha; flex-wrap: wrap quebra o terceiro item para a segunda linha.
+    </div>
+    <div class="criteria-fail">
+      FAIL: flex-wrap: wrap não quebrando linha ou gerando overflow horizontal sem quebra.
+    </div>
+  </div>
+
+  <div class="wrap-section">
+    <h2>1. flex-wrap: nowrap (todos na mesma linha)</h2>
+    <div class="flex-nowrap">
+      <div class="item item-a">Item A (100px)</div>
+      <div class="item item-b">Item B (100px)</div>
+      <div class="item item-c">Item C (100px)</div>
+    </div>
+
+    <h2>2. flex-wrap: wrap (quebra para segunda linha)</h2>
+    <div class="flex-wrap">
+      <div class="item item-a">Item A (100px)</div>
+      <div class="item item-b">Item B (100px)</div>
+      <div class="item item-c">Item C (100px)</div>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

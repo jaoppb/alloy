@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Margin Collapse</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .comparison-container {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    .wrapper {
+      background-color: #e74c3c;
+      width: 200px;
+      padding: 0;
+      margin-bottom: 20px;
+    }
+    /* Dois blocos adjacentes: 30px bottom + 20px top devem colapsar para 30px */
+    .box-a {
+      height: 40px;
+      background-color: #2ecc71;
+      margin-bottom: 30px;
+    }
+    .box-b {
+      height: 40px;
+      background-color: #2ecc71;
+      margin-top: 20px;
+    }
+    /* Referência estática para comparação: altura esperada = 40 + 30 + 40 = 110px */
+    .reference {
+      background-color: #3498db;
+      width: 200px;
+      height: 110px;
+    }
+    .indicator-box {
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Vertical Margin Collapse</h1>
+    <span class="badge">SPEC: CSS Box Model L3 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: As margens verticais entre a Caixa A (margin-bottom: 30px) e a Caixa B (margin-top: 20px) colapsam para o valor máximo (30px), fazendo a altura total do conjunto verde equivaler exatamente à barra azul de referência (110px).
+    </div>
+    <div class="criteria-fail">
+      FAIL: Se as margens somarem 50px (altura total 130px), revelando área em vermelho de desalinhamento em relação à referência azul.
+    </div>
+  </div>
+
+  <div class="comparison-container">
+    <h2>1. Blocos com Margens Adjacentes (Teste de Colapso)</h2>
+    <div class="wrapper">
+      <div class="box-a">Caixa A (margin-bottom: 30px)</div>
+      <div class="box-b">Caixa B (margin-top: 20px)</div>
+    </div>
+
+    <h2>2. Bloco de Referência (110px exatos)</h2>
+    <div class="reference">Referência (110px de altura)</div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>
