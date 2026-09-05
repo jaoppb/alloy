@@ -91,3 +91,48 @@ pub fn closes_list_item(tag: &str) -> bool {
 pub fn is_heading_tag(name: &str) -> bool {
     matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_void_tags() {
+        assert!(is_void_tag("br"));
+        assert!(is_void_tag("img"));
+        assert!(is_void_tag("input"));
+        assert!(is_void_tag("hr"));
+        assert!(is_void_tag("meta"));
+        assert!(is_void_tag("link"));
+        assert!(!is_void_tag("div"));
+        assert!(!is_void_tag("p"));
+    }
+
+    #[test]
+    fn test_rawtext_tags() {
+        assert!(is_rawtext_tag("script"));
+        assert!(is_rawtext_tag("style"));
+        assert!(!is_rawtext_tag("textarea"));
+        assert!(!is_rawtext_tag("div"));
+    }
+
+    #[test]
+    fn test_block_and_heading_tags() {
+        assert!(is_block_tag("div"));
+        assert!(is_block_tag("p"));
+        assert!(is_block_tag("h1"));
+        assert!(is_heading_tag("h1"));
+        assert!(is_heading_tag("h6"));
+        assert!(!is_heading_tag("p"));
+        assert!(!is_block_tag("span"));
+    }
+
+    #[test]
+    fn test_omission_triggers() {
+        assert!(closes_paragraph("p"));
+        assert!(closes_paragraph("div"));
+        assert!(!closes_paragraph("span"));
+        assert!(closes_list_item("li"));
+        assert!(!closes_list_item("div"));
+    }
+}

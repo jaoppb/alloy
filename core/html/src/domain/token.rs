@@ -1,107 +1,13 @@
 //! Value objects representing HTML5 tokens.
 
-use crate::domain::error::HtmlError;
-
-/// An attribute entry belonging to a tag.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AttributeEntry {
-    name: String,
-    value: String,
-}
-
-impl AttributeEntry {
-    /// Create a validated, lowercased attribute entry.
-    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Result<Self, HtmlError> {
-        let name_string = name.into().to_ascii_lowercase();
-        if name_string.is_empty() {
-            return Err(HtmlError::InvalidAttribute(
-                "attribute name cannot be empty".into(),
-            ));
-        }
-        Ok(Self {
-            name: name_string,
-            value: value.into(),
-        })
-    }
-
-    /// The attribute name.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// The attribute value.
-    #[must_use]
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-}
-
-/// A first-class collection of element attributes.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AttributeList {
-    entries: Vec<AttributeEntry>,
-}
-
-impl AttributeList {
-    /// Create an empty attribute collection.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-
-    /// Push an entry to the collection.
-    pub fn push(&mut self, entry: AttributeEntry) {
-        self.entries.push(entry);
-    }
-
-    /// Number of attributes in the collection.
-    #[must_use]
-    pub const fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Checks if the collection is empty.
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    /// Iterator over the attribute entries.
-    pub fn iter(&self) -> core::slice::Iter<'_, AttributeEntry> {
-        self.entries.iter()
-    }
-    /// Slice of the attribute entries.
-    #[must_use]
-    pub fn as_slice(&self) -> &[AttributeEntry] {
-        &self.entries
-    }
-
-    /// Find an attribute value by name.
-    #[must_use]
-    pub fn get(&self, name: &str) -> Option<&str> {
-        self.entries
-            .iter()
-            .find(|entry| entry.name() == name)
-            .map(AttributeEntry::value)
-    }
-}
-
-impl<'a> IntoIterator for &'a AttributeList {
-    type Item = &'a AttributeEntry;
-    type IntoIter = core::slice::Iter<'a, AttributeEntry>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
+use crate::domain::attribute::AttributeList;
+use crate::domain::tag_name::TagName;
+use crate::domain::text::Text;
 
 /// A DOCTYPE token representation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DoctypeToken {
-    name: Option<String>,
+    name: Option<TagName>,
     public_id: Option<String>,
     system_id: Option<String>,
     force_quirks: bool,
@@ -110,14 +16,14 @@ pub struct DoctypeToken {
 impl DoctypeToken {
     /// Create a new DOCTYPE token.
     #[must_use]
-    pub fn new(
-        name: Option<String>,
+    pub const fn new(
+        name: Option<TagName>,
         public_id: Option<String>,
         system_id: Option<String>,
         force_quirks: bool,
     ) -> Self {
         Self {
-            name: name.map(|s| s.to_ascii_lowercase()),
+            name,
             public_id,
             system_id,
             force_quirks,
@@ -127,7 +33,13 @@ impl DoctypeToken {
     /// The DOCTYPE root name (e.g. `"html"`).
     #[must_use]
     pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+        self.name.as_ref().map(TagName::as_str)
+    }
+
+    /// The tag name VO if present.
+    #[must_use]
+    pub const fn tag_name(&self) -> Option<&TagName> {
+        self.name.as_ref()
     }
 
     /// The PUBLIC identifier if present.
@@ -152,33 +64,32 @@ impl DoctypeToken {
 /// A `StartTag` or `EndTag` token payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagToken {
-    name: String,
+    name: TagName,
     attributes: AttributeList,
     self_closing: bool,
 }
 
 impl TagToken {
-    /// Create a new tag token with lowercased name.
-    pub fn new(
-        name: impl Into<String>,
-        attributes: AttributeList,
-        self_closing: bool,
-    ) -> Result<Self, HtmlError> {
-        let name_string = name.into().to_ascii_lowercase();
-        if name_string.is_empty() {
-            return Err(HtmlError::InvalidTag("tag name cannot be empty".into()));
-        }
-        Ok(Self {
-            name: name_string,
+    /// Create a new tag token with a validated tag name.
+    #[must_use]
+    pub const fn new(name: TagName, attributes: AttributeList, self_closing: bool) -> Self {
+        Self {
+            name,
             attributes,
             self_closing,
-        })
+        }
     }
 
-    /// The tag name.
+    /// The tag name VO.
+    #[must_use]
+    pub const fn tag_name(&self) -> &TagName {
+        &self.name
+    }
+
+    /// The tag name as string slice.
     #[must_use]
     pub fn name(&self) -> &str {
-        &self.name
+        self.name.as_str()
     }
 
     /// The collection of attributes.
@@ -187,7 +98,7 @@ impl TagToken {
         &self.attributes
     }
 
-    /// Mutable reference to attributes for building tokens.
+    /// Mutable reference to attributes.
     pub const fn attributes_mut(&mut self) -> &mut AttributeList {
         &mut self.attributes
     }
@@ -215,9 +126,49 @@ pub enum Token {
     /// Closing tag.
     EndTag(TagToken),
     /// Sequence of character data.
-    Character(String),
+    Character(Text),
     /// Comment data.
-    Comment(String),
+    Comment(Text),
     /// End of stream.
     EndOfFile,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doctype_token_accessors() {
+        let doctype = DoctypeToken::new(
+            Some(TagName::new_unchecked("html")),
+            Some("-//W3C//DTD HTML 4.01//EN".into()),
+            None,
+            false,
+        );
+        assert_eq!(doctype.name(), Some("html"));
+        assert_eq!(doctype.public_id(), Some("-//W3C//DTD HTML 4.01//EN"));
+        assert_eq!(doctype.system_id(), None);
+        assert!(!doctype.force_quirks());
+    }
+
+    #[test]
+    fn tag_token_accessors() {
+        let mut tag = TagToken::new(TagName::new_unchecked("div"), AttributeList::new(), false);
+        assert_eq!(tag.name(), "div");
+        assert!(!tag.is_self_closing());
+        tag.set_self_closing(true);
+        assert!(tag.is_self_closing());
+    }
+
+    #[test]
+    fn token_variants() {
+        let text_token = Token::Character(Text::new("hello"));
+        assert!(matches!(text_token, Token::Character(_)));
+
+        let comment_token = Token::Comment(Text::new("note"));
+        assert!(matches!(comment_token, Token::Comment(_)));
+
+        let eof = Token::EndOfFile;
+        assert_eq!(eof, Token::EndOfFile);
+    }
 }

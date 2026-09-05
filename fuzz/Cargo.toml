@@ -12,6 +12,7 @@ libfuzzer-sys = "0.4"
 network = { path = "../core/network", default-features = false }
 graphics = { path = "../core/graphics" }
 css = { path = "../core/css" }
+html = { path = "../core/html" }
 
 [[bin]]
 name = "inflate"
@@ -28,5 +29,11 @@ doc = false
 [[bin]]
 name = "css_parse"
 path = "fuzz_targets/css_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "html_parse"
+path = "fuzz_targets/html_parse.rs"
 test = false
 doc = false
