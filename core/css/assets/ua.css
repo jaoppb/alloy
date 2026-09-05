@@ -35,6 +35,10 @@ label {
 	display: inline;
 }
 
+a {
+	color: #0000ee;
+}
+
 h1 {
 	display: block;
 	font-size: 2em;
