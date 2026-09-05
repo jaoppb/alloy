@@ -7,6 +7,10 @@ repository.workspace = true
 publish.workspace = true
 description = "Alloy browser CLI entry point. v0.1: run a Rhai muscle script under the execution sandbox."
 
+[lib]
+name = "alloy"
+path = "src/lib.rs"
+
 [[bin]]
 name = "alloy"
 path = "src/main.rs"
@@ -16,6 +20,9 @@ dom = { path = "../core/dom" }
 engine = { path = "../core/engine" }
 rhai-runtime = { path = "../core/runtime/rhai" }
 rhai-bindings = { path = "../core/runtime/rhai-bindings" }
+css = { path = "../core/css" }
+graphics = { path = "../core/graphics", features = ["software-backend"] }
+html = { path = "../core/html" }
 clap = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
