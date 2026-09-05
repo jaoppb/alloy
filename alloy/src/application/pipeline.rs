@@ -198,8 +198,14 @@ fn render_dom_internal(
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
     sheets.absorb(extra_sheets);
-    let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
     let constraints = make_constraints(surface_size)?;
+    // Discharge `@media` conditions against the real viewport before the
+    // cascade: a `CascadeResolver` is handed no viewport by contract
+    // (`PRD-007:56-60`) and silently skips any rule still carrying a
+    // condition, so without this every `@media` block — supported or not —
+    // never applied.
+    let sheets = sheets.matching_viewport(&constraints);
+    let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
     let box_tree = if use_font_measurer {
         let measurer: Arc<dyn TextMeasurer> = Arc::new(FontBackedMeasurer::new(
             Arc::clone(&font_provider),
