@@ -154,11 +154,22 @@ where
     }
 
     fn absorb_stylesheet(&mut self, text: &str) {
-        if let Ok(sheet) = css::parse_stylesheet(text, Origin::Author) {
-            self.extra_sheets.absorb(sheet);
-            self.dirty = true;
-            self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
-        }
+        let sheet = match css::parse_stylesheet(text, Origin::Author) {
+            Ok(sheet) => sheet,
+            Err(error) => {
+                tracing::warn!(%error, bytes = text.len(), "stylesheet parse failed");
+                return;
+            }
+        };
+        tracing::debug!(
+            rules = sheet.rules().count(),
+            notes = sheet.notes().len(),
+            bytes = text.len(),
+            "stylesheet absorbed"
+        );
+        self.extra_sheets.absorb(sheet);
+        self.dirty = true;
+        self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
     }
 
     /// Asks the discoverer what `dom_tree` references, registers a
@@ -174,6 +185,7 @@ where
         let snapshot = css::snapshot(dom_tree, dom_tree.document());
         let found = self.services.discoverer().discover(&snapshot, base_url);
         for request in found {
+            tracing::debug!(?request, "subresource discovered");
             if let SubresourceRequest::Image(image) = &request {
                 self.images.reserve_placeholder(image.id());
             }
@@ -224,7 +236,14 @@ fn fetch_subresource<T: HttpTransport>(request: SubresourceRequest, transport: &
 fn fetch_text<T: HttpTransport>(url: &Url, transport: &T) -> Result<String, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
     ensure_success(url, response.status())?;
-    Ok(response.body().as_str().unwrap_or_default().to_owned())
+    let body = response.body().as_str().unwrap_or_default().to_owned();
+    tracing::debug!(
+        %url,
+        status = response.status().code(),
+        bytes = body.len(),
+        "stylesheet fetched"
+    );
+    Ok(body)
 }
 
 fn fetch_image<T: HttpTransport>(url: &Url, transport: &T) -> Result<Framebuffer, AlloyError> {
