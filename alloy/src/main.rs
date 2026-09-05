@@ -7,20 +7,27 @@
 //!   logs any non-unit return value via [`tracing`], and prints serialized HTML.
 //! - `alloy render <file.html> -o <out.png> [--width W] [--height H]` renders
 //!   HTML directly to a PNG file using the headless pipeline.
+//! - `alloy <url>` opens a native window and renders the page at `url`
+//!   (v0.5 Phase I4) — real network I/O and a real display, so this path has
+//!   no automated coverage; the golden e2e suite (`alloy/tests/e2e_golden.rs`)
+//!   exercises the same [`alloy::run_browser`] loop over mocks instead.
 
 #![forbid(unsafe_code)]
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use alloy::error::AlloyError;
 use alloy::logging;
-use alloy::{RenderOptions, render_html_to_png};
+use alloy::{RenderOptions, initial_window_attributes, render_html_to_png, run_browser};
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use dom::serialize_html;
 use engine::profiles;
+use network::{AllowAllPolicy, HttpTransport, RealHttpTransport, RequestPolicy, Url};
 use rhai_bindings::run_dom_with_fallback;
 use rhai_runtime::RhaiEngine;
+use window::{SoftbufferPresenter, WindowSystem, WinitSystem};
 
 /// The embedded default DOM script (C-09 fallback): built into the binary so a
 /// muscle-script failure always has something to fall back to.
@@ -33,6 +40,10 @@ struct Cli {
     /// Compile and run a Rhai muscle script, then log its result.
     #[arg(long, value_name = "PATH")]
     script: Option<PathBuf>,
+
+    /// Open a native window and render this page (v0.5 Phase I4).
+    #[arg(value_name = "URL")]
+    url: Option<String>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -79,11 +90,47 @@ fn run(cli: &Cli) -> Result<(), AlloyError> {
     if let Some(Commands::Render(args)) = &cli.command {
         return run_render_command(args);
     }
+    if let Some(raw_url) = cli.url.as_deref() {
+        return run_browse_command(raw_url);
+    }
     let Some(path) = cli.script.as_deref() else {
         let _ = Cli::command().print_help();
         return Ok(());
     };
     run_script(path)
+}
+
+/// `alloy <url>`: a real window, real network I/O, `AllowAllPolicy` (the
+/// scriptable `RequestPolicy` of v0.5 Phase M is a `rhai-bindings` concern,
+/// not this binary's default). Runs until the window closes.
+fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
+    let url = Url::parse(raw_url)?;
+    let transport: Arc<dyn HttpTransport> = Arc::new(RealHttpTransport::new()?);
+    let policy: Arc<dyn RequestPolicy> = Arc::new(AllowAllPolicy::new());
+
+    let mut system = WinitSystem::new()?;
+    let attributes = initial_window_attributes()?;
+    system.create_window(&attributes)?;
+    let window_id_and_handle = system
+        .window_handle()
+        .map(|handle| (window::WindowId::from_raw(u64::from(handle.id())), handle));
+    let Some((window_id, handle)) = window_id_and_handle else {
+        return Err(AlloyError::from(window::WindowError::creation_failed(
+            "no window handle after create_window succeeded",
+        )));
+    };
+    let mut presenter = SoftbufferPresenter::new(window_id, handle)?;
+
+    let stats = run_browser(
+        &url,
+        transport,
+        policy,
+        &mut system,
+        &mut presenter,
+        attributes.initial_size(),
+    )?;
+    tracing::info!(relayouts = stats.relayouts, "browser session ended");
+    Ok(())
 }
 
 fn run_render_command(args: &RenderArgs) -> Result<(), AlloyError> {
