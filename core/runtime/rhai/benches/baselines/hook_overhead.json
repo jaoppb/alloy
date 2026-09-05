@@ -1,0 +1,8 @@
+{
+	"_comment": "Committed criterion baseline for hook_overhead::on_event_overhead (v0.5 Phase P). Read by ci/hook_benchmark.sh. mean_ns is the criterion mean point estimate (nanoseconds) measured on the machine that recorded this file; regression_factor is how many times slower a CI run may be before the gate fails, generous enough to absorb cross-machine noise while still catching a real regression. absolute_ceiling_ns is the hard PRD-001 N-01 target (<10us per hook round trip) and is checked independently of the recorded baseline.",
+	"mean_ns": 406.85,
+	"recorded_on": "2026-09-05",
+	"recorded_by": "v0.5 Phase P (docs/v0-5-handoff/07-p-final-gates.md) — M never committed one (docs/v0-5-handoff/05-m-muscle-scripting.md DoD checkbox was unmet)",
+	"regression_factor": 5,
+	"absolute_ceiling_ns": 10000
+}

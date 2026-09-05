@@ -13,7 +13,9 @@ docs/
 ├── architecture/                       # System Architecture & Design
 │   ├── overview.md                     # High-level architecture, C4 diagrams, and core patterns
 │   ├── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
-│   └── style-cascade-port-contract.md  # ADR-0011 contract record for the CascadeResolver/LayoutEngine/TextMeasurer port
+│   ├── style-cascade-port-contract.md  # ADR-0011 contract record for the CascadeResolver/LayoutEngine/TextMeasurer port
+│   ├── http-transport-port-contract.md # ADR-0011 contract record for the HttpTransport/RequestPolicy port (not yet frozen)
+│   └── window-system-port-contract.md  # ADR-0011 contract record for the WindowSystem/Presenter port (not yet frozen)
 ├── requirements/                       # Product & System Requirements (PRDs)
 │   ├── PRD-001-alloy-core-system.md    # Overall browser system requirements
 │   ├── PRD-002-abstract-runtime-engine.md # Abstract engine & Rhai integration requirements
@@ -22,14 +24,17 @@ docs/
 │   ├── PRD-005-graphics-and-gpu-rendering.md # Vulkan & OpenGL graphics pipeline requirements
 │   ├── PRD-006-web-content-javascript-runtime-port.md # Replaceable content JS engine port
 │   ├── PRD-007-style-cascade-and-layout-engine-ports.md # Replaceable CSS cascade & layout ports
-│   └── PRD-008-html-tokenizer-and-tree-sink-ports.md # Replaceable HTML tokenizer & tree sink ports
+│   ├── PRD-008-html-tokenizer-and-tree-sink-ports.md # Replaceable HTML tokenizer & tree sink ports
+│   ├── PRD-009-network-transport-and-request-policy-port.md # Replaceable HTTP transport & request-policy ports
+│   └── PRD-010-window-system-and-presenter-port.md # Replaceable window-system & presenter ports
 ├── reports/                            # Technical Reports (analysis, audits, roadmaps)
 │   ├── ROADMAP-IMPLEMENTACAO-V1.md     # Phased roadmap from bootstrap to the v1.0 release
 │   ├── IMPLEMENTACAO-DETALHADA-V0-1.md # Detailed F0+F1+F2 implementation plan for v0.1
 │   ├── IMPLEMENTACAO-DETALHADA-V0-2.md # Detailed F3+F6+I1 implementation plan for v0.2
 │   ├── IMPLEMENTACAO-DETALHADA-V0-3.md # Detailed F4+F5+I2 implementation plan for v0.3
-│   ├── IMPLEMENTACAO-DETALHADA-V0-5.md # Detailed F8+F9+I4 implementation plan for v0.5
-│   └── VIOLACAO-N02-UNSAFE-NO-RHAI.md  # Audit: PRD-001:97 vs. the unsafe in rhai's binding seam
+│   ├── IMPLEMENTACAO-DETALHADA-V0-5.md # Detailed implementation plan for v0.5 (B0-B5, C0-C2, EE, I2, I4, M, P)
+│   ├── V0-5-PROGRESSO-E-PENDENCIAS.md  # v0.5 progress snapshot with file:line evidence
+│   └── VIOLACAO-N02-UNSAFE-NO-RHAI.md  # Audit: PRD-001:97 vs. the unsafe in rhai's binding seam (closed by ADR-0018)
 └── adr/                                # Architecture Decision Records (MADR format)
     ├── README.md                       # ADR index & decision log
     ├── 0001-record-architecture-decisions.md
@@ -45,8 +50,14 @@ docs/
     ├── 0011-replaceable-subsystem-ports-and-conformance-contract.md
     ├── 0013-object-safe-runtime-engine-companion.md
     ├── 0014-structured-logging-with-tracing.md
-    └── 0015-typed-errors-with-thiserror.md
+    ├── 0015-typed-errors-with-thiserror.md
+    ├── 0018-unsafe-by-threat-surface.md
+    └── 0019-single-event-loop-owns-the-main-thread.md
 ```
+
+`docs/v0-5-handoff/` holds the self-contained, per-phase handoff package for the v0.5 campaign (B4/B5/X/I2/M/I4/P) —
+each file there is meant to be opened on its own by a fresh session, without reading the rest of this documentation tree
+first.
 
 ---
 

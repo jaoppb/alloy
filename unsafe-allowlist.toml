@@ -82,10 +82,49 @@ hand-rolled blit. No hostile bytes on this surface either: it copies a buffer
 this workspace already produced into OS-owned shared memory.
 """
 
-# --- Spike finding (v0.5 Phase 0) -----------------------------------------------
-# `cargo-geiger 0.13` installs and runs under toolchain 1.97.1, but its full
-# `unsafe`-counting scan hits a target-resolution bug on this workspace
-# (phantom `core/engine/tests/engine_conformance.rs`). `cargo geiger
-# --forbid-only` works. Phase P must settle the enforcement mechanism: pin a
-# working cargo-geiger, curate a `--forbid-only` baseline, or switch to
-# `cargo-acl` / a dylint. Until then the `unsafe-audit` job is advisory.
+# --- ADR-0014 diagnostics stack (found by the Phase P direct-dependency scan) -
+# NOTE for whoever next revises ADR-0018: neither entry below is platform FFI —
+# "row 3" is a stretch, recorded honestly as one here rather than silently
+# omitted. `tracing`/`tracing-subscriber`'s `unsafe` is internal span/subscriber
+# bookkeeping (thread-local registry slots, `Once`-guarded statics), not FFI and
+# not attacker-controlled-byte parsing. It doesn't cleanly fit any of the three
+# nominal rows, but ADR-0014 already mandates `tracing` workspace-wide, so
+# forbidding it (row 4, "convenience") is not an available option either. This
+# is the one gap `ci/unsafe_audit.sh` surfaced that the four-row taxonomy does
+# not name a home for — a future ADR-0018 revision should probably add a row for
+# "cross-cutting infrastructure mandated by another ADR, no unsafe-free
+# alternative published" rather than keep stretching row 3 to cover it.
+[[allow]]
+crate = "tracing"
+row = 3
+reason = """
+`tracing =0.1.44` (18 unsafe items). Thread-local/`Once`-guarded static access
+in the span/subscriber dispatch core — required for the sub-microsecond
+per-event overhead ADR-0014 structured logging depends on. No attacker-
+controlled bytes on this surface; not literally platform FFI (see the note
+above this entry). Direct dependency of `alloy`, `rhai-runtime`, `rhai-bindings`.
+"""
+
+[[allow]]
+crate = "tracing-subscriber"
+row = 3
+reason = """
+`tracing-subscriber =0.3.23` (149 unsafe items, mostly transitive re-exports
+counted at this crate's own registry/filter layer — `sharded-slab`/
+`thread_local` internals). Same reasoning as the `tracing` entry above: no
+hostile bytes, mandated by ADR-0014, no unsafe-free alternative published.
+Direct dependency of `alloy` (`tracing_subscriber::EnvFilter` init).
+"""
+
+# --- Enforcement mechanism (settled in v0.5 Phase P) ------------------------
+# `cargo-geiger 0.13` installs and runs under toolchain 1.97.1. The
+# "target-resolution bug" noted in Phase 0 was specific to running geiger
+# against the *workspace root* virtual manifest; pointed at a real package
+# manifest (`--manifest-path alloy/Cargo.toml`, which pulls in the whole graph
+# through `alloy`'s own dependency tree) both `--forbid-only` and the full
+# `--output-format Json` scan run cleanly. `ci/unsafe_audit.sh` is the
+# settled mechanism: it runs the `--forbid-only` sweep, then reduces the full
+# JSON scan to this workspace's *direct* third-party dependencies (via `cargo
+# metadata`) and fails if one carries `unsafe` and is not listed in this file.
+# The `unsafe-audit` CI job is **blocking** from Phase P — see
+# `.github/workflows/ci.yml` and `justfile`'s `unsafe-audit` recipe.
