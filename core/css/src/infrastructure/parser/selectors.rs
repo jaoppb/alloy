@@ -4,9 +4,18 @@
 //! Everything outside the cut is **refused with a `CssError`**, never accepted
 //! and ignored: `::before` / `::after`, namespaces (`svg|rect`), `:has()`, any
 //! unknown pseudo-class, and every attribute matcher beyond `[attr]` and
-//! `[attr=v]`. A selector list containing one invalid selector is invalid
-//! whole (CSS Selectors L4 §3.1) — the caller drops the rule and records a
-//! note, which is why a half-applied rule can never happen.
+//! `[attr=v]`.
+//!
+//! A comma-separated selector list recovers **per selector**: a group where one
+//! member is outside the cut keeps the members that parsed and records a
+//! [`crate::ParseNote`] for each one dropped. This is a deliberate deviation
+//! from CSS Selectors L4 §3.1 ("invalid whole") — a real-world sheet groups
+//! dozens of selectors per rule and reaches for `::before` / `:not()` / `:root`
+//! constantly, so dropping the whole rule on the first unknown member left
+//! `alloy <url>` rendering real pages with no author style at all. Only when
+//! **no** member of the group parses does the rule fall back to being dropped
+//! whole, so a single (non-grouped) selector outside the cut still costs its
+//! rule.
 //!
 //! A parser function reads *and* advances the cursor. That is the one place
 //! this crate does not split command from query: re-deriving the position after
@@ -30,16 +39,113 @@ enum Progress {
     Done,
 }
 
+/// The selectors of one comma group that parsed, and one refusal reason per
+/// member that did not.
+///
+/// `skipped` is kept behind an iterator, never a public `Vec` (`ADR-0010:129`);
+/// the caller turns each entry into a [`crate::ParseNote`].
+pub(crate) struct ParsedSelectorList {
+    list: SelectorList,
+    skipped: Vec<CssError>,
+}
+
+impl ParsedSelectorList {
+    const fn new(list: SelectorList, skipped: Vec<CssError>) -> Self {
+        Self { list, skipped }
+    }
+
+    /// The selectors that parsed, ready to move into a `StyleRule`.
+    pub(crate) fn into_list(self) -> SelectorList {
+        self.list
+    }
+
+    /// One `CssError` per selector dropped from the comma group.
+    pub(crate) fn skipped(&self) -> impl Iterator<Item = &CssError> + '_ {
+        self.skipped.iter()
+    }
+}
+
 /// Parses the selector list in front of a `{`, leaving the cursor on the token
 /// that ended it.
-pub(crate) fn parse_selector_list(tokens: &mut TokenStream) -> Result<SelectorList, CssError> {
+///
+/// Recovery is per selector (see the module doc). `Err` is returned only when
+/// **no** member of the comma group parsed — then the caller drops the rule
+/// whole and records the reason.
+pub(crate) fn parse_selector_list(
+    tokens: &mut TokenStream,
+) -> Result<ParsedSelectorList, CssError> {
+    let start = tokens.peek_span();
     let mut list = SelectorList::new();
-    list.push(parse_complex(tokens)?);
+    let mut skipped: Vec<CssError> = Vec::new();
+    let opening_refusal = read_selector(tokens, &mut list, &mut skipped);
     while tokens.peek() == Some(&Token::Comma) {
         tokens.advance();
-        list.push(parse_complex(tokens)?);
+        read_selector(tokens, &mut list, &mut skipped);
     }
-    Ok(list)
+    complete_list(list, skipped, opening_refusal, start)
+}
+
+/// Reads one comma-separated entry. A parsed selector joins `list`; a refused
+/// one leaves its reason in `skipped` and the cursor resynced to the next
+/// boundary. Returns the refusal reason (also pushed to `skipped`) so the
+/// opening entry can report a whole-group failure, `None` when it parsed.
+fn read_selector(
+    tokens: &mut TokenStream,
+    list: &mut SelectorList,
+    skipped: &mut Vec<CssError>,
+) -> Option<CssError> {
+    match parse_complex(tokens) {
+        Ok(selector) => {
+            list.push(selector);
+            None
+        }
+        Err(error) => {
+            skipped.push(error.clone());
+            skip_to_selector_boundary(tokens);
+            Some(error)
+        }
+    }
+}
+
+/// `Ok` once any member parsed; otherwise the opening member's refusal, so
+/// `qualified_rule` still drops the rule and records why. When `list` is empty
+/// the opening `read_selector` returned `Some`, so the `start`-span fallback is
+/// unreachable — it only keeps this total without an `unwrap`.
+fn complete_list(
+    list: SelectorList,
+    skipped: Vec<CssError>,
+    opening_refusal: Option<CssError>,
+    start: SourceSpan,
+) -> Result<ParsedSelectorList, CssError> {
+    if !list.is_empty() {
+        return Ok(ParsedSelectorList::new(list, skipped));
+    }
+    Err(opening_refusal.unwrap_or_else(|| selector_error("expected a selector", start)))
+}
+
+/// After a rejected selector, advance to the `,` or `{` that bounds the next
+/// one, so the rest of a comma group can still be read. `(` / `[` nesting is
+/// balanced, so a `,` inside `:nth-child(2, 3)` or `[a=","]` is not mistaken
+/// for a group separator.
+fn skip_to_selector_boundary(tokens: &mut TokenStream) {
+    let mut depth: usize = 0;
+    while let Some(token) = tokens.peek() {
+        if depth == 0 && matches!(token, Token::Comma | Token::OpenBrace) {
+            return;
+        }
+        depth = depth_after(depth, token);
+        tokens.advance();
+    }
+}
+
+fn depth_after(depth: usize, token: &Token) -> usize {
+    if token.opens().is_some() {
+        return depth.saturating_add(1);
+    }
+    if token.closes().is_some() {
+        return depth.saturating_sub(1);
+    }
+    depth
 }
 
 /// One complex selector: compounds joined by combinators.

@@ -86,27 +86,27 @@ Written in the `E` / `F` element notation of the CSS specifications: one row is 
 `@media` is listed here because §2.8's table puts it in the same column — it gates a rule the same way a selector
 chooses its subjects.
 
-| token                | since | notes                                                                                     |
-| -------------------- | ----- | ----------------------------------------------------------------------------------------- |
-| `E`                  | B1    | type selector, ASCII-lowercased for HTML; specificity `(0,0,1)`                           |
-| `*`                  | B1    | universal; specificity `(0,0,0)`                                                          |
-| `.class`             | B1    | matches a whole name in the whitespace-separated `class` list; `(0,1,0)`                  |
-| `#id`                | B1    | matches the `id` attribute exactly; `(1,0,0)`                                             |
-| `[attr]`             | B1    | presence, whatever the value; `(0,1,0)`                                                   |
-| `[attr=value]`       | B1    | exact value, quoted or bare; `^=` / `$=` / `*=` / `~=` are refused                        |
-| `E, F`               | B1    | selector list; one invalid member invalidates the whole rule (Selectors L4 §3.1)          |
-| `E F`                | B1    | descendant combinator                                                                     |
-| `E > F`              | B1    | child combinator                                                                          |
-| `E + F`              | B1    | next-sibling combinator; counts element siblings only                                     |
-| `E ~ F`              | B1    | subsequent-sibling combinator                                                             |
-| `:hover`             | B1    | parses and weighs `(0,1,0)`; **never matches** — a `DomSnapshot` has no interaction state |
-| `:active`            | B1    | parses and weighs; never matches                                                          |
-| `:focus`             | B1    | parses and weighs; never matches                                                          |
-| `:first-child`       | B1    | 1-based among **element** siblings                                                        |
-| `:last-child`        | B1    | 1-based among element siblings                                                            |
-| `:nth-child()`       | B1    | `an+b`, `odd`, `even`, `n`, `-n+3`, a bare integer                                        |
-| `@media (min-width)` | B1    | evaluated by the producer via `StyleSheetSet::matching_viewport`, never by the resolver   |
-| `@media (max-width)` | B1    | same; a rule still carrying a condition is skipped by the cascade                         |
+| token                | since | notes                                                                                                                                                                                                              |
+| -------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `E`                  | B1    | type selector, ASCII-lowercased for HTML; specificity `(0,0,1)`                                                                                                                                                    |
+| `*`                  | B1    | universal; specificity `(0,0,0)`                                                                                                                                                                                   |
+| `.class`             | B1    | matches a whole name in the whitespace-separated `class` list; `(0,1,0)`                                                                                                                                           |
+| `#id`                | B1    | matches the `id` attribute exactly; `(1,0,0)`                                                                                                                                                                      |
+| `[attr]`             | B1    | presence, whatever the value; `(0,1,0)`                                                                                                                                                                            |
+| `[attr=value]`       | B1    | exact value, quoted or bare; `^=` / `$=` / `*=` / `~=` are refused                                                                                                                                                 |
+| `E, F`               | B1    | selector list; refused members are skipped with a note, the rule keeps the ones that parse (deviates from Selectors L4 §3.1 — see `parser/selectors.rs`); the rule is dropped whole only when **no** member parses |
+| `E F`                | B1    | descendant combinator                                                                                                                                                                                              |
+| `E > F`              | B1    | child combinator                                                                                                                                                                                                   |
+| `E + F`              | B1    | next-sibling combinator; counts element siblings only                                                                                                                                                              |
+| `E ~ F`              | B1    | subsequent-sibling combinator                                                                                                                                                                                      |
+| `:hover`             | B1    | parses and weighs `(0,1,0)`; **never matches** — a `DomSnapshot` has no interaction state                                                                                                                          |
+| `:active`            | B1    | parses and weighs; never matches                                                                                                                                                                                   |
+| `:focus`             | B1    | parses and weighs; never matches                                                                                                                                                                                   |
+| `:first-child`       | B1    | 1-based among **element** siblings                                                                                                                                                                                 |
+| `:last-child`        | B1    | 1-based among element siblings                                                                                                                                                                                     |
+| `:nth-child()`       | B1    | `an+b`, `odd`, `even`, `n`, `-n+3`, a bare integer                                                                                                                                                                 |
+| `@media (min-width)` | B1    | evaluated by the producer via `StyleSheetSet::matching_viewport`, never by the resolver                                                                                                                            |
+| `@media (max-width)` | B1    | same; a rule still carrying a condition is skipped by the cascade                                                                                                                                                  |
 
 Declared **out** for v0.5, and refused with a note rather than ignored:
 
