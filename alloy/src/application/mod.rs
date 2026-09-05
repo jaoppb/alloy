@@ -12,4 +12,7 @@ pub use event_loop::{
 };
 pub use navigation::navigate;
 pub use paint::paint_box_tree;
-pub use pipeline::{RenderOptions, render_dom, render_html_to_png, run_render};
+pub use pipeline::{
+    DEFAULT_FONT_SIZE, RenderOptions, default_runtime_font_provider, render_dom,
+    render_dom_with_font_provider, render_html_to_png, render_html_with_font_provider, run_render,
+};

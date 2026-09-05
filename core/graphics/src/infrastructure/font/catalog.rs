@@ -54,14 +54,18 @@ const fn linux_paths(family: GenericFamily) -> &'static [&'static str] {
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
             "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/Adwaita/AdwaitaSans-Regular.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
         ],
         GenericFamily::Serif => &[
             "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
             "/usr/share/fonts/TTF/DejaVuSerif.ttf",
+            "/usr/share/fonts/noto/NotoSerif-Regular.ttf",
         ],
         GenericFamily::Monospace => &[
             "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
             "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+            "/usr/share/fonts/Adwaita/AdwaitaMono-Regular.ttf",
         ],
     }
 }
