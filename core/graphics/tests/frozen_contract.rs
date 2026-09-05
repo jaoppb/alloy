@@ -331,6 +331,18 @@ fn every_error_variant_prints_something_a_reader_can_act_on() {
             },
             "the software backend is unavailable on this system",
         ),
+        (
+            GraphicsError::FontUnavailable {
+                font: FontId::new(1),
+            },
+            "font font #1 is not registered with this backend",
+        ),
+        (
+            GraphicsError::ImageUnavailable {
+                image: ImageId::new(42),
+            },
+            "image image #42 is not registered with this backend",
+        ),
     ];
 
     for (error, message) in cases {
