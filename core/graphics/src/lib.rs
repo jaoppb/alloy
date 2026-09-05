@@ -9,7 +9,8 @@
 //! This crate names no engine type and has no script bridge. Making a display
 //! list scriptable is `core/runtime/rhai`'s job at `I2b`, exactly as making a
 //! DOM node scriptable was at `I1` (v0.3 report decision 2.1). Its only
-//! dependencies are `thiserror` and, from `F4b`, `ttf-parser`.
+//! dependencies are `thiserror`, `ttf-parser` (from `F4b`), and `network`
+//! (`default-features = false`, for RFC 1951 inflate in Phase X).
 //!
 //! ## Layout (`ADR-0010` §1)
 //!
@@ -18,10 +19,11 @@
 //!   [`GlyphId`] / [`GlyphInstance`] / [`FaceMetrics`] / [`GlyphBitmap`],
 //!   [`ImageId`], [`BackendTier`], [`CommandIndex`] / [`CommandKind`], and the
 //!   typed [`GraphicsError`].
-//! - `application` — the two ports ([`RenderBackend`], [`FontProvider`]) and
-//!   the sanitizing builder (`F4a`).
+//! - `application` — the three ports ([`RenderBackend`], [`FontProvider`],
+//!   [`ImageProvider`]) and the sanitizing builder (`F4a`).
 //! - `infrastructure` — the tier cascade, the CPU rasterizer, the three
-//!   [`FontProvider`] adapters (`F4a`/`B3`), and the PNG encoder.
+//!   [`FontProvider`] adapters (`F4a`/`B3`), the [`ImageProvider`] adapters,
+//!   and the PNG codec (encoder and Phase X decoder).
 //!
 //! ## Determinism (`ADR-0016`)
 //!
@@ -51,11 +53,11 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Bumped on any change a backend or a producer could
 /// notice; frozen at `F4`, after which a change also needs a migration note in
-/// `PRD-005`. `2` is v0.5 Phase B3 — `GraphicsError` gains additive
-/// `FontUnavailable { font }` (`#[non_exhaustive]`, so a `match` with a
-/// wildcard arm needed no change), and the new [`FontProvider`] port sits
-/// alongside `RenderBackend`, not inside it.
-pub const PORT_SCHEMA_VERSION: u32 = 2;
+/// `PRD-005`.
+/// - `2`: v0.5 Phase B3 — [`FontProvider`] port and `FontUnavailable`.
+/// - `3`: v0.5 Phase X — [`ImageProvider`] port, `ImageUnavailable`, and
+///   `DrawImage` on the software backend.
+pub const PORT_SCHEMA_VERSION: u32 = 3;
 
 pub use application::conformance;
 pub use application::{DisplayListBuilder, FontProvider, ImageProvider, PxRect, RenderBackend};
