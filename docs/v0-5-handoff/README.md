@@ -24,37 +24,34 @@ trabalhar numa fase — cada arquivo aqui já extrai e atualiza a seção releva
 
 ## Estado em uma tabela
 
-| Fase                              | Estado                                                           | Arquivo desta pasta                                                      | Commit                     | Despacho                                             |
-| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------- | ---------------------------------------------------- |
-| 0, B0, C0, B1, C1, B2, C2, EE, B3 | ✅ entregues e verificadas (`just gate`)                         | — (ver relatório de progresso)                                           | `95c88bb` … `e07971d`      | —                                                    |
-| **B4**                            | 🟡 em andamento — ~3.100 linhas escritas, `core/css` não compila | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | nenhum (WIP não commitado) | misto 🟢🟡🔴 — ver [triagem](00-triagem-despacho.md) |
-| B5                                | ⏳ não iniciada                                                  | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | —                          | 🟡 médio                                             |
-| X                                 | ⏳ não iniciada                                                  | [`03-x-image-support.md`](03-x-image-support.md)                         | —                          | 🟢 leve                                              |
-| I2                                | ⏳ não iniciada                                                  | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | —                          | 🟢 leve                                              |
-| M                                 | ⏳ não iniciada                                                  | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | —                          | 🟢 leve, com uma releitura de capability             |
-| I4                                | ⏳ não iniciada                                                  | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                          | 🔴 pesado                                            |
-| P                                 | ⏳ não iniciada                                                  | [`07-p-final-gates.md`](07-p-final-gates.md)                             | —                          | 🟢 leve                                              |
+| Fase                              | Estado                                                                     | Arquivo desta pasta                                                      | Commit                | Despacho                                             |
+| --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------- | ---------------------------------------------------- |
+| 0, B0, C0, B1, C1, B2, C2, EE, B3 | ✅ entregues e verificadas (`just gate`)                                   | — (ver relatório de progresso)                                           | `95c88bb` … `e07971d` | —                                                    |
+| **B4**                            | ✅ entregue e verificada (`cargo test -p css`, `clippy`, `just no-engine`) | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | `1353647`             | misto 🟢🟡🔴 — ver [triagem](00-triagem-despacho.md) |
+| B5                                | ✅ entregue                                                                | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | `fc7d55e`             | 🟡 médio                                             |
+| X                                 | ✅ entregue                                                                | [`03-x-image-support.md`](03-x-image-support.md)                         | `3558e4c`             | 🟢 leve                                              |
+| I2                                | ⏳ não iniciada — pode começar agora (B4 e B5 commitados)                  | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | —                     | 🟢 leve                                              |
+| M                                 | ⏳ não iniciada                                                            | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | —                     | 🟢 leve, com uma releitura de capability             |
+| I4                                | ⏳ não iniciada                                                            | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                     | 🔴 pesado                                            |
+| P                                 | ⏳ não iniciada                                                            | [`07-p-final-gates.md`](07-p-final-gates.md)                             | —                     | 🟢 leve                                              |
 
 ## Grafo de dependência do que resta
 
 ```text
-B4 (em andamento)
-  ├──> B5 (pode começar em paralelo — só depende de B0, já entregue)
-  │       ↓
-  │      I2  (precisa de B4 + B5)  ──> push + PR draft "v0.5 · I2 render headless"
-  │       ↓
-X (precisa de B4 + C1, pode rodar em paralelo com I2)
-  │       ↓
-  M  (precisa de EE + B4 + C1 + C2 — todas já prontas menos B4)
+B4 ✅ ──> B5 ✅
+  │         ↓
+  │        I2  (precisa de B4 + B5, ambas prontas — pode começar) ──> push + PR draft "v0.5 · I2 render headless"
+  │
+X ✅ (precisa de B4 + C1)
+  ↓
+  M  (precisa de EE + B4 + C1 + C2 — todas prontas)
        ↓
   I4  (precisa de I2 + C1 + C2 + M + X)  ──> push + PR draft "v0.5 · I4 alloy <url>"
        ↓
   P  (precisa de todas)  ──> PR final
 ```
 
-Ordem recomendada para sessões separadas: **fechar B4 primeiro** (é o bloqueador de tudo — nada mais compila, testa ou
-builda em cima de um `core/css` quebrado). Depois, B5 e X podem rodar em sessões paralelas. M só faz sentido depois de
-B4. I2 precisa de B4+B5. I4 precisa de quase tudo. P é sempre a última.
+B4, B5 e X estão entregues e commitadas. Restam, em ordem: I2 (pode começar agora), depois M, depois I4, depois P.
 
 ## Como usar cada arquivo de fase
 
