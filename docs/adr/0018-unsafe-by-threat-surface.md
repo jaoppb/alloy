@@ -1,8 +1,8 @@
 # ADR-0018: `unsafe` Governed by Threat Surface (rewrite of N-02)
 
-- **Status**: Proposed (drafted in v0.5 Phase 0; finalised in Phase P alongside the `unsafe-audit` gate)
+- **Status**: Accepted (drafted in v0.5 Phase 0; finalised in Phase P alongside the `unsafe-audit` gate)
 - **Deciders**: Architecture Team
-- **Date**: 2026-09-03
+- **Date**: 2026-09-03 (accepted 2026-09-05)
 
 ---
 

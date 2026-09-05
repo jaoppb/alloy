@@ -2,6 +2,13 @@
 //!
 //! Provides the [`TokenSink`] and [`TreeSink`] replaceable ports (PRD-008, ADR-0011)
 //! and a streaming tokenizer complying with WHATWG HTML5 §13.2.5.
+//!
+//! ## Contract record
+//!
+//! This crate is the `TokenSink` / `TreeSink` port under the `ADR-0011` Replaceable Port
+//! Contract. `docs/architecture/html-tree-sink-port-contract.md` records the state of all
+//! seven items. A change to [`Token`] or the `TreeSink`/`TokenSink` signatures bumps
+//! [`PORT_SCHEMA_VERSION`] and adds a migration note to `PRD-008`.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc)]
@@ -9,6 +16,12 @@
 pub mod application;
 pub mod domain;
 pub mod infrastructure;
+
+/// The observable version of this port's token and tree-sink vocabulary.
+///
+/// `ADR-0011` item 3. Introduced in v0.5 Phase P, recording the surface v0.5
+/// Phase B5 shipped — see `docs/architecture/html-tree-sink-port-contract.md`.
+pub const PORT_SCHEMA_VERSION: u32 = 1;
 
 pub use application::conformance::run_html_conformance;
 pub use application::ports::{RawKind, TokenSink, TokenSinkResult, TreeSink};

@@ -94,7 +94,15 @@ Subsystems expose standard lifecycle hooks invoked through the engine trait:
 ## 6. Non-Functional Requirements
 
 - **Performance**: Rust-to-Engine invocation overhead must be minimal (<10μs per event hook).
-- **Memory Safety**: Zero unsafe memory operations exposed to script runtimes.
+- **Memory Safety** (N-02, rewritten in v0.5 Phase P by `ADR-0018`): every hand-written crate in this workspace keeps
+  `#![forbid(unsafe_code)]`, without exception. Third-party `unsafe` is governed **by threat surface**, not banned
+  outright — the original "zero unsafe memory operations exposed to script runtimes" was never true in practice
+  (`rhai`'s binding-dispatch seam has carried `unsafe` since v0.1; see `docs/reports/VIOLACAO-N02-UNSAFE-NO-RHAI.md`)
+  and had no instrument to check it. The rule: **forbidden** on attacker-controlled bytes (TLS, HTTP, HTML, CSS, image,
+  font parsing) and for convenience (SIMD, custom allocators); **permitted, nominally enumerated** for the trusted
+  muscle script's binding dispatch and for platform FFI with no alternative (window/surface/event-loop). Enforced by the
+  blocking CI job `unsafe-audit` against the reviewed `unsafe-allowlist.toml`. See `ADR-0018` for the full rationale and
+  the RustCrypto carve-out for the v0.5 TLS provider.
 - **Reliability**: 100% crash isolation between independent subsystem scripts.
 - **Testability**: Every domain crate must be testable with and without script engines attached.
 - **SPDD Compliance**: All functional increments must have corresponding SPDD Prompts (`spdd/prompt/*.md`).

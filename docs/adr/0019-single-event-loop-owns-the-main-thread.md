@@ -1,8 +1,8 @@
 # ADR-0019: A Single Event Loop Owns the Main Thread
 
-- **Status**: Proposed (drafted in v0.5 Phase 0; finalised in Phase C2 / P)
+- **Status**: Accepted (drafted in v0.5 Phase 0; finalised in Phase C2 / P)
 - **Deciders**: Architecture Team
-- **Date**: 2026-09-03
+- **Date**: 2026-09-03 (accepted 2026-09-05)
 
 ---
 
