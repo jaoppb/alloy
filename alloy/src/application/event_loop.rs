@@ -18,13 +18,16 @@ use std::thread;
 
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
-use graphics::{Framebuffer, ImageId};
+use graphics::{FontProvider, Framebuffer, ImageId, SyntheticFontProvider};
 use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
 use window::{
     FrameView, Presenter, PumpStatus, WindowAttributes, WindowEvent, WindowSystem, WindowTitle,
 };
 
-use crate::application::pipeline::{RenderOptions, render_dom};
+use crate::application::paint::DEFAULT_FONT;
+use crate::application::pipeline::{
+    DEFAULT_FONT_SIZE, RenderOptions, default_runtime_font_provider, render_dom_with_font_provider,
+};
 use crate::application::{navigation, subresource};
 use crate::error::AlloyError;
 
@@ -44,9 +47,9 @@ enum LoopMessage {
 pub struct LoopStats {
     /// How many times this run actually re-laid-out and presented a frame.
     pub relayouts: usize,
-    /// How many navigations have completed successfully.
+    /// How many navigations have successfully parsed into the document tree.
     pub navigations: usize,
-    /// How many `<link rel=stylesheet>` fetches have been absorbed into the
+    /// How many external `<link rel=stylesheet>` sheets were absorbed into the
     /// cascade.
     pub stylesheets_loaded: usize,
     /// How many `<img>` fetches have decoded and replaced their placeholder.
@@ -68,10 +71,11 @@ struct Session {
     dirty: bool,
     viewport: window::SurfaceSize,
     stats: LoopStats,
+    font_provider: Arc<dyn FontProvider>,
 }
 
 impl Session {
-    const fn new(viewport: window::SurfaceSize) -> Self {
+    fn new(viewport: window::SurfaceSize, font_provider: Arc<dyn FontProvider>) -> Self {
         Self {
             dom_tree: None,
             extra_sheets: StyleSheetSet::new(),
@@ -84,6 +88,7 @@ impl Session {
                 stylesheets_loaded: 0,
                 images_loaded: 0,
             },
+            font_provider,
         }
     }
 
@@ -248,13 +253,14 @@ pub fn run_browser(
     presenter: &mut dyn Presenter,
     initial_size: window::SurfaceSize,
 ) -> Result<LoopStats, AlloyError> {
+    let mut session = Session::new(initial_size, default_runtime_font_provider());
     run_loop(
         url,
         &transport,
         policy,
         system,
         presenter,
-        initial_size,
+        &mut session,
         |_| false,
     )
 }
@@ -278,13 +284,16 @@ pub fn run_browser_until(
     initial_size: window::SurfaceSize,
     should_stop: impl FnMut(&LoopStats) -> bool,
 ) -> Result<LoopStats, AlloyError> {
+    let font_provider =
+        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    let mut session = Session::new(initial_size, font_provider);
     run_loop(
         url,
         &transport,
         policy,
         system,
         presenter,
-        initial_size,
+        &mut session,
         should_stop,
     )
 }
@@ -322,23 +331,15 @@ fn run_loop(
     policy: Arc<dyn RequestPolicy>,
     system: &mut dyn WindowSystem,
     presenter: &mut dyn Presenter,
-    initial_size: window::SurfaceSize,
+    session: &mut Session,
     mut should_stop: impl FnMut(&LoopStats) -> bool,
 ) -> Result<LoopStats, AlloyError> {
     let (sender, receiver) = mpsc::channel();
     spawn_navigation(url.clone(), Arc::clone(transport), policy, sender.clone());
 
-    let mut session = Session::new(initial_size);
-
     loop {
-        let (outcome, did_work) = pump_once(
-            system,
-            presenter,
-            &receiver,
-            transport,
-            &sender,
-            &mut session,
-        )?;
+        let (outcome, did_work) =
+            pump_once(system, presenter, &receiver, transport, &sender, session)?;
         if outcome == PumpStatus::Exit || should_stop(&session.stats) {
             return Ok(session.stats);
         }
@@ -409,11 +410,12 @@ fn present_if_ready(presenter: &mut dyn Presenter, session: &Session) -> Result<
     let viewport = session.viewport;
     let graphics_size = graphics::SurfaceSize::new(viewport.width(), viewport.height())
         .ok_or(AlloyError::InvalidDimensions)?;
-    let framebuffer = render_dom(
+    let framebuffer = render_dom_with_font_provider(
         dom_tree,
         session.extra_sheets.clone(),
         &session.images,
         graphics_size,
+        Arc::clone(&session.font_provider),
     )?;
     let pixels = frame_pixels(&framebuffer);
     let view = FrameView::new(viewport.width(), viewport.height(), &pixels)
@@ -474,12 +476,15 @@ mod tests {
     use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
     use super::{
-        Arc, HttpTransport, ImageId, LoopMessage, Session, WindowEvent, pump_once, subresource,
+        Arc, DEFAULT_FONT, DEFAULT_FONT_SIZE, HttpTransport, ImageId, LoopMessage, Session,
+        SyntheticFontProvider, WindowEvent, pump_once, subresource,
     };
     use crate::application::event_loop::initial_window_attributes;
 
     fn loaded_session(viewport: SurfaceSize) -> Session {
-        let mut session = Session::new(viewport);
+        let font_provider =
+            Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+        let mut session = Session::new(viewport, font_provider);
         session.dom_tree = Some(html::parse("<html><body>hi</body></html>").unwrap());
         session
     }
