@@ -4,10 +4,12 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
+use std::collections::BTreeMap;
+
 use css::{EdgeSizes, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
 use graphics::{
-    Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
-    GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
+    Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, Framebuffer, GlyphId,
+    GlyphInstance, GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
 };
 
 /// Default font identifier used for text painting in the headless pipeline.
@@ -17,11 +19,12 @@ pub const DEFAULT_FONT: FontId = FontId::new(1);
 pub fn paint_box_tree(
     box_tree: &LayoutBoxTree,
     styled_tree: &StyledTree,
+    images: &BTreeMap<ImageId, Framebuffer>,
     font_provider: &dyn FontProvider,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     for laid_out in box_tree.boxes_in_document_order() {
-        paint_single_box(laid_out, styled_tree, font_provider, builder)?;
+        paint_single_box(laid_out, styled_tree, images, font_provider, builder)?;
     }
     Ok(())
 }
@@ -29,6 +32,7 @@ pub fn paint_box_tree(
 fn paint_single_box(
     laid_out: &LayoutBox,
     styled_tree: &StyledTree,
+    images: &BTreeMap<ImageId, Framebuffer>,
     font_provider: &dyn FontProvider,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
@@ -39,7 +43,7 @@ fn paint_single_box(
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
     paint_text(laid_out, styled_node, font_provider, builder)?;
-    paint_image(laid_out, builder)
+    paint_image(laid_out, images, builder)
 }
 
 fn paint_background(
@@ -142,9 +146,12 @@ fn paint_border_sides(
 
 fn paint_image(
     laid_out: &LayoutBox,
+    images: &BTreeMap<ImageId, Framebuffer>,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    if !laid_out.intrinsic_size().is_pending() {
+    let raw_id = u32::try_from(laid_out.node().index()).unwrap_or(u32::MAX);
+    let image_id = ImageId::new(raw_id);
+    if !images.contains_key(&image_id) {
         return Ok(());
     }
     let content = laid_out.content();
@@ -152,8 +159,6 @@ fn paint_image(
         return Ok(());
     }
     let area = rect_to_px_rect(content);
-    let raw_id = u32::try_from(laid_out.node().index()).unwrap_or(0);
-    let image_id = ImageId::new(raw_id);
     builder.draw_image(image_id, area, area)
 }
 

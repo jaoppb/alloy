@@ -313,6 +313,28 @@ fn the_ua_sheet_still_gives_a_heading_and_a_paragraph_their_classic_shape() {
     );
 }
 
+#[test]
+fn the_ua_sheet_gives_an_anchor_tag_the_standard_link_blue_colour() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let html = child(&mut tree, root, "html");
+    let body = child(&mut tree, html, "body");
+    let anchor = child(&mut tree, body, "a");
+    text(&mut tree, anchor, "Link");
+
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+
+    let anchor_style = styled.node(styled_id(&dom, "a")).expect("styled").style();
+    assert_eq!(anchor_style.display(), css::Display::Inline);
+    assert_eq!(
+        anchor_style.color(),
+        css::CssColor::rgb(0x00, 0x00, 0xEE),
+        "standard UA default link color is #0000ee"
+    );
+}
+
 fn styled_id(dom: &DomSnapshot, tag: &str) -> css::SnapshotId {
     dom.nodes_in_document_order()
         .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(tag))

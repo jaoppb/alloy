@@ -70,3 +70,12 @@ fn invalid_surface_dimensions_are_refused() {
         Err(AlloyError::InvalidDimensions)
     ));
 }
+
+#[test]
+fn rendering_html_with_svg_and_unregistered_images_does_not_crash() {
+    let html = "<html><body><svg width=\"24\" height=\"24\"></svg><img src=\"missing.png\"><img alt=\"no src\"></body></html>";
+    let options = RenderOptions::new(100, 100);
+    let bytes =
+        render_html_to_png(html, &options).expect("render succeeds without ImageUnavailable crash");
+    assert!(!bytes.is_empty());
+}

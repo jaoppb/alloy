@@ -11,16 +11,17 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use css::{
-    BlockLayout, CascadeResolver, FontBackedMeasurer, LayoutEngine, StyleSheetSet, TextMeasurer,
-    UaCascade, ViewportConstraints,
+    BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
+    StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
 };
 use graphics::{
-    Au, DisplayListBuilder, FontProvider, Framebuffer, GenericFamily, ImageId, ImageProvider,
-    InMemoryImageProvider, RenderBackend, SoftwareCpuBackend, SurfaceSize, SyntheticFontProvider,
+    Au, DisplayListBuilder, FontProvider, Framebuffer, GenericFamily, GraphicsError, ImageId,
+    ImageProvider, Rect, RenderBackend, SoftwareCpuBackend, SurfaceSize, SyntheticFontProvider,
     SystemFontProvider,
 };
 
 use crate::application::paint::{DEFAULT_FONT, paint_box_tree};
+use crate::application::subresource;
 use crate::error::AlloyError;
 
 /// The font size used for font registration in rendering (16px).
@@ -119,18 +120,22 @@ pub fn run_render(source_html: &str, width: u32, height: u32) -> Result<Vec<u8>,
     render_html_to_png(source_html, &options)
 }
 
+/// A clickable link region within the rendered document.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkTarget {
+    /// Bounding rectangle in document space (`Au`).
+    pub area: Rect,
+    /// The link destination (`href`).
+    pub href: String,
+}
+
 /// Renders an already-parsed document using the deterministic [`SyntheticFontProvider`].
 ///
 /// `extra_sheets` is absorbed into the document's own `<style>`/`style=`
 /// rules at `Origin::Author` precedence — how the v0.5 I4 event loop feeds in
 /// a fetched `<link rel=stylesheet>` without `core/css` ever fetching
-/// anything itself. `images` is looked up once per node whose box is
-/// [`css::IntrinsicSize::Pending`] (every `<img>`/`<video>`/… box, loaded or
-/// not, `core/css/src/domain/computed/intrinsic.rs`): a discovered image with
-/// no entry yet must still resolve to *something* (a placeholder — see
-/// `crate::application::subresource::placeholder_framebuffer`), or the whole
-/// frame fails with `GraphicsError::ImageUnavailable` before a single fetch
-/// has had a chance to complete.
+/// anything itself. `images` maps discovered images to their pixel data; missing
+/// images fallback cleanly to a placeholder without crashing.
 pub fn render_dom(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
@@ -139,14 +144,15 @@ pub fn render_dom(
 ) -> Result<Framebuffer, AlloyError> {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    render_dom_internal(
+    let (framebuffer, _) = render_dom_internal(
         dom_tree,
         extra_sheets,
         images,
         surface_size,
         font_provider,
         false,
-    )
+    )?;
+    Ok(framebuffer)
 }
 
 /// Renders an already-parsed document with a specified [`FontProvider`] and real font metrics.
@@ -157,6 +163,20 @@ pub fn render_dom_with_font_provider(
     surface_size: SurfaceSize,
     font_provider: Arc<dyn FontProvider>,
 ) -> Result<Framebuffer, AlloyError> {
+    let (framebuffer, _) =
+        render_dom_with_links(dom_tree, extra_sheets, images, surface_size, font_provider)?;
+    Ok(framebuffer)
+}
+
+/// Renders an already-parsed document with real font metrics, returning both
+/// the rendered [`Framebuffer`] and clickable [`LinkTarget`]s.
+pub fn render_dom_with_links(
+    dom_tree: &dom::DomTree,
+    extra_sheets: StyleSheetSet,
+    images: &BTreeMap<ImageId, Framebuffer>,
+    surface_size: SurfaceSize,
+    font_provider: Arc<dyn FontProvider>,
+) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
     render_dom_internal(
         dom_tree,
         extra_sheets,
@@ -174,7 +194,7 @@ fn render_dom_internal(
     surface_size: SurfaceSize,
     font_provider: Arc<dyn FontProvider>,
     use_font_measurer: bool,
-) -> Result<Framebuffer, AlloyError> {
+) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
     sheets.absorb(extra_sheets);
@@ -190,34 +210,79 @@ fn render_dom_internal(
         BlockLayout::new().layout(&styled_tree, &constraints)?
     };
 
+    let link_targets = collect_link_targets(&box_tree, &snapshot);
+
     let mut builder = DisplayListBuilder::new();
     paint_box_tree(
         &box_tree,
         &styled_tree,
+        images,
         font_provider.as_ref(),
         &mut builder,
     )?;
     let display_list = builder.build()?;
 
-    let image_provider: Arc<dyn ImageProvider> = Arc::new(build_image_provider(images));
+    let image_provider = build_image_provider(images);
     let mut backend = SoftwareCpuBackend::with_providers(font_provider, image_provider);
     backend.begin_frame(surface_size)?;
     backend.submit(&display_list)?;
     backend.end_frame()?;
-    Ok(backend.read_back()?)
+    let framebuffer = backend.read_back()?;
+    Ok((framebuffer, link_targets))
 }
 
-/// Folds every currently-known image into a fresh, immutable provider — the
-/// same "rebuild from an immutable snapshot" discipline `UaCascade`/
-/// `BlockLayout` already use, applied to the one piece of render state that
-/// changes over a page's lifetime (`core/graphics`'s `InMemoryImageProvider`
-/// is a consuming builder specifically so no lock is needed here).
-fn build_image_provider(images: &BTreeMap<ImageId, Framebuffer>) -> InMemoryImageProvider {
-    images
+fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec<LinkTarget> {
+    let mut targets = Vec::new();
+    for laid_out in box_tree.boxes_in_document_order() {
+        let border_box = laid_out.border_box();
+        if border_box.is_empty() {
+            continue;
+        }
+        let mut current_id = Some(laid_out.node());
+        while let Some(id) = current_id {
+            let Some(node) = snapshot.node(id) else {
+                break;
+            };
+            if node.tag() == Some("a")
+                && let Some(href) = node.attribute("href")
+            {
+                targets.push(LinkTarget {
+                    area: border_box,
+                    href: href.to_string(),
+                });
+                break;
+            }
+            current_id = node.parent();
+        }
+    }
+    targets
+}
+
+#[derive(Clone, Debug)]
+struct SessionImageProvider {
+    images: BTreeMap<ImageId, Arc<Framebuffer>>,
+    placeholder: Arc<Framebuffer>,
+}
+
+impl ImageProvider for SessionImageProvider {
+    fn get(&self, image: ImageId) -> Result<Arc<Framebuffer>, GraphicsError> {
+        if let Some(frame) = self.images.get(&image) {
+            return Ok(Arc::clone(frame));
+        }
+        Ok(Arc::clone(&self.placeholder))
+    }
+}
+
+fn build_image_provider(images: &BTreeMap<ImageId, Framebuffer>) -> Arc<dyn ImageProvider> {
+    let map = images
         .iter()
-        .fold(InMemoryImageProvider::new(), |provider, (&id, frame)| {
-            provider.with_image(id, frame.clone())
-        })
+        .map(|(&id, frame)| (id, Arc::new(frame.clone())))
+        .collect();
+    let placeholder = Arc::new(subresource::placeholder_framebuffer());
+    Arc::new(SessionImageProvider {
+        images: map,
+        placeholder,
+    })
 }
 
 fn make_constraints(surface_size: SurfaceSize) -> Result<ViewportConstraints, AlloyError> {

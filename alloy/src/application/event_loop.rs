@@ -18,15 +18,17 @@ use std::thread;
 
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
-use graphics::{FontProvider, Framebuffer, ImageId, SyntheticFontProvider};
+use graphics::{Au, FontProvider, Framebuffer, ImageId, SyntheticFontProvider};
 use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
 use window::{
-    FrameView, Presenter, PumpStatus, WindowAttributes, WindowEvent, WindowSystem, WindowTitle,
+    FrameView, PhysicalPosition, PointerButton, Presenter, PumpStatus, WindowAttributes,
+    WindowEvent, WindowSystem, WindowTitle,
 };
 
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::{
-    DEFAULT_FONT_SIZE, RenderOptions, default_runtime_font_provider, render_dom_with_font_provider,
+    DEFAULT_FONT_SIZE, LinkTarget, RenderOptions, default_runtime_font_provider,
+    render_dom_with_links,
 };
 use crate::application::{navigation, subresource};
 use crate::error::AlloyError;
@@ -66,20 +68,31 @@ pub struct LoopStats {
 /// to the state a live session must keep between frames.
 struct Session {
     dom_tree: Option<DomTree>,
+    base_url: Option<Url>,
     extra_sheets: StyleSheetSet,
     images: BTreeMap<ImageId, Framebuffer>,
+    links: Vec<LinkTarget>,
+    pointer_pos: Option<PhysicalPosition>,
     dirty: bool,
     viewport: window::SurfaceSize,
     stats: LoopStats,
     font_provider: Arc<dyn FontProvider>,
+    policy: Arc<dyn RequestPolicy>,
 }
 
 impl Session {
-    fn new(viewport: window::SurfaceSize, font_provider: Arc<dyn FontProvider>) -> Self {
+    fn new(
+        viewport: window::SurfaceSize,
+        font_provider: Arc<dyn FontProvider>,
+        policy: Arc<dyn RequestPolicy>,
+    ) -> Self {
         Self {
             dom_tree: None,
+            base_url: None,
             extra_sheets: StyleSheetSet::new(),
             images: BTreeMap::new(),
+            links: Vec::new(),
+            pointer_pos: None,
             dirty: false,
             viewport,
             stats: LoopStats {
@@ -89,6 +102,7 @@ impl Session {
                 images_loaded: 0,
             },
             font_provider,
+            policy,
         }
     }
 
@@ -103,6 +117,10 @@ impl Session {
         match message {
             LoopMessage::Navigation(Ok((dom_tree, base_url))) => {
                 tracing::info!(url = %base_url, "navigation complete");
+                self.extra_sheets = StyleSheetSet::new();
+                self.images.clear();
+                self.links.clear();
+                self.base_url = Some(base_url.clone());
                 self.spawn_subresources(&dom_tree, &base_url, transport, sender);
                 self.dom_tree = Some(dom_tree);
                 self.dirty = true;
@@ -253,16 +271,12 @@ pub fn run_browser(
     presenter: &mut dyn Presenter,
     initial_size: window::SurfaceSize,
 ) -> Result<LoopStats, AlloyError> {
-    let mut session = Session::new(initial_size, default_runtime_font_provider());
-    run_loop(
-        url,
-        &transport,
-        policy,
-        system,
-        presenter,
-        &mut session,
-        |_| false,
-    )
+    let mut session = Session::new(
+        initial_size,
+        default_runtime_font_provider(),
+        Arc::clone(&policy),
+    );
+    run_loop(url, &transport, system, presenter, &mut session, |_| false)
 }
 
 /// The same session as [`run_browser`], but returns as soon as `should_stop`
@@ -286,11 +300,10 @@ pub fn run_browser_until(
 ) -> Result<LoopStats, AlloyError> {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let mut session = Session::new(initial_size, font_provider);
+    let mut session = Session::new(initial_size, font_provider, Arc::clone(&policy));
     run_loop(
         url,
         &transport,
-        policy,
         system,
         presenter,
         &mut session,
@@ -328,14 +341,18 @@ const IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(4);
 fn run_loop(
     url: &Url,
     transport: &Arc<dyn HttpTransport>,
-    policy: Arc<dyn RequestPolicy>,
     system: &mut dyn WindowSystem,
     presenter: &mut dyn Presenter,
     session: &mut Session,
     mut should_stop: impl FnMut(&LoopStats) -> bool,
 ) -> Result<LoopStats, AlloyError> {
     let (sender, receiver) = mpsc::channel();
-    spawn_navigation(url.clone(), Arc::clone(transport), policy, sender.clone());
+    spawn_navigation(
+        url.clone(),
+        Arc::clone(transport),
+        Arc::clone(&session.policy),
+        sender.clone(),
+    );
 
     loop {
         let (outcome, did_work) =
@@ -369,11 +386,21 @@ fn pump_once(
     let mut close_requested = false;
     let mut latest_resize = None;
     let mut saw_window_event = false;
+    let mut clicked_pos = None;
     let window_status = system.pump_events(&mut |event| {
         saw_window_event = true;
         match event {
             WindowEvent::CloseRequested => close_requested = true,
             WindowEvent::Resized(size) => latest_resize = Some(size),
+            WindowEvent::PointerMoved { position } => session.pointer_pos = Some(position),
+            WindowEvent::PointerButton {
+                button: PointerButton::Left,
+                pressed: true,
+            } => {
+                if let Some(pos) = session.pointer_pos {
+                    clicked_pos = Some(pos);
+                }
+            }
             _ => {}
         }
     })?;
@@ -381,6 +408,20 @@ fn pump_once(
     if let Some(size) = latest_resize {
         session.viewport = size;
         session.dirty = true;
+    }
+
+    if let Some(pos) = clicked_pos
+        && let Some(href) = hit_test(&session.links, pos)
+        && let Some(base) = session.base_url.as_ref()
+        && let Ok(target_url) = base.join(href)
+    {
+        tracing::info!(url = %target_url, "link clicked, navigating");
+        spawn_navigation(
+            target_url,
+            Arc::clone(transport),
+            Arc::clone(&session.policy),
+            sender.clone(),
+        );
     }
 
     let mut saw_message = false;
@@ -403,20 +444,48 @@ fn pump_once(
     Ok((PumpStatus::Continue, did_work))
 }
 
-fn present_if_ready(presenter: &mut dyn Presenter, session: &Session) -> Result<(), AlloyError> {
+#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str> {
+    if !position.x().is_finite() || !position.y().is_finite() {
+        return None;
+    }
+    let x_px = position.x().round() as i64;
+    let y_px = position.y().round() as i64;
+    let x_i32 = i32::try_from(x_px).ok()?;
+    let y_i32 = i32::try_from(y_px).ok()?;
+    let x_au = Au::from_whole_px(x_i32)?;
+    let y_au = Au::from_whole_px(y_i32)?;
+    for target in links.iter().rev() {
+        let area = target.area;
+        if x_au >= area.min_x()
+            && x_au < area.max_x()
+            && y_au >= area.min_y()
+            && y_au < area.max_y()
+        {
+            return Some(&target.href);
+        }
+    }
+    None
+}
+
+fn present_if_ready(
+    presenter: &mut dyn Presenter,
+    session: &mut Session,
+) -> Result<(), AlloyError> {
     let Some(dom_tree) = session.dom_tree.as_ref() else {
         return Ok(());
     };
     let viewport = session.viewport;
     let graphics_size = graphics::SurfaceSize::new(viewport.width(), viewport.height())
         .ok_or(AlloyError::InvalidDimensions)?;
-    let framebuffer = render_dom_with_font_provider(
+    let (framebuffer, links) = render_dom_with_links(
         dom_tree,
         session.extra_sheets.clone(),
         &session.images,
         graphics_size,
         Arc::clone(&session.font_provider),
     )?;
+    session.links = links;
     let pixels = frame_pixels(&framebuffer);
     let view = FrameView::new(viewport.width(), viewport.height(), &pixels)
         .ok_or(AlloyError::InvalidDimensions)?;
@@ -484,7 +553,8 @@ mod tests {
     fn loaded_session(viewport: SurfaceSize) -> Session {
         let font_provider =
             Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-        let mut session = Session::new(viewport, font_provider);
+        let policy = Arc::new(network::AllowAllPolicy);
+        let mut session = Session::new(viewport, font_provider, policy);
         session.dom_tree = Some(html::parse("<html><body>hi</body></html>").unwrap());
         session
     }
@@ -561,5 +631,73 @@ mod tests {
             session.stats.relayouts, 1,
             "fifty coalesced image arrivals must cost exactly one relayout, not fifty"
         );
+    }
+
+    #[test]
+    fn clicking_a_link_triggers_navigation_to_resolved_url() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let target_url = network::Url::parse("http://example.com/target.html").unwrap();
+        let response = network::HttpResponse::new(
+            network::StatusCode::OK,
+            network::HeaderMap::new(),
+            network::Body::from_text("<html><body>target</body></html>"),
+        );
+        let transport: Arc<dyn HttpTransport> =
+            Arc::new(MockTransport::new().with_response(target_url, response));
+        let mut session = loaded_session(attributes.initial_size());
+        session.base_url = Some(network::Url::parse("http://example.com/index.html").unwrap());
+        session.dom_tree = Some(
+            html::parse("<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>").unwrap(),
+        );
+        session.dirty = true;
+
+        // First pump: renders document and populates session.links
+        pump_once(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        )
+        .unwrap();
+
+        assert!(!session.links.is_empty(), "link target must be collected");
+
+        // Move pointer over the link and click
+        system.schedule(WindowEvent::PointerMoved {
+            position: window::PhysicalPosition::new(20.0, 20.0),
+        });
+        system.schedule(WindowEvent::PointerButton {
+            button: window::PointerButton::Left,
+            pressed: true,
+        });
+
+        pump_once(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        )
+        .unwrap();
+
+        // The click should have spawned a navigation message to receiver
+        let message = receiver
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .expect("navigation message received");
+        match message {
+            LoopMessage::Navigation(Ok((_, target_url))) => {
+                let expected = network::Url::parse("http://example.com/target.html").unwrap();
+                assert_eq!(target_url, expected);
+            }
+            _ => panic!("expected successful navigation to target.html"),
+        }
     }
 }
