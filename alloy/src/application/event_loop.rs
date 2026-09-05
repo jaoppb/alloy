@@ -128,6 +128,17 @@ impl Session {
             }
             LoopMessage::Navigation(Err(error)) => {
                 tracing::error!(%error, "navigation failed");
+                let escaped_error = error.to_string().replace('&', "&amp;").replace('<', "&lt;");
+                let error_html = format!(
+                    "<!DOCTYPE html><html><head><title>Navigation Error</title><style>body {{ margin: 32px; background-color: #fdf2e9; color: #78281f; }} h1 {{ color: #c0392b; }} .error-box {{ background-color: #ffffff; padding: 16px; border-width: 2px; }}</style></head><body><h1>Navigation Error</h1><div class=\"error-box\"><p><strong>Failed to load:</strong> {escaped_error}</p></div></body></html>"
+                );
+                if let Ok(error_tree) = html::parse(&error_html) {
+                    self.extra_sheets = StyleSheetSet::new();
+                    self.images.clear();
+                    self.links.clear();
+                    self.dom_tree = Some(error_tree);
+                    self.dirty = true;
+                }
             }
             LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
             LoopMessage::Stylesheet(Err(error)) => {
@@ -413,15 +424,20 @@ fn pump_once(
     if let Some(pos) = clicked_pos
         && let Some(href) = hit_test(&session.links, pos)
         && let Some(base) = session.base_url.as_ref()
-        && let Ok(target_url) = base.join(href)
     {
-        tracing::info!(url = %target_url, "link clicked, navigating");
-        spawn_navigation(
-            target_url,
-            Arc::clone(transport),
-            Arc::clone(&session.policy),
-            sender.clone(),
-        );
+        if href.starts_with('#') {
+            tracing::info!(anchor = href, "in-page anchor clicked (no-op in v0.5)");
+        } else if let Ok(target_url) = base.join(href) {
+            tracing::info!(url = %target_url, "link clicked, navigating");
+            spawn_navigation(
+                target_url,
+                Arc::clone(transport),
+                Arc::clone(&session.policy),
+                sender.clone(),
+            );
+        } else {
+            tracing::warn!(href, "failed to resolve link target against base URL");
+        }
     }
 
     let mut saw_message = false;
