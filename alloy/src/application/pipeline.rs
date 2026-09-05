@@ -205,6 +205,7 @@ fn render_dom_internal(
     // condition, so without this every `@media` block — supported or not —
     // never applied.
     let sheets = sheets.matching_viewport(&constraints);
+    log_cascade_input(&sheets);
     let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
     let box_tree = if use_font_measurer {
         let measurer: Arc<dyn TextMeasurer> = Arc::new(FontBackedMeasurer::new(
@@ -235,6 +236,22 @@ fn render_dom_internal(
     backend.end_frame()?;
     let framebuffer = backend.read_back()?;
     Ok((framebuffer, link_targets))
+}
+
+/// How much author CSS actually reached the cascade. `rules` is what survived
+/// the v0.5 cut, `notes` is every rule / declaration / selector dropped on the
+/// way — a real site whose sheets are mostly `::before` / `:not()` / grid
+/// shows up here as `rules` near zero and `notes` in the hundreds. Visible at
+/// `ALLOY_LOG=alloy=debug`; the per-note reasons at `alloy=trace`.
+fn log_cascade_input(sheets: &StyleSheetSet) {
+    tracing::debug!(
+        rules = sheets.rules().count(),
+        notes = sheets.notes().len(),
+        "css cascade input"
+    );
+    for note in sheets.notes().iter() {
+        tracing::trace!(note = %note, "css parse recovery");
+    }
 }
 
 fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec<LinkTarget> {
