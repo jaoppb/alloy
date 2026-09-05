@@ -5,6 +5,7 @@
 //! and actual parser execution.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg(feature = "dom")]
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
