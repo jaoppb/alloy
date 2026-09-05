@@ -5,8 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
+description = "HTML5 tokenization and tree construction over core/dom (PRD-008, ADR-0010, ADR-0011)."
+
+[features]
+default = []
 
 [dependencies]
+dom = { path = "../dom" }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true
