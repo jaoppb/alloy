@@ -656,6 +656,7 @@ dependencies = [
 name = "graphics"
 version = "0.1.0"
 dependencies = [
+ "network",
  "thiserror 2.0.17",
  "ttf-parser",
 ]

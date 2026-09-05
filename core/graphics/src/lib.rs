@@ -58,7 +58,7 @@ pub mod infrastructure;
 pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::conformance;
-pub use application::{DisplayListBuilder, FontProvider, PxRect, RenderBackend};
+pub use application::{DisplayListBuilder, FontProvider, ImageProvider, PxRect, RenderBackend};
 pub use domain::{
     color::{Color, Opacity},
     command::DisplayCommand,
@@ -80,6 +80,8 @@ pub use infrastructure::cascade::{
 pub use infrastructure::font::{
     FontCatalog, GenericFamily, SyntheticFontProvider, SystemFontProvider, TtfParserProvider,
 };
+pub use infrastructure::image::{EmptyImageProvider, InMemoryImageProvider};
+pub use infrastructure::png_decode::{PngDecodeError, decode_png};
 #[cfg(feature = "software-backend")]
 pub use infrastructure::software::SoftwareCpuBackend;
-pub use infrastructure::{golden, png};
+pub use infrastructure::{golden, image, png, png_decode};
