@@ -417,6 +417,70 @@ fn a_recovered_rule_leaves_a_note_without_costing_the_rules_around_it() {
 }
 
 #[test]
+fn a_comma_group_applies_the_members_inside_the_cut_and_notes_the_rest() {
+    // Old behaviour dropped this whole rule because `.lead::before` is outside
+    // the cut; now the `p` member still styles the paragraph, and the dropped
+    // member leaves exactly one note.
+    let (tree, root) = document("p, .lead::before, #missing::after { color: #0000ff }", None);
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+
+    assert_eq!(sheets.len(), 1, "the rule survives on its readable member");
+    assert_eq!(sheets.notes().len(), 2, "one note per dropped comma member");
+
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let paragraph = dom
+        .nodes_in_document_order()
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .expect("a paragraph");
+    assert_eq!(
+        styled.node(paragraph).expect("styled").style().color(),
+        BLUE,
+        "the `p` member of the comma group still applied"
+    );
+}
+
+#[test]
+fn a_comma_group_with_no_readable_member_still_drops_its_rule_whole() {
+    let (tree, root) = document(
+        "::before, ::after { color: #ff0000 } p { color: #0000ff }",
+        None,
+    );
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+
+    assert_eq!(sheets.len(), 1, "only the trailing `p` rule is kept");
+    assert!(
+        !sheets.notes().is_empty(),
+        "the unreadable group left a note"
+    );
+
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let paragraph = dom
+        .nodes_in_document_order()
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .expect("a paragraph");
+    assert_eq!(
+        styled.node(paragraph).expect("styled").style().color(),
+        BLUE,
+        "recovery continued to the next rule after the whole-group failure"
+    );
+}
+
+#[test]
+fn a_bad_member_mid_group_is_resynced_past_without_swallowing_the_next_one() {
+    // The refused member carries a combinator and a functional pseudo-class;
+    // the boundary scan has to skip all of it and land on the `,` so `.lead`
+    // is still read.
+    let style = paragraph_style("div:has(x) > a, .lead { color: #0000ff }", None);
+    assert_eq!(
+        style.color(),
+        BLUE,
+        "`.lead` after a multi-token refused member still parsed"
+    );
+}
+
+#[test]
 fn the_cascade_is_deterministic_across_repeated_resolutions() {
     let (tree, root) = document(
         "#first { color: #ff0000 } .lead { color: #008000 } p { color: #0000ff }",
