@@ -24,16 +24,16 @@ trabalhar numa fase — cada arquivo aqui já extrai e atualiza a seção releva
 
 ## Estado em uma tabela
 
-| Fase                              | Estado                                                                     | Arquivo desta pasta                                                      | Commit                | Despacho                                             |
-| --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------- | ---------------------------------------------------- |
-| 0, B0, C0, B1, C1, B2, C2, EE, B3 | ✅ entregues e verificadas (`just gate`)                                   | — (ver relatório de progresso)                                           | `95c88bb` … `e07971d` | —                                                    |
-| **B4**                            | ✅ entregue e verificada (`cargo test -p css`, `clippy`, `just no-engine`) | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | `1353647`             | misto 🟢🟡🔴 — ver [triagem](00-triagem-despacho.md) |
-| B5                                | ✅ entregue                                                                | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | `fc7d55e`             | 🟡 médio                                             |
-| X                                 | ✅ entregue                                                                | [`03-x-image-support.md`](03-x-image-support.md)                         | `3558e4c`             | 🟢 leve                                              |
-| **I2**                            | ✅ entregue e verificada (`cargo test -p alloy`, golden e2e)               | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | `9bb8ae3`             | 🟢 leve                                              |
-| **M**                             | ✅ entregue e verificada (`cargo test -p rhai-bindings`, bench)            | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | `067e87b`             | 🟢 leve, com uma releitura de capability             |
-| I4                                | ⏳ não iniciada — pode começar agora (I2, M, X, C1, C2 commitadas)         | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                     | 🔴 pesado                                            |
-| P                                 | ⏳ não iniciada                                                            | [`07-p-final-gates.md`](07-p-final-gates.md)                             | —                     | 🟢 leve                                              |
+| Fase                              | Estado                                                                                                                                                                                                       | Arquivo desta pasta                                                      | Commit                 | Despacho                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ---------------------- | ---------------------------------------------------- |
+| 0, B0, C0, B1, C1, B2, C2, EE, B3 | ✅ entregues e verificadas (`just gate`)                                                                                                                                                                     | — (ver relatório de progresso)                                           | `95c88bb` … `e07971d`  | —                                                    |
+| **B4**                            | ✅ entregue e verificada (`cargo test -p css`, `clippy`, `just no-engine`)                                                                                                                                   | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | `1353647`              | misto 🟢🟡🔴 — ver [triagem](00-triagem-despacho.md) |
+| B5                                | ✅ entregue                                                                                                                                                                                                  | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | `fc7d55e`              | 🟡 médio                                             |
+| X                                 | ✅ entregue                                                                                                                                                                                                  | [`03-x-image-support.md`](03-x-image-support.md)                         | `3558e4c`              | 🟢 leve                                              |
+| **I2**                            | ✅ entregue e verificada (`cargo test -p alloy`, golden e2e)                                                                                                                                                 | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | `9bb8ae3`              | 🟢 leve                                              |
+| **M**                             | ✅ entregue e verificada (`cargo test -p rhai-bindings`, bench)                                                                                                                                              | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | `067e87b`              | 🟢 leve, com uma releitura de capability             |
+| **I4**                            | ✅ entregue e verificada (`cargo test --workspace`, `clippy`, golden e2e) — falta só o checkpoint de `push`/PR (ação compartilhada, aguardando confirmação do usuário) e a verificação manual de janela real | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | _pendente_             | 🔴 pesado                                            |
+| **P**                             | 🟡 quase entregue — docs e a maioria dos portões de CI feitos; o portão `coverage` está honestamente vermelho (~66% < 85%) até mais testes de domínio serem escritos para `network`/`window`                 | [`07-p-final-gates.md`](07-p-final-gates.md)                             | `56d487d` + _pendente_ | 🟢 leve                                              |
 
 ## Grafo de dependência do que resta
 
@@ -42,12 +42,15 @@ B4 ✅ ──> B5 ✅
   │         ↓
   │        I2 ✅ ──────────────────────────────────────────────┐
   │                                                             ↓
-X ✅ ──>   M ✅ (precisa de EE + B4 + C1 + C2 — todas prontas) ─> I4 (pode começar agora) ──> push + PR draft "v0.5 · I4 alloy <url>"
+X ✅ ──>   M ✅ (precisa de EE + B4 + C1 + C2 — todas prontas) ─> I4 ✅ ──> push + PR draft "v0.5 · I4 alloy <url>" ⏳
                                                                  ↓
-                                                            P  (precisa de todas)  ──> PR final
+                                                            P 🟡 (docs + maioria dos portões feitos; coverage vermelho) ──> PR final ⏳
 ```
 
-B4, B5, X, I2 e M estão entregues e commitadas. Restam: I4 (pode começar agora), depois P.
+B4, B5, X, I2, M e I4 estão entregues (I4 ainda sem commit/push desta sessão). P está quase entregue — falta fechar o
+portão `coverage` (~66% < 85%) com mais testes de domínio, e depois abrir o PR final. **Nenhum PR foi aberto e nenhum
+push foi feito**: com várias sessões mexendo em `feat/v0-5` ao mesmo tempo nesta rodada, um `push`/PR é uma ação
+compartilhada que precisa de confirmação explícita do usuário antes de qualquer sessão executar.
 
 ## Como usar cada arquivo de fase
 

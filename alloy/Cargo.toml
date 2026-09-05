@@ -23,6 +23,8 @@ rhai-bindings = { path = "../core/runtime/rhai-bindings" }
 css = { path = "../core/css" }
 graphics = { path = "../core/graphics", features = ["software-backend"] }
 html = { path = "../core/html" }
+network = { path = "../core/network", features = ["real-transport"] }
+window = { path = "../core/window" }
 clap = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
