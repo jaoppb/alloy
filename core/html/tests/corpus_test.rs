@@ -1,6 +1,7 @@
 //! Corpus test verifying parsing of real-world pages (class-example.com) into a correct [`dom::DomTree`].
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg(feature = "dom")]
 
 use std::path::PathBuf;
 

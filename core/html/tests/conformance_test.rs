@@ -2,8 +2,11 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use html::{DomTreeSink, MockTreeSink, run_html_conformance};
+#[cfg(feature = "dom")]
+use html::DomTreeSink;
+use html::{MockTreeSink, run_html_conformance};
 
+#[cfg(feature = "dom")]
 #[test]
 fn dom_tree_sink_passes_conformance() {
     let mut sink = DomTreeSink::new();

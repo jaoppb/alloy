@@ -102,7 +102,7 @@ hook-benchmark:
 # and cargo-fuzz — not part of `just gate`, CI-only otherwise).
 fuzz target="":
     @command -v cargo-fuzz >/dev/null || {{cargo}} install cargo-fuzz --locked
-    {{ if target == "" { "for t in inflate png_decode css_parse; do cargo +nightly fuzz run $t -- -max_total_time=600; done" } else { "cargo +nightly fuzz run " + target + " -- -max_total_time=600" } }}
+    {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do cargo +nightly fuzz run $t -- -max_total_time=600; done" } else { "cargo +nightly fuzz run " + target + " -- -max_total_time=600" } }}
 
 # Supply-chain audit: licenses, advisories, bans, sources
 deny:

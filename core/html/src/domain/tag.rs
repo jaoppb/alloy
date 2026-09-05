@@ -1,9 +1,8 @@
 //! Vocabulary of HTML tags and their structural semantics.
 
-use core::fmt;
-use core::str::FromStr;
-
 use crate::domain::error::HtmlError;
+use crate::domain::location::SourceLocation;
+use core::fmt;
 
 macro_rules! define_tags {
     (
@@ -189,17 +188,21 @@ define_tags! {
 }
 
 impl TagName {
-    /// Validate and normalise `raw`. `Err(HtmlError::InvalidTag)` when it is
+    /// Validate and normalise `raw`. `Err(HtmlError::InvalidTag)` at `location` when it is
     /// empty, starts with a non-letter, or contains a character other than an
     /// ASCII alphanumeric or `-`.
-    pub fn new(raw: &str) -> Result<Self, HtmlError> {
+    pub fn new(raw: &str, location: SourceLocation) -> Result<Self, HtmlError> {
+        Self::parse(raw).ok_or_else(|| HtmlError::invalid_tag(raw, location))
+    }
+
+    fn parse(raw: &str) -> Option<Self> {
         let valid = starts_with_letter(raw) && raw.chars().skip(1).all(is_tag_character);
         if !valid {
-            return Err(HtmlError::InvalidTag(raw.to_string()));
+            return None;
         }
 
         let lower = raw.to_ascii_lowercase();
-        Ok(Self::from_standard_name(&lower).unwrap_or(Self::Custom(lower)))
+        Some(Self::from_standard_name(&lower).unwrap_or(Self::Custom(lower)))
     }
 
     /// The `<html>` element tag.
@@ -434,36 +437,12 @@ impl PartialEq<TagName> for &str {
     }
 }
 
-impl TryFrom<&str> for TagName {
-    type Error = HtmlError;
-
-    fn try_from(raw: &str) -> Result<Self, Self::Error> {
-        Self::new(raw)
-    }
-}
-
-impl TryFrom<String> for TagName {
-    type Error = HtmlError;
-
-    fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(&raw)
-    }
-}
-
-impl FromStr for TagName {
-    type Err = HtmlError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::new(s)
-    }
-}
-
 /// Checks whether `name` is a W3C HTML5 void element.
 ///
 /// Void elements never have child nodes or end tags.
 #[must_use]
 pub fn is_void_tag(name: &str) -> bool {
-    TagName::new(name).is_ok_and(|tag| tag.is_void())
+    TagName::parse(name).is_some_and(|tag| tag.is_void())
 }
 
 /// Checks whether `name` is a raw-text or script-data element.
@@ -472,48 +451,51 @@ pub fn is_void_tag(name: &str) -> bool {
 /// until the corresponding end tag is reached.
 #[must_use]
 pub fn is_rawtext_tag(name: &str) -> bool {
-    TagName::new(name).is_ok_and(|tag| tag.is_rawtext())
+    TagName::parse(name).is_some_and(|tag| tag.is_rawtext())
 }
 
 /// Checks whether `name` is a block-level element in the HTML content model.
 #[must_use]
 pub fn is_block_tag(name: &str) -> bool {
-    TagName::new(name).is_ok_and(|tag| tag.is_block())
+    TagName::parse(name).is_some_and(|tag| tag.is_block())
 }
 
 /// Checks whether an open `<p>` tag should be automatically closed before inserting `tag`.
 #[must_use]
 pub fn closes_paragraph(tag: &str) -> bool {
-    TagName::new(tag).is_ok_and(|t| t.closes_paragraph())
+    TagName::parse(tag).is_some_and(|t| t.closes_paragraph())
 }
 
 /// Checks whether an open `<li>` tag should be automatically closed before inserting `tag`.
 #[must_use]
 pub fn closes_list_item(tag: &str) -> bool {
-    TagName::new(tag).is_ok_and(|t| t.closes_list_item())
+    TagName::parse(tag).is_some_and(|t| t.closes_list_item())
 }
 
 /// Checks whether `name` is one of the heading tags (`h1` through `h6`).
 #[must_use]
 pub fn is_heading_tag(name: &str) -> bool {
-    TagName::new(name).is_ok_and(|t| t.is_heading())
+    TagName::parse(name).is_some_and(|t| t.is_heading())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn at_start() -> SourceLocation {
+        SourceLocation::initial()
+    }
+
     #[test]
     fn a_standard_name_parses_case_insensitively_to_its_variant() {
-        assert_eq!(TagName::new("DIV"), Ok(TagName::Div));
-        assert_eq!("h3".parse::<TagName>(), Ok(TagName::H3));
-        assert_eq!(TagName::try_from("Span"), Ok(TagName::Span));
-        assert_eq!(TagName::try_from("br".to_owned()), Ok(TagName::Br));
+        assert_eq!(TagName::new("DIV", at_start()), Ok(TagName::Div));
+        assert_eq!(TagName::new("h3", at_start()), Ok(TagName::H3));
+        assert_eq!(TagName::new("Span", at_start()), Ok(TagName::Span));
     }
 
     #[test]
     fn an_unknown_but_well_formed_name_is_a_custom_element() {
-        let tag = TagName::new("My-Widget").expect("valid custom element");
+        let tag = TagName::new("My-Widget", at_start()).expect("valid custom element");
         assert_eq!(tag, TagName::Custom("my-widget".to_owned()));
         assert_eq!(tag.as_str(), "my-widget");
         assert_eq!(tag.to_string(), "my-widget");
@@ -523,8 +505,8 @@ mod tests {
     fn a_malformed_name_is_a_typed_error() {
         for raw in ["", "1div", "-x", "a b", "a_b"] {
             assert_eq!(
-                TagName::new(raw),
-                Err(HtmlError::InvalidTag(raw.to_owned()))
+                TagName::new(raw, at_start()),
+                Err(HtmlError::invalid_tag(raw, at_start()))
             );
         }
     }
@@ -550,7 +532,7 @@ mod tests {
             (TagName::noscript(), "noscript"),
         ];
         for (constructed, name) in pairs {
-            assert_eq!(TagName::new(name), Ok(constructed));
+            assert_eq!(TagName::new(name, at_start()), Ok(constructed));
         }
     }
 
