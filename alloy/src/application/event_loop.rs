@@ -19,7 +19,7 @@ use std::thread;
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
 use graphics::{Au, FontProvider, Framebuffer, ImageId, SyntheticFontProvider};
-use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
+use network::{HttpRequest, HttpTransport, RequestPolicy, StatusCode, Url};
 use window::{
     FrameView, PhysicalPosition, PointerButton, Presenter, PumpStatus, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
@@ -230,12 +230,28 @@ fn spawn_image_fetch(
 
 fn fetch_text(url: &Url, transport: &dyn HttpTransport) -> Result<String, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
+    ensure_success(url, response.status())?;
     Ok(response.body().as_str().unwrap_or_default().to_owned())
 }
 
 fn fetch_image(url: &Url, transport: &dyn HttpTransport) -> Result<Framebuffer, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
+    ensure_success(url, response.status())?;
     Ok(graphics::png::decode(response.body().as_bytes())?)
+}
+
+/// A subresource fetch that redirected to an error page still "succeeds" at
+/// the transport layer. Reject a non-`2xx` status here so the caller's
+/// `warn!` names the real problem instead of the CSS parser silently making
+/// zero rules from an HTML 404 body.
+fn ensure_success(url: &Url, status: StatusCode) -> Result<(), AlloyError> {
+    if status.is_success() {
+        return Ok(());
+    }
+    Err(AlloyError::SubresourceStatus {
+        url: url.to_string(),
+        status: status.code(),
+    })
 }
 
 /// The window `alloy <url>` and the e2e golden test both open.
@@ -562,9 +578,32 @@ mod tests {
 
     use super::{
         Arc, DEFAULT_FONT, DEFAULT_FONT_SIZE, HttpTransport, ImageId, LoopMessage, Session,
-        SyntheticFontProvider, WindowEvent, pump_once, subresource,
+        SyntheticFontProvider, WindowEvent, fetch_text, pump_once, subresource,
     };
     use crate::application::event_loop::initial_window_attributes;
+    use crate::error::AlloyError;
+
+    #[test]
+    fn a_non_2xx_stylesheet_status_is_a_typed_error_not_an_empty_body() {
+        let sheet_url = network::Url::parse("http://example.com/missing.css").unwrap();
+        let not_found = network::HttpResponse::new(
+            network::StatusCode::NOT_FOUND,
+            network::HeaderMap::new(),
+            network::Body::from_text("<!doctype html><title>404</title>"),
+        );
+        let transport: Arc<dyn HttpTransport> =
+            Arc::new(MockTransport::new().with_response(sheet_url.clone(), not_found));
+
+        let result = fetch_text(&sheet_url, transport.as_ref());
+
+        assert!(
+            matches!(
+                result,
+                Err(AlloyError::SubresourceStatus { status: 404, .. })
+            ),
+            "a 404 error page must not reach the CSS parser as a stylesheet"
+        );
+    }
 
     fn loaded_session(viewport: SurfaceSize) -> Session {
         let font_provider =
