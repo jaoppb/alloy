@@ -143,3 +143,32 @@ fn a_hundred_renders_of_the_image_scene_are_byte_identical() {
         );
     }
 }
+
+#[test]
+fn renders_image_loaded_from_disk_png() {
+    let disk_png_path = reference("boxes.png");
+    let disk_bytes = std::fs::read(&disk_png_path).expect("boxes.png exists");
+    let decoded = decode_png(&disk_bytes).expect("decodes disk png");
+    let image_id = ImageId::new(99);
+    let provider = Arc::new(InMemoryImageProvider::new().with_image(image_id, decoded));
+    let mut backend = SoftwareCpuBackend::with_image_provider(provider);
+
+    let mut builder = DisplayListBuilder::new();
+    builder
+        .draw_image(
+            image_id,
+            PxRect::from_px(0.0, 0.0, 32.0, 32.0),
+            PxRect::from_px(0.0, 0.0, 32.0, 32.0),
+        )
+        .unwrap();
+    let list = builder.build().unwrap();
+
+    backend
+        .begin_frame(SurfaceSize::new(32, 32).unwrap())
+        .unwrap();
+    backend.submit(&list).unwrap();
+    backend.end_frame().unwrap();
+    let result = backend.read_back().unwrap();
+    assert_eq!(result.width(), 32);
+    assert_eq!(result.height(), 32);
+}
