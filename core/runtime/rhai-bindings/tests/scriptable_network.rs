@@ -9,7 +9,7 @@
 use engine::{Capability, CapabilitySet, EngineError, RuntimeEngine, profiles};
 use network::{HttpRequest, PolicyVerdict, RequestPolicy, Url};
 use rhai_bindings::{
-    DEFAULT_NETWORK_SCRIPT, NETWORK_BINDINGS, ScriptRequestPolicy, register_net_bindings,
+    DEFAULT_NETWORK_SCRIPT, NETWORK_BINDINGS, ScriptRequestPolicy, register_network_bindings,
 };
 use rhai_runtime::RhaiEngine;
 
@@ -18,7 +18,7 @@ fn ui_script_without_network_fetch_is_denied_when_fetching() {
     let engine = RhaiEngine::new();
     let ui_caps = profiles::ui_window(); // WINDOW_MANAGE | GRAPHICS_DRAW | DOM_READ (no NETWORK_FETCH)
     let mut context = engine.create_context(ui_caps).expect("context");
-    register_net_bindings(&mut context).expect("register_net_bindings");
+    register_network_bindings(&mut context).expect("register_network_bindings");
 
     let outcome = engine.eval_value(&mut context, r#"fetch("https://example.com")"#);
     match outcome {
@@ -34,7 +34,7 @@ fn every_network_binding_is_denied_without_network_fetch() {
     let engine = RhaiEngine::new();
     let empty_caps = CapabilitySet::empty();
     let mut context = engine.create_context(empty_caps).expect("context");
-    register_net_bindings(&mut context).expect("register_net_bindings");
+    register_network_bindings(&mut context).expect("register_network_bindings");
 
     let snippets = [
         ("fetch", r#"fetch("https://example.com")"#),
@@ -67,7 +67,7 @@ fn network_bindings_execute_under_network_fetch() {
     let engine = RhaiEngine::new();
     let caps = profiles::network_interceptor();
     let mut context = engine.create_context(caps).expect("context");
-    register_net_bindings(&mut context).expect("register_net_bindings");
+    register_network_bindings(&mut context).expect("register_network_bindings");
 
     let allow_outcome = engine
         .eval_value(&mut context, r#"allow("req")"#)
