@@ -7,6 +7,11 @@ hardcoded em Rust. M move essa política para scripts `.rhai`, seguindo ADR-0003
 capacidades cravadas em `CapabilitySet`, o script decide o quê e quando. Depende de **EE** (já entregue —
 `SubsystemName` enumera os subsistemas reais), **B4**, **C1** e **C2** (todas prontas ou a caminho).
 
+> **Só o item 4 (`css_bindings.rs`) e a parte de `cascade.rhai` do item 5 dependem de B4** — registram `StyledTree`, o
+> agregado que B4 está mudando de forma agora. Os itens 1–3 (`css_cascade()`, `NETWORK_BINDINGS`, `WINDOW_BINDINGS`), o
+> resto do item 5 (`default_ui.rhai`/`default_network.rhai`) e os itens 6–7 não tocam `core/css` e podem ser despachados
+> agora, em paralelo com o fechamento de B4 — ver [`PARALELO-COM-B4.md`](PARALELO-COM-B4.md).
+
 ## Estado atual
 
 ```bash

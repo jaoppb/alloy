@@ -11,6 +11,9 @@ conversa.
 - [`00-triagem-despacho.md`](00-triagem-despacho.md) — separa o que é mecânico o bastante para despachar a outra IA (ou
   a uma sessão sem contexto nenhum da campanha) e conferir só pelo `Definition of Done`, do que exige alguém
   acompanhando a decisão de design enquanto ela é tomada.
+- [`PARALELO-COM-B4.md`](PARALELO-COM-B4.md) — dessas tarefas leves, quais **não tocam nenhum arquivo de `core/css`** e
+  por isso podem rodar agora mesmo, em sessões separadas, enquanto uma IA mais forte fica dedicada só ao
+  `01-b4-box-model-inline-flexbox.md`.
 - `docs/reports/V0-5-PROGRESSO-E-PENDENCIAS.md` — o estado exato de tudo que já foi verificado nesta sessão, com
   evidência `arquivo:linha`.
 - O `CLAUDE.md` da raiz do repositório — arquitetura, Object Calisthenics, comandos, convenções de commit.

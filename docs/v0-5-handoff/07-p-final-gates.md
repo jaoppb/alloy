@@ -5,6 +5,12 @@
 A última fase: fecha a documentação e os portões de CI que as seis fases de código deixaram em aberto. Depende de
 **todas** as fases anteriores. Termina em PR final, fundindo a v0.5 inteira.
 
+> **Os itens 1 (ADR-0018/0019), 2 (N-02), 3 (PRD-009/PRD-010) e os dois _contract records_ de rede/janela do item 4 não
+> dependem de B4** — só de C0/C1/C2, já entregues — e podem ser despachados agora, em paralelo com o fechamento de B4. O
+> resto do item 4 (`style-cascade-port-contract.md` — que na verdade é o freeze I3, e pertence ao DoD de B4, não a esta
+> fase), o item 6 (`CLAUDE.md`/`docs/README.md`) e a tabela de portões de CI dependem de B4 **e** B5 estarem prontas.
+> Ver [`PARALELO-COM-B4.md`](PARALELO-COM-B4.md).
+
 ## Passos
 
 ### Documentos
