@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Padding and Border Width</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .box-container {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    /* Padding com shorthand de 4 componentes: top right bottom left */
+    .pad-shorthand {
+      background-color: #e8f8f5;
+      padding: 10px 20px 30px 40px;
+      margin-bottom: 16px;
+      width: 250px;
+    }
+    .inner-content {
+      background-color: #2ecc71;
+      color: #ffffff;
+      padding: 4px;
+    }
+    /* Padding longhands específicos */
+    .pad-longhands {
+      background-color: #fef9e7;
+      padding-top: 15px;
+      padding-right: 25px;
+      padding-bottom: 5px;
+      padding-left: 35px;
+      margin-bottom: 16px;
+      width: 250px;
+    }
+    .inner-longhand {
+      background-color: #f39c12;
+      color: #ffffff;
+      padding: 4px;
+    }
+    /* Border width individual e shorthand */
+    .border-test {
+      background-color: #ebf5fb;
+      border-top-width: 4px;
+      border-right-width: 8px;
+      border-bottom-width: 12px;
+      border-left-width: 16px;
+      padding: 10px;
+      width: 220px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Padding &amp; Border-Width Box Insets</h1>
+    <span class="badge">SPEC: CSS Box Model L3 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: Espaçamentos internos (padding) shorthands e longhands criam os afastamentos corretos nos 4 lados; border-width calcula as dimensões de borda nos quatro lados conforme declarado.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Espaçamentos assimétricos ignorados ou aplicados no lado errado.
+    </div>
+  </div>
+
+  <div class="box-container">
+    <h2>1. Padding Shorthand (10px 20px 30px 40px)</h2>
+    <div class="pad-shorthand">
+      <div class="inner-content">Conteúdo (topo:10px, dir:20px, baixo:30px, esq:40px)</div>
+    </div>
+
+    <h2>2. Padding Longhands (top:15px, right:25px, bottom:5px, left:35px)</h2>
+    <div class="pad-longhands">
+      <div class="inner-longhand">Conteúdo Longhand</div>
+    </div>
+
+    <h2>3. Border Widths (top:4px, right:8px, bottom:12px, left:16px)</h2>
+    <div class="border-test">
+      Caixa com bordas assimétricas calculadas na geometria.
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

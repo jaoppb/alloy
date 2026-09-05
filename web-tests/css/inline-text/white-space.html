@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: White Space</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .ws-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .box-container {
+      width: 260px;
+      background-color: #f1f2f6;
+      padding: 8px;
+      margin-bottom: 12px;
+      border-width: 1px;
+    }
+    .ws-normal {
+      white-space: normal;
+    }
+    .ws-nowrap {
+      white-space: nowrap;
+      background-color: #ffeaa7;
+    }
+    .ws-pre {
+      white-space: pre;
+      background-color: #dfe6e9;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: White-Space Handling</h1>
+    <span class="badge">SPEC: CSS Text L3 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: white-space: normal colapsa espaços múltiplos e quebra linhas na largura de 260px; white-space: nowrap impede quebras automáticas de linha; white-space: pre preserva espaçamento e quebras exatas do código fonte.
+    </div>
+    <div class="criteria-fail">
+      FAIL: white-space: nowrap quebrando linhas ou pre colapsando espaços múltiplos.
+    </div>
+  </div>
+
+  <div class="ws-section">
+    <h2>1. white-space: normal (colapsa e quebra em 260px)</h2>
+    <div class="box-container ws-normal">
+      Este    é    um   texto   com   múltiplos    espaços    que    devem    colapsar    em    um   único   espaço   e   quebrar   linhas   normalmente.
+    </div>
+
+    <h2>2. white-space: nowrap (sem quebra de linha)</h2>
+    <div class="box-container ws-nowrap">
+      Linha longa contínua sem quebras automáticas de texto mesmo ultrapassando a largura da caixa.
+    </div>
+
+    <h2>3. white-space: pre (preserva espaços e quebras)</h2>
+    <div class="box-container ws-pre">
+Linha 1   com   espaços
+  Linha 2 indentada
+Linha 3
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

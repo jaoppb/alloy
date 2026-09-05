@@ -186,6 +186,22 @@ layering:
 # Alias for `layering` (pre-v0.5-Phase-P name).
 no-engine: layering
 
+# --- web-tests server -------------------------------------------------
+
+# Start Caddy local test server via Docker Compose
+serve-tests:
+    docker compose -f web-tests/docker-compose.yml up -d
+    @echo "✓ Caddy web test server running at http://localhost:8080"
+
+# Stop Caddy local test server
+stop-tests:
+    docker compose -f web-tests/docker-compose.yml down
+    @echo "✓ Caddy web test server stopped"
+
+# Run smoke test verifying Caddy endpoints and alloy rendering
+test-web:
+    ./scripts/smoke_web_tests.sh
+
 # --- misc -------------------------------------------------------------
 
 # Dependency tree for the whole workspace

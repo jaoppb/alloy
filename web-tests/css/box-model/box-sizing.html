@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Box Sizing</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .sizing-container {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    .ruler {
+      width: 200px;
+      height: 20px;
+      background-color: #34495e;
+      color: #ffffff;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    /* content-box: width 200px + padding 20px = 240px total */
+    .content-box-mode {
+      box-sizing: content-box;
+      width: 200px;
+      padding: 20px;
+      background-color: #e67e22;
+      color: #ffffff;
+      margin-bottom: 16px;
+    }
+    /* border-box: width 200px incluindo padding 20px = 200px total */
+    .border-box-mode {
+      box-sizing: border-box;
+      width: 200px;
+      padding: 20px;
+      background-color: #27ae60;
+      color: #ffffff;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Box Sizing (content-box vs border-box)</h1>
+    <span class="badge">SPEC: CSS Box Sizing L3 §5 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: A caixa verde (border-box) tem largura total de exatamente 200px, alinhando perfeitamente com a régua cinza de 200px; a caixa laranja (content-box) expande além da régua (240px).
+    </div>
+    <div class="criteria-fail">
+      FAIL: A caixa verde (border-box) expandir além de 200px ou ignorar o padding interno.
+    </div>
+  </div>
+
+  <div class="sizing-container">
+    <h2>Régua de Referência (200px de largura)</h2>
+    <div class="ruler">200px</div>
+
+    <h2>1. border-box (width: 200px; padding: 20px;) &rarr; Total 200px</h2>
+    <div class="border-box-mode">
+      border-box (alinha com a régua)
+    </div>
+
+    <h2>2. content-box (width: 200px; padding: 20px;) &rarr; Total 240px</h2>
+    <div class="content-box-mode">
+      content-box (ultrapassa a régua)
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Navigation Test: 404 Error Handling</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .error-card {
+      background-color: #ffffff;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .btn-broken {
+      display: block;
+      background-color: #e74c3c;
+      color: #ffffff;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>Navigation Test: Broken Link &amp; 404 Response</h1>
+    <span class="badge">SPEC: HTTP/1.1 Status 404 / Error Handling</span>
+    <div class="criteria-pass">
+      PASS: Ao clicar no link quebrado para uma rota inexistente, o motor do Alloy recebe HTTP 404 do servidor Caddy e renderiza a resposta de erro ou feedback visual sem travar o processo nem fechar a janela.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Pânico no processo (panic/crash), fechamento súbito da janela ou travamento infinito do loop de eventos.
+    </div>
+  </div>
+
+  <div class="error-card">
+    <h2>1. Link para Rota Inexistente no Servidor (404)</h2>
+    <a class="btn-broken" href="/pagina-que-nao-existe-404.html">Acessar Link Quebrado (/pagina-que-nao-existe-404.html)</a>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

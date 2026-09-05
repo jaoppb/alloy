@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Text Align</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .align-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .align-box {
+      width: 320px;
+      background-color: #f1f2f6;
+      padding: 8px;
+      margin-bottom: 12px;
+      border-width: 1px;
+    }
+    .t-left {
+      text-align: left;
+    }
+    .t-center {
+      text-align: center;
+    }
+    .t-right {
+      text-align: right;
+    }
+    .t-justify {
+      text-align: justify;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Text Alignment</h1>
+    <span class="badge">SPEC: CSS Text L3 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: text-align alinha as linhas à esquerda, no centro, à direita e com espaçamento justificado (distribuindo espaços entre palavras ao longo da linha de 320px).
+    </div>
+    <div class="criteria-fail">
+      FAIL: Linhas não alinhadas na direção especificada ou justificação não calculando os intervalos entre palavras.
+    </div>
+  </div>
+
+  <div class="align-section">
+    <h2>1. text-align: left (inicial)</h2>
+    <div class="align-box t-left">
+      Texto alinhado à esquerda dentro da caixa de 320px.
+    </div>
+
+    <h2>2. text-align: center</h2>
+    <div class="align-box t-center">
+      Texto centralizado horizontalmente dentro da caixa.
+    </div>
+
+    <h2>3. text-align: right</h2>
+    <div class="align-box t-right">
+      Texto ancorado à direita da caixa.
+    </div>
+
+    <h2>4. text-align: justify</h2>
+    <div class="align-box t-justify">
+      O alinhamento justificado ajusta o espaçamento das palavras para que cada linha ocupe exatamente a largura de margem a margem da caixa delimitadora.
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

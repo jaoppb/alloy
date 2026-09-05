@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Graceful Degradation</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .degrade-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    /* Bloco misturando propriedades suportadas com propriedades ainda fora do corte v0.5 */
+    .tolerant-box {
+      background-color: #2ecc71; /* Suportada */
+      color: #ffffff;            /* Suportada */
+      padding: 16px;             /* Suportada */
+      margin-bottom: 12px;       /* Suportada */
+      /* Fora do corte v0.5: devem ser descartadas com ParseNote mas NÃO quebrar as acima */
+      transform: scale(1.1);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      filter: blur(0px);
+      position: absolute;
+      z-index: 99;
+    }
+
+    /* Regras com seletores avançados ou desconhecidos devem ser descartadas sem afetar regras válidas */
+    div:has(span) {
+      background-color: #e74c3c;
+    }
+
+    .valid-fallback {
+      background-color: #3498db;
+      color: #ffffff;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Parser Resilience &amp; Degradation</h1>
+    <span class="badge">RESILIENCE: CSS Syntax L3 / Alloy ParseNote Protocol</span>
+    <div class="criteria-pass">
+      PASS: Propriedades não suportadas (transform, box-shadow, filter, position) são ignoradas silenciosamente sem invalidar as regras válidas do mesmo bloco (a caixa permanece verde com padding correto); seletores fora do corte não afetam outras regras.
+    </div>
+    <div class="criteria-fail">
+      FAIL: O bloco de estilo inteiro ser descartado devido a uma propriedade desconhecida, ou crash no parser de estilos.
+    </div>
+  </div>
+
+  <div class="degrade-section">
+    <h2>1. Bloco de Declarações Tolerante</h2>
+    <div class="tolerant-box">
+      Esta caixa DEVE ser VERDE (#2ecc71) com espaçamento de 16px. As propriedades avançadas foram ignoradas com segurança.
+    </div>
+
+    <h2>2. Regra Válida após Seletor Inválido</h2>
+    <div class="valid-fallback">
+      Esta caixa DEVE ser AZUL (#3498db), comprovando que o descarte de seletores não suportados (:has) não invalida regras seguintes.
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

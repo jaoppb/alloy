@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HTML Test: Lists and Tag Omission</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .lists-container {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    ul, ol {
+      padding-left: 24px;
+      margin-bottom: 16px;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    .nested-list {
+      background-color: #f8f9fa;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>HTML Test: Lists &amp; &lt;li&gt; Tag Omission</h1>
+    <span class="badge">SPEC: WHATWG HTML §13.2.5 / Alloy PRD-008 Tag Omission</span>
+    <div class="criteria-pass">
+      PASS: Itens de lista sem tag de fechamento (&lt;/li&gt;) são auto-fechados pelo parser do Alloy quando o próximo &lt;li&gt; é aberto, mantendo a hierarquia correta de itens irmãos.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Itens sem &lt;/li&gt; ficarem recursivamente aninhados uns dentro dos outros.
+    </div>
+  </div>
+
+  <div class="lists-container">
+    <h2>1. Lista não-ordenada padrão com fechamento explícito (&lt;ul&gt;)</h2>
+    <ul>
+      <li>Primeiro item da lista</li>
+      <li>Segundo item da lista</li>
+      <li>Terceiro item da lista</li>
+    </ul>
+
+    <h2>2. Lista ordenada com omissão de fechamento &lt;/li&gt; (Tag Omission)</h2>
+    <ol>
+      <li>Item 1 (sem tag de fechamento)
+      <li>Item 2 (sem tag de fechamento)
+      <li>Item 3 (sem tag de fechamento)
+    </ol>
+
+    <h2>3. Lista aninhada</h2>
+    <ul class="nested-list">
+      <li>Nível 1 - Item A</li>
+      <li>Nível 1 - Item B
+        <ul>
+          <li>Nível 2 - Subitem B.1</li>
+          <li>Nível 2 - Subitem B.2</li>
+        </ul>
+      </li>
+      <li>Nível 1 - Item C</li>
+    </ul>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

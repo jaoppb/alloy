@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HTML Test: Graceful Degradation</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .degradation-container {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    .unknown-wrapper {
+      background-color: #f8f9fa;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .highlight {
+      background-color: #2ecc71;
+      color: #ffffff;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>HTML Test: Graceful Degradation (Unknown / Custom Tags)</h1>
+    <span class="badge">RESILIENCE: WHATWG Error Handling / Alloy Tolerance</span>
+    <div class="criteria-pass">
+      PASS: Tags desconhecidas ou fora da especificação v0.5 (&lt;custom-tag&gt;, &lt;aside&gt;, &lt;video&gt;, &lt;canvas&gt;) são toleradas sem travamento do parser, e o conteúdo interno dessas tags é renderizado normalmente.
+    </div>
+    <div class="criteria-fail">
+      FAIL: O motor de renderização entrar em pânico (panic/crash) ou omitir o conteúdo de texto interno.
+    </div>
+  </div>
+
+  <div class="degradation-container">
+    <div class="unknown-wrapper">
+      <h2>1. Tag customizada: &lt;custom-component&gt;</h2>
+      <custom-component>
+        <div class="highlight">
+          Conteúdo dentro de &lt;custom-component&gt; renderizado com sucesso.
+        </div>
+      </custom-component>
+    </div>
+
+    <div class="unknown-wrapper">
+      <h2>2. Tags HTML5 avançadas fora do corte v0.5</h2>
+      <aside>
+        <p>Conteúdo dentro de &lt;aside&gt; (tratado como fluxo regular de conteúdo).</p>
+      </aside>
+      <dialog open>
+        <p>Conteúdo dentro de &lt;dialog&gt; (sem suporte nativo a modal, mas legível).</p>
+      </dialog>
+      <video>
+        <p>Texto de fallback dentro de &lt;video&gt;.</p>
+      </video>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

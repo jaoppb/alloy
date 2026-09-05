@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HTML Test: Semantic Structure</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .semantic-container {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    nav {
+      background-color: #2c3e50;
+      color: #ffffff;
+      padding: 8px;
+      margin-bottom: 12px;
+    }
+    nav a {
+      color: #ecf0f1;
+      margin-right: 12px;
+    }
+    main {
+      padding: 12px;
+      background-color: #ecf0f1;
+    }
+    article {
+      background-color: #ffffff;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    section {
+      background-color: #f9f9f9;
+      padding: 8px;
+      margin-top: 8px;
+    }
+    blockquote {
+      background-color: #eaf2f8;
+      margin: 8px 0;
+      padding: 8px;
+    }
+    footer {
+      background-color: #34495e;
+      color: #bdc3c7;
+      padding: 8px;
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>HTML Test: Semantic &amp; Structural Tags</h1>
+    <span class="badge">SPEC: WHATWG HTML5 / Alloy PRD-008</span>
+    <div class="criteria-pass">
+      PASS: Todos os elementos semânticos (header, nav, main, article, section, blockquote, footer, h1-h6) são renderizados na hierarquia correta de blocos sem quebrar o layout.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Elementos colapsando incorretamente ou texto não renderizado dentro das seções estruturais.
+    </div>
+  </div>
+
+  <div class="semantic-container">
+    <header>
+      <h2>Header do Documento</h2>
+      <p>Subtítulo introdutório dentro do cabeçalho.</p>
+    </header>
+
+    <nav>
+      <a href="#art1">Artigo 1</a>
+      <a href="#art2">Artigo 2</a>
+    </nav>
+
+    <main>
+      <article id="art1">
+        <h2>Artigo Principal</h2>
+        <p>Parágrafo explicativo dentro do artigo com conteúdo textual.</p>
+        <blockquote>
+          Esta é uma citação em bloco (blockquote) com recuo e fundo diferenciado.
+        </blockquote>
+        <section>
+          <h3>Seção Interna do Artigo</h3>
+          <p>Conteúdo adicional dentro de uma tag section aninhada.</p>
+          <h4>Cabeçalho H4</h4>
+          <h5>Cabeçalho H5</h5>
+          <h6>Cabeçalho H6</h6>
+        </section>
+      </article>
+    </main>
+
+    <footer>
+      <p>Rodapé estrutural (footer) do documento de teste.</p>
+    </footer>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

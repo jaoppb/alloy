@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Flexbox Grow, Shrink &amp; Basis</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .flex-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .flex-container {
+      display: flex;
+      flex-direction: row;
+      background-color: #ecf0f1;
+      width: 400px;
+      padding: 8px;
+      margin-bottom: 12px;
+    }
+    .grow-1 {
+      flex-grow: 1;
+      background-color: #3498db;
+      color: #ffffff;
+      padding: 8px;
+      margin-right: 4px;
+    }
+    .grow-2 {
+      flex-grow: 2;
+      background-color: #2ecc71;
+      color: #ffffff;
+      padding: 8px;
+    }
+    .basis-100 {
+      flex-basis: 100px;
+      background-color: #e67e22;
+      color: #ffffff;
+      padding: 8px;
+      margin-right: 4px;
+    }
+    .basis-200 {
+      flex-basis: 200px;
+      background-color: #9b59b6;
+      color: #ffffff;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Flexbox Item Sizing (grow, shrink, basis)</h1>
+    <span class="badge">SPEC: CSS Flexbox L1 §9 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: No teste 1, o item verde (flex-grow: 2) expande com o dobro do espaço livre absorvido pelo item azul (flex-grow: 1); no teste 2, flex-basis: 100px e 200px definem o tamanho base inicial dos itens na linha.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Itens não expandindo para preencher o contêiner ou proporções de grow divergentes de 1:2.
+    </div>
+  </div>
+
+  <div class="flex-section">
+    <h2>1. flex-grow: 1 vs flex-grow: 2</h2>
+    <div class="flex-container">
+      <div class="grow-1">Grow: 1</div>
+      <div class="grow-2">Grow: 2</div>
+    </div>
+
+    <h2>2. flex-basis: 100px e 200px com flex-grow</h2>
+    <div class="flex-container">
+      <div class="basis-100">Basis: 100px</div>
+      <div class="basis-200">Basis: 200px</div>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

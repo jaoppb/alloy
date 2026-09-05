@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Showcase: Article Page Layout</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .article-container {
+      background-color: #ffffff;
+      padding: 24px;
+      max-width: 600px;
+    }
+    .article-header {
+      margin-bottom: 20px;
+      border-bottom-width: 2px;
+      padding-bottom: 12px;
+    }
+    .lead-paragraph {
+      font-size: 16px;
+      color: #34495e;
+      margin-bottom: 16px;
+    }
+    .highlight-quote {
+      background-color: #e8f4f8;
+      padding: 12px;
+      margin: 16px 0;
+      border-left-width: 4px;
+      font-style: italic;
+    }
+    .feature-list {
+      background-color: #fcfcfc;
+      padding: 12px 24px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>Showcase: Realistic Article Page Layout</h1>
+    <span class="badge">INTEGRATION: Document Flow + Inlines + Semantics</span>
+    <div class="criteria-pass">
+      PASS: Artigo completo renderizado com fluxo natural de blocos de texto, cabeçalhos hierárquicos, citação em destaque e lista de itens sem quebras anormais.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Sobreposição de blocos textuais ou perda de formatação de parágrafos.
+    </div>
+  </div>
+
+  <div class="article-container">
+    <header class="article-header">
+      <h1>Arquitetura do Navegador Alloy</h1>
+      <p>Uma abordagem moderna para motores de renderização modulares.</p>
+    </header>
+
+    <main>
+      <p class="lead-paragraph">
+        O projeto Alloy implementa o padrão <strong>Skeleton and Muscle</strong>, dividindo contratos de baixo nível estritos e lógica comportamental flexível.
+      </p>
+
+      <blockquote class="highlight-quote">
+        "A segurança da memória em Rust unida ao dinamismo de scripts cria a base ideal para navegabilidade personalizada."
+      </blockquote>
+
+      <h2>Recursos Principais do Motor</h2>
+      <ul class="feature-list">
+        <li>Tokenizador HTML5 segundo WHATWG §13.2.5</li>
+        <li>Motor de layout CSS com suporte a Box Model e Flexbox</li>
+        <li>Renderizador de software determinístico pixel a pixel</li>
+      </ul>
+
+      <p>
+        Para mais informações, consulte a documentação arquitetural no repositório oficial.
+      </p>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 Alloy Project. Todos os direitos reservados.</p>
+    </footer>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>
