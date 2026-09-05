@@ -19,15 +19,18 @@ use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::declaration::Declaration;
 use crate::domain::length::Length;
+use crate::infrastructure::cascade::flex_values;
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
-    parse_color, parse_display, parse_length, parse_length_edges, value_tokens,
+    parse_box_sizing, parse_color, parse_display, parse_length, parse_length_edges, parse_sizing,
+    parse_text_align, parse_white_space, value_tokens,
 };
 
 /// Which box property a `-top` / `-right` / `-bottom` / `-left` longhand edits.
 #[derive(Clone, Copy)]
 enum BoxProperty {
     Margin,
+    Border,
     Padding,
 }
 
@@ -73,8 +76,9 @@ fn apply_property(
         .or_else(|| apply_property_value(style, property, tokens))
 }
 
-/// The six shorthand and singular properties; the eight edge longhands fall
-/// through to [`apply_edge_longhand`].
+/// The shorthand and singular properties; the twelve edge longhands fall
+/// through to [`apply_edge_longhand`] and the nine Flexbox ones to
+/// [`flex_values::apply`].
 fn apply_property_value(
     style: ComputedStyle,
     property: &str,
@@ -86,9 +90,24 @@ fn apply_property_value(
         "background-color" => parse_color(tokens).map(|value| style.with_background_color(value)),
         "font-size" => parse_length(tokens).map(|value| style.with_font_size(value)),
         "margin" => parse_length_edges(tokens).map(|value| style.with_margin(value)),
+        "border-width" => parse_length_edges(tokens).map(|value| style.with_border(value)),
         "padding" => parse_length_edges(tokens).map(|value| style.with_padding(value)),
-        _ => apply_edge_longhand(style, property, tokens),
+        "width" => parse_sizing(tokens).map(|value| style.with_width(value)),
+        "height" => parse_sizing(tokens).map(|value| style.with_height(value)),
+        "box-sizing" => parse_box_sizing(tokens).map(|value| style.with_box_sizing(value)),
+        "text-align" => parse_text_align(tokens).map(|value| style.with_text_align(value)),
+        "white-space" => parse_white_space(tokens).map(|value| style.with_white_space(value)),
+        _ => apply_edge_or_flex(style, property, tokens),
     }
+}
+
+fn apply_edge_or_flex(
+    style: ComputedStyle,
+    property: &str,
+    tokens: &[Token],
+) -> Option<ComputedStyle> {
+    apply_edge_longhand(style, property, tokens)
+        .or_else(|| flex_values::apply(style, property, tokens))
 }
 
 fn apply_edge_longhand(
@@ -101,6 +120,10 @@ fn apply_edge_longhand(
     Some(set_edge(style, box_property, side, length))
 }
 
+/// `margin-top`, `padding-left`, `border-right-width`, … → which box property
+/// and which side. The `border` longhands carry a `-width` suffix because only
+/// the **width** of a border is geometry; `border-style` and `border-color` are
+/// paint and stay outside the cut.
 fn split_edge_property(property: &str) -> Option<(BoxProperty, BoxSide)> {
     let margin = property
         .strip_prefix("margin-")
@@ -108,8 +131,15 @@ fn split_edge_property(property: &str) -> Option<(BoxProperty, BoxSide)> {
     let padding = property
         .strip_prefix("padding-")
         .map(|side| (BoxProperty::Padding, side));
-    let (box_property, name) = margin.or(padding)?;
+    let border = border_side_name(property).map(|side| (BoxProperty::Border, side));
+    let (box_property, name) = margin.or(padding).or(border)?;
     Some((box_property, box_side(name)?))
+}
+
+fn border_side_name(property: &str) -> Option<&str> {
+    property
+        .strip_prefix("border-")
+        .and_then(|rest| rest.strip_suffix("-width"))
 }
 
 fn box_side(name: &str) -> Option<BoxSide> {
@@ -130,6 +160,7 @@ const fn set_edge(
 ) -> ComputedStyle {
     match box_property {
         BoxProperty::Margin => style.with_margin(edge_with(style.margin(), side, length)),
+        BoxProperty::Border => style.with_border(edge_with(style.border(), side, length)),
         BoxProperty::Padding => style.with_padding(edge_with(style.padding(), side, length)),
     }
 }
@@ -186,10 +217,20 @@ fn reset_to_initial(style: ComputedStyle, property: &str) -> Option<ComputedStyl
         "color" => Some(style.with_color(initial.color())),
         "background-color" => Some(style.with_background_color(initial.background_color())),
         "margin" => Some(style.with_margin(initial.margin())),
+        "border-width" => Some(style.with_border(initial.border())),
         "padding" => Some(style.with_padding(initial.padding())),
         "font-size" => Some(style.with_font_size(initial.font_size())),
-        _ => reset_edge_longhand(style, property),
+        "width" => Some(style.with_width(initial.width())),
+        "height" => Some(style.with_height(initial.height())),
+        "box-sizing" => Some(style.with_box_sizing(initial.box_sizing())),
+        "text-align" => Some(style.with_text_align(initial.text_align())),
+        "white-space" => Some(style.with_white_space(initial.white_space())),
+        _ => reset_edge_or_flex(style, property),
     }
+}
+
+fn reset_edge_or_flex(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+    reset_edge_longhand(style, property).or_else(|| flex_values::reset(style, property))
 }
 
 fn reset_edge_longhand(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
@@ -223,10 +264,25 @@ fn copy_property(
         "color" => Some(style.with_color(parent.color())),
         "background-color" => Some(style.with_background_color(parent.background_color())),
         "margin" => Some(style.with_margin(parent.margin())),
+        "border-width" => Some(style.with_border(parent.border())),
         "padding" => Some(style.with_padding(parent.padding())),
         "font-size" => Some(style.with_font_size(parent.font_size())),
-        _ => copy_edge_longhand(style, parent, property),
+        "width" => Some(style.with_width(parent.width())),
+        "height" => Some(style.with_height(parent.height())),
+        "box-sizing" => Some(style.with_box_sizing(parent.box_sizing())),
+        "text-align" => Some(style.with_text_align(parent.text_align())),
+        "white-space" => Some(style.with_white_space(parent.white_space())),
+        _ => copy_edge_or_flex(style, parent, property),
     }
+}
+
+fn copy_edge_or_flex(
+    style: ComputedStyle,
+    parent: &ComputedStyle,
+    property: &str,
+) -> Option<ComputedStyle> {
+    copy_edge_longhand(style, parent, property)
+        .or_else(|| flex_values::inherit(style, parent, property))
 }
 
 fn copy_edge_longhand(
@@ -237,6 +293,7 @@ fn copy_edge_longhand(
     let (box_property, side) = split_edge_property(property)?;
     let parent_edges = match box_property {
         BoxProperty::Margin => parent.margin(),
+        BoxProperty::Border => parent.border(),
         BoxProperty::Padding => parent.padding(),
     };
     Some(set_edge(

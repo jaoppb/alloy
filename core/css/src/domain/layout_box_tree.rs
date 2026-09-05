@@ -6,8 +6,9 @@
 //! [`crate::ViewportConstraints`] produce a byte-identical tree on every
 //! platform (`PRD-007:79-80`, `:100`).
 
-use graphics::{Au, Rect};
+use graphics::{Au, Point, Rect, Size};
 
+use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
 
 /// The four sides of a box's margin or padding, resolved to [`Au`].
@@ -72,15 +73,17 @@ impl EdgeSizes {
     }
 }
 
-/// One laid-out box: which node it belongs to, its content rectangle, and the
-/// margin and padding around it.
+/// One laid-out box: which node it belongs to, its content rectangle, the three
+/// edges around it, and whether its size is still provisional.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LayoutBox {
     node: SnapshotId,
     content: Rect,
     margin: EdgeSizes,
+    border: EdgeSizes,
     padding: EdgeSizes,
+    intrinsic_size: IntrinsicSize,
     children: ChildIds,
 }
 
@@ -89,15 +92,17 @@ impl LayoutBox {
     pub const fn new(
         node: SnapshotId,
         content: Rect,
-        margin: EdgeSizes,
-        padding: EdgeSizes,
+        edges: BoxEdges,
+        intrinsic_size: IntrinsicSize,
         children: ChildIds,
     ) -> Self {
         Self {
             node,
             content,
-            margin,
-            padding,
+            margin: edges.margin,
+            border: edges.border,
+            padding: edges.padding,
+            intrinsic_size,
             children,
         }
     }
@@ -118,14 +123,119 @@ impl LayoutBox {
     }
 
     #[must_use]
+    pub const fn border(&self) -> EdgeSizes {
+        self.border
+    }
+
+    #[must_use]
     pub const fn padding(&self) -> EdgeSizes {
         self.padding
+    }
+
+    /// Whether this box's geometry still waits on an unloaded resource
+    /// (Phase X reads this).
+    #[must_use]
+    pub const fn intrinsic_size(&self) -> IntrinsicSize {
+        self.intrinsic_size
     }
 
     #[must_use]
     pub const fn children(&self) -> &ChildIds {
         &self.children
     }
+
+    /// The content box grown by padding and border — what a background and a
+    /// border are painted into.
+    #[must_use]
+    pub fn border_box(&self) -> Rect {
+        grown(self.content, self.padding).map_or(self.content, |padded| {
+            grown(padded, self.border).unwrap_or(padded)
+        })
+    }
+
+    /// The border box grown by margin — the space this box occupies in flow.
+    #[must_use]
+    pub fn margin_box(&self) -> Rect {
+        let border_box = self.border_box();
+        grown(border_box, self.margin).unwrap_or(border_box)
+    }
+}
+
+/// The three edges of a box, passed to [`LayoutBox::new`] as one value so the
+/// constructor never grows a fourth positional `EdgeSizes` a caller can swap by
+/// accident.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct BoxEdges {
+    margin: EdgeSizes,
+    border: EdgeSizes,
+    padding: EdgeSizes,
+}
+
+impl BoxEdges {
+    /// All three edges zero.
+    pub const ZERO: Self = Self {
+        margin: EdgeSizes::ZERO,
+        border: EdgeSizes::ZERO,
+        padding: EdgeSizes::ZERO,
+    };
+
+    #[must_use]
+    pub const fn new(margin: EdgeSizes, border: EdgeSizes, padding: EdgeSizes) -> Self {
+        Self {
+            margin,
+            border,
+            padding,
+        }
+    }
+
+    #[must_use]
+    pub const fn margin(self) -> EdgeSizes {
+        self.margin
+    }
+
+    #[must_use]
+    pub const fn border(self) -> EdgeSizes {
+        self.border
+    }
+
+    #[must_use]
+    pub const fn padding(self) -> EdgeSizes {
+        self.padding
+    }
+
+    /// `left + right` across all three edges.
+    #[must_use]
+    pub const fn horizontal(self) -> Au {
+        self.margin
+            .horizontal()
+            .saturating_add(self.border.horizontal())
+            .saturating_add(self.padding.horizontal())
+    }
+
+    /// `top + bottom` across all three edges.
+    #[must_use]
+    pub const fn vertical(self) -> Au {
+        self.margin
+            .vertical()
+            .saturating_add(self.border.vertical())
+            .saturating_add(self.padding.vertical())
+    }
+}
+
+/// `rect` expanded by `edges` on all four sides, or `None` when the result is
+/// not a representable [`Size`].
+fn grown(rect: Rect, edges: EdgeSizes) -> Option<Rect> {
+    let inner = rect.size();
+    let origin = Point::new(
+        rect.min_x().saturating_sub(edges.left()),
+        rect.min_y().saturating_sub(edges.top()),
+    );
+    let outer = Size::new(
+        inner.width().saturating_add(edges.horizontal()),
+        inner.height().saturating_add(edges.vertical()),
+    )?;
+    Some(Rect::new(origin, outer))
 }
 
 /// The tree of laid-out boxes. Nodes with `display: none` generate no box, so
@@ -180,6 +290,11 @@ impl LayoutBoxTreeBuilder {
 
     pub(crate) fn push(&mut self, laid_out: LayoutBox) {
         self.boxes.push(laid_out);
+    }
+
+    /// Appends a run of boxes already in document order.
+    pub(crate) fn push_all(&mut self, laid_out: impl IntoIterator<Item = LayoutBox>) {
+        self.boxes.extend(laid_out);
     }
 
     pub(crate) fn finish(self, root: Option<SnapshotId>) -> LayoutBoxTree {
