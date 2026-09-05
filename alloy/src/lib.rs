@@ -13,8 +13,9 @@ pub mod logging;
 
 pub use application::paint::paint_box_tree;
 pub use application::pipeline::{
-    DEFAULT_FONT_SIZE, RenderOptions, default_runtime_font_provider, render_dom,
-    render_dom_with_font_provider, render_html_to_png, render_html_with_font_provider, run_render,
+    DEFAULT_FONT_SIZE, LinkTarget, RenderOptions, default_runtime_font_provider, render_dom,
+    render_dom_with_font_provider, render_dom_with_links, render_html_to_png,
+    render_html_with_font_provider, run_render,
 };
 pub use application::{
     LoopStats, initial_window_attributes, navigate, run_browser, run_browser_until,
