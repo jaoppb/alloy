@@ -156,11 +156,22 @@ impl Session {
     }
 
     fn absorb_stylesheet(&mut self, text: &str) {
-        if let Ok(sheet) = css::parse_stylesheet(text, Origin::Author) {
-            self.extra_sheets.absorb(sheet);
-            self.dirty = true;
-            self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
-        }
+        let sheet = match css::parse_stylesheet(text, Origin::Author) {
+            Ok(sheet) => sheet,
+            Err(error) => {
+                tracing::warn!(%error, bytes = text.len(), "stylesheet parse failed");
+                return;
+            }
+        };
+        tracing::debug!(
+            rules = sheet.rules().count(),
+            notes = sheet.notes().len(),
+            bytes = text.len(),
+            "stylesheet absorbed"
+        );
+        self.extra_sheets.absorb(sheet);
+        self.dirty = true;
+        self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
     }
 
     /// Discovers `<link rel=stylesheet>` and `<img>` in `dom_tree`, registers
@@ -176,6 +187,11 @@ impl Session {
     ) {
         let snapshot = css::snapshot(dom_tree, dom_tree.document());
         let found = subresource::discover(&snapshot, base_url);
+        tracing::debug!(
+            stylesheets = found.stylesheets.len(),
+            images = found.images.len(),
+            "subresources discovered"
+        );
         for url in found.stylesheets {
             spawn_stylesheet_fetch(url, Arc::clone(transport), sender.clone());
         }
@@ -231,7 +247,14 @@ fn spawn_image_fetch(
 fn fetch_text(url: &Url, transport: &dyn HttpTransport) -> Result<String, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
     ensure_success(url, response.status())?;
-    Ok(response.body().as_str().unwrap_or_default().to_owned())
+    let body = response.body().as_str().unwrap_or_default().to_owned();
+    tracing::debug!(
+        %url,
+        status = response.status().code(),
+        bytes = body.len(),
+        "stylesheet fetched"
+    );
+    Ok(body)
 }
 
 fn fetch_image(url: &Url, transport: &dyn HttpTransport) -> Result<Framebuffer, AlloyError> {
