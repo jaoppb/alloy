@@ -102,7 +102,8 @@ impl IntoIterator for Subresources {
 /// fetch machinery, while [`SubresourceRequest`] keeps the fetchable kinds
 /// closed.
 pub trait SubresourceDiscoverer: Send + Sync {
-    /// Walks `snapshot` and resolves every reference against `base`.
+    /// Walks `snapshot` and resolves every reference against `base`, or
+    /// against the document's own `<base href>` when it declares one.
     fn discover(&self, snapshot: &DomSnapshot, base: &Url) -> Subresources;
 }
 
@@ -113,18 +114,35 @@ pub struct MarkupDiscoverer;
 
 impl SubresourceDiscoverer for MarkupDiscoverer {
     fn discover(&self, snapshot: &DomSnapshot, base: &Url) -> Subresources {
+        let base = effective_base(snapshot, base);
         let mut found = Subresources::default();
         for id in snapshot.nodes_in_document_order() {
             let Some(node) = snapshot.node(id) else {
                 continue;
             };
-            let Some(request) = request_for(id, node, base) else {
+            let Some(request) = request_for(id, node, &base) else {
                 continue;
             };
             found.push(request);
         }
         found
     }
+}
+
+/// The URL relative references resolve against: the first `<base href>` in
+/// document order resolved against the navigation URL (WHATWG HTML §4.2.3),
+/// or the navigation URL itself when there is none. Performance-tuned sites
+/// point `<base>` at a CDN, so ignoring it fetches every subresource from the
+/// wrong origin.
+fn effective_base(snapshot: &DomSnapshot, nav_url: &Url) -> Url {
+    let declared_href = snapshot
+        .nodes_in_document_order()
+        .filter_map(|id| snapshot.node(id))
+        .filter(|node| node.tag_str() == Some("base"))
+        .find_map(|node| node.attribute("href"));
+    declared_href
+        .and_then(|href| nav_url.join(href).ok())
+        .unwrap_or_else(|| nav_url.clone())
 }
 
 fn request_for(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<SubresourceRequest> {
@@ -136,11 +154,22 @@ fn request_for(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<Subresou
 }
 
 fn stylesheet_request(node: NodeRef<'_>, base: &Url) -> Option<StylesheetRequest> {
-    if node.attribute("rel") != Some("stylesheet") {
+    if !rel_is_stylesheet(node) {
         return None;
     }
     let href = node.attribute("href")?;
     base.join(href).ok().map(StylesheetRequest::new)
+}
+
+/// `rel` is a space-separated, case-insensitive token set: `rel="stylesheet"`
+/// but also `rel="preload stylesheet"` and `rel="Stylesheet"`. The
+/// `<link rel="preload" ... onload="this.rel='stylesheet'">` swap pattern is
+/// still missed — it needs script execution (v0.7).
+fn rel_is_stylesheet(node: NodeRef<'_>) -> bool {
+    node.attribute("rel").is_some_and(|rel| {
+        rel.split_ascii_whitespace()
+            .any(|token| token.eq_ignore_ascii_case("stylesheet"))
+    })
 }
 
 fn image_request(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<ImageRequest> {
@@ -178,13 +207,27 @@ mod tests {
     use super::{MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
     use network::Url;
 
-    fn discover(markup: &str) -> Vec<SubresourceRequest> {
+    fn discover_from(markup: &str, nav_url: &str) -> Vec<SubresourceRequest> {
         let tree = html::parse(markup).unwrap();
         let snapshot = css::snapshot(&tree, tree.document());
-        let base = Url::parse("http://example.com/dir/page.html").unwrap();
+        let base = Url::parse(nav_url).unwrap();
         MarkupDiscoverer
             .discover(&snapshot, &base)
             .into_iter()
+            .collect()
+    }
+
+    fn discover(markup: &str) -> Vec<SubresourceRequest> {
+        discover_from(markup, "http://example.com/dir/page.html")
+    }
+
+    fn stylesheet_urls(found: &[SubresourceRequest]) -> Vec<String> {
+        found
+            .iter()
+            .filter_map(|request| match request {
+                SubresourceRequest::Stylesheet(sheet) => Some(sheet.url().to_string()),
+                SubresourceRequest::Image(_) => None,
+            })
             .collect()
     }
 
@@ -212,5 +255,37 @@ mod tests {
                <body><img></body></html>"#,
         );
         assert!(found.is_empty(), "nothing fetchable here, got {found:?}");
+    }
+
+    #[test]
+    fn a_multi_token_rel_still_counts_as_a_stylesheet_link() {
+        let found = discover_from(
+            "<link rel=\"preload stylesheet\" href=\"/a.css\">\
+             <link rel=\"Stylesheet\" href=\"/b.css\">\
+             <link rel=\"preload\" href=\"/c.css\">",
+            "https://example.com/index.html",
+        );
+        assert_eq!(
+            stylesheet_urls(&found),
+            vec![
+                "https://example.com/a.css".to_owned(),
+                "https://example.com/b.css".to_owned(),
+            ],
+            "`preload stylesheet` and `Stylesheet` match; bare `preload` does not"
+        );
+    }
+
+    #[test]
+    fn a_base_href_element_moves_the_origin_relative_links_resolve_against() {
+        let found = discover_from(
+            "<base href=\"https://cdn.example/assets/\">\
+             <link rel=\"stylesheet\" href=\"site.css\">",
+            "https://example.com/index.html",
+        );
+        assert_eq!(
+            stylesheet_urls(&found),
+            vec!["https://cdn.example/assets/site.css".to_owned()],
+            "`<base href>` redirects the relative stylesheet to the CDN origin"
+        );
     }
 }
