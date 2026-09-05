@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Navigation Test: Page B</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .success-card {
+      background-color: #ffffff;
+      padding: 24px;
+      margin-bottom: 20px;
+      border-left-width: 6px;
+    }
+    .btn-back {
+      display: block;
+      background-color: #e67e22;
+      color: #ffffff;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .status-box {
+      background-color: #e8f8f5;
+      color: #27ae60;
+      padding: 16px;
+      margin-bottom: 16px;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>Navigation Test: Page B (Página de Destino)</h1>
+    <span class="badge">SPEC: Browser Event Loop / Link Navigation</span>
+    <div class="criteria-pass">
+      PASS: Navegação bem-sucedida! Esta página confirma que o clique no link da Página A foi processado, a requisição HTTP foi concluída e o novo DOM foi renderizado.
+    </div>
+  </div>
+
+  <div class="success-card">
+    <div class="status-box">
+      <strong>Sucesso:</strong> Você está agora na <code>Página B</code> (/navigation/page-b.html).
+    </div>
+
+    <h2>Retornar para a Página Anterior</h2>
+    <a class="btn-back" href="page-a.html">&larr; Voltar para a Página A (page-a.html)</a>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>
