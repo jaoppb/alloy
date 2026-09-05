@@ -14,6 +14,10 @@ engine = { path = "../../engine" }
 # `core/dom` is a pure domain crate — this edge stays one-way and never lets a
 # `rhai` type reach `core/dom`.
 dom = { path = "../../dom" }
+network = { path = "../../network" }
+window = { path = "../../window" }
+css = { path = "../../css" }
+graphics = { path = "../../graphics" }
 rhai = { workspace = true }
 tracing = { workspace = true }
 

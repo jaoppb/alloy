@@ -93,6 +93,12 @@ pub mod profiles {
         CapabilitySet::new(Capability::DOM_READ | Capability::GRAPHICS_DRAW)
     }
 
+    /// CSS cascade / style engine alias (Phase M, PRD-003:56, PRD-007 §3.4).
+    #[must_use]
+    pub fn css_cascade() -> CapabilitySet {
+        css_style()
+    }
+
     /// Network interceptor: fetch and write the cache.
     #[must_use]
     pub fn network_interceptor() -> CapabilitySet {

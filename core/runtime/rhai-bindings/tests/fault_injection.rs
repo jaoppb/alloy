@@ -5,11 +5,24 @@
 //! remains usable. `run_dom_with_fallback` recovers from every failure class,
 //! including the embedded default script itself failing.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::similar_names,
+    clippy::significant_drop_tightening
+)]
+
+use css::{CascadeResolver, StyleSheetSet};
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionLimits, FunctionName,
     RuntimeEngine, native_fn, profiles,
 };
-use rhai_bindings::{minimal_document, run_dom_with_fallback};
+use network::{HttpRequest, PolicyVerdict, RequestPolicy, Url};
+use rhai_bindings::{
+    NETWORK_BINDINGS, ScriptCascadeResolver, ScriptRequestPolicy, WINDOW_BINDINGS,
+    minimal_document, run_dom_with_fallback, run_ui_event_with_fallback,
+};
 use rhai_runtime::RhaiEngine;
 
 const ALL_CAPABILITIES: [Capability; 9] = [
@@ -186,5 +199,129 @@ fn minimal_document_is_well_formed() {
     assert_eq!(
         dom::serialize_html(&tree, tree.document()).expect("serialize"),
         "<html><body></body></html>"
+    );
+}
+
+fn network_snippet(name: &str) -> (&'static str, Arity) {
+    match name {
+        "fetch" => ("fetch(\"https://example.com\")", Arity::exact(1)),
+        "allow" => ("allow(\"request\")", Arity::exact(1)),
+        "deny" => ("deny(\"blocked\")", Arity::exact(1)),
+        "rewrite" => ("rewrite(\"https://example.com\")", Arity::exact(1)),
+        "header" => ("header(\"content-type\", \"text/html\")", Arity::exact(2)),
+        other => panic!("unknown network binding `{other}`"),
+    }
+}
+
+fn window_snippet(name: &str) -> (&'static str, Arity) {
+    match name {
+        "repaint" => ("repaint()", Arity::exact(0)),
+        "title" => ("title(\"test\")", Arity::exact(1)),
+        "route" => ("route(\"window\", \"focus\")", Arity::exact(2)),
+        "key_shortcut" => ("key_shortcut(\"ctrl+q\", \"quit\")", Arity::exact(2)),
+        other => panic!("unknown window binding `{other}`"),
+    }
+}
+
+#[test]
+fn a_panicking_network_binding_is_trapped_as_script_panic() {
+    let engine = RhaiEngine::new();
+    for (name, capability) in NETWORK_BINDINGS {
+        let fn_name = FunctionName::parse(name).expect("valid function name");
+        let (snippet, arity) = network_snippet(name);
+        let mut context = engine
+            .create_context(CapabilitySet::new(*capability))
+            .expect("context");
+
+        let handler = native_fn(
+            |_arguments: &[EngineValue]| -> Result<EngineValue, EngineError> {
+                panic!("injected panic in network binding");
+            },
+        );
+        context
+            .register_guarded_binding(&fn_name, arity, *capability, handler)
+            .expect("register panicking binding");
+
+        let outcome = engine.eval_value(&mut context, snippet);
+        assert!(
+            matches!(outcome, Err(EngineError::ScriptPanic { .. })),
+            "binding {name}: expected trapped ScriptPanic, got {outcome:?}"
+        );
+
+        let after: i64 = engine
+            .eval(&mut context, "1 + 1")
+            .expect("context still usable after trapped network panic");
+        assert_eq!(after, 2);
+    }
+}
+
+#[test]
+fn a_panicking_window_binding_is_trapped_as_script_panic() {
+    let engine = RhaiEngine::new();
+    for (name, capability) in WINDOW_BINDINGS {
+        let fn_name = FunctionName::parse(name).expect("valid function name");
+        let (snippet, arity) = window_snippet(name);
+        let mut context = engine
+            .create_context(CapabilitySet::new(*capability))
+            .expect("context");
+
+        let handler = native_fn(
+            |_arguments: &[EngineValue]| -> Result<EngineValue, EngineError> {
+                panic!("injected panic in window binding");
+            },
+        );
+        context
+            .register_guarded_binding(&fn_name, arity, *capability, handler)
+            .expect("register panicking binding");
+
+        let outcome = engine.eval_value(&mut context, snippet);
+        assert!(
+            matches!(outcome, Err(EngineError::ScriptPanic { .. })),
+            "binding {name}: expected trapped ScriptPanic, got {outcome:?}"
+        );
+
+        let after: i64 = engine
+            .eval(&mut context, "1 + 1")
+            .expect("context still usable after trapped window panic");
+        assert_eq!(after, 2);
+    }
+}
+
+#[test]
+fn panicking_network_script_policy_falls_back_safely() {
+    let engine = RhaiEngine::new();
+    let panicking_script = "panic(\"injected network script fault\");";
+    let policy = ScriptRequestPolicy::new(engine, panicking_script);
+
+    let url = Url::parse("https://example.com").expect("url");
+    let request = HttpRequest::get(url);
+    let verdict = policy.decide(&request).expect("verdict via fallback");
+    assert_eq!(verdict, PolicyVerdict::Allow);
+}
+
+#[test]
+fn panicking_ui_script_falls_back_safely() {
+    let engine = RhaiEngine::new();
+    let panicking_script = "panic(\"injected UI script fault\");";
+    let fallback_script = "repaint(); 42";
+
+    let outcome = run_ui_event_with_fallback(&engine, panicking_script, "resize", fallback_script);
+    assert_eq!(outcome, EngineValue::Int(42));
+}
+
+#[test]
+fn panicking_cascade_script_falls_back_to_ua_cascade() {
+    let engine = RhaiEngine::new();
+    let panicking_script = "panic(\"injected cascade fault\");";
+    let resolver = ScriptCascadeResolver::new(engine, panicking_script);
+
+    let dom_tree = minimal_document();
+    let snapshot = css::snapshot(&dom_tree, dom_tree.document());
+    let sheets = StyleSheetSet::new();
+
+    let outcome = resolver.resolve(&snapshot, &sheets);
+    assert!(
+        outcome.is_ok(),
+        "cascade should fall back to UaCascade on panic"
     );
 }
