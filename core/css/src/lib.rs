@@ -59,18 +59,29 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Bumped on any change a resolver, a layout engine or a
 /// producer could notice; **frozen at I3** (end of B4), after which a change
-/// also needs a migration note in `PRD-007`.
-pub const PORT_SCHEMA_VERSION: u32 = 2;
+/// also needs a migration note in `PRD-007`. `3` is v0.5 Phase B4: `ComputedStyle`
+/// gains `border` / `width` / `height` / `box_sizing` / `text_align` /
+/// `white_space` / `flex`, `StyledNode` gains `text` and `intrinsic_size`, and
+/// `LayoutBox` is constructed from a `BoxEdges` grouping margin/border/padding
+/// instead of a bare margin, plus an `IntrinsicSize` — every one of these is a
+/// new or regrouped field a downstream consumer could observe, not a value
+/// change, so nothing here breaks existing `match` arms.
+pub const PORT_SCHEMA_VERSION: u32 = 3;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
 /// The single canonical registry: the parser **drops** a declaration whose
 /// property is not on this list (with a [`ParseNote`]), and
 /// `infrastructure/cascade/values.rs` applies exactly these.
-/// `core/css/tests/manifest_runner.rs` asserts this list, the fourteen-row
-/// `## Properties` table of `core/css/tests/data/MANIFEST.md`, and what
-/// [`parse_stylesheet`] actually accepts all agree — in every direction.
-pub const SUPPORTED_PROPERTIES: [&str; 14] = [
+/// `core/css/tests/manifest_runner.rs` asserts this list, the `## Properties`
+/// table of `core/css/tests/data/MANIFEST.md`, and what [`parse_stylesheet`]
+/// actually accepts all agree — in every direction.
+///
+/// Jumps from 14 to 33 in v0.5 B4: the box model and inline formatting context
+/// add six shorthands/singulars and the four `border-*-width` longhands
+/// (`border-style`/`border-color` stay outside the cut — only a border's width
+/// is geometry), and Flexbox adds its nine properties.
+pub const SUPPORTED_PROPERTIES: [&str; 33] = [
     "display",
     "color",
     "background-color",
@@ -85,6 +96,25 @@ pub const SUPPORTED_PROPERTIES: [&str; 14] = [
     "padding-bottom",
     "padding-left",
     "font-size",
+    "border-width",
+    "border-top-width",
+    "border-right-width",
+    "border-bottom-width",
+    "border-left-width",
+    "width",
+    "height",
+    "box-sizing",
+    "text-align",
+    "white-space",
+    "flex-direction",
+    "flex-wrap",
+    "justify-content",
+    "align-items",
+    "align-content",
+    "align-self",
+    "flex-grow",
+    "flex-shrink",
+    "flex-basis",
 ];
 
 /// The selector and `@media` forms this crate parses and matches against a

@@ -8,6 +8,7 @@
 //! hard-coded UA defaults, and `initial` / `inherit` resolve here.
 
 pub mod author_rules;
+pub mod flex_values;
 pub mod values;
 
 pub use crate::infrastructure::ua_sheet::UaCascade;

@@ -8,10 +8,19 @@
 //! single parent-before-child pass so an inheriting resolver always sees its
 //! parent's finished style.
 
+use crate::domain::computed::intrinsic::{self, IntrinsicSize};
 use crate::domain::computed::style::ComputedStyle;
-use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId};
+use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
+use crate::domain::text::TextRun;
 
-/// One node's computed style, plus its place in the tree.
+/// One node's computed style, plus its place in the tree, the character data it
+/// carries, and whether its own size is still provisional.
+///
+/// The last two are what v0.5 B4 added: [`crate::LayoutEngine::layout`] is
+/// handed **only** a `&StyledTree` (`PRD-007:56-60`), so an inline formatting
+/// context can reach the text only if the text travels inside the aggregate,
+/// and Phase X can find the boxes waiting on a resource only if the marker
+/// does too.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct StyledNode {
@@ -19,12 +28,26 @@ pub struct StyledNode {
     parent: Option<SnapshotId>,
     children: ChildIds,
     style: ComputedStyle,
+    text: Option<TextRun>,
+    intrinsic_size: IntrinsicSize,
 }
 
 impl StyledNode {
     #[must_use]
     pub const fn node(&self) -> SnapshotId {
         self.node
+    }
+
+    /// The character data of a text node, or `None` for anything else.
+    #[must_use]
+    pub const fn text(&self) -> Option<&TextRun> {
+        self.text.as_ref()
+    }
+
+    /// Whether this node's own size still depends on an unloaded resource.
+    #[must_use]
+    pub const fn intrinsic_size(&self) -> IntrinsicSize {
+        self.intrinsic_size
     }
 
     #[must_use]
@@ -99,6 +122,8 @@ impl StyledTree {
                 parent: node_ref.parent(),
                 children: ChildIds::from_ids(node_ref.children()),
                 style,
+                text: character_data_of(node_ref),
+                intrinsic_size: intrinsic::for_tag(node_ref.tag()),
             });
         }
         Self {
@@ -106,6 +131,15 @@ impl StyledTree {
             root: snapshot.root(),
         }
     }
+}
+
+/// The text a node contributes to an inline formatting context. Only a `Text`
+/// node has any: a comment's character data is markup, never rendered content.
+fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    if node_ref.kind() != SnapshotNodeKind::Text {
+        return None;
+    }
+    node_ref.text().map(TextRun::new)
 }
 
 /// The already-computed style of `node_ref`'s parent, looked up by index — safe

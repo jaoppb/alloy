@@ -12,7 +12,8 @@ docs/
 ├── README.md                           # This index
 ├── architecture/                       # System Architecture & Design
 │   ├── overview.md                     # High-level architecture, C4 diagrams, and core patterns
-│   └── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
+│   ├── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
+│   └── style-cascade-port-contract.md  # ADR-0011 contract record for the CascadeResolver/LayoutEngine/TextMeasurer port
 ├── requirements/                       # Product & System Requirements (PRDs)
 │   ├── PRD-001-alloy-core-system.md    # Overall browser system requirements
 │   ├── PRD-002-abstract-runtime-engine.md # Abstract engine & Rhai integration requirements
