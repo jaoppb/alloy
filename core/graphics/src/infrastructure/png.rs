@@ -181,7 +181,8 @@ const CRC_POLYNOMIAL: u32 = 0xedb8_8320;
 /// required an `ADR-0017` carve-out — and eight shifts per byte is more than
 /// enough for an artefact measured in kilobytes. Paying microseconds to keep the
 /// lint gate intact is the right trade here.
-fn crc32(bytes: &[u8]) -> u32 {
+#[must_use]
+pub fn crc32(bytes: &[u8]) -> u32 {
     let mut register = u32::MAX;
     for byte in bytes {
         register ^= u32::from(*byte);

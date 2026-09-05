@@ -359,51 +359,63 @@ fn a_zero_radius_is_indistinguishable_from_a_square_rectangle() {
     assert_eq!(square.as_rgba8(), rounded.as_rgba8());
 }
 
-// ---- what v0.3 refuses ----
+// ---- what is unimplemented or checked against providers ----
 
 #[test]
-fn the_two_unimplemented_commands_report_unsupported_naming_themselves() {
-    let cases = [
-        (
-            "DrawImage",
-            list_of(|builder| {
-                builder
-                    .draw_image(
-                        ImageId::new(0),
-                        PxRect::from_px(0.0, 0.0, 1.0, 1.0),
-                        PxRect::from_px(0.0, 0.0, 1.0, 1.0),
-                    )
-                    .unwrap();
-            }),
-        ),
-        (
-            "DrawPath",
-            list_of(|builder| {
-                builder
-                    .draw_path(
-                        Path::from_segments([PathSegment::MoveTo { to: Point::ORIGIN }]),
-                        Some(Color::BLACK),
-                        None,
-                    )
-                    .unwrap();
-            }),
-        ),
-    ];
+fn the_unimplemented_draw_path_reports_unsupported_naming_itself() {
+    let list = list_of(|builder| {
+        builder
+            .draw_path(
+                Path::from_segments([PathSegment::MoveTo { to: Point::ORIGIN }]),
+                Some(Color::BLACK),
+                None,
+            )
+            .unwrap();
+    });
 
-    for (name, list) in cases {
-        let mut backend = SoftwareCpuBackend::new();
-        backend.begin_frame(surface(1, 1)).unwrap();
+    let mut backend = SoftwareCpuBackend::new();
+    backend.begin_frame(surface(1, 1)).unwrap();
 
-        let error = backend
-            .submit(&list)
-            .expect_err("v0.3 does not implement this command");
+    let error = backend
+        .submit(&list)
+        .expect_err("DrawPath is not implemented");
 
-        let GraphicsError::Unsupported { tier, command } = error else {
-            panic!("{name} must be refused as Unsupported, got {error:?}");
-        };
-        assert_eq!(tier, BackendTier::Software);
-        assert_eq!(command.name(), name, "the error must name the command");
-    }
+    let GraphicsError::Unsupported { tier, command } = error else {
+        panic!("DrawPath must be refused as Unsupported, got {error:?}");
+    };
+    assert_eq!(tier, BackendTier::Software);
+    assert_eq!(
+        command.name(),
+        "DrawPath",
+        "the error must name the command"
+    );
+}
+
+#[test]
+fn draw_image_with_unregistered_image_reports_image_unavailable() {
+    let list = list_of(|builder| {
+        builder
+            .draw_image(
+                ImageId::new(42),
+                PxRect::from_px(0.0, 0.0, 1.0, 1.0),
+                PxRect::from_px(0.0, 0.0, 1.0, 1.0),
+            )
+            .unwrap();
+    });
+
+    let mut backend = SoftwareCpuBackend::new();
+    backend.begin_frame(surface(1, 1)).unwrap();
+
+    let error = backend
+        .submit(&list)
+        .expect_err("unregistered image must be refused");
+
+    assert_eq!(
+        error,
+        GraphicsError::ImageUnavailable {
+            image: ImageId::new(42),
+        }
+    );
 }
 
 // ---- determinism ----
