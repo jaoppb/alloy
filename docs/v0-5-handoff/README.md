@@ -30,9 +30,9 @@ trabalhar numa fase — cada arquivo aqui já extrai e atualiza a seção releva
 | **B4**                            | ✅ entregue e verificada (`cargo test -p css`, `clippy`, `just no-engine`) | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | `1353647`             | misto 🟢🟡🔴 — ver [triagem](00-triagem-despacho.md) |
 | B5                                | ✅ entregue                                                                | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | `fc7d55e`             | 🟡 médio                                             |
 | X                                 | ✅ entregue                                                                | [`03-x-image-support.md`](03-x-image-support.md)                         | `3558e4c`             | 🟢 leve                                              |
-| I2                                | ⏳ não iniciada — pode começar agora (B4 e B5 commitados)                  | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | —                     | 🟢 leve                                              |
-| M                                 | ⏳ não iniciada                                                            | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | —                     | 🟢 leve, com uma releitura de capability             |
-| I4                                | ⏳ não iniciada                                                            | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                     | 🔴 pesado                                            |
+| **I2**                            | ✅ entregue e verificada (`cargo test -p alloy`, golden e2e)               | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | `9bb8ae3`             | 🟢 leve                                              |
+| **M**                             | ✅ entregue e verificada (`cargo test -p rhai-bindings`, bench)            | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | `067e87b`             | 🟢 leve, com uma releitura de capability             |
+| I4                                | ⏳ não iniciada — pode começar agora (I2, M, X, C1, C2 commitadas)         | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                     | 🔴 pesado                                            |
 | P                                 | ⏳ não iniciada                                                            | [`07-p-final-gates.md`](07-p-final-gates.md)                             | —                     | 🟢 leve                                              |
 
 ## Grafo de dependência do que resta
@@ -40,18 +40,14 @@ trabalhar numa fase — cada arquivo aqui já extrai e atualiza a seção releva
 ```text
 B4 ✅ ──> B5 ✅
   │         ↓
-  │        I2  (precisa de B4 + B5, ambas prontas — pode começar) ──> push + PR draft "v0.5 · I2 render headless"
-  │
-X ✅ (precisa de B4 + C1)
-  ↓
-  M  (precisa de EE + B4 + C1 + C2 — todas prontas)
-       ↓
-  I4  (precisa de I2 + C1 + C2 + M + X)  ──> push + PR draft "v0.5 · I4 alloy <url>"
-       ↓
-  P  (precisa de todas)  ──> PR final
+  │        I2 ✅ ──────────────────────────────────────────────┐
+  │                                                             ↓
+X ✅ ──>   M ✅ (precisa de EE + B4 + C1 + C2 — todas prontas) ─> I4 (pode começar agora) ──> push + PR draft "v0.5 · I4 alloy <url>"
+                                                                 ↓
+                                                            P  (precisa de todas)  ──> PR final
 ```
 
-B4, B5 e X estão entregues e commitadas. Restam, em ordem: I2 (pode começar agora), depois M, depois I4, depois P.
+B4, B5, X, I2 e M estão entregues e commitadas. Restam: I4 (pode começar agora), depois P.
 
 ## Como usar cada arquivo de fase
 

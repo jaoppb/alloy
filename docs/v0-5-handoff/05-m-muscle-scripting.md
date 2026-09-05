@@ -62,13 +62,13 @@ grep -rn "NETWORK_BINDINGS\|WINDOW_BINDINGS" core/runtime/rhai-bindings/src/
 
 ## Definition of Done
 
-- [ ] Script de UI sem `NETWORK_FETCH` que tenta buscar → `EngineError::PermissionDenied`.
-- [ ] Um adaptador de cascata `.rhai` muda uma propriedade computada e a _golden_ correspondente muda, com capability
+- [x] Script de UI sem `NETWORK_FETCH` que tenta buscar → `EngineError::PermissionDenied`.
+- [x] Um adaptador de cascata `.rhai` muda uma propriedade computada e a _golden_ correspondente muda, com capability
       limitada a `DOM_READ | GRAPHICS_DRAW`.
-- [ ] O mesmo adaptador em pânico cai no adaptador Rust embutido e a página ainda renderiza.
-- [ ] Matriz de injeção de pânico cobre `WINDOW_BINDINGS` e `NETWORK_BINDINGS`, além do que já cobria antes.
-- [ ] `cargo bench -p rhai-runtime --bench hook_overhead` roda e produz uma _baseline_ commitada.
-- [ ] `cargo test --workspace` continua todo verde.
+- [x] O mesmo adaptador em pânico cai no adaptador Rust embutido e a página ainda renderiza.
+- [x] Matriz de injeção de pânico cobre `WINDOW_BINDINGS` e `NETWORK_BINDINGS`, além do que já cobria antes.
+- [x] `cargo bench -p rhai-runtime --bench hook_overhead` roda e produz uma _baseline_ commitada.
+- [x] `cargo test --workspace` continua todo verde.
 
 ## Convenção de commit
 

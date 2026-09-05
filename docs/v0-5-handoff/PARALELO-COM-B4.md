@@ -1,5 +1,17 @@
 # O que pode rodar agora, em paralelo com B4
 
+> [!NOTE] **Status da Estratégia de Despacho**: **Superado e Concluído**. Todas as frentes que estavam bloqueadas ou
+> paralelizadas em torno de B4 foram entregues e verificadas:
+>
+> - **B4** entregue em `1353647`
+> - **B5** entregue em `fc7d55e` (Faixa 1)
+> - **X** entregue em `3558e4c` (Faixa 2)
+> - **I2** entregue em `9bb8ae3` (paralelo I2 + M executado com sucesso)
+> - **M integral** entregue em `067e87b` (Faixa 3 integral, incluindo `css_bindings.rs`)
+>
+> O gargalo foi inteiramente superado. A campanha avança para a Fase **I4** (`06-i4-alloy-url.md`), seguida de **P**
+> (`07-p-final-gates.md`). O texto abaixo é mantido como registro histórico do plano de despacho paralelo original.
+
 `01-b4-box-model-inline-flexbox.md` é o único arquivo desta pasta que pede uma IA mais forte dedicada só a ele — o
 algoritmo de Flexbox, os testes de retângulo e a correção do `pipeline.rs` são exatamente as três tarefas 🔴/🟡 da
 [triagem](00-triagem-despacho.md). Enquanto isso roda, quatro pedaços do backlog **não tocam nenhum arquivo do WIP de
