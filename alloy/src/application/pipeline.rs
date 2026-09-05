@@ -11,18 +11,20 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use css::{
-    BlockLayout, CascadeResolver, LayoutEngine, StyleSheetSet, UaCascade, ViewportConstraints,
+    BlockLayout, CascadeResolver, FontBackedMeasurer, LayoutEngine, StyleSheetSet, TextMeasurer,
+    UaCascade, ViewportConstraints,
 };
 use graphics::{
-    Au, DisplayListBuilder, Framebuffer, ImageId, ImageProvider, InMemoryImageProvider,
-    RenderBackend, SoftwareCpuBackend, SurfaceSize, SyntheticFontProvider,
+    Au, DisplayListBuilder, FontProvider, Framebuffer, GenericFamily, ImageId, ImageProvider,
+    InMemoryImageProvider, RenderBackend, SoftwareCpuBackend, SurfaceSize, SyntheticFontProvider,
+    SystemFontProvider,
 };
 
 use crate::application::paint::{DEFAULT_FONT, paint_box_tree};
 use crate::error::AlloyError;
 
-/// The font size used for synthetic font registration in headless rendering (16px).
-const DEFAULT_FONT_SIZE: Au = Au::from_raw(16 * graphics::AU_PER_PX);
+/// The font size used for font registration in rendering (16px).
+pub const DEFAULT_FONT_SIZE: Au = Au::from_raw(16 * graphics::AU_PER_PX);
 
 /// Sizing and layout configuration for headless HTML rendering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,7 +63,26 @@ impl Default for RenderOptions {
     }
 }
 
-/// Renders HTML source text to a PNG byte vector using the specified options.
+/// Resolves the default font provider for runtime rendering.
+///
+/// Attempts to resolve a system sans-serif font, falling back to
+/// [`SyntheticFontProvider`] if no candidate font exists or parses on the host
+/// system.
+#[must_use]
+pub fn default_runtime_font_provider() -> Arc<dyn FontProvider> {
+    match SystemFontProvider::resolve(GenericFamily::SansSerif, DEFAULT_FONT, DEFAULT_FONT_SIZE) {
+        Ok(system) => Arc::new(system),
+        Err(err) => {
+            tracing::warn!(
+                %err,
+                "could not resolve system sans-serif font; falling back to synthetic font provider"
+            );
+            Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE))
+        }
+    }
+}
+
+/// Renders HTML source text to a PNG byte vector using the specified options and synthetic font.
 pub fn render_html_to_png(html_str: &str, options: &RenderOptions) -> Result<Vec<u8>, AlloyError> {
     let surface_size = options.surface_size()?;
     let dom_tree = html::parse(html_str)?;
@@ -74,14 +95,31 @@ pub fn render_html_to_png(html_str: &str, options: &RenderOptions) -> Result<Vec
     Ok(graphics::png::encode(&framebuffer))
 }
 
+/// Renders HTML source text to a PNG byte vector using a custom [`FontProvider`].
+pub fn render_html_with_font_provider(
+    html_str: &str,
+    options: &RenderOptions,
+    font_provider: Arc<dyn FontProvider>,
+) -> Result<Vec<u8>, AlloyError> {
+    let surface_size = options.surface_size()?;
+    let dom_tree = html::parse(html_str)?;
+    let framebuffer = render_dom_with_font_provider(
+        &dom_tree,
+        StyleSheetSet::default(),
+        &BTreeMap::new(),
+        surface_size,
+        font_provider,
+    )?;
+    Ok(graphics::png::encode(&framebuffer))
+}
+
 /// Convenience function to render HTML with the given dimensions to PNG bytes.
 pub fn run_render(source_html: &str, width: u32, height: u32) -> Result<Vec<u8>, AlloyError> {
     let options = RenderOptions::new(width, height);
     render_html_to_png(source_html, &options)
 }
 
-/// Renders an already-parsed document: snapshot, cascade, layout, paint,
-/// rasterize.
+/// Renders an already-parsed document using the deterministic [`SyntheticFontProvider`].
 ///
 /// `extra_sheets` is absorbed into the document's own `<style>`/`style=`
 /// rules at `Origin::Author` precedence — how the v0.5 I4 event loop feeds in
@@ -99,15 +137,59 @@ pub fn render_dom(
     images: &BTreeMap<ImageId, Framebuffer>,
     surface_size: SurfaceSize,
 ) -> Result<Framebuffer, AlloyError> {
+    let font_provider =
+        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    render_dom_internal(
+        dom_tree,
+        extra_sheets,
+        images,
+        surface_size,
+        font_provider,
+        false,
+    )
+}
+
+/// Renders an already-parsed document with a specified [`FontProvider`] and real font metrics.
+pub fn render_dom_with_font_provider(
+    dom_tree: &dom::DomTree,
+    extra_sheets: StyleSheetSet,
+    images: &BTreeMap<ImageId, Framebuffer>,
+    surface_size: SurfaceSize,
+    font_provider: Arc<dyn FontProvider>,
+) -> Result<Framebuffer, AlloyError> {
+    render_dom_internal(
+        dom_tree,
+        extra_sheets,
+        images,
+        surface_size,
+        font_provider,
+        true,
+    )
+}
+
+fn render_dom_internal(
+    dom_tree: &dom::DomTree,
+    extra_sheets: StyleSheetSet,
+    images: &BTreeMap<ImageId, Framebuffer>,
+    surface_size: SurfaceSize,
+    font_provider: Arc<dyn FontProvider>,
+    use_font_measurer: bool,
+) -> Result<Framebuffer, AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
     sheets.absorb(extra_sheets);
     let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
     let constraints = make_constraints(surface_size)?;
-    let box_tree = BlockLayout::new().layout(&styled_tree, &constraints)?;
+    let box_tree = if use_font_measurer {
+        let measurer: Arc<dyn TextMeasurer> = Arc::new(FontBackedMeasurer::new(
+            Arc::clone(&font_provider),
+            DEFAULT_FONT,
+        ));
+        BlockLayout::with_measurer(measurer).layout(&styled_tree, &constraints)?
+    } else {
+        BlockLayout::new().layout(&styled_tree, &constraints)?
+    };
 
-    let font_provider =
-        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
     let mut builder = DisplayListBuilder::new();
     paint_box_tree(
         &box_tree,

@@ -20,7 +20,10 @@ use std::sync::Arc;
 
 use alloy::error::AlloyError;
 use alloy::logging;
-use alloy::{RenderOptions, initial_window_attributes, render_html_to_png, run_browser};
+use alloy::{
+    RenderOptions, default_runtime_font_provider, initial_window_attributes,
+    render_html_with_font_provider, run_browser,
+};
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use dom::serialize_html;
 use engine::profiles;
@@ -140,7 +143,8 @@ fn run_render_command(args: &RenderArgs) -> Result<(), AlloyError> {
     })?;
 
     let options = RenderOptions::new(args.width, args.height);
-    let png_bytes = render_html_to_png(&html, &options)?;
+    let font_provider = default_runtime_font_provider();
+    let png_bytes = render_html_with_font_provider(&html, &options, font_provider)?;
 
     std::fs::write(&args.output, &png_bytes).map_err(|source| AlloyError::OutputWrite {
         path: args.output.clone(),
