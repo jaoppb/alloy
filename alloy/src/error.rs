@@ -71,4 +71,10 @@ pub enum AlloyError {
     /// A fetched image's bytes did not decode as PNG (v0.5 Phase I4).
     #[error("could not decode fetched image: {0}")]
     ImageDecode(#[from] graphics::png::PngProblem),
+
+    /// A subresource fetch completed but the server answered with a non-`2xx`
+    /// status (v0.5 Phase I4). An error-page body must never be handed to the
+    /// CSS parser or the PNG decoder as if it were the resource.
+    #[error("subresource {url} returned HTTP {status}")]
+    SubresourceStatus { url: String, status: u16 },
 }
