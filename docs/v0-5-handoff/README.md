@@ -8,6 +8,9 @@ conversa.
 
 **Antes de abrir qualquer arquivo de fase**, leia:
 
+- [`00-triagem-despacho.md`](00-triagem-despacho.md) — separa o que é mecânico o bastante para despachar a outra IA (ou
+  a uma sessão sem contexto nenhum da campanha) e conferir só pelo `Definition of Done`, do que exige alguém
+  acompanhando a decisão de design enquanto ela é tomada.
 - `docs/reports/V0-5-PROGRESSO-E-PENDENCIAS.md` — o estado exato de tudo que já foi verificado nesta sessão, com
   evidência `arquivo:linha`.
 - O `CLAUDE.md` da raiz do repositório — arquitetura, Object Calisthenics, comandos, convenções de commit.
@@ -18,16 +21,16 @@ trabalhar numa fase — cada arquivo aqui já extrai e atualiza a seção releva
 
 ## Estado em uma tabela
 
-| Fase                              | Estado                                                           | Arquivo desta pasta                                                      | Commit                     |
-| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------- |
-| 0, B0, C0, B1, C1, B2, C2, EE, B3 | ✅ entregues e verificadas (`just gate`)                         | — (ver relatório de progresso)                                           | `95c88bb` … `e07971d`      |
-| **B4**                            | 🟡 em andamento — ~3.100 linhas escritas, `core/css` não compila | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | nenhum (WIP não commitado) |
-| B5                                | ⏳ não iniciada                                                  | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | —                          |
-| X                                 | ⏳ não iniciada                                                  | [`03-x-image-support.md`](03-x-image-support.md)                         | —                          |
-| I2                                | ⏳ não iniciada                                                  | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | —                          |
-| M                                 | ⏳ não iniciada                                                  | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | —                          |
-| I4                                | ⏳ não iniciada                                                  | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                          |
-| P                                 | ⏳ não iniciada                                                  | [`07-p-final-gates.md`](07-p-final-gates.md)                             | —                          |
+| Fase                              | Estado                                                           | Arquivo desta pasta                                                      | Commit                     | Despacho                                             |
+| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------- | ---------------------------------------------------- |
+| 0, B0, C0, B1, C1, B2, C2, EE, B3 | ✅ entregues e verificadas (`just gate`)                         | — (ver relatório de progresso)                                           | `95c88bb` … `e07971d`      | —                                                    |
+| **B4**                            | 🟡 em andamento — ~3.100 linhas escritas, `core/css` não compila | [`01-b4-box-model-inline-flexbox.md`](01-b4-box-model-inline-flexbox.md) | nenhum (WIP não commitado) | misto 🟢🟡🔴 — ver [triagem](00-triagem-despacho.md) |
+| B5                                | ⏳ não iniciada                                                  | [`02-b5-html-tokenizer.md`](02-b5-html-tokenizer.md)                     | —                          | 🟡 médio                                             |
+| X                                 | ⏳ não iniciada                                                  | [`03-x-image-support.md`](03-x-image-support.md)                         | —                          | 🟢 leve                                              |
+| I2                                | ⏳ não iniciada                                                  | [`04-i2-headless-pipeline.md`](04-i2-headless-pipeline.md)               | —                          | 🟢 leve                                              |
+| M                                 | ⏳ não iniciada                                                  | [`05-m-muscle-scripting.md`](05-m-muscle-scripting.md)                   | —                          | 🟢 leve, com uma releitura de capability             |
+| I4                                | ⏳ não iniciada                                                  | [`06-i4-alloy-url.md`](06-i4-alloy-url.md)                               | —                          | 🔴 pesado                                            |
+| P                                 | ⏳ não iniciada                                                  | [`07-p-final-gates.md`](07-p-final-gates.md)                             | —                          | 🟢 leve                                              |
 
 ## Grafo de dependência do que resta
 
