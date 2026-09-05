@@ -9,6 +9,7 @@
 use css::{CascadeResolver, CssColor, StyleSheetSet};
 use dom::{DomTree, TagName};
 use engine::{Capability, CapabilitySet, EngineError, RuntimeEngine, profiles};
+use graphics::{Color, DisplayListBuilder, PxRect, RenderBackend, SoftwareCpuBackend, SurfaceSize};
 use rhai_bindings::{
     DEFAULT_CASCADE_SCRIPT, ScriptCascadeResolver, SnapshotHandle, StyledTreeHandle,
     register_css_bindings,
@@ -56,6 +57,53 @@ fn script_cascade_resolver_alters_computed_style() {
         CssColor::rgb(255, 0, 0),
         "cascade.rhai should override h1 color to red"
     );
+}
+
+#[test]
+fn script_cascade_resolver_changes_rendered_pixels_under_graphics_draw() {
+    let engine = RhaiEngine::new();
+    let resolver = ScriptCascadeResolver::new(engine, DEFAULT_CASCADE_SCRIPT);
+
+    let dom = sample_dom();
+    let snapshot = css::snapshot(&dom, dom.document());
+    let sheets = StyleSheetSet::new();
+
+    let styled_tree = resolver.resolve(&snapshot, &sheets).expect("resolve");
+
+    let h1_id = snapshot
+        .nodes_in_document_order()
+        .find(|id| {
+            snapshot
+                .node(*id)
+                .and_then(css::NodeRef::tag)
+                .is_some_and(|tag| tag == "h1")
+        })
+        .expect("h1 node found");
+
+    let h1_styled = styled_tree.node(h1_id).expect("h1 styled node");
+    let color = h1_styled.style().color().to_graphics();
+    assert_eq!(color, Color::rgb(255, 0, 0));
+
+    // Render a 10x10 rectangle with the computed color to prove pixels change on screen
+    let mut builder = DisplayListBuilder::new();
+    builder
+        .draw_rect(PxRect::from_px(0.0, 0.0, 10.0, 10.0), color)
+        .expect("draw_rect succeeds");
+    let display_list = builder.build().expect("build succeeds");
+
+    let mut backend = SoftwareCpuBackend::new();
+    let surface_size = SurfaceSize::new(10, 10).expect("valid size");
+    backend.begin_frame(surface_size).expect("begin_frame");
+    backend.submit(&display_list).expect("submit");
+    backend.end_frame().expect("end_frame");
+    let frame = backend.read_back().expect("read_back");
+
+    // All rendered pixels must be the overridden color (red)
+    for y in 0..10 {
+        for x in 0..10 {
+            assert_eq!(frame.pixel(x, y), Some(Color::rgb(255, 0, 0)));
+        }
+    }
 }
 
 #[test]
