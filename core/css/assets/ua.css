@@ -42,37 +42,43 @@ a {
 h1 {
 	display: block;
 	font-size: 2em;
+	font-weight: bold;
 	margin: 0.67em 0;
 }
 
 h2 {
 	display: block;
 	font-size: 1.5em;
-	margin: 0.67em 0;
+	font-weight: bold;
+	margin: 0.83em 0;
 }
 
 h3 {
 	display: block;
 	font-size: 1.17em;
-	margin: 0.67em 0;
+	font-weight: bold;
+	margin: 1em 0;
 }
 
 h4 {
 	display: block;
 	font-size: 1em;
-	margin: 0.67em 0;
+	font-weight: bold;
+	margin: 1.33em 0;
 }
 
 h5 {
 	display: block;
 	font-size: 0.83em;
-	margin: 0.67em 0;
+	font-weight: bold;
+	margin: 1.67em 0;
 }
 
 h6 {
 	display: block;
 	font-size: 0.67em;
-	margin: 0.67em 0;
+	font-weight: bold;
+	margin: 2.33em 0;
 }
 
 p {
@@ -88,4 +94,58 @@ body {
 blockquote {
 	display: block;
 	margin: 16px 40px;
+}
+
+pre {
+	display: block;
+	font-family: monospace;
+	white-space: pre;
+	margin: 1em 0;
+}
+
+ol,
+ul {
+	display: block;
+	margin: 1em 0;
+	padding-left: 40px;
+}
+
+li {
+	display: list-item;
+}
+
+dt {
+	display: block;
+	font-weight: bold;
+}
+
+dd {
+	display: block;
+	margin-left: 40px;
+}
+
+/*
+ * Obsolete presentational element — kept for web-compat (HTML §13 Obsolete).
+ * `<center>` is equivalent to a block with `text-align: center` (issue #4).
+ */
+center {
+	display: block;
+	text-align: center;
+}
+
+/*
+ * Form controls — Tier 3 (v0.6) placeholder (issues #2 and #3).
+ *
+ * A full form implementation (replaced element rasterization, focus,
+ * constraint validation) is out of scope for v0.5. These UA rules give
+ * `<input>` and `<button>` inline-block display so the author's own sizing CSS
+ * (`width`, `height`, `border`) takes effect. Without them the controls fall
+ * through to `display: block` (the ComputedStyle initial) and layout treats
+ * them as anonymous block containers, which swallows the author's sizing.
+ */
+input,
+button,
+select,
+textarea {
+	display: inline-block;
 }
