@@ -22,41 +22,42 @@ the runner — all three, or CI is red.
 The CSS properties the parser accepts inside a declaration block and the cascade resolves to a computed value. A
 declaration naming anything else is dropped on its own, with a note, leaving the rest of its rule intact.
 
-| token                 | since | notes                                                                                              |
-| --------------------- | ----- | -------------------------------------------------------------------------------------------------- |
-| `display`             | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4              |
-| `color`               | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)               |
-| `background-color`    | B1    | not inherited; same value grammar as `color`                                                       |
-| `margin`              | B1    | the 1–4 component shorthand (CSS Box Model §8.3)                                                   |
-| `margin-top`          | B1    | longhand; overwrites only its own side                                                             |
-| `margin-right`        | B1    | longhand                                                                                           |
-| `margin-bottom`       | B1    | longhand                                                                                           |
-| `margin-left`         | B1    | longhand                                                                                           |
-| `padding`             | B1    | the 1–4 component shorthand                                                                        |
-| `padding-top`         | B1    | longhand                                                                                           |
-| `padding-right`       | B1    | longhand                                                                                           |
-| `padding-bottom`      | B1    | longhand                                                                                           |
-| `padding-left`        | B1    | longhand                                                                                           |
-| `font-size`           | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                                  |
-| `border-width`        | B4    | the 1–4 component shorthand; `border-style` / `border-color` stay out of the cut                   |
-| `width`               | B4    | `Sizing::Auto` or a `Length`; the flow content width when auto                                     |
-| `height`              | B4    | `Sizing::Auto` or a `Length`; a `%` against an indefinite container computes to auto               |
-| `box-sizing`          | B4    | `content-box` (initial) / `border-box` (CSS Box Sizing L3 §5)                                      |
-| `text-align`          | B4    | inherited; `left` (initial) / `right` / `center` / `justify`                                       |
-| `white-space`         | B4    | not inherited; `normal` (initial) / `pre` / `nowrap`                                               |
-| `border-top-width`    | B4    | longhand; overwrites only its own side                                                             |
-| `border-right-width`  | B4    | longhand                                                                                           |
-| `border-bottom-width` | B4    | longhand                                                                                           |
-| `border-left-width`   | B4    | longhand                                                                                           |
-| `flex-direction`      | B4    | `row` (initial) / `row-reverse` / `column` / `column-reverse`                                      |
-| `flex-wrap`           | B4    | `nowrap` (initial) / `wrap` / `wrap-reverse` — see the Flexbox simplifications below               |
-| `justify-content`     | B4    | `flex-start` (initial) / `flex-end` / `center` / `space-between` / `space-around` / `space-evenly` |
-| `align-items`         | B4    | `stretch` (initial) / `flex-start` / `flex-end` / `center` / `baseline`                            |
-| `align-content`       | B4    | `stretch` (initial) / `flex-start` / `flex-end` / `center` / `space-between` / `space-around`      |
-| `align-self`          | B4    | `auto` (initial, defers to `align-items`) / same keywords as `align-items`                         |
-| `flex-grow`           | B4    | a non-negative number; initial `0`                                                                 |
-| `flex-shrink`         | B4    | a non-negative number; initial `1`                                                                 |
-| `flex-basis`          | B4    | `auto` (initial) or a `Sizing` length/percentage                                                   |
+| token                 | since | notes                                                                                                                      |
+| --------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------- |
+| `display`             | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4                                      |
+| `color`               | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)                                       |
+| `background-color`    | B1    | not inherited; same value grammar as `color`                                                                               |
+| `margin`              | B1    | the 1–4 component shorthand (CSS Box Model §8.3)                                                                           |
+| `margin-top`          | B1    | longhand; overwrites only its own side                                                                                     |
+| `margin-right`        | B1    | longhand                                                                                                                   |
+| `margin-bottom`       | B1    | longhand                                                                                                                   |
+| `margin-left`         | B1    | longhand                                                                                                                   |
+| `padding`             | B1    | the 1–4 component shorthand                                                                                                |
+| `padding-top`         | B1    | longhand                                                                                                                   |
+| `padding-right`       | B1    | longhand                                                                                                                   |
+| `padding-bottom`      | B1    | longhand                                                                                                                   |
+| `padding-left`        | B1    | longhand                                                                                                                   |
+| `font-size`           | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                                                          |
+| `font-family`         | fonts | inherited; comma list of quoted / bare names and `serif` / `sans-serif` / `monospace` — see the font simplifications below |
+| `border-width`        | B4    | the 1–4 component shorthand; `border-style` / `border-color` stay out of the cut                                           |
+| `width`               | B4    | `Sizing::Auto` or a `Length`; the flow content width when auto                                                             |
+| `height`              | B4    | `Sizing::Auto` or a `Length`; a `%` against an indefinite container computes to auto                                       |
+| `box-sizing`          | B4    | `content-box` (initial) / `border-box` (CSS Box Sizing L3 §5)                                                              |
+| `text-align`          | B4    | inherited; `left` (initial) / `right` / `center` / `justify`                                                               |
+| `white-space`         | B4    | not inherited; `normal` (initial) / `pre` / `nowrap`                                                                       |
+| `border-top-width`    | B4    | longhand; overwrites only its own side                                                                                     |
+| `border-right-width`  | B4    | longhand                                                                                                                   |
+| `border-bottom-width` | B4    | longhand                                                                                                                   |
+| `border-left-width`   | B4    | longhand                                                                                                                   |
+| `flex-direction`      | B4    | `row` (initial) / `row-reverse` / `column` / `column-reverse`                                                              |
+| `flex-wrap`           | B4    | `nowrap` (initial) / `wrap` / `wrap-reverse` — see the Flexbox simplifications below                                       |
+| `justify-content`     | B4    | `flex-start` (initial) / `flex-end` / `center` / `space-between` / `space-around` / `space-evenly`                         |
+| `align-items`         | B4    | `stretch` (initial) / `flex-start` / `flex-end` / `center` / `baseline`                                                    |
+| `align-content`       | B4    | `stretch` (initial) / `flex-start` / `flex-end` / `center` / `space-between` / `space-around`                              |
+| `align-self`          | B4    | `auto` (initial, defers to `align-items`) / same keywords as `align-items`                                                 |
+| `flex-grow`           | B4    | a non-negative number; initial `0`                                                                                         |
+| `flex-shrink`         | B4    | a non-negative number; initial `1`                                                                                         |
+| `flex-basis`          | B4    | `auto` (initial) or a `Sizing` length/percentage                                                                           |
 
 Every property above also accepts the CSS-wide keywords `initial` and `inherit` (B2, CSS Cascade L4 §7.1): `initial`
 resets to the value `ComputedStyle::initial()` gives it, `inherit` copies the parent's computed value even for a
@@ -79,6 +80,17 @@ shrinkage:
 | no first-baseline-of-line algorithm                                                                    | `align-items: baseline` / `align-self: baseline` behave like `flex-start`                                                                                                          | v0.7        |
 | no shrink-to-fit (min/max-content) intrinsic sizing pass                                               | an item with both `flex-basis: auto` and an `auto` own main-size property gets a hypothetical main size of `0` instead of a content-based measurement                              | v0.7        |
 | same missing shrink-to-fit pass, on the cross axis                                                     | in a `column` container, a non-`stretch` item with an `auto` own width still fills the cross axis exactly as `stretch` would; an item with an explicit `width` positions correctly | v0.7        |
+
+### Font simplifications (fonts increment)
+
+`font-family` is a `Copy` field of `ComputedStyle` (`core/css/src/domain/computed/font.rs`), which is copied per node
+during layout, so the list is fixed-capacity rather than a `Vec`. Two cuts, silent (the value is parsed only at cascade
+time, which has no `ParseNote` channel) and declared here in the same spirit as the Flexbox cuts:
+
+| gap                                      | behaviour instead                                                                                                                                                 | tracked for |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| the list has no length limit in CSS      | at most `FontFamilyList::CAPACITY` (3) families are kept; a real chain ends in a generic and the provider default is a generic, so the dropped tail is equivalent | v0.7        |
+| a family name has no length limit in CSS | a name longer than `FamilyName::CAPACITY` (23) bytes is truncated at a UTF-8 boundary                                                                             | v0.7        |
 
 ## Selectors
 
