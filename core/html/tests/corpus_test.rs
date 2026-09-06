@@ -127,4 +127,3 @@ fn malformed_attribute_in_real_world_tag_is_skipped_gracefully() {
         );
     }
 }
-

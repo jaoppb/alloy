@@ -99,7 +99,8 @@ impl Token {
 impl fmt::Display for Token {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Ident(name) | Self::Url(name) => formatter.write_str(name),
+            Self::Ident(name) => formatter.write_str(name),
+            Self::Url(name) => write!(formatter, "url({name})"),
             Self::AtKeyword(name) => write!(formatter, "@{name}"),
             Self::Hash(name) => write!(formatter, "#{name}"),
             Self::QuotedString(text) => write!(formatter, "\"{text}\""),
