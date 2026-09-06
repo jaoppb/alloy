@@ -244,6 +244,84 @@ fn named_color(name: &str) -> Option<CssColor> {
     }
 }
 
+/// The `background` shorthand (CSS Backgrounds & Borders L3 §3.10), narrowed to
+/// the single component this cut resolves: the background **colour**. `url()`
+/// layers, `linear-gradient()` and the position / size / repeat / attachment
+/// keywords are scanned past; `none` clears the colour to `transparent`.
+///
+/// `None` when the value names no colour and is not `none`, so a previous
+/// `background-color` stands rather than being silently cleared. The image
+/// itself is not fetched — a v0.7 line in `tests/data/MANIFEST.md`.
+#[must_use]
+pub(crate) fn parse_background_shorthand(tokens: &[Token]) -> Option<CssColor> {
+    first_color(tokens).or_else(|| names_keyword(tokens, "none").then_some(CssColor::TRANSPARENT))
+}
+
+/// The `border` (and `border-top` / … ) shorthand (same spec, §4.3), narrowed
+/// to the one component that is geometry: the border **width**. A
+/// `<line-style>` keyword and a colour are scanned past; `none` and `0` mean no
+/// border.
+///
+/// `None` when the value carries no width and is not `none` — CSS would compute
+/// `medium` there, which this cut has no representation for.
+#[must_use]
+pub(crate) fn parse_border_shorthand(tokens: &[Token]) -> Option<Length> {
+    if names_keyword(tokens, "none") {
+        return Some(Length::ZERO);
+    }
+    tokens.iter().find_map(length_from_token)
+}
+
+/// Whether `tokens` contains the bare identifier `keyword`, case-insensitively.
+fn names_keyword(tokens: &[Token], keyword: &str) -> bool {
+    tokens
+        .iter()
+        .any(|token| matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case(keyword)))
+}
+
+/// The first run of `tokens` that reads as a colour — one `#hex` / name token,
+/// or a whole `rgb()` / `rgba()` call — scanning past everything else.
+fn first_color(tokens: &[Token]) -> Option<CssColor> {
+    let mut rest = tokens;
+    while let Some(head) = rest.first() {
+        let width = colour_run_len(head, rest).clamp(1, rest.len());
+        let (candidate, tail) = rest.split_at(width);
+        if let Some(color) = parse_color(candidate) {
+            return Some(color);
+        }
+        rest = tail;
+    }
+    None
+}
+
+/// How many tokens the colour candidate at `head` spans: a function call runs
+/// through its matching `)`, anything else is a single token.
+fn colour_run_len(head: &Token, tokens: &[Token]) -> usize {
+    match head {
+        Token::Function(_) => function_span(tokens),
+        _ => 1,
+    }
+}
+
+fn function_span(tokens: &[Token]) -> usize {
+    let mut depth: usize = 0;
+    for (index, token) in tokens.iter().enumerate() {
+        depth = paren_depth(depth, token);
+        if depth == 0 {
+            return index.saturating_add(1);
+        }
+    }
+    tokens.len()
+}
+
+const fn paren_depth(depth: usize, token: &Token) -> usize {
+    match token {
+        Token::Function(_) | Token::OpenParenthesis => depth.saturating_add(1),
+        Token::CloseParenthesis => depth.saturating_sub(1),
+        _ => depth,
+    }
+}
+
 /// The `display` keywords [`Display`] carries.
 #[must_use]
 pub(crate) fn parse_display(tokens: &[Token]) -> Option<Display> {

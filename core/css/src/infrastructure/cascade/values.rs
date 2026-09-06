@@ -22,8 +22,9 @@ use crate::domain::length::Length;
 use crate::infrastructure::cascade::{flex_values, font_values};
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
-    parse_box_sizing, parse_color, parse_display, parse_length, parse_length_edges, parse_sizing,
-    parse_text_align, parse_white_space, value_tokens,
+    parse_background_shorthand, parse_border_shorthand, parse_box_sizing, parse_color,
+    parse_display, parse_length, parse_length_edges, parse_sizing, parse_text_align,
+    parse_white_space, value_tokens,
 };
 
 /// Which box property a `-top` / `-right` / `-bottom` / `-left` longhand edits.
@@ -88,9 +89,14 @@ fn apply_property_value(
         "display" => parse_display(tokens).map(|value| style.with_display(value)),
         "color" => parse_color(tokens).map(|value| style.with_color(value)),
         "background-color" => parse_color(tokens).map(|value| style.with_background_color(value)),
+        "background" => {
+            parse_background_shorthand(tokens).map(|value| style.with_background_color(value))
+        }
         "font-size" => parse_length(tokens).map(|value| style.with_font_size(value)),
         "margin" => parse_length_edges(tokens).map(|value| style.with_margin(value)),
         "border-width" => parse_length_edges(tokens).map(|value| style.with_border(value)),
+        "border" => parse_border_shorthand(tokens)
+            .map(|value| style.with_border(LengthEdges::uniform(value))),
         "padding" => parse_length_edges(tokens).map(|value| style.with_padding(value)),
         "width" => parse_sizing(tokens).map(|value| style.with_width(value)),
         "height" => parse_sizing(tokens).map(|value| style.with_height(value)),
@@ -216,9 +222,11 @@ fn reset_to_initial(style: ComputedStyle, property: &str) -> Option<ComputedStyl
     match property {
         "display" => Some(style.with_display(initial.display())),
         "color" => Some(style.with_color(initial.color())),
-        "background-color" => Some(style.with_background_color(initial.background_color())),
+        "background-color" | "background" => {
+            Some(style.with_background_color(initial.background_color()))
+        }
         "margin" => Some(style.with_margin(initial.margin())),
-        "border-width" => Some(style.with_border(initial.border())),
+        "border-width" | "border" => Some(style.with_border(initial.border())),
         "padding" => Some(style.with_padding(initial.padding())),
         "font-size" => Some(style.with_font_size(initial.font_size())),
         "width" => Some(style.with_width(initial.width())),
@@ -265,9 +273,11 @@ fn copy_property(
     match property {
         "display" => Some(style.with_display(parent.display())),
         "color" => Some(style.with_color(parent.color())),
-        "background-color" => Some(style.with_background_color(parent.background_color())),
+        "background-color" | "background" => {
+            Some(style.with_background_color(parent.background_color()))
+        }
         "margin" => Some(style.with_margin(parent.margin())),
-        "border-width" => Some(style.with_border(parent.border())),
+        "border-width" | "border" => Some(style.with_border(parent.border())),
         "padding" => Some(style.with_padding(parent.padding())),
         "font-size" => Some(style.with_font_size(parent.font_size())),
         "width" => Some(style.with_width(parent.width())),

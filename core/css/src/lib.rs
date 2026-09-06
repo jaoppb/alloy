@@ -69,7 +69,14 @@ pub mod infrastructure;
 /// `font_family` (a [`FontFamilyList`]). A new field a consumer could observe,
 /// not a value change — nothing here breaks existing `match` arms. Post-freeze,
 /// so `PRD-007` carries the migration note.
-pub const PORT_SCHEMA_VERSION: u32 = 4;
+///
+/// `5` widens the parse surface for the v0.7 CSS work, brought forward for the
+/// "unstyled real sites" follow-up: the `background` and `border` **shorthands**
+/// are now accepted, each narrowed to the one component this cut can act on
+/// (`background` → its colour, `border` → its width). No new `ComputedStyle`
+/// field — the same computed values a producer already reads, populated from
+/// more inputs. Post-freeze, so `PRD-007` carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 5;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -84,11 +91,15 @@ pub const PORT_SCHEMA_VERSION: u32 = 4;
 /// add six shorthands/singulars and the four `border-*-width` longhands
 /// (`border-style`/`border-color` stay outside the cut — only a border's width
 /// is geometry), and Flexbox adds its nine properties. The v0.5 fonts increment
-/// adds `font-family` (34).
-pub const SUPPORTED_PROPERTIES: [&str; 34] = [
+/// adds `font-family` (34). The "unstyled real sites" follow-up adds the
+/// `background` and `border` shorthands, each narrowed to one component — colour
+/// and width respectively (36).
+pub const SUPPORTED_PROPERTIES: [&str; 36] = [
     "display",
     "color",
     "background-color",
+    "background",
+    "border",
     "margin",
     "margin-top",
     "margin-right",

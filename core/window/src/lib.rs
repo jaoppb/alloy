@@ -71,7 +71,11 @@ pub mod infrastructure;
 /// `ADR-0011` item 3. Bumped on any change a backend or a caller could
 /// notice; **frozen at I4**, after which a change also needs a migration note
 /// in `PRD-010`.
-pub const PORT_SCHEMA_VERSION: u32 = 1;
+///
+/// `1 -> 2`: `WindowSystem` gained `request_redraw` — the event loop needs an
+/// explicit repaint signal so a Wayland compositor that dropped the first
+/// present still gets the frame, and so expose/occlusion redraws are served.
+pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 pub use application::conformance;
 pub use application::{Presenter, PumpStatus, WindowSystem};
