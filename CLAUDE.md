@@ -58,7 +58,9 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   RustCrypto alternative NO-GO — `docs/reports/SPIKE-C0-TLS-PROVIDER.md`), `HttpTransport`/`RequestPolicy` ports
   (`PRD-009`). `network::PORT_SCHEMA_VERSION = 1`, **not yet frozen** — freezes at `I4`.
 - **C2 — `core/window`**: `winit`+`softbuffer` adapter, `WindowSystem`/`Presenter` ports (`PRD-010`), headless reference
-  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 1`, **not yet frozen**.
+  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 2` (`1→2`:
+  `WindowSystem::request_redraw` added during I4 for the blank-window / Wayland-lost-first-present fix —
+  `docs/reports/DIAGNOSTICO-JANELA-BRANCA-WAYLAND.md`), **not yet frozen**.
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
 - **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;

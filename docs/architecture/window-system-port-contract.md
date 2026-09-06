@@ -8,12 +8,12 @@ document is its contract record: the state of all seven mandatory items at the `
 | Item | Contract requirement                                                      | State                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-010` §2 (variation model: `WindowSystem`/`Presenter` each independently replaceable; threat model: no attacker-controlled bytes on this seam — the concern is misuse ordering, not hostile input, `ADR-0018` row 3)                                                                                                                                                                                                                                                                   |
-| 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ Both `WindowSystem` and `Presenter` are object-safe from the start — no generic method, no associated type, every signature speaks only this crate's own boundary types. No companion needed, same shape as `graphics::RenderBackend`/`network::HttpTransport`                                                                                                                                                                                                                             |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `WindowEvent`, `FrameView`, `WindowAttributes`, `WindowError`, … all domain-owned in `core/window`, `#[non_exhaustive]`; `window::PORT_SCHEMA_VERSION = 1`, frozen — see item 7                                                                                                                                                                                                                                                                                                            |
+| 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ Both `WindowSystem` and `Presenter` are object-safe from the start — no generic method, no associated type, every signature speaks only this crate's own boundary types (`create_window`, `pump_events`, `request_redraw`, `present`). No companion needed, same shape as `graphics::RenderBackend`/`network::HttpTransport`                                                                                                                                                               |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `WindowEvent`, `FrameView`, `WindowAttributes`, `WindowError`, … all domain-owned in `core/window`, `#[non_exhaustive]`; `window::PORT_SCHEMA_VERSION = 2` (`1 → 2`: `WindowSystem::request_redraw` added — see item 7 and §4)                                                                                                                                                                                                                                                             |
 | 4    | Exactly one typed error, source location                                  | ✅ `WindowError`, `#[non_exhaustive]`, one `thiserror` enum; every variant carries the `WindowOperation` attempted, and every variant tied to an existing window carries its `WindowId` — the location metadata for this port                                                                                                                                                                                                                                                                 |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `window::conformance::run_window_suite`; `HeadlessWindowSystem` + `RecordingPresenter` (reference) and `WinitSystem` + `SoftbufferPresenter` (real, feature `winit-system`, default-on) both pass it. `cargo test -p window --no-default-features` links neither `winit` nor `softbuffer` at all — the `layering` CI job holds this. `alloy/tests/e2e_golden.rs` additionally proves `HeadlessWindowSystem`/`RecordingPresenter` drive the real `alloy::run_browser_until` loop end to end |
-| 7    | Frozen-API milestone                                                      | ✅ **Frozen at `I4`.** `window::PORT_SCHEMA_VERSION = 1` is that surface. Any future boundary change bumps it and adds a row to §4's migration table below                                                                                                                                                                                                                                                                                                                                    |
+| 7    | Frozen-API milestone                                                      | ⏳ **Not yet frozen — `I4` has not merged to `main`.** `window::PORT_SCHEMA_VERSION = 2` is the current surface. The `1 → 2` bump (`request_redraw`) landed while I4 was still in progress; §4 records it. Freezes at the `I4` merge, after which a change also needs a `PRD-010` migration note                                                                                                                                                                                              |
 
 ---
 
@@ -22,8 +22,16 @@ document is its contract record: the state of all seven mandatory items at the `
 Neither trait needed a `dyn`-dispatch companion:
 
 - `WindowSystem::create_window(&mut self, attrs: &WindowAttributes) -> Result<WindowId, WindowError>` /
-  `WindowSystem::pump_events(&mut self, sink: &mut dyn FnMut(WindowEvent)) -> Result<PumpStatus, WindowError>`
+  `WindowSystem::pump_events(&mut self, sink: &mut dyn FnMut(WindowEvent)) -> Result<PumpStatus, WindowError>` /
+  `WindowSystem::request_redraw(&mut self)`
 - `Presenter::present(&mut self, frame: FrameView<'_>) -> Result<(), WindowError>`
+
+`request_redraw` is a command (Command–Query Separation): no return value, no failure channel, a silent no-op before any
+window exists. It asks the backend to deliver a `WindowEvent::RedrawRequested` on a following `pump_events`. It exists
+because a repaint signal cannot come only from content changes: a Wayland compositor can drop the first `present` onto a
+not-yet-configured surface, and expose/occlusion redraws have no other trigger. The event loop calls it after every
+frame it presents; `WinitSystem` forwards to `winit`'s `Window::request_redraw`, `HeadlessWindowSystem` enqueues a
+`RedrawRequested` for its next `pump_events`.
 
 Every parameter and return type is a concrete, `#[non_exhaustive]` boundary aggregate. `&mut dyn WindowSystem` and
 `&mut dyn Presenter` both compile and are exactly what `core/window/src/application/conformance.rs` takes.
@@ -46,9 +54,10 @@ keeps the two ports decoupled while still letting the CPU rasterizer's output re
 
 ## 4. Boundary-schema migrations (`window::PORT_SCHEMA_VERSION`)
 
-| Version | Change                                                                                                       | Adapter action |
-| ------- | ------------------------------------------------------------------------------------------------------------ | -------------- |
-| **1**   | Surface introduced in v0.5 Phase C2; frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`). | —              |
+| Version | Change                                                                                                                                                                                                                                                                                   | Adapter action                                                                                                    |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **1**   | Surface introduced in v0.5 Phase C2.                                                                                                                                                                                                                                                     | —                                                                                                                 |
+| **2**   | `WindowSystem::request_redraw(&mut self)` added — the event loop needs an explicit repaint signal so a Wayland compositor that dropped the first `present` still gets the frame, and so expose/occlusion redraws are served at all. Landed during v0.5 Phase I4, before the `I4` freeze. | Every `WindowSystem` impl adds the method. A backend with no discrete redraw request may implement it as a no-op. |
 
 ---
 
@@ -94,7 +103,9 @@ panic.
 
 - **Ordering safety**: calling `pump_events` before any `create_window` call has ever succeeded is a typed
   `WindowError::NoWindowYet`, never a panic and never a hang — pinned by
-  `check_pump_events_before_create_window_is_refused` in the conformance suite.
+  `check_pump_events_before_create_window_is_refused` in the conformance suite. `request_redraw` has no failure channel,
+  so the same premature call is a **silent no-op** instead — pinned by
+  `check_request_redraw_before_create_window_is_silent`.
 - **Creation failure**: a backend that cannot create a window at all (no display server, a headless CI runner) returns
   `WindowError::CreationFailed`, never a process abort. `HeadlessWindowSystem` exists precisely so CI can exercise this
   port with no real display.

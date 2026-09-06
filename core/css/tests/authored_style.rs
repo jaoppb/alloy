@@ -431,7 +431,7 @@ fn a_comma_group_applies_the_members_inside_the_cut_and_notes_the_rest() {
     let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("a paragraph");
     assert_eq!(
         styled.node(paragraph).expect("styled").style().color(),
@@ -458,7 +458,7 @@ fn a_comma_group_with_no_readable_member_still_drops_its_rule_whole() {
     let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("a paragraph");
     assert_eq!(
         styled.node(paragraph).expect("styled").style().color(),

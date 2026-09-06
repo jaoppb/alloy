@@ -33,6 +33,18 @@ pub trait WindowSystem {
     /// that hands the thread away).
     fn pump_events(&mut self, sink: &mut dyn FnMut(WindowEvent))
     -> Result<PumpStatus, WindowError>;
+
+    /// Asks the backend to deliver a [`WindowEvent::RedrawRequested`] on a
+    /// following [`Self::pump_events`] call.
+    ///
+    /// A command (Command–Query Separation): it changes nothing the caller can
+    /// observe now and returns `()`. A no-op when no window exists yet — the
+    /// caller may fire it unconditionally after presenting a frame. The event
+    /// loop uses it so a compositor that dropped the first present (a Wayland
+    /// surface not yet configured) still gets the frame re-blitted once the
+    /// surface is live, and so expose/occlusion redraws are served at all
+    /// (`ADR-0019`; `PRD-010`).
+    fn request_redraw(&mut self);
 }
 
 /// Turns a rendered frame into pixels on screen. `Send` — see the module doc.

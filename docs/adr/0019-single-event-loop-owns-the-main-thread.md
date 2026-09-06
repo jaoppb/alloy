@@ -60,3 +60,34 @@ a convention F10/F11 could unknowingly break.
 - **Negative**: a hand-rolled thread pool + channel plumbing in `alloy/src/application/event_loop.rs` instead of a
   batteries-included runtime. Long CPU-bound work on the main thread (large relayout) still blocks the loop — mitigated
   by per-frame coalescing, not by preemption.
+
+---
+
+## Addendum — 2026-09-05: repaint is a distinct signal from relayout (v0.5 Phase I4)
+
+The first `alloy <url>` sessions on Wayland opened a window that stayed blank. Two gaps in the pull-driven loop:
+
+1. **The loop presented a frame only when content changed** (`session.dirty`: a navigation, resize, image, or
+   stylesheet). It never asked the platform to repaint and it dropped `WindowEvent::RedrawRequested`. On Wayland the
+   first `present` frequently lands on a surface the compositor has not configured yet and is discarded — with no redraw
+   path, no further frame is ever produced.
+2. **The main-document fetch rendered a silently-empty document.** A non-`2xx`, an empty body, or a non-UTF-8 body all
+   became `html::parse("")` → a blank white window, logged only as success. (Fixed in
+   `alloy/src/application/navigation.rs`: those are now typed `AlloyError`s that fall back to the visible error card.)
+
+**Decision.** _Relayout_ (rebuild the display list, bump `LoopStats::relayouts`) and _repaint_ (re-blit the cached
+frame, no pipeline) are separate operations. `WindowSystem` gains **`request_redraw(&mut self)`** — a
+Command–Query-Separation command, no return, no failure channel, a silent no-op before a window exists — asking the
+backend to deliver a `RedrawRequested` on a following `pump_events`. The loop:
+
+- caches the pixels of each presented frame in the `Session`;
+- calls `request_redraw()` after every relayout, so a compositor that dropped the present re-delivers a redraw once the
+  surface is live;
+- serves `RedrawRequested` (compositor expose/occlusion included) with a **repaint** — no relayout, `relayouts`
+  untouched, so the I4 per-pump coalescing proof is unaffected.
+
+`request_redraw` is the only idiomatic winit signal robust against compositors that repaint only when asked. `alloy`
+owns every `WindowSystem` impl (`WinitSystem` → `Window::request_redraw`; `HeadlessWindowSystem` → enqueue a
+`RedrawRequested`), so the port method is small. `window::PORT_SCHEMA_VERSION` moves `1 → 2`; the
+`window-system-port-contract.md` migration table records it. The port had not yet frozen (`I4` is not merged to `main`),
+so this is a pre-freeze change, not a contract break.
