@@ -8,11 +8,11 @@ all seven mandatory items at the `I3` freeze point (end of v0.5 B4).
 | ---- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-007` §2 (variation model: an author's style cascade and layout algorithm may be replaced without touching a consumer; §2 threat model: hostile author CSS, never a trusted-code boundary)                                                                                                                                                                                                                        |
 | 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ All three traits (`CascadeResolver`, `LayoutEngine`, `TextMeasurer`) are already object-safe — no generic method, no associated type, every signature speaks only this crate's own types plus the shared `graphics` units. No companion needed. See §2 below                                                                                                                                                          |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `DomSnapshot`, `StyledTree`, `LayoutBoxTree`, `ComputedStyle`, `StyledNode`, `LayoutBox` all domain-owned in `core/css`, `#[non_exhaustive]`; `css::PORT_SCHEMA_VERSION` is the single version knob. **`= 3`** since B4 reshaped `ComputedStyle` / `StyledNode` / `LayoutBox` (additive fields; `PRD-007` migration note below)                                                                                       |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `DomSnapshot`, `StyledTree`, `LayoutBoxTree`, `ComputedStyle`, `StyledNode`, `LayoutBox` all domain-owned in `core/css`, `#[non_exhaustive]`; `css::PORT_SCHEMA_VERSION` is the single version knob. **`= 4`** — B4 reshaped `ComputedStyle` / `StyledNode` / `LayoutBox`, the fonts increment added `ComputedStyle::font_family` (additive fields; `PRD-007` migration note below)                                   |
 | 4    | Exactly one typed error, source location                                  | ✅ `CssError`, `#[non_exhaustive]`, one enum shared by all three traits; `CssStage` names which stage raised it, `SourceSpan` carries line/column where the parser produced one                                                                                                                                                                                                                                          |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `css::application::conformance::run_css_conformance`; `UaCascade` / `BlockLayout` / `FontBackedMeasurer` (real adapters) and `MockCascadeResolver` / `MockLayoutEngine` / `MockTextMeasurer` (reference mocks) both pass it (`tests/css_conformance.rs`). `--no-default-features` builds and tests the crate with no script-facing adapter linked (`core/css/Cargo.toml`'s `builtin-adapters` feature — see §6 below) |
-| 7    | Frozen-API milestone                                                      | ✅ Frozen at `I3` (end of B4). `css::PORT_SCHEMA_VERSION = 3` is that surface; any future boundary change bumps it and adds a `PRD-007` migration note                                                                                                                                                                                                                                                                   |
+| 7    | Frozen-API milestone                                                      | ✅ Frozen at `I3` (end of B4). `css::PORT_SCHEMA_VERSION = 4` is that surface (B4 froze it at `3`; the fonts increment bumped it to `4`); any future boundary change bumps it and adds a `PRD-007` migration note                                                                                                                                                                                                        |
 
 ---
 
@@ -33,10 +33,17 @@ no companion trait, the same shape `graphics::RenderBackend` uses.
 
 ---
 
-## 3. Boundary aggregates and the B4 schema bump
+## 3. Boundary aggregates and the schema bumps after the freeze
 
-`css::PORT_SCHEMA_VERSION` moved `2 → 3` in v0.5 B4. Every change is **additive** — a new field or a new grouping, never
-a removed or renarrowed one — so no existing `match` arm anywhere in the workspace needed to change:
+`css::PORT_SCHEMA_VERSION` moved `2 → 3` in v0.5 B4, and `3 → 4` in the v0.5 fonts increment. Every change is
+**additive** — a new field or a new grouping, never a removed or renarrowed one — so no existing `match` arm anywhere in
+the workspace needed to change:
+
+| Version | Aggregate       | What it added                                                                                                                                                                               |
+| ------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `4`     | `ComputedStyle` | `font_family: FontFamilyList` — inherited (CSS Fonts L4), a fixed-capacity `Copy` list (`core/css/src/domain/computed/font.rs`); the two size cuts are declared in `tests/data/MANIFEST.md` |
+
+### The B4 bump (`2 → 3`)
 
 | Aggregate       | What B4 added                                                                                                                                                                                    |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -148,6 +155,6 @@ tree-shaped input.
 
 Re-run `cargo test -p css` (conformance is `tests/css_conformance.rs`; determinism is `tests/determinism.rs`),
 `cargo test -p css --no-default-features` (item 6's `no-<adapter>` proof), and check `css::PORT_SCHEMA_VERSION` against
-the last recorded value (`3`, as of this freeze) when reviewing any change to `ComputedStyle` / `StyledNode` /
-`LayoutBox` / `CssError` / a trait signature (items 3/4/7). `just no-engine` additionally proves `core/css` links
-neither `engine` nor `rhai`.
+the last recorded value (`4`, B4's `3` plus the fonts increment) when reviewing any change to `ComputedStyle` /
+`StyledNode` / `LayoutBox` / `CssError` / a trait signature (items 3/4/7). `just no-engine` additionally proves
+`core/css` links neither `engine` nor `rhai`.

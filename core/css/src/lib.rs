@@ -59,14 +59,17 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Bumped on any change a resolver, a layout engine or a
 /// producer could notice; **frozen at I3** (end of B4), after which a change
-/// also needs a migration note in `PRD-007`. `3` is v0.5 Phase B4: `ComputedStyle`
+/// also needs a migration note in `PRD-007`. `3` was v0.5 Phase B4: `ComputedStyle`
 /// gains `border` / `width` / `height` / `box_sizing` / `text_align` /
 /// `white_space` / `flex`, `StyledNode` gains `text` and `intrinsic_size`, and
 /// `LayoutBox` is constructed from a `BoxEdges` grouping margin/border/padding
-/// instead of a bare margin, plus an `IntrinsicSize` — every one of these is a
-/// new or regrouped field a downstream consumer could observe, not a value
-/// change, so nothing here breaks existing `match` arms.
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+/// instead of a bare margin, plus an `IntrinsicSize`.
+///
+/// `4` is the v0.5 fonts increment: `ComputedStyle` gains an inherited
+/// `font_family` (a [`FontFamilyList`]). A new field a consumer could observe,
+/// not a value change — nothing here breaks existing `match` arms. Post-freeze,
+/// so `PRD-007` carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 4;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -77,11 +80,12 @@ pub const PORT_SCHEMA_VERSION: u32 = 3;
 /// table of `core/css/tests/data/MANIFEST.md`, and what [`parse_stylesheet`]
 /// actually accepts all agree — in every direction.
 ///
-/// Jumps from 14 to 33 in v0.5 B4: the box model and inline formatting context
+/// Jumped from 14 to 33 in v0.5 B4: the box model and inline formatting context
 /// add six shorthands/singulars and the four `border-*-width` longhands
 /// (`border-style`/`border-color` stay outside the cut — only a border's width
-/// is geometry), and Flexbox adds its nine properties.
-pub const SUPPORTED_PROPERTIES: [&str; 33] = [
+/// is geometry), and Flexbox adds its nine properties. The v0.5 fonts increment
+/// adds `font-family` (34).
+pub const SUPPORTED_PROPERTIES: [&str; 34] = [
     "display",
     "color",
     "background-color",
@@ -96,6 +100,7 @@ pub const SUPPORTED_PROPERTIES: [&str; 33] = [
     "padding-bottom",
     "padding-left",
     "font-size",
+    "font-family",
     "border-width",
     "border-top-width",
     "border-right-width",
@@ -152,7 +157,9 @@ pub use application::matching::{matches, strongest_match};
 pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
 pub use application::snapshot::snapshot;
 pub use domain::color::CssColor;
-pub use domain::computed::{ComputedStyle, Display, LengthEdges};
+pub use domain::computed::{
+    ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, LengthEdges,
+};
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{
     AttributeList, ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind,

@@ -14,6 +14,7 @@ use crate::domain::color::CssColor;
 use crate::domain::computed::display::Display;
 use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::flex::FlexStyle;
+use crate::domain::computed::font::FontFamilyList;
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
 use crate::domain::length::Length;
@@ -32,6 +33,7 @@ pub struct ComputedStyle {
     border: LengthEdges,
     padding: LengthEdges,
     font_size: Length,
+    font_family: FontFamilyList,
     width: Sizing,
     height: Sizing,
     box_sizing: BoxSizing,
@@ -52,6 +54,7 @@ impl ComputedStyle {
             border: LengthEdges::ZERO,
             padding: LengthEdges::ZERO,
             font_size: Length::Pixels(INITIAL_FONT_SIZE_PX),
+            font_family: FontFamilyList::empty(),
             width: Sizing::Auto,
             height: Sizing::Auto,
             box_sizing: BoxSizing::ContentBox,
@@ -64,15 +67,17 @@ impl ComputedStyle {
     /// A fresh style that inherits the inherited properties from `parent` and
     /// takes the `initial` value for the rest.
     ///
-    /// The inherited set is exactly CSS's: `color` and `font-size` (CSS Color
-    /// L4 / CSS Fonts L4) plus `text-align` and `white-space` (CSS Text L3 §7.3,
-    /// §4.1.1). Every box property is **not** inherited, which is why the box
-    /// edges, the two axes and the Flexbox group all reset here.
+    /// The inherited set is exactly CSS's: `color` and `font-size` /
+    /// `font-family` (CSS Color L4 / CSS Fonts L4) plus `text-align` and
+    /// `white-space` (CSS Text L3 §7.3, §4.1.1). Every box property is **not**
+    /// inherited, which is why the box edges, the two axes and the Flexbox group
+    /// all reset here.
     #[must_use]
     pub const fn inheriting_from(parent: &Self) -> Self {
         Self {
             color: parent.color,
             font_size: parent.font_size,
+            font_family: parent.font_family,
             text_align: parent.text_align,
             white_space: parent.white_space,
             ..Self::initial()
@@ -115,6 +120,14 @@ impl ComputedStyle {
     #[must_use]
     pub const fn with_font_size(self, font_size: Length) -> Self {
         Self { font_size, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_font_family(self, font_family: FontFamilyList) -> Self {
+        Self {
+            font_family,
+            ..self
+        }
     }
 
     #[must_use]
@@ -183,6 +196,11 @@ impl ComputedStyle {
     #[must_use]
     pub const fn font_size(&self) -> Length {
         self.font_size
+    }
+
+    #[must_use]
+    pub const fn font_family(&self) -> FontFamilyList {
+        self.font_family
     }
 
     #[must_use]

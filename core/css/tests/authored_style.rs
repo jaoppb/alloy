@@ -479,6 +479,75 @@ fn a_bad_member_mid_group_is_resynced_past_without_swallowing_the_next_one() {
     );
 }
 
+// ---- fonts increment: `font-family` -------------------------------------
+
+#[test]
+fn a_font_family_list_keeps_its_order_and_folds_bare_multi_word_names() {
+    let style = paragraph_style(
+        "p { font-family: \"Helvetica Neue\", PT Sans, monospace }",
+        None,
+    );
+    assert_eq!(
+        style.font_family().to_string(),
+        "Helvetica Neue, PT Sans, monospace",
+        "quoted names, space-folded bare names and a trailing generic all survive in order"
+    );
+}
+
+#[test]
+fn font_family_inherits_to_a_descendant_no_rule_selects() {
+    let style = paragraph_style("body { font-family: monospace }", None);
+    assert_eq!(
+        style.font_family().to_string(),
+        "monospace",
+        "`font-family` is inherited (CSS Fonts L4), so the body rule reaches the paragraph"
+    );
+}
+
+#[test]
+fn the_initial_font_family_is_the_empty_list() {
+    let style = paragraph_style("p { color: #000 }", None);
+    assert!(
+        style.font_family().is_empty(),
+        "with no author `font-family`, the computed list defers to the provider default"
+    );
+}
+
+#[test]
+fn the_initial_keyword_clears_an_inherited_font_family() {
+    let style = paragraph_style(
+        "body { font-family: monospace } p { font-family: initial }",
+        None,
+    );
+    assert!(
+        style.font_family().is_empty(),
+        "`initial` resets to the empty list even though the parent set one"
+    );
+}
+
+#[test]
+fn a_chain_past_the_capacity_keeps_the_first_three_families() {
+    let style = paragraph_style("p { font-family: a, b, c, d, sans-serif }", None);
+    assert_eq!(
+        style.font_family().to_string(),
+        "a, b, c",
+        "only FontFamilyList::CAPACITY families are kept; the generic tail is dropped"
+    );
+}
+
+#[test]
+fn a_family_name_past_the_byte_capacity_is_truncated_on_a_boundary() {
+    let style = paragraph_style(
+        "p { font-family: \"AbcdefghijklmnopqrstuvwxyzABCDEFGHIJ\" }",
+        None,
+    );
+    assert_eq!(
+        style.font_family().to_string(),
+        "Abcdefghijklmnopqrstuvw",
+        "23 bytes kept, the rest dropped at a UTF-8 boundary"
+    );
+}
+
 #[test]
 fn the_cascade_is_deterministic_across_repeated_resolutions() {
     let (tree, root) = document(

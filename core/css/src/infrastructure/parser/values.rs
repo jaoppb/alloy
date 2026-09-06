@@ -17,6 +17,7 @@ use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::flex::{
     AlignContent, AlignItems, AlignSelf, FlexDirection, FlexFactor, FlexWrap, JustifyContent,
 };
+use crate::domain::computed::font::{FamilyName, FontFamily, FontFamilyList, GenericFamily};
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
 use crate::domain::declaration::DeclarationValue;
@@ -392,4 +393,57 @@ pub(crate) fn parse_flex_factor(tokens: &[Token]) -> Option<FlexFactor> {
         return None;
     };
     FlexFactor::new(*value)
+}
+
+/// `font-family` (CSS Fonts L4 §5.1): a comma-separated list where each entry is
+/// a quoted string, one or more bare identifiers folded to a single-space name,
+/// or a bare generic keyword (`serif` / `sans-serif` / `monospace`). Over-long
+/// chains and names are capped by [`FontFamilyList`] / [`FamilyName`] — a
+/// documented cut, not a refusal, so a list with at least one readable entry
+/// always parses.
+#[must_use]
+pub(crate) fn parse_font_family(tokens: &[Token]) -> Option<FontFamilyList> {
+    if tokens.is_empty() {
+        return None;
+    }
+    let parts = comma_separated(tokens);
+    let families: Option<Vec<FontFamily>> =
+        parts.iter().map(|part| family_from_part(part)).collect();
+    Some(FontFamilyList::from_families(families?))
+}
+
+/// One comma-separated entry of a `font-family` list.
+fn family_from_part(tokens: &[Token]) -> Option<FontFamily> {
+    if let [Token::QuotedString(name)] = tokens {
+        return Some(FontFamily::Named(FamilyName::new(name)));
+    }
+    named_or_generic(tokens)
+}
+
+/// A run of bare identifiers: a generic keyword when the run is exactly one of
+/// the three, otherwise the identifiers folded to one space-separated name
+/// (CSS Fonts L4 §5.1 — consecutive identifiers collapse to a single space).
+fn named_or_generic(tokens: &[Token]) -> Option<FontFamily> {
+    let names: Option<Vec<&str>> = tokens.iter().map(identifier_text).collect();
+    let joined = names?.join(" ");
+    if let Some(generic) = generic_family(&joined) {
+        return Some(FontFamily::Generic(generic));
+    }
+    Some(FontFamily::Named(FamilyName::new(&joined)))
+}
+
+const fn identifier_text(token: &Token) -> Option<&str> {
+    match token {
+        Token::Ident(name) => Some(name.as_str()),
+        _ => None,
+    }
+}
+
+fn generic_family(name: &str) -> Option<GenericFamily> {
+    match name.to_ascii_lowercase().as_str() {
+        "serif" => Some(GenericFamily::Serif),
+        "sans-serif" => Some(GenericFamily::SansSerif),
+        "monospace" => Some(GenericFamily::Monospace),
+        _ => None,
+    }
 }

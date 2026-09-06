@@ -98,3 +98,20 @@ ports — the contract is dogfooded, not bypassed for the default path.
 - [ ] A script adapter that panics falls back to the built-in resolver and the page still renders.
 - [ ] `core/css` builds and tests with `--no-default-features` (feature `no-script`), using only Rust adapters.
 - [ ] Determinism test: 100 repeated runs of the same input produce the identical `LayoutBoxTree`.
+
+---
+
+## 6. Post-freeze migration notes
+
+The boundary aggregates and `css::PORT_SCHEMA_VERSION` froze at `I3` (end of B4, version `3`). Every later change is
+recorded here, and is **additive** — a new `#[non_exhaustive]` field or grouping, never a removed or renarrowed one, so
+no in-tree consumer's `match` needs updating.
+
+### `3 → 4` — fonts increment: `ComputedStyle::font_family`
+
+`ComputedStyle` gains `font_family: FontFamilyList` (`core/css/src/domain/computed/font.rs`), an inherited property (CSS
+Fonts L4 §5.1) added alongside `color` / `font_size` in `ComputedStyle::inheriting_from`. It is a fixed-capacity `Copy`
+list rather than a `Vec` because `ComputedStyle` is `Copy` and copied per node during layout; the two size cuts
+(`FontFamilyList::CAPACITY` families, `FamilyName::CAPACITY` bytes per name) are declared in
+`core/css/tests/data/MANIFEST.md` beside the Flexbox cuts. Consumers read it through `ComputedStyle::font_family()`; a
+consumer that does not care about fonts is unaffected.
