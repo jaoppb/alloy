@@ -234,15 +234,115 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 5,
-        "version 5 accepts the `background` / `border` shorthands (ADR-0011 item 3, post-I3 — PRD-007)"
+        PORT_SCHEMA_VERSION, 7,
+        "version 7 adds visual decorations, advanced typography, grid, and logical properties (ADR-0011 item 3)"
     );
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 36);
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 133);
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));
     assert!(SUPPORTED_PROPERTIES.contains(&"font-family"));
     assert!(SUPPORTED_PROPERTIES.contains(&"margin-left"));
     assert!(SUPPORTED_PROPERTIES.contains(&"background"));
     assert!(SUPPORTED_PROPERTIES.contains(&"border"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"position"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"top"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"z-index"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"min-width"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"overflow"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"border-radius"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"opacity"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"font-weight"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"grid-template-columns"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"writing-mode"));
     assert_eq!(SUPPORTED_SELECTORS.len(), 19);
     assert!(SUPPORTED_SELECTORS.contains(&":nth-child()"));
+}
+
+// ---- Positioning & Insets ----
+
+#[test]
+fn position_style_defaults_and_builders() {
+    use css::{PositionStyle, PositionType, Sizing, ZIndex};
+
+    let initial = PositionStyle::initial();
+    assert_eq!(initial.position(), PositionType::Static);
+    assert!(initial.position().is_in_flow());
+    assert!(!initial.position().is_positioned());
+    assert_eq!(initial.top(), Sizing::Auto);
+    assert_eq!(initial.right(), Sizing::Auto);
+    assert_eq!(initial.bottom(), Sizing::Auto);
+    assert_eq!(initial.left(), Sizing::Auto);
+    assert_eq!(initial.z_index(), ZIndex::Auto);
+
+    let custom = initial
+        .with_position(PositionType::Absolute)
+        .with_top(Sizing::Fixed(Length::pixels(10.0)))
+        .with_right(Sizing::Fixed(Length::pixels(20.0)))
+        .with_bottom(Sizing::Fixed(Length::pixels(30.0)))
+        .with_left(Sizing::Fixed(Length::pixels(40.0)))
+        .with_z_index(ZIndex::Index(99));
+
+    assert_eq!(custom.position(), PositionType::Absolute);
+    assert!(!custom.position().is_in_flow());
+    assert!(custom.position().is_positioned());
+    assert_eq!(custom.top(), Sizing::Fixed(Length::pixels(10.0)));
+    assert_eq!(custom.right(), Sizing::Fixed(Length::pixels(20.0)));
+    assert_eq!(custom.bottom(), Sizing::Fixed(Length::pixels(30.0)));
+    assert_eq!(custom.left(), Sizing::Fixed(Length::pixels(40.0)));
+    assert_eq!(custom.z_index(), ZIndex::Index(99));
+    assert_eq!(custom.position().to_string(), "absolute");
+    assert_eq!(custom.z_index().to_string(), "99");
+    assert_eq!(ZIndex::Auto.to_string(), "auto");
+    assert_eq!(PositionType::Relative.to_string(), "relative");
+    assert_eq!(PositionType::Fixed.to_string(), "fixed");
+    assert_eq!(PositionType::Sticky.to_string(), "sticky");
+}
+
+// ---- Overflow ----
+
+#[test]
+fn overflow_style_defaults_and_builders() {
+    use css::{Overflow, OverflowStyle};
+
+    let initial = OverflowStyle::initial();
+    assert_eq!(initial.x(), Overflow::Visible);
+    assert_eq!(initial.y(), Overflow::Visible);
+    assert!(!initial.x().is_clipped());
+
+    let custom = initial.with_x(Overflow::Hidden).with_y(Overflow::Auto);
+    assert_eq!(custom.x(), Overflow::Hidden);
+    assert_eq!(custom.y(), Overflow::Auto);
+    assert!(custom.x().is_clipped());
+    assert!(custom.y().is_clipped());
+    assert_eq!(custom.x().to_string(), "hidden");
+    assert_eq!(Overflow::Clip.to_string(), "clip");
+    assert_eq!(Overflow::Scroll.to_string(), "scroll");
+    assert_eq!(Overflow::Auto.to_string(), "auto");
+
+    let uniform = OverflowStyle::uniform(Overflow::Scroll);
+    assert_eq!(uniform.x(), Overflow::Scroll);
+    assert_eq!(uniform.y(), Overflow::Scroll);
+}
+
+// ---- SizingConstraints ----
+
+#[test]
+fn sizing_constraints_defaults_and_builders() {
+    use css::{Sizing, SizingConstraints};
+
+    let initial = SizingConstraints::initial();
+    assert_eq!(initial.min_width(), Sizing::Auto);
+    assert_eq!(initial.max_width(), Sizing::Auto);
+    assert_eq!(initial.min_height(), Sizing::Auto);
+    assert_eq!(initial.max_height(), Sizing::Auto);
+
+    let custom = initial
+        .with_min_width(Sizing::Fixed(Length::pixels(100.0)))
+        .with_max_width(Sizing::Fixed(Length::pixels(800.0)))
+        .with_min_height(Sizing::Fixed(Length::pixels(50.0)))
+        .with_max_height(Sizing::Fixed(Length::pixels(400.0)));
+
+    assert_eq!(custom.min_width(), Sizing::Fixed(Length::pixels(100.0)));
+    assert_eq!(custom.max_width(), Sizing::Fixed(Length::pixels(800.0)));
+    assert_eq!(custom.min_height(), Sizing::Fixed(Length::pixels(50.0)));
+    assert_eq!(custom.max_height(), Sizing::Fixed(Length::pixels(400.0)));
 }
