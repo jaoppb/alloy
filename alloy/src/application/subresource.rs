@@ -5,7 +5,7 @@
 //! this module only answers "what does this document reference", a pure
 //! function of a [`DomSnapshot`].
 
-use css::{DomSnapshot, NodeRef, SnapshotId};
+use css::{DomSnapshot, NodeRef, SnapshotId, TagName};
 use graphics::{Color, Framebuffer, ImageId, SurfaceSize};
 use network::Url;
 
@@ -35,8 +35,8 @@ pub fn discover(snapshot: &DomSnapshot, nav_url: &Url) -> Subresources {
             continue;
         };
         match node.tag() {
-            Some("link") => discover_stylesheet(node, &base, &mut found),
-            Some("img") => discover_image(id, node, &base, &mut found),
+            Some(TagName::Link) => discover_stylesheet(node, &base, &mut found),
+            Some(TagName::Img) => discover_image(id, node, &base, &mut found),
             _ => {}
         }
     }
@@ -53,7 +53,7 @@ fn effective_base(snapshot: &DomSnapshot, nav_url: &Url) -> Url {
         let Some(node) = snapshot.node(id) else {
             continue;
         };
-        if node.tag() != Some("base") {
+        if node.tag() != Some(&TagName::Base) {
             continue;
         }
         let Some(href) = node.attribute("href") else {

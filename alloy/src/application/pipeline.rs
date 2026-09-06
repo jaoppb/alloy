@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
-    StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
+    StyleSheetSet, TagName, TextMeasurer, UaCascade, ViewportConstraints,
 };
 use graphics::{
     Au, DisplayListBuilder, FontProvider, Framebuffer, GenericFamily, GraphicsError, ImageId,
@@ -212,9 +212,9 @@ fn render_dom_internal(
             Arc::clone(&font_provider),
             DEFAULT_FONT,
         ));
-        BlockLayout::with_measurer(measurer).layout(&styled_tree, &constraints)?
+        BlockLayout::new(measurer).layout(&styled_tree, &constraints)?
     } else {
-        BlockLayout::new().layout(&styled_tree, &constraints)?
+        BlockLayout::monospace().layout(&styled_tree, &constraints)?
     };
 
     let link_targets = collect_link_targets(&box_tree, &snapshot);
@@ -266,7 +266,7 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
             let Some(node) = snapshot.node(id) else {
                 break;
             };
-            if node.tag() == Some("a")
+            if node.tag() == Some(&TagName::A)
                 && let Some(href) = node.attribute("href")
             {
                 targets.push(LinkTarget {

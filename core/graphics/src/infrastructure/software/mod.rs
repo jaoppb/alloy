@@ -61,7 +61,7 @@ const CANVAS: Color = Color::WHITE;
 
 /// A CPU rasterizer with a clip stack, an opacity stack, a bound font
 /// provider (v0.5 B3), and an image provider (v0.5 Phase X).
-pub struct SoftwareCpuBackend<F: FontProvider = SyntheticFontProvider> {
+pub struct SoftwareCpuBackend<F: FontProvider + ?Sized = SyntheticFontProvider> {
     state: FrameState,
     frame: Option<Framebuffer>,
     clips: Vec<Rect>,
@@ -70,7 +70,7 @@ pub struct SoftwareCpuBackend<F: FontProvider = SyntheticFontProvider> {
     images: Arc<dyn ImageProvider>,
 }
 
-impl<F: FontProvider> core::fmt::Debug for SoftwareCpuBackend<F> {
+impl<F: FontProvider + ?Sized> core::fmt::Debug for SoftwareCpuBackend<F> {
     // `FontProvider` carries no `Debug` bound (a port trait, not a
     // diagnostic one); the bound font is omitted instead of deriving, the
     // same choice `TtfParserProvider`'s own `Debug` makes.
@@ -101,7 +101,7 @@ impl SoftwareCpuBackend<SyntheticFontProvider> {
     }
 }
 
-impl<F: FontProvider> SoftwareCpuBackend<F> {
+impl<F: FontProvider + ?Sized> SoftwareCpuBackend<F> {
     /// A backend bound to `fonts` — e.g. a [`TtfParserProvider`] or
     /// [`SystemFontProvider`] with real faces registered.
     ///
@@ -444,7 +444,7 @@ fn scale_byte_to_full(byte: u8) -> u32 {
         .unwrap_or(0)
 }
 
-impl<F: FontProvider> RenderBackend for SoftwareCpuBackend<F> {
+impl<F: FontProvider + ?Sized> RenderBackend for SoftwareCpuBackend<F> {
     fn tier(&self) -> BackendTier {
         BackendTier::Software
     }

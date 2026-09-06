@@ -61,8 +61,6 @@ impl DoctypeToken {
     }
 }
 
-use crate::domain::tag::TagName;
-
 /// A `StartTag` or `EndTag` token payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagToken {
@@ -82,29 +80,9 @@ impl TagToken {
         }
     }
 
-    /// Parse and validate a tag token from a raw tag name.
-    pub fn parse(
-        name: &str,
-        attributes: AttributeList,
-        self_closing: bool,
-    ) -> Result<Self, HtmlError> {
-        let tag = TagName::new(name)?;
-        Ok(Self {
-            name: tag,
-            attributes,
-            self_closing,
-        })
-    }
-
     /// The tag name VO.
     #[must_use]
     pub const fn tag_name(&self) -> &TagName {
-        &self.name
-    }
-
-    /// The strongly-typed tag name.
-    #[must_use]
-    pub const fn tag(&self) -> &TagName {
         &self.name
     }
 

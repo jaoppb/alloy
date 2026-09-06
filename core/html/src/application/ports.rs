@@ -105,29 +105,3 @@ pub trait TreeSink: Send + Sync {
     /// Return the root document node handle.
     fn root_node(&self) -> NodeHandle;
 }
-
-impl<T: TreeSink + ?Sized> TreeSink for &mut T {
-    fn create_element(
-        &mut self,
-        tag: &str,
-        attributes: &AttributeList,
-    ) -> Result<dom::NodeId, HtmlError> {
-        (**self).create_element(tag, attributes)
-    }
-
-    fn create_text(&mut self, text: &str) -> Result<dom::NodeId, HtmlError> {
-        (**self).create_text(text)
-    }
-
-    fn create_comment(&mut self, text: &str) -> Result<dom::NodeId, HtmlError> {
-        (**self).create_comment(text)
-    }
-
-    fn append_child(&mut self, parent: dom::NodeId, child: dom::NodeId) -> Result<(), HtmlError> {
-        (**self).append_child(parent, child)
-    }
-
-    fn root_node(&self) -> dom::NodeId {
-        (**self).root_node()
-    }
-}

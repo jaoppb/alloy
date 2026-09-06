@@ -19,7 +19,7 @@ use std::thread;
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
 use graphics::{Au, FontProvider, Framebuffer, ImageId, SyntheticFontProvider};
-use network::{HttpRequest, HttpTransport, RequestPolicy, StatusCode, Url};
+use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
 use window::{
     FrameView, PhysicalPosition, PointerButton, Presenter, PumpStatus, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
@@ -47,10 +47,14 @@ enum LoopMessage {
 /// background work to land before looking at the presented frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LoopStats {
-    /// How many times this run actually re-laid-out and presented a frame.
+    /// How many times this run actually re-laid-out and presented a frame. A
+    /// bare `RedrawRequested` repaint re-blits the cached frame and does not
+    /// count here — the I4 coalescing proof is about relayouts only.
     pub relayouts: usize,
     /// How many navigations have successfully parsed into the document tree.
     pub navigations: usize,
+    /// How many navigations failed and fell back to the error card.
+    pub navigation_errors: usize,
     /// How many external `<link rel=stylesheet>` sheets were absorbed into the
     /// cascade.
     pub stylesheets_loaded: usize,
@@ -75,9 +79,21 @@ struct Session {
     pointer_pos: Option<PhysicalPosition>,
     dirty: bool,
     viewport: window::SurfaceSize,
+    last_frame: Option<CachedFrame>,
     stats: LoopStats,
     font_provider: Arc<dyn FontProvider>,
     policy: Arc<dyn RequestPolicy>,
+}
+
+/// The pixels of the last frame `relayout_and_present` produced, kept so a
+/// `RedrawRequested` can re-blit them without re-running the whole
+/// `render_dom_with_links` pipeline (cascade → layout → paint → raster →
+/// readback). This is the "repaint is cheap, relayout is not" split the event
+/// loop rests on.
+struct CachedFrame {
+    width: u32,
+    height: u32,
+    pixels: Vec<u32>,
 }
 
 impl Session {
@@ -95,9 +111,11 @@ impl Session {
             pointer_pos: None,
             dirty: false,
             viewport,
+            last_frame: None,
             stats: LoopStats {
                 relayouts: 0,
                 navigations: 0,
+                navigation_errors: 0,
                 stylesheets_loaded: 0,
                 images_loaded: 0,
             },
@@ -132,6 +150,7 @@ impl Session {
                 let error_html = format!(
                     "<!DOCTYPE html><html><head><title>Navigation Error</title><style>body {{ margin: 32px; background-color: #fdf2e9; color: #78281f; }} h1 {{ color: #c0392b; }} .error-box {{ background-color: #ffffff; padding: 16px; border-width: 2px; }}</style></head><body><h1>Navigation Error</h1><div class=\"error-box\"><p><strong>Failed to load:</strong> {escaped_error}</p></div></body></html>"
                 );
+                self.stats.navigation_errors = self.stats.navigation_errors.saturating_add(1);
                 if let Ok(error_tree) = html::parse(&error_html) {
                     self.extra_sheets = StyleSheetSet::new();
                     self.images.clear();
@@ -246,7 +265,7 @@ fn spawn_image_fetch(
 
 fn fetch_text(url: &Url, transport: &dyn HttpTransport) -> Result<String, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
-    ensure_success(url, response.status())?;
+    navigation::ensure_success(url, response.status())?;
     let body = response.body().as_str().unwrap_or_default().to_owned();
     tracing::debug!(
         %url,
@@ -259,22 +278,8 @@ fn fetch_text(url: &Url, transport: &dyn HttpTransport) -> Result<String, AlloyE
 
 fn fetch_image(url: &Url, transport: &dyn HttpTransport) -> Result<Framebuffer, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
-    ensure_success(url, response.status())?;
+    navigation::ensure_success(url, response.status())?;
     Ok(graphics::png::decode(response.body().as_bytes())?)
-}
-
-/// A subresource fetch that redirected to an error page still "succeeds" at
-/// the transport layer. Reject a non-`2xx` status here so the caller's
-/// `warn!` names the real problem instead of the CSS parser silently making
-/// zero rules from an HTML 404 body.
-fn ensure_success(url: &Url, status: StatusCode) -> Result<(), AlloyError> {
-    if status.is_success() {
-        return Ok(());
-    }
-    Err(AlloyError::SubresourceStatus {
-        url: url.to_string(),
-        status: status.code(),
-    })
 }
 
 /// The window `alloy <url>` and the e2e golden test both open.
@@ -436,12 +441,14 @@ fn pump_once(
     let mut close_requested = false;
     let mut latest_resize = None;
     let mut saw_window_event = false;
+    let mut needs_repaint = false;
     let mut clicked_pos = None;
     let window_status = system.pump_events(&mut |event| {
         saw_window_event = true;
         match event {
             WindowEvent::CloseRequested => close_requested = true,
             WindowEvent::Resized(size) => latest_resize = Some(size),
+            WindowEvent::RedrawRequested => needs_repaint = true,
             WindowEvent::PointerMoved { position } => session.pointer_pos = Some(position),
             WindowEvent::PointerButton {
                 button: PointerButton::Left,
@@ -485,10 +492,18 @@ fn pump_once(
         session.apply(message, transport, sender);
     }
 
+    let relaid_out = session.dirty;
     if session.dirty {
-        present_if_ready(presenter, session)?;
+        relayout_and_present(presenter, session)?;
         session.record_relayout();
         session.dirty = false;
+        // Re-arm the platform redraw: on Wayland the present just made can be
+        // dropped by a not-yet-configured surface, and the RedrawRequested
+        // this schedules re-blits the cached frame once it is live.
+        system.request_redraw();
+    }
+    if needs_repaint && !relaid_out {
+        repaint(presenter, session)?;
     }
 
     let did_work = saw_window_event || saw_message;
@@ -523,7 +538,11 @@ fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str> {
     None
 }
 
-fn present_if_ready(
+/// Rebuilds the display list from the current document, viewport and
+/// subresources, presents it, and caches the pixels for a later cheap
+/// [`repaint`]. The only path that bumps `stats.relayouts` — the I4 coalescing
+/// proof rests on that staying true.
+fn relayout_and_present(
     presenter: &mut dyn Presenter,
     session: &mut Session,
 ) -> Result<(), AlloyError> {
@@ -541,8 +560,28 @@ fn present_if_ready(
         Arc::clone(&session.font_provider),
     )?;
     session.links = links;
-    let pixels = frame_pixels(&framebuffer);
-    let view = FrameView::new(viewport.width(), viewport.height(), &pixels)
+    let cached = CachedFrame {
+        width: viewport.width(),
+        height: viewport.height(),
+        pixels: frame_pixels(&framebuffer),
+    };
+    let view = FrameView::new(cached.width, cached.height, &cached.pixels)
+        .ok_or(AlloyError::InvalidDimensions)?;
+    presenter.present(view)?;
+    session.last_frame = Some(cached);
+    Ok(())
+}
+
+/// Re-blits the frame [`relayout_and_present`] last produced, with no pipeline
+/// work and without touching `stats.relayouts`. A no-op before the first
+/// frame. Serves `RedrawRequested`: a compositor expose/occlusion, or the
+/// redraw winit re-arms once a Wayland surface that dropped the first present
+/// is finally configured.
+fn repaint(presenter: &mut dyn Presenter, session: &Session) -> Result<(), AlloyError> {
+    let Some(frame) = session.last_frame.as_ref() else {
+        return Ok(());
+    };
+    let view = FrameView::new(frame.width, frame.height, &frame.pixels)
         .ok_or(AlloyError::InvalidDimensions)?;
     presenter.present(view)?;
     Ok(())
@@ -620,10 +659,7 @@ mod tests {
         let result = fetch_text(&sheet_url, transport.as_ref());
 
         assert!(
-            matches!(
-                result,
-                Err(AlloyError::SubresourceStatus { status: 404, .. })
-            ),
+            matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
             "a 404 error page must not reach the CSS parser as a stylesheet"
         );
     }
@@ -708,6 +744,174 @@ mod tests {
         assert_eq!(
             session.stats.relayouts, 1,
             "fifty coalesced image arrivals must cost exactly one relayout, not fifty"
+        );
+    }
+
+    fn pump(
+        system: &mut HeadlessWindowSystem,
+        presenter: &mut RecordingPresenter,
+        receiver: &mpsc::Receiver<LoopMessage>,
+        transport: &Arc<dyn HttpTransport>,
+        sender: &mpsc::Sender<LoopMessage>,
+        session: &mut Session,
+    ) {
+        pump_once(system, presenter, receiver, transport, sender, session).unwrap();
+    }
+
+    #[test]
+    fn a_redraw_request_repaints_the_cached_frame_without_a_relayout() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let transport = mock_transport();
+        let mut session = loaded_session(attributes.initial_size());
+
+        // First pump: the auto-seeded Resized lays out and presents once.
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+        assert_eq!(session.stats.relayouts, 1);
+        assert_eq!(presenter.present_count(), 1);
+
+        system.schedule(WindowEvent::RedrawRequested);
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(
+            session.stats.relayouts, 1,
+            "a RedrawRequested must not trigger another relayout"
+        );
+        assert_eq!(
+            presenter.present_count(),
+            2,
+            "a RedrawRequested must re-blit the cached frame"
+        );
+    }
+
+    #[test]
+    fn a_redraw_request_before_the_first_frame_is_a_silent_noop() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let transport = mock_transport();
+        let font_provider =
+            Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+        let policy = Arc::new(network::AllowAllPolicy);
+        // No document yet.
+        let mut session = Session::new(attributes.initial_size(), font_provider, policy);
+
+        system.schedule(WindowEvent::RedrawRequested);
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(
+            presenter.present_count(),
+            0,
+            "a RedrawRequested with nothing rendered yet must present nothing"
+        );
+        assert!(session.last_frame.is_none());
+    }
+
+    #[test]
+    fn a_relayout_arms_a_following_repaint() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let transport = mock_transport();
+        let mut session = loaded_session(attributes.initial_size());
+
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+        assert_eq!(presenter.present_count(), 1);
+
+        // Nothing new scheduled: the redraw the relayout re-armed is the only
+        // thing this pump sees, and it must repaint (not relayout).
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(
+            session.stats.relayouts, 1,
+            "no new relayout without new content"
+        );
+        assert_eq!(
+            presenter.present_count(),
+            2,
+            "the re-armed redraw repainted"
+        );
+    }
+
+    #[test]
+    fn many_redraw_requests_in_one_pump_coalesce_to_one_repaint() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let transport = mock_transport();
+        let mut session = loaded_session(attributes.initial_size());
+
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+        let presents_after_load = presenter.present_count();
+
+        for _ in 0..50 {
+            system.schedule(WindowEvent::RedrawRequested);
+        }
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &transport,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(session.stats.relayouts, 1);
+        assert_eq!(
+            presenter.present_count(),
+            presents_after_load + 1,
+            "fifty coalesced RedrawRequested events cost exactly one repaint"
         );
     }
 

@@ -115,3 +115,19 @@ list rather than a `Vec` because `ComputedStyle` is `Copy` and copied per node d
 (`FontFamilyList::CAPACITY` families, `FamilyName::CAPACITY` bytes per name) are declared in
 `core/css/tests/data/MANIFEST.md` beside the Flexbox cuts. Consumers read it through `ComputedStyle::font_family()`; a
 consumer that does not care about fonts is unaffected.
+
+### `4 → 5` — "unstyled real sites" follow-up: the `background` / `border` shorthands
+
+`SUPPORTED_PROPERTIES` grows from 34 to 36: the CSS Backgrounds & Borders L3 `background` and `border` shorthands are
+now accepted by the parser and resolved by the cascade, each **narrowed to the single component this cut already has a
+computed value for** — `background` → its colour (folded into `ComputedStyle::background_color`), `border` → its width
+(folded into the `border` edges, like `border-width`). `url()` layers, gradients, position/repeat/size keywords, and a
+border's `<line-style>` and colour are scanned past; `none` / `0` clear. The narrowings are declared in
+`core/css/tests/data/MANIFEST.md` beside the Flexbox and font cuts.
+
+**No boundary-aggregate field changed** — this is a wider set of _inputs_ for fields that already exist, so a consumer
+that pattern-matches `ComputedStyle` is unaffected; a producer feeding real-world stylesheets simply gets
+`background_color` / `border` populated from declarations it previously dropped. Brought forward from the planned v0.7
+CSS widening because the blank-window fix (`docs/reports/DIAGNOSTICO-JANELA-BRANCA-WAYLAND.md`) left real pages visibly
+unstyled and the page background was the highest-leverage single gap. `margin: auto` centring and `background-image`
+fetch/paint are the next items and are **not** in this bump.

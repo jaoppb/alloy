@@ -30,8 +30,7 @@ pub use domain::error::HtmlError;
 pub use domain::handle::NodeHandle;
 pub use domain::location::SourceLocation;
 pub use domain::tag::{
-    TagName, closes_list_item, closes_paragraph, is_block_tag, is_heading_tag, is_rawtext_tag,
-    is_void_tag,
+    closes_list_item, closes_paragraph, is_block_tag, is_heading_tag, is_rawtext_tag, is_void_tag,
 };
 pub use domain::tag_name::TagName;
 pub use domain::text::Text;
@@ -110,7 +109,7 @@ pub fn parse(html: &str) -> Result<dom::DomTree, HtmlError> {
 }
 
 /// Parses an HTML input string pumping events into an arbitrary [`TreeSink`].
-pub fn parse_with_sink<S: TreeSink + ?Sized>(html: &str, sink: &mut S) -> Result<(), HtmlError> {
+pub fn parse_with_sink(html: &str, sink: &mut dyn TreeSink) -> Result<(), HtmlError> {
     let mut builder = TreeBuilder::new(sink);
     let tokenizer = Tokenizer::new(html);
     tokenizer.run(&mut builder)
