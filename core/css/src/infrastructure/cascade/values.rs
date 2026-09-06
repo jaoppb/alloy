@@ -19,7 +19,10 @@ use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::declaration::Declaration;
 use crate::domain::length::Length;
-use crate::infrastructure::cascade::{flex_values, font_values};
+use crate::infrastructure::cascade::{
+    flex_values, font_values, grid_values, logical_values, overflow_values, position_values,
+    sizing_constraints_values, text_values, visual_values,
+};
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
     parse_background_shorthand, parse_border_shorthand, parse_box_sizing, parse_color,
@@ -115,6 +118,33 @@ fn apply_edge_or_flex(
     apply_edge_longhand(style, property, tokens)
         .or_else(|| flex_values::apply(style, property, tokens))
         .or_else(|| font_values::apply(style, property, tokens))
+        .or_else(|| position_values::apply(style, property, tokens))
+        .or_else(|| sizing_constraints_values::apply(style, property, tokens))
+        .or_else(|| overflow_values::apply(style, property, tokens))
+        .or_else(|| {
+            visual_values::apply_visual_property(style.visual(), property, tokens)
+                .map(|val| style.with_visual(val))
+        })
+        .or_else(|| {
+            text_values::apply(style.text_advance(), property, tokens)
+                .map(|val| style.with_text_advance(val))
+        })
+        .or_else(|| {
+            grid_values::apply(style.grid(), property, tokens).map(|val| style.with_grid(val))
+        })
+        .or_else(|| apply_logical(style, property, tokens))
+}
+
+fn apply_logical(style: ComputedStyle, property: &str, tokens: &[Token]) -> Option<ComputedStyle> {
+    let mut logical = style.logical();
+    if logical_values::apply_to_logical_style(&mut logical, property, tokens) {
+        let style = style.with_logical(logical);
+        return Some(
+            logical_values::apply_with_context(style, logical.context(), property, tokens)
+                .unwrap_or(style),
+        );
+    }
+    logical_values::apply_with_context(style, logical.context(), property, tokens)
 }
 
 fn apply_edge_longhand(
@@ -242,6 +272,18 @@ fn reset_edge_or_flex(style: ComputedStyle, property: &str) -> Option<ComputedSt
     reset_edge_longhand(style, property)
         .or_else(|| flex_values::reset(style, property))
         .or_else(|| font_values::reset(style, property))
+        .or_else(|| position_values::reset(style, property))
+        .or_else(|| sizing_constraints_values::reset(style, property))
+        .or_else(|| overflow_values::reset(style, property))
+        .or_else(|| {
+            visual_values::reset_visual_property(style.visual(), property)
+                .map(|val| style.with_visual(val))
+        })
+        .or_else(|| {
+            text_values::reset(style.text_advance(), property)
+                .map(|val| style.with_text_advance(val))
+        })
+        .or_else(|| grid_values::reset(style.grid(), property).map(|val| style.with_grid(val)))
 }
 
 fn reset_edge_longhand(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
@@ -297,6 +339,21 @@ fn copy_edge_or_flex(
     copy_edge_longhand(style, parent, property)
         .or_else(|| flex_values::inherit(style, parent, property))
         .or_else(|| font_values::inherit(style, parent, property))
+        .or_else(|| position_values::inherit(style, parent, property))
+        .or_else(|| sizing_constraints_values::inherit(style, parent, property))
+        .or_else(|| overflow_values::inherit(style, parent, property))
+        .or_else(|| {
+            visual_values::inherit_visual_property(style.visual(), &parent.visual(), property)
+                .map(|val| style.with_visual(val))
+        })
+        .or_else(|| {
+            text_values::inherit(style.text_advance(), parent.text_advance(), property)
+                .map(|val| style.with_text_advance(val))
+        })
+        .or_else(|| {
+            grid_values::inherit(style.grid(), &parent.grid(), property)
+                .map(|val| style.with_grid(val))
+        })
 }
 
 fn copy_edge_longhand(

@@ -10,6 +10,14 @@
 pub mod author_rules;
 pub mod flex_values;
 pub mod font_values;
+pub mod grid_values;
+pub mod logical_values;
+pub mod overflow_values;
+pub mod position_values;
+pub mod sizing_constraints_values;
+pub mod text_values;
 pub mod values;
+pub mod variable_values;
+pub mod visual_values;
 
 pub use crate::infrastructure::ua_sheet::UaCascade;

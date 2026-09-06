@@ -19,6 +19,8 @@ use crate::domain::computed::flex::{
 };
 use crate::domain::computed::font::{FamilyName, FontFamily, FontFamilyList, GenericFamily};
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
+use crate::domain::computed::overflow::Overflow;
+use crate::domain::computed::position::{PositionType, ZIndex};
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
 use crate::domain::declaration::DeclarationValue;
 use crate::domain::length::Length;
@@ -461,4 +463,52 @@ fn generic_family(name: &str) -> Option<GenericFamily> {
         "monospace" => Some(GenericFamily::Monospace),
         _ => None,
     }
+}
+
+/// `position` (CSS Positioned Layout L3 §2).
+#[must_use]
+pub(crate) fn parse_position(tokens: &[Token]) -> Option<PositionType> {
+    keyword(tokens).and_then(|name| match name.as_str() {
+        "static" => Some(PositionType::Static),
+        "relative" => Some(PositionType::Relative),
+        "absolute" => Some(PositionType::Absolute),
+        "fixed" => Some(PositionType::Fixed),
+        "sticky" => Some(PositionType::Sticky),
+        _ => None,
+    })
+}
+
+/// `z-index` (CSS Positioned Layout L3 §4).
+#[must_use]
+pub(crate) fn parse_z_index(tokens: &[Token]) -> Option<ZIndex> {
+    if keyword(tokens).is_some_and(|name| name == "auto") {
+        return Some(ZIndex::Auto);
+    }
+    let [Token::Number(value)] = tokens else {
+        return None;
+    };
+    format!("{value}").parse::<i32>().ok().map(ZIndex::Index)
+}
+
+/// `overflow` (CSS Overflow L3 §3).
+#[must_use]
+pub(crate) fn parse_overflow(tokens: &[Token]) -> Option<Overflow> {
+    keyword(tokens).and_then(|name| match name.as_str() {
+        "visible" => Some(Overflow::Visible),
+        "hidden" => Some(Overflow::Hidden),
+        "clip" => Some(Overflow::Clip),
+        "scroll" => Some(Overflow::Scroll),
+        "auto" => Some(Overflow::Auto),
+        _ => None,
+    })
+}
+
+/// Constraint sizing (`min-width`, `max-width`, `min-height`, `max-height`):
+/// `auto`, `none` or a length.
+#[must_use]
+pub(crate) fn parse_constraint_sizing(tokens: &[Token]) -> Option<Sizing> {
+    if keyword(tokens).is_some_and(|name| name == "auto" || name == "none") {
+        return Some(Sizing::Auto);
+    }
+    parse_length(tokens).map(Sizing::Fixed)
 }
