@@ -133,13 +133,55 @@ impl StyledTree {
     }
 }
 
-/// The text a node contributes to an inline formatting context. Only a `Text`
-/// node has any: a comment's character data is markup, never rendered content.
+/// The text a node contributes to an inline formatting context.
+///
+/// For ordinary nodes only a `Text` node has any: a comment's character data
+/// is markup, never rendered content.
+///
+/// For `<input>` elements the inline text is synthesized from the element's
+/// attributes rather than from a child text node — the element is a replaced
+/// control with no actual DOM children, but the layout engine needs a label to
+/// paint (issues #2 / #3). The synthesis follows WHATWG HTML §4.10.18.5:
+///   - `type="submit"` → `value` attribute, default `"Submit Query"`
+///   - `type="reset"`  → `value` attribute, default `"Reset"`
+///   - `type="button"` → `value` attribute, default `""`
+///   - all other types → no synthesized text (the control is opaque)
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
-    if node_ref.kind() != SnapshotNodeKind::Text {
+    if node_ref.kind() == SnapshotNodeKind::Text {
+        return node_ref.text().map(TextRun::new);
+    }
+    synthesized_input_text(node_ref)
+}
+
+/// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible
+/// label derived from their attributes, or `None` for every other element kind.
+fn synthesized_input_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    if node_ref.tag() != Some("input") {
         return None;
     }
-    node_ref.text().map(TextRun::new)
+    let input_type = node_ref
+        .attribute("type")
+        .unwrap_or("text")
+        .to_ascii_lowercase();
+    let label = match input_type.as_str() {
+        "submit" => {
+            let value = node_ref.attribute("value").unwrap_or("Submit Query");
+            value.to_owned()
+        }
+        "reset" => {
+            let value = node_ref.attribute("value").unwrap_or("Reset");
+            value.to_owned()
+        }
+        "button" => {
+            let value = node_ref.attribute("value").unwrap_or("");
+            value.to_owned()
+        }
+        _ => return None,
+    };
+    if label.is_empty() {
+        return None;
+    }
+    Some(TextRun::new(&label))
 }
 
 /// The already-computed style of `node_ref`'s parent, looked up by index — safe
