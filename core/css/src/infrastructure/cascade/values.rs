@@ -19,7 +19,7 @@ use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::declaration::Declaration;
 use crate::domain::length::Length;
-use crate::infrastructure::cascade::flex_values;
+use crate::infrastructure::cascade::{flex_values, font_values};
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
     parse_box_sizing, parse_color, parse_display, parse_length, parse_length_edges, parse_sizing,
@@ -108,6 +108,7 @@ fn apply_edge_or_flex(
 ) -> Option<ComputedStyle> {
     apply_edge_longhand(style, property, tokens)
         .or_else(|| flex_values::apply(style, property, tokens))
+        .or_else(|| font_values::apply(style, property, tokens))
 }
 
 fn apply_edge_longhand(
@@ -230,7 +231,9 @@ fn reset_to_initial(style: ComputedStyle, property: &str) -> Option<ComputedStyl
 }
 
 fn reset_edge_or_flex(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
-    reset_edge_longhand(style, property).or_else(|| flex_values::reset(style, property))
+    reset_edge_longhand(style, property)
+        .or_else(|| flex_values::reset(style, property))
+        .or_else(|| font_values::reset(style, property))
 }
 
 fn reset_edge_longhand(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
@@ -283,6 +286,7 @@ fn copy_edge_or_flex(
 ) -> Option<ComputedStyle> {
     copy_edge_longhand(style, parent, property)
         .or_else(|| flex_values::inherit(style, parent, property))
+        .or_else(|| font_values::inherit(style, parent, property))
 }
 
 fn copy_edge_longhand(

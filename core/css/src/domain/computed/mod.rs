@@ -4,6 +4,7 @@
 pub mod display;
 pub mod edges;
 pub mod flex;
+pub mod font;
 pub mod inline_style;
 pub mod intrinsic;
 pub mod sizing;
@@ -15,6 +16,7 @@ pub use flex::{
     AlignContent, AlignItems, AlignSelf, FlexDirection, FlexFactor, FlexStyle, FlexWrap,
     JustifyContent,
 };
+pub use font::{FamilyName, FontFamily, FontFamilyList, GenericFamily};
 pub use inline_style::{TextAlign, WhiteSpace};
 pub use intrinsic::IntrinsicSize;
 pub use sizing::{BoxSizing, Sizing};
