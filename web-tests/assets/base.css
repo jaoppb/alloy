@@ -1,0 +1,99 @@
+/* Alloy Web Tests - Shared Base Styles (Offline, Zero-CDN) */
+body {
+    margin: 16px;
+    padding: 0;
+    background-color: #f4f6f8;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+header {
+    margin-bottom: 20px;
+    padding: 16px;
+    background-color: #ffffff;
+}
+
+h1 {
+    margin: 0;
+    margin-bottom: 8px;
+    font-size: 20px;
+    color: #1a252f;
+}
+
+h2 {
+    margin: 0;
+    margin-bottom: 8px;
+    font-size: 16px;
+    color: #2c3e50;
+}
+
+p {
+    margin: 0;
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.test-meta {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: #ffffff;
+}
+
+.badge {
+    padding: 4px;
+    background-color: #3498db;
+    color: #ffffff;
+    font-size: 12px;
+}
+
+.criteria-pass {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #e8f8f5;
+    color: #27ae60;
+    font-size: 13px;
+}
+
+.criteria-fail {
+    margin-top: 4px;
+    padding: 8px;
+    background-color: #fdedec;
+    color: #c0392b;
+    font-size: 13px;
+}
+
+.test-canvas {
+    margin-top: 16px;
+    padding: 16px;
+    background-color: #ffffff;
+}
+
+.box {
+    width: 60px;
+    height: 60px;
+    background-color: #3498db;
+    color: #ffffff;
+    text-align: center;
+}
+
+.pass-box {
+    background-color: #2ecc71;
+}
+
+.fail-box {
+    background-color: #e74c3c;
+}
+
+.neutral-box {
+    background-color: #95a5a6;
+}
+
+.nav-back {
+    margin-top: 24px;
+    padding: 8px;
+    background-color: #ffffff;
+}
+
+a {
+    color: #2980b9;
+}

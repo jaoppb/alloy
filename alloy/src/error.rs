@@ -59,4 +59,16 @@ pub enum AlloyError {
     /// Surface dimensions were invalid (must be positive).
     #[error("invalid surface dimensions: width and height must be positive")]
     InvalidDimensions,
+
+    /// Navigation or a subresource fetch failed (v0.5 Phase I4).
+    #[error(transparent)]
+    Network(#[from] network::NetworkError),
+
+    /// The native window or its presenter failed (v0.5 Phase I4).
+    #[error(transparent)]
+    Window(#[from] window::WindowError),
+
+    /// A fetched image's bytes did not decode as PNG (v0.5 Phase I4).
+    #[error("could not decode fetched image: {0}")]
+    ImageDecode(#[from] graphics::png::PngProblem),
 }

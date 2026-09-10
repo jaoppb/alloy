@@ -51,11 +51,13 @@ dependencies = [
  "engine",
  "graphics",
  "html",
+ "network",
  "rhai-bindings",
  "rhai-runtime",
  "thiserror 2.0.17",
  "tracing",
  "tracing-subscriber",
+ "window",
 ]
 
 [[package]]

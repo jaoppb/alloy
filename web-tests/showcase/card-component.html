@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Showcase: Card Component</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .component-wrapper {
+      background-color: #f0f3f5;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .card {
+      background-color: #ffffff;
+      width: 320px;
+      padding: 16px;
+      border-width: 1px;
+      box-sizing: border-box;
+    }
+
+    .card-header {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .avatar {
+      width: 48px;
+      height: 48px;
+      margin-right: 12px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      color: #1a252f;
+      margin-bottom: 2px;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: #7f8c8d;
+      margin: 0;
+    }
+
+    .card-body {
+      color: #34495e;
+      font-size: 13px;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+
+    .card-footer {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top-width: 1px;
+    }
+
+    .action-btn {
+      background-color: #2ecc71;
+      color: #ffffff;
+      padding: 6px 12px;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .meta-tag {
+      color: #95a5a6;
+      font-size: 11px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="test-meta">
+    <h1>Showcase: Realistic UI Card Component</h1>
+    <span class="badge">INTEGRATION: HTML5 + CSS Flexbox + Local Assets</span>
+    <div class="criteria-pass">
+      PASS: O cartão renderiza centralizado, com avatar PNG local 16x16 (expandido para 48x48), tipografia hierarquizada
+      e rodapé flex com botão e tag perfeitamente distribuídos.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Avatar ausente, desalinhamento do layout flexbox ou quebra das margens internas do cartão.
+    </div>
+  </div>
+
+  <div class="component-wrapper">
+    <div class="card">
+      <div class="card-header">
+        <img class="avatar" src="/assets/test-pattern.png" alt="Pattern">
+        <div>
+          <h2 class="card-title">Alloy Engine Core</h2>
+          <p class="card-subtitle">v0.5 Headless &amp; Window</p>
+        </div>
+      </div>
+      <p class="card-body">
+        Renderizador modular de alta performance escrito em Rust com lógica comportamental extensível em Rhai.
+      </p>
+      <div class="card-footer">
+        <span class="meta-tag">100% Offline</span>
+        <div class="action-btn">Verificar</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+
+</html>

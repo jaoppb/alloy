@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Navigation Test: Page A</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .nav-card {
+      background-color: #ffffff;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .btn-link {
+      display: block;
+      background-color: #3498db;
+      color: #ffffff;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .btn-link-sec {
+      display: block;
+      background-color: #2ecc71;
+      color: #ffffff;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>Navigation Test: Page A (Página de Origem)</h1>
+    <span class="badge">SPEC: Browser Event Loop / Link Navigation</span>
+    <div class="criteria-pass">
+      PASS: Clicar no botão azul (link relativo) ou verde (link absoluto) transita a janela do navegador para a Página B, alterando a URL base e renderizando o novo documento.
+    </div>
+    <div class="criteria-fail">
+      FAIL: O clique não disparar requisição, a tela permanecer congelada na Página A ou ocorrer travamento da janela.
+    </div>
+  </div>
+
+  <div class="nav-card">
+    <h2>1. Transição de Página via Link Relativo</h2>
+    <a class="btn-link" href="page-b.html">Navegar para Página B (Relativo: page-b.html)</a>
+
+    <h2>2. Transição de Página via Link Absoluto</h2>
+    <a class="btn-link-sec" href="/navigation/page-b.html">Navegar para Página B (Absoluto: /navigation/page-b.html)</a>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

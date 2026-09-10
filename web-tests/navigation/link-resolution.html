@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Navigation Test: Link Resolution</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .res-section {
+      background-color: #ffffff;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .link-box {
+      background-color: #f8f9fa;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-left-width: 4px;
+    }
+    .anchor-target {
+      margin-top: 200px;
+      padding: 16px;
+      background-color: #eaf2f8;
+      border-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>Navigation Test: URL Resolution Patterns</h1>
+    <span class="badge">SPEC: RFC 3986 §5 / Alloy core/network Url::join</span>
+    <div class="criteria-pass">
+      PASS: Cada padrão de URL (relativo ao diretório atual, relativo subindo pasta com .., absoluto da raiz com /, query parameters e âncoras in-page) é resolvido corretamente contra a URL base da página.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Erro de sintaxe de URL, resolução para caminhos duplicados ou perda do esquema/autoridade.
+    </div>
+  </div>
+
+  <div class="res-section">
+    <h2>1. Link Relativo no Mesmo Diretório</h2>
+    <div class="link-box">
+      <a href="page-b.html">Link para page-b.html (deve resolver para /navigation/page-b.html)</a>
+    </div>
+
+    <h2>2. Link Relativo Subindo Diretório (..)</h2>
+    <div class="link-box">
+      <a href="../html/semantic-tags.html">Link para ../html/semantic-tags.html (deve resolver para /html/semantic-tags.html)</a>
+    </div>
+
+    <h2>3. Link Absoluto a Partir da Raiz (/)</h2>
+    <div class="link-box">
+      <a href="/css/box-model/margin-collapse.html">Link para /css/box-model/margin-collapse.html</a>
+    </div>
+
+    <h2>4. Link com Query Parameters (?)</h2>
+    <div class="link-box">
+      <a href="page-b.html?source=resolution_test&amp;session=42">Link para page-b.html?source=resolution_test&amp;session=42</a>
+    </div>
+
+    <h2>5. Âncora In-Page com Fragmento (#)</h2>
+    <div class="link-box">
+      <a href="#ancora-alvo">Pular para o Alvo da Âncora (#ancora-alvo)</a>
+    </div>
+
+    <div id="ancora-alvo" class="anchor-target">
+      <h3>Alvo da Âncora In-Page (#ancora-alvo)</h3>
+      <p>Elemento de destino da navegação interna de fragmento.</p>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

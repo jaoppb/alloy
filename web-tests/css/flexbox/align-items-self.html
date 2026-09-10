@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Flexbox Align Items &amp; Self</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .flex-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .flex-container {
+      display: flex;
+      flex-direction: row;
+      background-color: #ecf0f1;
+      height: 120px;
+      width: 400px;
+      padding: 8px;
+      margin-bottom: 12px;
+    }
+    .align-center {
+      align-items: center;
+    }
+    .align-flex-end {
+      align-items: flex-end;
+    }
+    .item {
+      width: 60px;
+      background-color: #3498db;
+      color: #ffffff;
+      text-align: center;
+      padding: 4px;
+      margin-right: 8px;
+    }
+    .item-h1 { height: 40px; }
+    .item-h2 { height: 60px; }
+    .self-override {
+      align-self: flex-start;
+      background-color: #e74c3c;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Flexbox Align-Items &amp; Align-Self</h1>
+    <span class="badge">SPEC: CSS Flexbox L1 §9 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: align-items: center centraliza os itens verticalmente no contêiner de 120px de altura; align-items: flex-end ancora os itens na base inferior; e align-self: flex-start (caixa vermelha) sobrepõe o alinhamento geral do contêiner e sobe para o topo.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Itens não alinhados no eixo cruzado ou align-self sendo ignorado.
+    </div>
+  </div>
+
+  <div class="flex-section">
+    <h2>1. align-items: center</h2>
+    <div class="flex-container align-center">
+      <div class="item item-h1">H40</div>
+      <div class="item item-h2">H60</div>
+      <div class="item item-h1">H40</div>
+    </div>
+
+    <h2>2. align-items: flex-end com align-self: flex-start</h2>
+    <div class="flex-container align-flex-end">
+      <div class="item item-h1">Base 1</div>
+      <div class="item item-h2 self-override">Topo (Self)</div>
+      <div class="item item-h1">Base 2</div>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>
