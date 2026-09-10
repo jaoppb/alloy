@@ -8,10 +8,11 @@ publish.workspace = true
 description = "HTML5 tokenization and tree construction over core/dom (PRD-008, ADR-0010, ADR-0011)."
 
 [features]
-default = []
+default = ["dom"]
+dom = ["dep:dom"]
 
 [dependencies]
-dom = { path = "../dom" }
+dom = { path = "../dom", optional = true }
 thiserror = { workspace = true }
 
 [lints]

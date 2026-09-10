@@ -14,6 +14,7 @@ members = [
 	"devtools",
 	"extension",
 ]
+exclude = ["fuzz"]
 
 # Centralised package metadata. Every crate inherits these with `field.workspace = true`
 # so version, edition and MSRV are declared in exactly one place (roadmap F0, ADR-0006).
