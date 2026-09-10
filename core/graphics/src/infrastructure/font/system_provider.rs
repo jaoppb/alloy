@@ -12,6 +12,7 @@ use crate::domain::error::GraphicsError;
 use crate::domain::font::{FaceMetrics, FontId, GlyphBitmap, GlyphId};
 use crate::domain::unit::Au;
 use crate::infrastructure::font::catalog::{FontCatalog, GenericFamily};
+use crate::infrastructure::font::index;
 use crate::infrastructure::font::ttf_provider::TtfParserProvider;
 
 /// A [`FontProvider`] over one real, resolved system font.
@@ -38,6 +39,22 @@ impl SystemFontProvider {
             }
         }
         Err(GraphicsError::FontUnavailable { font: id })
+    }
+
+    /// Resolves a **named** family (`font-family: Georgia`) against the OS font
+    /// index, case-insensitively, and registers it as `id` at `size`.
+    ///
+    /// # Errors
+    ///
+    /// [`GraphicsError::FontUnavailable`] when no installed face claims `name`,
+    /// or the file it found does not read or parse. The caller then falls back
+    /// to the next family in the list, a generic, or the synthetic provider.
+    pub fn resolve_named(name: &str, id: FontId, size: Au) -> Result<Self, GraphicsError> {
+        let unavailable = || GraphicsError::FontUnavailable { font: id };
+        let path = index::shared().path_for(name).ok_or_else(unavailable)?;
+        let data = std::fs::read(path).map_err(|_error| unavailable())?;
+        let provider = TtfParserProvider::new().with_face(id, data, size)?;
+        Ok(Self { inner: provider })
     }
 }
 

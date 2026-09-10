@@ -71,7 +71,9 @@ impl TreeSink for DomTreeSink {
         let node = self.tree.create_element(dom_tag);
 
         for entry in attributes {
-            let attr_name = dom::AttributeName::new(entry.name().as_str())?;
+            let Ok(attr_name) = dom::AttributeName::new(entry.name().as_str()) else {
+                continue;
+            };
             let attr_val = dom::AttributeValue::new(entry.value().as_str());
             self.tree.set_attribute(node, attr_name, attr_val)?;
         }
@@ -120,7 +122,9 @@ impl TreeSink for DomTreeSink {
     ) -> Result<(), HtmlError> {
         let target_node = self.resolve_node(target)?;
         for entry in attributes {
-            let attr_name = dom::AttributeName::new(entry.name().as_str())?;
+            let Ok(attr_name) = dom::AttributeName::new(entry.name().as_str()) else {
+                continue;
+            };
             if self.tree.attribute(target_node, &attr_name).is_err() {
                 let attr_val = dom::AttributeValue::new(entry.value().as_str());
                 self.tree.set_attribute(target_node, attr_name, attr_val)?;

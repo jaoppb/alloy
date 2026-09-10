@@ -92,3 +92,38 @@ fn test_example_com_corpus_parsing() {
     assert!(serialized.contains("Example Domain"));
     assert!(serialized.contains("Documentation reference"));
 }
+
+#[test]
+fn malformed_attribute_in_real_world_tag_is_skipped_gracefully() {
+    // Real-world malformed HTML from CERN (https://home.web.cern.ch/about):
+    // Accidental double-quote after attribute value `stroke="currentColor""`
+    let html = r#"<svg class="header-icon" stroke="currentColor"" stroke-width="2"></svg>"#;
+    let tree = parse(html).expect("Parsing HTML with malformed attribute must succeed");
+    let doc = tree.document();
+    let svg_node = tree
+        .descendants(doc)
+        .find(|&n| {
+            matches!(
+                tree.node_kind(n),
+                Ok(dom::NodeKind::Element(e)) if e.tag().as_str() == "svg"
+            )
+        })
+        .expect("svg element must exist");
+
+    if let Ok(dom::NodeKind::Element(elem)) = tree.node_kind(svg_node) {
+        let stroke_name = dom::AttributeName::new("stroke").unwrap();
+        let stroke_width_name = dom::AttributeName::new("stroke-width").unwrap();
+        assert_eq!(
+            elem.attributes()
+                .get(&stroke_name)
+                .map(dom::AttributeValue::as_str),
+            Some("currentColor")
+        );
+        assert_eq!(
+            elem.attributes()
+                .get(&stroke_width_name)
+                .map(dom::AttributeValue::as_str),
+            Some("2")
+        );
+    }
+}

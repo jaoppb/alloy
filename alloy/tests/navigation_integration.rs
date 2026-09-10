@@ -69,6 +69,10 @@ impl WindowSystem for DelayedClickWindowSystem {
         }
         self.inner.pump_events(sink)
     }
+
+    fn request_redraw(&mut self) {
+        self.inner.request_redraw();
+    }
 }
 
 #[test]
@@ -165,4 +169,80 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
         stats.navigations, 1,
         "in-page anchor must not trigger additional network navigation"
     );
+}
+
+/// Drives a full browser session against a single start URL whose response is
+/// `response`, stopping once the loop has presented at least one frame.
+fn navigate_once(start_url: &Url, response: HttpResponse) -> alloy::LoopStats {
+    let transport = Arc::new(MockTransport::new().with_response(start_url.clone(), response));
+    let policy = Arc::new(AllowAllPolicy::new());
+    let mut system = HeadlessWindowSystem::new();
+    let mut presenter = RecordingPresenter::new();
+    let size = window::SurfaceSize::new(200, 150).unwrap();
+    let attributes = WindowAttributes::new(WindowTitle::from("test"), size);
+    system.create_window(&attributes).unwrap();
+
+    let stats = run_browser_until(
+        start_url,
+        transport,
+        policy,
+        &mut system,
+        &mut presenter,
+        size,
+        |stats| stats.navigation_errors >= 1,
+    )
+    .expect("browser loop runs");
+
+    assert!(
+        presenter.last_frame().is_some(),
+        "a frame must have been presented (the error card)"
+    );
+    stats
+}
+
+#[test]
+fn navigating_to_an_empty_body_shows_the_error_card_not_a_blank_window() {
+    let start_url = Url::parse("http://example.com/empty").unwrap();
+    let empty_ok = HttpResponse::new(StatusCode::OK, HeaderMap::new(), network::Body::empty());
+
+    let stats = navigate_once(&start_url, empty_ok);
+
+    assert_eq!(
+        stats.navigations, 0,
+        "an empty body is not a rendered document"
+    );
+    assert_eq!(
+        stats.navigation_errors, 1,
+        "it must fall back to the error card"
+    );
+}
+
+#[test]
+fn navigating_to_a_204_shows_the_error_card() {
+    let start_url = Url::parse("http://example.com/no-content").unwrap();
+    let no_content = HttpResponse::new(
+        StatusCode::new(204).unwrap(),
+        HeaderMap::new(),
+        network::Body::empty(),
+    );
+
+    let stats = navigate_once(&start_url, no_content);
+
+    assert_eq!(stats.navigations, 0);
+    assert_eq!(stats.navigation_errors, 1);
+}
+
+#[test]
+fn navigating_to_a_non_utf8_body_shows_the_error_card() {
+    let start_url = Url::parse("http://example.com/binary").unwrap();
+    let binary = HttpResponse::new(
+        StatusCode::OK,
+        HeaderMap::new(),
+        network::Body::from_bytes(vec![0xFF, 0xFE, 0x00, 0x9C]),
+    );
+
+    let stats = navigate_once(&start_url, binary);
+
+    assert_eq!(stats.navigations, 0);
+    assert_eq!(stats.navigation_errors, 1);
 }
