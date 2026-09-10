@@ -35,12 +35,13 @@
 //! inside one layer, and that is `F9`'s problem to raise, not something to
 //! pretend is solved.
 
+mod image;
 mod raster;
 
 use std::sync::Arc;
 
-use crate::application::FontProvider;
 use crate::application::ports::RenderBackend;
+use crate::application::{FontProvider, ImageProvider};
 use crate::domain::color::{Color, Opacity};
 use crate::domain::command::DisplayCommand;
 use crate::domain::display_list::DisplayList;
@@ -48,21 +49,24 @@ use crate::domain::error::{FrameOperation, FrameState, GraphicsError};
 use crate::domain::font::{FontId, GlyphBitmap, GlyphRun};
 use crate::domain::framebuffer::Framebuffer;
 use crate::domain::geometry::{Point, Rect, Size, SurfaceSize};
+use crate::domain::image::ImageId;
 use crate::domain::tier::BackendTier;
 use crate::domain::unit::{AU_PER_PX, Au};
 use crate::infrastructure::font::SyntheticFontProvider;
+use crate::infrastructure::image::EmptyImageProvider;
 
 /// The colour a frame starts as: opaque white, the default canvas of a page.
 const CANVAS: Color = Color::WHITE;
 
-/// A CPU rasterizer with a clip stack, an opacity stack, and a bound font
-/// provider (v0.5 B3).
+/// A CPU rasterizer with a clip stack, an opacity stack, a bound font
+/// provider (v0.5 B3), and an image provider (v0.5 Phase X).
 pub struct SoftwareCpuBackend {
     state: FrameState,
     frame: Option<Framebuffer>,
     clips: Vec<Rect>,
     opacities: Vec<Opacity>,
     fonts: Arc<dyn FontProvider>,
+    images: Arc<dyn ImageProvider>,
 }
 
 impl core::fmt::Debug for SoftwareCpuBackend {
@@ -96,12 +100,25 @@ impl SoftwareCpuBackend {
     /// [`SystemFontProvider`]: crate::infrastructure::font::SystemFontProvider
     #[must_use]
     pub fn with_font_provider(fonts: Arc<dyn FontProvider>) -> Self {
+        Self::with_providers(fonts, Arc::new(EmptyImageProvider))
+    }
+
+    /// A backend bound to `images` with the default synthetic font provider.
+    #[must_use]
+    pub fn with_image_provider(images: Arc<dyn ImageProvider>) -> Self {
+        Self::with_providers(Arc::new(SyntheticFontProvider::new()), images)
+    }
+
+    /// A backend bound to both `fonts` and `images`.
+    #[must_use]
+    pub fn with_providers(fonts: Arc<dyn FontProvider>, images: Arc<dyn ImageProvider>) -> Self {
         Self {
             state: FrameState::Idle,
             frame: None,
             clips: Vec::new(),
             opacities: Vec::new(),
             fonts,
+            images,
         }
     }
 
@@ -118,6 +135,11 @@ impl SoftwareCpuBackend {
                 color,
                 font,
             } => self.draw_text(glyphs, *color, *font),
+            DisplayCommand::DrawImage {
+                image,
+                source,
+                destination,
+            } => self.draw_image(*image, *source, *destination),
             DisplayCommand::PushClip { region } => {
                 self.clips.push(*region);
                 Ok(())
@@ -139,6 +161,28 @@ impl SoftwareCpuBackend {
                 command: other.kind(),
             }),
         }
+    }
+
+    /// Rasterizes one decoded image, scaled into `destination`.
+    fn draw_image(
+        &mut self,
+        image: ImageId,
+        source: Rect,
+        destination: Rect,
+    ) -> Result<(), GraphicsError> {
+        let image_buf = self.images.get(image)?;
+        let opacity = self.accumulated_opacity();
+        let Some(area) = self.clipped(destination) else {
+            return Ok(());
+        };
+        let Some(frame) = self.frame.as_mut() else {
+            return Err(GraphicsError::FrameOutOfOrder {
+                attempted: FrameOperation::Submit,
+                state: self.state,
+            });
+        };
+        image::paint_image(frame, area, destination, source, &image_buf, opacity);
+        Ok(())
     }
 
     /// Fills `rect` with `color`, clipped and attenuated by the current state.

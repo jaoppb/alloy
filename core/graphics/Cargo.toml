@@ -23,6 +23,9 @@ thiserror = { workspace = true }
 # uses) lives in this crate too, so `--no-default-features` still needs the type
 # even with `software-backend` off.
 ttf-parser = { workspace = true }
+# Phase X image support: reexport of network::inflate (RFC 1951 / zlib for PNG IDAT).
+# default-features = false links no socket and no crypto.
+network = { path = "../network", default-features = false }
 
 [lints]
 workspace = true

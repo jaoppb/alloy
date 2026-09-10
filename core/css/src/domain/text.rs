@@ -56,16 +56,38 @@ impl ComputedText {
 }
 
 /// The measured extent of a text run: one line box.
+///
+/// `baseline` is the distance from the top of the box down to the alphabetic
+/// baseline — what the inline formatting context of v0.5 B4 aligns items on. A
+/// measurer with no notion of ascent reports `baseline == height`, which makes
+/// [`TextMetrics::new`] the "align on the bottom edge" answer it was before the
+/// field existed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TextMetrics {
     width: Au,
     height: Au,
+    baseline: Au,
 }
 
 impl TextMetrics {
+    /// Metrics whose baseline sits on the bottom edge.
     #[must_use]
     pub const fn new(width: Au, height: Au) -> Self {
-        Self { width, height }
+        Self {
+            width,
+            height,
+            baseline: height,
+        }
+    }
+
+    /// Metrics with an explicit ascent.
+    #[must_use]
+    pub const fn with_baseline(width: Au, height: Au, baseline: Au) -> Self {
+        Self {
+            width,
+            height,
+            baseline,
+        }
     }
 
     #[must_use]
@@ -76,5 +98,17 @@ impl TextMetrics {
     #[must_use]
     pub const fn height(self) -> Au {
         self.height
+    }
+
+    /// The distance from the top of the box to the alphabetic baseline.
+    #[must_use]
+    pub const fn baseline(self) -> Au {
+        self.baseline
+    }
+
+    /// The distance from the baseline to the bottom of the box.
+    #[must_use]
+    pub const fn descent(self) -> Au {
+        self.height.saturating_sub(self.baseline)
     }
 }
