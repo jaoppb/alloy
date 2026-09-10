@@ -1,12 +1,14 @@
 //! [`DomSnapshot`] — an immutable, read-only projection of a `dom::DomTree`
 //! (`PRD-007:35-36`).
 //!
-//! Elements, attributes and tree shape, with **no `core/dom` internal type in
-//! the public API**: a node is addressed by an opaque [`SnapshotId`], a tag is
-//! a `&str`, an attribute is a `(&str, &str)` pair. The only way to build one
-//! is [`crate::snapshot`], the explicit mapping function of `PRD-007:36`.
+//! Elements, attributes and tree shape: a node is addressed by an opaque
+//! [`SnapshotId`], a tag is a [`TagName`], and an attribute is a `(&str, &str)`
+//! pair. The only way to build one is [`crate::snapshot`], the explicit
+//! mapping function of `PRD-007:36`.
 
 use core::fmt;
+
+use dom::TagName;
 
 /// An opaque handle to a node inside one [`DomSnapshot`].
 ///
@@ -148,10 +150,10 @@ impl AttributeList {
     }
 }
 
-/// An element's own facts: its lowercased tag and its attributes.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// An element's own facts: its tag and its attributes.
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ElementFacts {
-    tag: String,
+    tag: TagName,
     attributes: AttributeList,
 }
 
@@ -226,10 +228,10 @@ impl<'snapshot> NodeRef<'snapshot> {
             .map_or(SnapshotNodeKind::Document, |node| node.kind)
     }
 
-    /// The lowercased tag name, or `None` for a non-element.
+    /// The tag name, or `None` for a non-element.
     #[must_use]
-    pub fn tag(self) -> Option<&'snapshot str> {
-        self.element().map(|element| element.tag.as_str())
+    pub fn tag(self) -> Option<&'snapshot TagName> {
+        self.element().map(|element| &element.tag)
     }
 
     /// The value of attribute `name`, or `None`.
@@ -290,7 +292,7 @@ impl SnapshotBuilder {
     pub(crate) fn add_element(
         &mut self,
         parent: Option<SnapshotId>,
-        tag: String,
+        tag: TagName,
         attributes: AttributeList,
     ) -> SnapshotId {
         let facts = ElementFacts { tag, attributes };

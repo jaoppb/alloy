@@ -1,8 +1,7 @@
 //! [`snapshot`] — the explicit `dom::DomTree → DomSnapshot` mapping
 //! (`PRD-007:36`).
 //!
-//! This is the **only** file in `core/css` that names a `core/dom` type. It is
-//! non-recursive: an explicit work stack of `(dom::NodeId, parent SnapshotId)`
+//! Non-recursive: an explicit work stack of `(dom::NodeId, parent SnapshotId)`
 //! frames, never a self-call — the same discipline as
 //! `core/dom/src/application/serialize.rs`. Nodes are visited pre-order, so the
 //! [`SnapshotId`]s come out in document order with every parent's id smaller
@@ -38,11 +37,9 @@ fn add_node(
     parent: Option<SnapshotId>,
 ) -> SnapshotId {
     match tree.node_kind(dom_node) {
-        Ok(dom::NodeKind::Element(element)) => builder.add_element(
-            parent,
-            element.tag().as_str().to_owned(),
-            collect_attributes(element),
-        ),
+        Ok(dom::NodeKind::Element(element)) => {
+            builder.add_element(parent, element.tag().clone(), collect_attributes(element))
+        }
         Ok(dom::NodeKind::Text(content)) => {
             builder.add_character_data(SnapshotNodeKind::Text, parent, content.as_str().to_owned())
         }

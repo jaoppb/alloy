@@ -80,6 +80,7 @@ pub const SUPPORTED_SELECTORS: [&str; 0] = [];
 pub use application::conformance;
 pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
 pub use application::snapshot::snapshot;
+pub use dom::TagName;
 pub use domain::color::CssColor;
 pub use domain::computed::{ComputedStyle, Display, LengthEdges};
 pub use domain::dom_snapshot::{

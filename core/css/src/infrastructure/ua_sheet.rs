@@ -7,6 +7,8 @@
 //! `font-size`). B2 replaces this with a real three-origin cascade over parsed
 //! rules.
 
+use dom::TagName;
+
 use crate::application::ports::CascadeResolver;
 use crate::domain::computed::display::Display;
 use crate::domain::computed::edges::LengthEdges;
@@ -52,23 +54,33 @@ const fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> C
     }
 }
 
-fn style_for_tag(base: ComputedStyle, tag: &str) -> ComputedStyle {
+const fn style_for_tag(base: ComputedStyle, tag: &TagName) -> ComputedStyle {
     match tag {
-        "head" | "style" | "script" | "title" | "meta" | "link" | "base" => {
-            base.with_display(Display::None)
-        }
-        "span" | "a" | "em" | "strong" | "b" | "i" | "code" | "small" | "label" => {
-            base.with_display(Display::Inline)
-        }
-        "h1" => heading(base, 2.00),
-        "h2" => heading(base, 1.50),
-        "h3" => heading(base, 1.17),
-        "h4" => heading(base, 1.00),
-        "h5" => heading(base, 0.83),
-        "h6" => heading(base, 0.67),
-        "p" => block_with_margin(base, LengthEdges::vertical(Length::Pixels(16.0))),
-        "body" => block_with_margin(base, LengthEdges::uniform(Length::Pixels(8.0))),
-        "blockquote" => block_with_margin(
+        TagName::Head
+        | TagName::Style
+        | TagName::Script
+        | TagName::Title
+        | TagName::Meta
+        | TagName::Link
+        | TagName::Base => base.with_display(Display::None),
+        TagName::Span
+        | TagName::A
+        | TagName::Em
+        | TagName::Strong
+        | TagName::B
+        | TagName::I
+        | TagName::Code
+        | TagName::Small
+        | TagName::Label => base.with_display(Display::Inline),
+        TagName::H1 => heading(base, 2.00),
+        TagName::H2 => heading(base, 1.50),
+        TagName::H3 => heading(base, 1.17),
+        TagName::H4 => heading(base, 1.00),
+        TagName::H5 => heading(base, 0.83),
+        TagName::H6 => heading(base, 0.67),
+        TagName::P => block_with_margin(base, LengthEdges::vertical(Length::Pixels(16.0))),
+        TagName::Body => block_with_margin(base, LengthEdges::uniform(Length::Pixels(8.0))),
+        TagName::Blockquote => block_with_margin(
             base,
             LengthEdges::new(
                 Length::Pixels(16.0),

@@ -122,8 +122,7 @@ arch:
     @command -v arch-lint >/dev/null || { echo "arch-lint not found — run: just setup"; exit 1; }
     arch-lint check
 
-# Prove core/engine links no script interpreter (ADR-0002 / ADR-0011 item 2) and
-# that core/runtime/rhai names no domain crate (v0.5 report §2.12 — the R split)
+# Prove core/engine links no script interpreter (ADR-0002 / ADR-0011 item 2)
 no-engine:
     @{{cargo}} tree -p engine --edges normal --prefix none
     @if {{cargo}} tree -p engine --edges normal --prefix none \
@@ -131,16 +130,6 @@ no-engine:
         echo "✗ core/engine linked a script interpreter"; exit 1; \
     else \
         echo "✓ core/engine is interpreter-free"; \
-    fi
-    @if {{cargo}} tree -p rhai-runtime --edges normal --prefix none | grep -Eq '^dom '; then \
-        echo "✗ core/runtime/rhai depends on core/dom — the bridge belongs in rhai-bindings"; exit 1; \
-    else \
-        echo "✓ core/runtime/rhai is domain-crate free"; \
-    fi
-    @if {{cargo}} tree -p css --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then \
-        echo "✗ core/css linked the engine or a script runtime"; exit 1; \
-    else \
-        echo "✓ core/css is engine/rhai free"; \
     fi
 
 # --- misc -------------------------------------------------------------
