@@ -12,5 +12,12 @@ engine = { path = "../../engine" }
 rhai = { workspace = true }
 tracing = { workspace = true }
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "hook_overhead"
+harness = false
+
 [lints]
 workspace = true

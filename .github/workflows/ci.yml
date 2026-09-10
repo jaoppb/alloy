@@ -90,9 +90,11 @@ jobs:
       - run: cargo check --workspace --all-targets
       - run: cargo test --workspace --all-features
 
-  # ---- ADR-0002 / ADR-0011 N-04: the engine abstraction links no runtime --
-  no-engine:
-    name: Engine abstraction is adapter-free
+  # ---- ADR-0002 / ADR-0011 N-04: layering — no crate links a subsystem it
+  # must not (renamed from `no-engine` in v0.5 Phase P: the checks below cover
+  # every subsystem's layering rule, not only the engine's, since B4/B5/C1/C2) -
+  layering:
+    name: Layering — no crate links a subsystem it must not
     needs: rust-quality
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -112,6 +114,7 @@ jobs:
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
+      - run: cargo test -p html --no-default-features
       - run: cargo test -p network --no-default-features
       - run: cargo test -p window --no-default-features
       # PRD-007: core/css realises the cascade/layout ports without linking the
@@ -133,6 +136,15 @@ jobs:
             exit 1
           fi
           echo "✓ core/network is engine/rhai/subsystem free"
+      # PRD-008 / B5: core/html realises the TokenSink/TreeSink ports over
+      # core/dom without naming the engine or a script runtime.
+      - name: html links no engine or script runtime
+        run: |
+          if cargo tree -p html --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then
+            echo "✗ core/html linked the engine or a script runtime"
+            exit 1
+          fi
+          echo "✓ core/html is engine/rhai free"
       # v0.5 report §2.12 (R): the pure Rhai backend must name no domain crate —
       # the domain bridges live in `rhai-bindings`. `just no-engine` also asserts
       # `rhai-runtime -> !dom` locally; this keeps it green in CI.
@@ -167,7 +179,7 @@ jobs:
 
   # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
   css-conformance:
-    name: CSS support manifest
+    name: CSS + HTML support manifests
     needs: rust-quality
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -188,8 +200,9 @@ jobs:
       # SUPPORTED_PROPERTIES / SUPPORTED_SELECTORS registries, and what the
       # parser really accepts — must agree in every direction. There is no bless
       # path: a generated manifest would agree by construction. B5 adds
-      # `-p html --test manifest_runner` here for the html5lib cut.
+      # `-p html --test manifest_runner` here for the html5lib-class cut.
       - run: cargo test -p css --test manifest_runner
+      - run: cargo test -p html --test manifest_runner
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
   fault-injection:
@@ -217,6 +230,63 @@ jobs:
       # The suite moved to `rhai-bindings` with the DOM bridge (v0.5 report §2.12).
       - run: cargo test -p rhai-bindings --test fault_injection -- --test-threads=1
 
+  # ---- PRD-001 N-01 / v0.5 Phase M: the <10us per-hook budget must not regress -
+  hook-benchmark:
+    name: Hook dispatch overhead
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-benchmark-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-benchmark-
+      # ci/hook_benchmark.sh checks the measured mean against both the
+      # absolute PRD-001 N-01 ceiling (<10us) and a generous multiple of the
+      # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
+      - run: ci/hook_benchmark.sh
+
+  # ---- ADR-0018 row 1 surfaces: fuzz the hostile-byte decoders ---------------
+  fuzz:
+    name: Fuzz (${{ matrix.target }})
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [inflate, png_decode, css_parse]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/bin/cargo-fuzz
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            fuzz/target/
+          key: ${{ runner.os }}-cargo-fuzz-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-fuzz-
+      - name: Install nightly (cargo-fuzz requires it)
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-fuzz
+        run: test -x ~/.cargo/bin/cargo-fuzz || cargo install cargo-fuzz --locked
+      # 10 minutes per target (ADR-0018 row 1: TLS/HTTP/HTML/CSS/image/font
+      # decoders must never panic on hostile bytes) — zero crashes expected.
+      # Run from the repo root: cargo-fuzz auto-discovers ./fuzz/Cargo.toml,
+      # the same convention `fuzz/` already documents (kept outside the main
+      # workspace on purpose).
+      - run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=600
 
   supply-chain:
     name: cargo-deny
@@ -236,17 +306,16 @@ jobs:
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
-  # Advisory for now (v0.5 Phase 0 spike): `cargo-geiger 0.13` runs under the
-  # pinned toolchain but its full unsafe-count scan hits a target-resolution bug
-  # on this workspace; `--forbid-only` works. Phase P settles the enforcement
-  # mechanism and flips `continue-on-error` off. `unsafe-allowlist.toml` is the
-  # reviewed record of every dependency permitted to carry `unsafe`.
+  # Blocking from v0.5 Phase P: `ci/unsafe_audit.sh` runs the `--forbid-only`
+  # sweep, then a full `cargo-geiger` scan reduced to this workspace's direct
+  # third-party dependencies, failing if one carries `unsafe` outside the
+  # reviewed `unsafe-allowlist.toml`. See that script's header for why the
+  # scope is direct dependencies, not the whole transitive graph.
   unsafe-audit:
-    name: unsafe audit (advisory)
+    name: unsafe audit
     needs: rust-quality
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    continue-on-error: true
     permissions:
       contents: read
     steps:
@@ -262,10 +331,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-geiger-
       - name: Install cargo-geiger
         run: test -x ~/.cargo/bin/cargo-geiger || cargo install cargo-geiger --locked
-      - name: forbid(unsafe_code) tree
-        run: cargo geiger --manifest-path "$PWD/alloy/Cargo.toml" --forbid-only --output-format Ascii
-      - name: allowlist is present and non-empty
-        run: test -s unsafe-allowlist.toml && grep -q '\[\[allow\]\]' unsafe-allowlist.toml
+      - run: ci/unsafe_audit.sh
 
   # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
   arch-lint:
@@ -319,3 +385,20 @@ jobs:
         with:
           name: coverage-lcov
           path: lcov.info
+      # v0.5 Phase P: extend the domain/ gate to the four ports B4/B5/C1/C2
+      # added. Scoped to domain/ only (excludes application/ and
+      # infrastructure/, which carry real I/O and adapter plumbing that a
+      # domain-coverage gate was never meant to measure) via
+      # --ignore-filename-regex, the same way the engine gate above is
+      # implicitly domain-only because that crate is mostly domain/.
+      - name: Coverage for css/network/window/html domain/
+        run: >
+          cargo llvm-cov --package css --package network --package window --package html --all-features
+          --ignore-filename-regex '(/application/|/infrastructure/)'
+          --lcov --output-path lcov-v0-5.info
+          --fail-under-lines 85
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov-v0-5
+          path: lcov-v0-5.info

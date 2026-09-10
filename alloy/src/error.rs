@@ -20,11 +20,43 @@ pub enum AlloyError {
         source: io::Error,
     },
 
+    /// The HTML input file could not be read.
+    #[error("cannot read HTML file {}: {source}", path.display())]
+    HtmlRead {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    /// The output PNG file could not be written.
+    #[error("cannot write output PNG {}: {source}", path.display())]
+    OutputWrite {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
     /// Compiling or running the script under the sandbox failed.
     #[error(transparent)]
     Engine(#[from] EngineError),
 
-    /// Serializing the DOM failed.
+    /// Serializing or operating on the DOM failed.
     #[error("could not serialize the DOM: {0}")]
     Dom(#[from] DomError),
+
+    /// Parsing HTML failed.
+    #[error(transparent)]
+    Html(#[from] html::HtmlError),
+
+    /// CSS cascade or layout resolution failed.
+    #[error(transparent)]
+    Css(#[from] css::CssError),
+
+    /// Display list generation or rasterization failed.
+    #[error(transparent)]
+    Graphics(#[from] graphics::GraphicsError),
+
+    /// Surface dimensions were invalid (must be positive).
+    #[error("invalid surface dimensions: width and height must be positive")]
+    InvalidDimensions,
 }

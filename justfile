@@ -81,20 +81,28 @@ fix:
 
 # --- quality gates -------------------------------------------------
 
-# Full local gate (CI minus the 3-OS matrix)
-gate: fmt-check lint check test deny coverage arch no-engine css-conformance
+# Full local gate (CI minus the 3-OS matrix, cargo-fuzz's 10min/target runs, and benches)
+gate: fmt-check lint check test deny coverage arch layering css-conformance unsafe-audit
     @echo "✓ all local gates passed"
 
 # Alias for `gate`
 ci: gate
 
-# unsafe-by-threat-surface audit (ADR-0018). Advisory until Phase P settles the
-# enforcement mechanism — cargo-geiger 0.13 full scan is buggy on this tree.
+# unsafe-by-threat-surface audit (ADR-0018). Blocking since v0.5 Phase P —
+# see ci/unsafe_audit.sh for the forbid-only sweep + direct-dependency scan.
 unsafe-audit:
     @command -v cargo-geiger >/dev/null || {{cargo}} install cargo-geiger --locked
-    {{cargo}} geiger --manifest-path "$PWD/alloy/Cargo.toml" --forbid-only --output-format Ascii
-    @test -s unsafe-allowlist.toml && grep -q '\[\[allow\]\]' unsafe-allowlist.toml \
-        && echo "✓ unsafe-allowlist.toml present"
+    ./ci/unsafe_audit.sh
+
+# Hook-dispatch overhead vs. the committed baseline (PRD-001 N-01, <10us).
+hook-benchmark:
+    ./ci/hook_benchmark.sh
+
+# ADR-0018 row-1 decoders under cargo-fuzz, 10 min/target (requires nightly
+# and cargo-fuzz — not part of `just gate`, CI-only otherwise).
+fuzz target="":
+    @command -v cargo-fuzz >/dev/null || {{cargo}} install cargo-fuzz --locked
+    {{ if target == "" { "for t in inflate png_decode css_parse; do cargo +nightly fuzz run $t -- -max_total_time=600; done" } else { "cargo +nightly fuzz run " + target + " -- -max_total_time=600" } }}
 
 # Supply-chain audit: licenses, advisories, bans, sources
 deny:
@@ -106,10 +114,14 @@ audit:
     @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: just setup"; exit 1; }
     {{cargo}} deny check advisories
 
-# Line coverage of the engine crate; fails under the roadmap threshold
+# Line coverage of the engine crate, and of css/network/window/html's domain/
+# (v0.5 Phase P); both fail under the roadmap threshold.
 coverage:
     @command -v cargo-llvm-cov >/dev/null || { echo "cargo-llvm-cov not found — run: just setup"; exit 1; }
     {{cargo}} llvm-cov --package {{cov_pkg}} --all-features --summary-only --fail-under-lines {{cov_min}}
+    {{cargo}} llvm-cov --package css --package network --package window --package html --all-features \
+        --ignore-filename-regex '(/application/|/infrastructure/)' \
+        --summary-only --fail-under-lines {{cov_min}}
 
 # Write an HTML coverage report under target/llvm-cov/html
 coverage-html:
@@ -117,10 +129,11 @@ coverage-html:
     {{cargo}} llvm-cov --package {{cov_pkg}} --all-features --html
     @echo "report: target/llvm-cov/html/index.html"
 
-# CSS support manifest: MANIFEST.md, the registries and the parser must agree
-# in every direction (relatório §2.8:350-354). No bless path by design.
+# CSS + HTML support manifests: MANIFEST.md, the registries and the parser
+# must agree in every direction (relatório §2.8:350-354). No bless path by design.
 css-conformance:
     {{cargo}} test -p css --test manifest_runner
+    {{cargo}} test -p html --test manifest_runner
 
 # Architecture gate: layers, dependencies, `tracing` + no-`unwrap` (arch-lint)
 arch:
@@ -128,8 +141,10 @@ arch:
     arch-lint check
 
 # Prove core/engine links no script interpreter (ADR-0002 / ADR-0011 item 2) and
-# that core/runtime/rhai names no domain crate (v0.5 report §2.12 — the R split)
-no-engine:
+# that core/runtime/rhai names no domain crate (v0.5 report §2.12 — the R split).
+# Renamed from `no-engine` in v0.5 Phase P (kept as an alias below) — it now
+# covers every subsystem's layering rule, not only the engine's.
+layering:
     @{{cargo}} tree -p engine --edges normal --prefix none
     @if {{cargo}} tree -p engine --edges normal --prefix none \
         | grep -Eiq '^(rhai|boa_engine|rquickjs|deno_core|v8|mlua|rlua) '; then \
@@ -147,6 +162,11 @@ no-engine:
     else \
         echo "✓ core/css is engine/rhai free"; \
     fi
+    @if {{cargo}} tree -p html --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then \
+        echo "✗ core/html linked the engine or a script runtime"; exit 1; \
+    else \
+        echo "✓ core/html is engine/rhai free"; \
+    fi
     @if {{cargo}} tree -p network --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics) '; then \
         echo "✗ core/network linked the engine, a script runtime or another subsystem"; exit 1; \
     else \
@@ -162,6 +182,9 @@ no-engine:
     else \
         echo "✓ core/window --no-default-features (no-window) links neither winit nor softbuffer"; \
     fi
+
+# Alias for `layering` (pre-v0.5-Phase-P name).
+no-engine: layering
 
 # --- misc -------------------------------------------------------------
 
