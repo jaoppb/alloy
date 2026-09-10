@@ -187,3 +187,46 @@ fn box_sizing_decides_whether_padding_and_border_grow_the_box_or_eat_the_content
     assert_eq!(border_box.content().size().width(), au(170));
     assert_eq!(border_box.border_box().size().width(), au(200));
 }
+
+// ---- position: relative -----------------------------------------------------
+
+/// A box with `position: relative; top: 20px; left: 10px` stays in normal
+/// flow for margin purposes — its sibling below it is unaffected — but its
+/// painted rectangle shifts by the declared insets (issue #5).
+#[test]
+fn position_relative_shifts_paint_rect_without_disturbing_flow() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let container = element(&mut tree, root, "container");
+    element(&mut tree, container, "a");
+    element(&mut tree, container, "b");
+
+    let source = "
+        #a { height: 40px; position: relative; top: 20px; left: 10px; }
+        #b { height: 20px; }
+    ";
+    let dom = snapshot(&tree, root);
+    let boxes = layout_boxes(&tree, root, source);
+    let a = box_of(&boxes, &dom, "a");
+    let b = box_of(&boxes, &dom, "b");
+
+    // `#a` is shifted 10px right and 20px down visually.
+    assert_eq!(
+        a.border_box().min_x(),
+        au(10),
+        "#a should be shifted 10px right"
+    );
+    assert_eq!(
+        a.border_box().min_y(),
+        au(20),
+        "#a should be shifted 20px down"
+    );
+
+    // `#b` is placed immediately after `#a`'s 40px normal-flow height, at y=40.
+    // The relative offset of `#a` must not push `#b` further down.
+    assert_eq!(
+        b.border_box().min_y(),
+        au(40),
+        "#b must stay at normal-flow position"
+    );
+}

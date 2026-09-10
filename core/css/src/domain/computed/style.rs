@@ -15,8 +15,15 @@ use crate::domain::computed::display::Display;
 use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::flex::FlexStyle;
 use crate::domain::computed::font::FontFamilyList;
+use crate::domain::computed::grid::GridStyle;
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
+use crate::domain::computed::logical::LogicalStyle;
+use crate::domain::computed::overflow::OverflowStyle;
+use crate::domain::computed::position::PositionStyle;
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
+use crate::domain::computed::sizing_constraints::SizingConstraints;
+use crate::domain::computed::text_advance::TextAdvanceStyle;
+use crate::domain::computed::visual::VisualStyle;
 use crate::domain::length::Length;
 
 /// The CSS `initial` computed `font-size`: `16px`.
@@ -40,6 +47,13 @@ pub struct ComputedStyle {
     text_align: TextAlign,
     white_space: WhiteSpace,
     flex: FlexStyle,
+    position: PositionStyle,
+    constraints: SizingConstraints,
+    overflow: OverflowStyle,
+    visual: VisualStyle,
+    text_advance: TextAdvanceStyle,
+    grid: GridStyle,
+    logical: LogicalStyle,
 }
 
 impl ComputedStyle {
@@ -61,6 +75,13 @@ impl ComputedStyle {
             text_align: TextAlign::Left,
             white_space: WhiteSpace::Normal,
             flex: FlexStyle::initial(),
+            position: PositionStyle::initial(),
+            constraints: SizingConstraints::initial(),
+            overflow: OverflowStyle::initial(),
+            visual: VisualStyle::initial(),
+            text_advance: TextAdvanceStyle::initial(),
+            grid: GridStyle::initial(),
+            logical: LogicalStyle::initial(),
         }
     }
 
@@ -80,6 +101,8 @@ impl ComputedStyle {
             font_family: parent.font_family,
             text_align: parent.text_align,
             white_space: parent.white_space,
+            text_advance: TextAdvanceStyle::inheriting_from(&parent.text_advance),
+            logical: parent.logical,
             ..Self::initial()
         }
     }
@@ -164,6 +187,47 @@ impl ComputedStyle {
     }
 
     #[must_use]
+    pub const fn with_position(self, position: PositionStyle) -> Self {
+        Self { position, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_constraints(self, constraints: SizingConstraints) -> Self {
+        Self {
+            constraints,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub const fn with_overflow(self, overflow: OverflowStyle) -> Self {
+        Self { overflow, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_visual(self, visual: VisualStyle) -> Self {
+        Self { visual, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_text_advance(self, text_advance: TextAdvanceStyle) -> Self {
+        Self {
+            text_advance,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub const fn with_grid(self, grid: GridStyle) -> Self {
+        Self { grid, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_logical(self, logical: LogicalStyle) -> Self {
+        Self { logical, ..self }
+    }
+
+    #[must_use]
     pub const fn display(&self) -> Display {
         self.display
     }
@@ -231,6 +295,41 @@ impl ComputedStyle {
     #[must_use]
     pub const fn flex(&self) -> FlexStyle {
         self.flex
+    }
+
+    #[must_use]
+    pub const fn position(&self) -> PositionStyle {
+        self.position
+    }
+
+    #[must_use]
+    pub const fn constraints(&self) -> SizingConstraints {
+        self.constraints
+    }
+
+    #[must_use]
+    pub const fn overflow(&self) -> OverflowStyle {
+        self.overflow
+    }
+
+    #[must_use]
+    pub const fn visual(&self) -> VisualStyle {
+        self.visual
+    }
+
+    #[must_use]
+    pub const fn text_advance(&self) -> TextAdvanceStyle {
+        self.text_advance
+    }
+
+    #[must_use]
+    pub const fn grid(&self) -> GridStyle {
+        self.grid
+    }
+
+    #[must_use]
+    pub const fn logical(&self) -> LogicalStyle {
+        self.logical
     }
 
     /// The computed `font-size` resolved to a computed length, for layout and
