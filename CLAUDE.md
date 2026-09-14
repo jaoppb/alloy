@@ -1,6 +1,9 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Gemini CLI — see `GEMINI.md`, a pointer to this file) when
+working with code in this repository. Do not fork guidance into `GEMINI.md`: recurring-mistake documentation only works
+if every agent reads the same corrections, so this file is the single source and `GEMINI.md` stays a pointer, never a
+copy.
 
 ## Current State
 
@@ -74,6 +77,54 @@ Still **stubs** (8 lines: a doc comment and `#![forbid(unsafe_code)]` — no fun
 `core/graphics`, `core/window`, `core/network`, `core/js`, `devtools`, `extension`. Open criteria: C-10 … C-18 (v0.3+).
 Follow the `domain/` / `application/` / `infrastructure/` layering that `core/engine`, `core/runtime/rhai`, and
 `core/dom` now demonstrate; `docs/adr/` + `docs/requirements/` remain the authoritative contract.
+
+## Recurring Review Feedback — Read Before Opening a PR
+
+Mined from every review comment on PRs #1–#11 (`gh api repos/jaoppb/alloy/pulls/<N>/{reviews,comments}`). These patterns
+were flagged **more than once, in more than one PR** — each is a mistake an agent re-introduced after it had already
+been corrected somewhere else in the codebase. This section exists so that stops happening; check it before every push,
+and especially before starting a fresh stacked branch off `main` (PRs #10–#20 are parallel stacked branches — a decision
+recorded here or in `docs/adr/` may already postdate the commit your branch forked from).
+
+1. **Naked primitive strings for domain identifiers.** By far the most repeated finding (PR #2, #4, #5, #10, #11):
+   function/variable names, tag names, attribute names, HTTP media types — all initially shipped as raw `&str`/`String`
+   instead of a validated newtype or enum, then had to be redone as `FunctionName`, `VariableName`, `TagName`,
+   `AttributeName`, `MediaType`, etc. This is not a style nit — it is the Object Calisthenics rule above ("no naked
+   primitives") and CI/review will catch it every time. When a value has a valid/invalid distinction (an identifier
+   format, a closed vocabulary like an HTML tag or an HTTP method) it is a newtype or enum from the first commit, never
+   a bare string with call sites doing `&str` comparisons.
+2. **`arch-lint.toml` reinvented per-branch instead of extended.** PR #4, #5, #10, #11 each got "replace this with a
+   rule at `arch-lint.toml`" — a stacked branch re-adding an ad hoc `cargo tree | grep` / manual dependency check
+   instead of adding a `[[deny-scope-dep]]` / `[[restrict-use]]` rule to the existing config. Before writing any new
+   architectural check (dependency direction, layer boundary), read `arch-lint.toml` first — the mechanism almost
+   certainly already exists; extend it, don't shadow it with a bespoke script.
+3. **`println!`/`eprintln!` creeping back in.** PR #2, #4, #5: raw print macros instead of `tracing` (ADR-0014). This is
+   settled — use `tracing::info!`/`warn!`/`error!` with `EnvFilter` from the first line of new code, in every crate that
+   logs, including a fresh stacked branch that forked before ADR-0014 landed.
+4. **Manual error enums instead of `thiserror`.** PR #2, #4, #5: hand-rolled `impl Display`/`Error` where `thiserror`
+   (ADR-0015) applies. `core/engine` is the one deliberate exception (hand-written `Display`/`Error`, see Object
+   Calisthenics note above) — everywhere else, derive with `thiserror` from the start.
+5. **Wrong collection for keyed/lookup data.** PR #5, #10: `Vec<(K, V)>` used where a `BTreeMap`/`HashMap`-backed
+   first-class collection was needed for correctness (ordering, dedup) or `O(1)`/`O(log n)` lookup — e.g.
+   `AttributeMap`, a guarded-binding table. Pick the collection for the access pattern the type actually needs, not the
+   first one that compiles.
+6. **Domain logic implemented in `application` (or leaking into `infrastructure`).** PR #2, #5: CSS parsing, DOM
+   serialization detail (`is_void`, entity escaping) initially placed in `application/` when the decision belongs in
+   `domain/` types themselves (e.g. `TagName::is_void()`), and `infrastructure` coupling a concrete crate (`notify`)
+   directly into `application` instead of behind a port. Re-check layer placement (per the layering table below) before
+   the first commit of a new type, not after review.
+7. **GitHub Actions pinned to stale versions.** PR #2, #4: `actions/checkout`, `setup-node`, `cache`, etc. left on an
+   old major. Check the action's current stable major before pinning a version in `.github/workflows/ci.yml`, and keep
+   `node-version` on the current LTS/latest used elsewhere in the workflow.
+8. **A documented invariant silently goes false.** PR #4: introducing `rhai` made `PRD-001:97` ("zero unsafe memory
+   operations exposed to script runtimes") false by vacuity-loss — `main` had no script engine, so the requirement was
+   trivially true until this PR made it checkable and failing. Nobody caught it until a manual audit. When a PR adds a
+   new dependency or crosses a boundary a PRD/ADR makes a claim about, grep the claim against the new code _before_
+   opening the PR and either satisfy it or open a tracked, explicit exception — never let review discover it.
+9. **A missing ADR for a tooling/architecture decision.** PR #2, #4: `thiserror` adoption, the `justfile` / `arch-lint`
+   swap, `tracing` adoption were all implemented before an ADR existed to justify them; reviewers asked for the ADR
+   after the fact. If the change is the kind of decision `docs/adr/README.md` tracks, write the ADR in the same PR as
+   the code, not as a follow-up.
 
 ## Commands
 
