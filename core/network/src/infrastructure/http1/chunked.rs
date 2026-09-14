@@ -25,8 +25,8 @@ use crate::infrastructure::limits::WireLimits;
 /// [`NetworkError::Framing`] for every malformation above,
 /// [`NetworkError::LimitExceeded`] at the body or chunk-line ceiling,
 /// [`NetworkError::Timeout`] when the body budget is spent.
-pub fn decode(
-    reader: &mut dyn BufRead,
+pub fn decode<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<Vec<u8>, NetworkError> {
@@ -45,8 +45,8 @@ pub fn decode(
     }
 }
 
-fn read_chunk_size(
-    reader: &mut dyn BufRead,
+fn read_chunk_size<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<usize, NetworkError> {
@@ -87,8 +87,8 @@ fn guard_total(collected: usize, incoming: usize, limits: WireLimits) -> Result<
     Ok(())
 }
 
-fn expect_chunk_terminator(
-    reader: &mut dyn BufRead,
+fn expect_chunk_terminator<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<(), NetworkError> {
@@ -109,8 +109,8 @@ fn expect_chunk_terminator(
 /// one. Its fields are discarded — nothing downstream reads them yet — but it
 /// is still read under the field-count ceiling so it cannot be an unbounded
 /// stream in disguise.
-fn read_trailer_section(
-    reader: &mut dyn BufRead,
+fn read_trailer_section<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<(), NetworkError> {

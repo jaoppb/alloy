@@ -75,6 +75,19 @@ fn an_invalid_chunk_size_line_is_a_typed_error() {
 }
 
 #[test]
+fn a_switching_protocols_interim_response_is_a_typed_refusal() {
+    // 101 changes the protocol underneath this parser; unlike every other
+    // 1xx, it must not be skipped in search of the final status line.
+    let wire =
+        b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\nHTTP/1.1 200 OK\r\n\r\n";
+    let outcome = MockTransport::parse_wire(wire);
+    assert!(
+        matches!(outcome, Err(NetworkError::Malformed { .. })),
+        "a 101 response must be a typed refusal, got {outcome:?}"
+    );
+}
+
+#[test]
 fn a_giant_header_line_is_refused_by_the_wire_limits() {
     let mut wire = Vec::from(*b"HTTP/1.1 200 OK\r\nX-Huge: ");
     wire.extend(std::iter::repeat_n(b'a', 2 * 1024 * 1024));

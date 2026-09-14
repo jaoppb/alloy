@@ -26,6 +26,9 @@ pub enum Method {
     Options,
     /// Echo the request back.
     Trace,
+    /// Retrieve a representation selected by a request body, when the target
+    /// is too complex for a query string (IETF `HTTP QUERY Method`).
+    Query,
 }
 
 impl Method {
@@ -41,6 +44,7 @@ impl Method {
             Self::Patch => "PATCH",
             Self::Options => "OPTIONS",
             Self::Trace => "TRACE",
+            Self::Query => "QUERY",
         }
     }
 
@@ -52,10 +56,11 @@ impl Method {
     }
 
     /// Whether this method is one a 301/302/303 redirect rewrites to `GET`
-    /// (RFC 9110 §15.4).
+    /// (RFC 9110 §15.4). `QUERY` is safe and idempotent like `GET`/`HEAD`, so
+    /// it is exempt too.
     #[must_use]
     pub const fn is_rewritten_on_redirect(self) -> bool {
-        !matches!(self, Self::Get | Self::Head)
+        !matches!(self, Self::Get | Self::Head | Self::Query)
     }
 }
 

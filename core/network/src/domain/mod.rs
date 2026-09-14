@@ -19,3 +19,4 @@ pub mod scheme;
 pub mod status;
 pub mod target;
 pub mod url;
+pub mod version;

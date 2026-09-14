@@ -53,7 +53,7 @@ thiserror = "=2.0.17"
 # dalek intrinsics). The pre-authorised `ADR-0018` fallback applies. Not yet in any crate's
 # `[dependencies]` — C1 opts in.
 # core/network C1 — TLS 1.2/1.3 state machine (sans-I/O); `ring` provider selected via feature.
-rustls = { version = "=0.23.43", default-features = false, features = ["std", "tls12", "ring"] }
+rustls = { version = "=0.23.45", default-features = false, features = ["std", "tls12", "ring"] }
 # core/network C1 — embedded Mozilla trust roots (NOT the OS trust store; v0.5 report decision).
 webpki-roots = "=1.0.9"
 # core/network C1 — `rustls::crypto::ring::default_provider()` primitives. ADR-0018 row-1

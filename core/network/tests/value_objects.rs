@@ -4,7 +4,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use network::{HeaderMap, HeaderName, HeaderValue, Method, NetworkError, Scheme, StatusCode, Url};
+use network::{
+    HeaderMap, HeaderName, HeaderValue, HttpVersion, MediaType, MediaTypeName, Method,
+    NetworkError, Query, Scheme, StatusCode, Url,
+};
 
 #[test]
 fn a_well_formed_absolute_url_parses_into_its_parts() {
@@ -71,4 +74,77 @@ fn head_and_304_forbid_a_response_body() {
     assert!(!Method::Head.allows_response_body());
     assert!(Method::Get.allows_response_body());
     assert!(StatusCode::new(304).unwrap().forbids_body());
+}
+
+#[test]
+fn query_is_safe_and_idempotent_like_get_on_redirect() {
+    assert!(!Method::Query.is_rewritten_on_redirect());
+    assert_eq!(Method::Query.as_str(), "QUERY");
+}
+
+#[test]
+fn a_query_string_parses_into_ordered_decoded_pairs() {
+    let query = Query::new("a=1&flag&b=hello%20world").unwrap();
+    let mut params = query.params();
+    let first = params.next().unwrap();
+    assert_eq!(first.key(), "a");
+    assert_eq!(first.value(), Some("1"));
+    let second = params.next().unwrap();
+    assert_eq!(second.key(), "flag");
+    assert_eq!(second.value(), None);
+    assert_eq!(query.get("b"), Some("hello world"));
+    assert_eq!(query.as_str(), "a=1&flag&b=hello%20world");
+}
+
+#[test]
+fn a_query_string_with_a_truncated_percent_escape_is_a_typed_refusal() {
+    assert!(Url::parse("https://example.com/?a=%2").is_err());
+}
+
+#[test]
+fn an_empty_query_string_carries_no_pairs() {
+    let query = Query::new("").unwrap();
+    assert_eq!(query.params().count(), 0);
+    assert_eq!(query.get("anything"), None);
+    assert_eq!(query.as_str(), "");
+}
+
+#[test]
+fn get_answers_the_first_pair_when_a_key_repeats() {
+    let query = Query::new("a=1&a=2").unwrap();
+    assert_eq!(query.get("a"), Some("1"));
+    assert_eq!(query.params().count(), 2);
+}
+
+#[test]
+fn a_relative_query_only_reference_resolves_against_the_base_path() {
+    let base = Url::parse("https://example.com/a/b?old=1").unwrap();
+    let resolved = base.join("?new=2").unwrap();
+    assert_eq!(resolved.path().to_string(), "/a/b");
+    assert_eq!(
+        resolved.query().and_then(|query| query.get("new")),
+        Some("2")
+    );
+}
+
+#[test]
+fn http_version_parses_only_the_two_versions_this_engine_speaks() {
+    assert_eq!(HttpVersion::parse("HTTP/1.1"), Some(HttpVersion::Http11));
+    assert_eq!(HttpVersion::parse("HTTP/1.0"), Some(HttpVersion::Http10));
+    assert_eq!(HttpVersion::parse("HTTP/2"), None);
+}
+
+#[test]
+fn media_type_name_lowercases_and_rejects_illegal_characters() {
+    assert_eq!(MediaTypeName::new("TEXT").unwrap().as_str(), "text");
+    assert!(MediaTypeName::new("").is_err());
+    assert!(MediaTypeName::new("a/b").is_err());
+}
+
+#[test]
+fn a_content_type_is_textual_only_for_the_known_type_subtype_pairs() {
+    let html = MediaType::parse("text/html; charset=utf-8").unwrap();
+    assert!(html.is_textual());
+    let png = MediaType::parse("image/png").unwrap();
+    assert!(!png.is_textual());
 }
