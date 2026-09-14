@@ -2,13 +2,20 @@
 //! (`PRD-007:35-36`).
 //!
 //! Elements, attributes and tree shape: a node is addressed by an opaque
-//! [`SnapshotId`], a tag is a [`TagName`], and an attribute is a `(&str, &str)`
-//! pair. The only way to build one is [`crate::snapshot`], the explicit
-//! mapping function of `PRD-007:36`.
+//! [`SnapshotId`], a tag is a [`TagName`], and an attribute is a validated
+//! [`AttributeKey`] / [`AttributeValue`] pair — this crate's own value objects,
+//! not `core/dom`'s `AttributeName`/`AttributeValue` (kept from leaking across
+//! the port boundary the same way `PORT_SCHEMA_VERSION` does). The only way to
+//! build one is [`crate::snapshot`], the explicit mapping function of
+//! `PRD-007:36`.
 
 use core::fmt;
+use std::borrow::Borrow;
+use std::collections::BTreeMap;
 
 use dom::TagName;
+
+use crate::domain::error::CssError;
 
 /// An opaque handle to a node inside one [`DomSnapshot`].
 ///
@@ -100,25 +107,105 @@ impl<'ids> IntoIterator for &'ids ChildIds {
     }
 }
 
-/// One element's attributes, in source order. A first-class collection — no
-/// public `Vec`, and lookup is by `&str` so `core/dom`'s `AttributeName` never
-/// leaks.
+/// A validated attribute key.
+///
+/// Non-empty, ASCII, no control or whitespace characters and none of
+/// `" ' / = >`; lowercased on construction — the same grammar
+/// `dom::AttributeName` enforces, kept as this crate's own type so
+/// `dom::AttributeName` never leaks across the port boundary.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AttributeKey(String);
+
+impl AttributeKey {
+    pub fn new(raw: &str) -> Result<Self, CssError> {
+        let valid = !raw.is_empty() && !raw.chars().any(is_forbidden_key_character);
+        if !valid {
+            return Err(CssError::unsupported(
+                crate::domain::error::CssStage::Selector,
+                format!("invalid attribute key: {raw:?}"),
+            ));
+        }
+        Ok(Self(raw.to_ascii_lowercase()))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Crate-internal: copies an already-validated `dom::AttributeName`'s
+    /// string directly. `dom::AttributeName` enforces the identical grammar
+    /// [`new`](Self::new) checks, so re-validating a name the DOM already
+    /// accepted can never fail — this constructor stays infallible instead of
+    /// forcing an unreachable error path onto [`crate::snapshot`].
+    pub(crate) fn from_dom(name: &dom::AttributeName) -> Self {
+        Self(name.as_str().to_owned())
+    }
+}
+
+const fn is_forbidden_key_character(character: char) -> bool {
+    character.is_ascii_control()
+        || character.is_whitespace()
+        || matches!(character, '"' | '\'' | '/' | '=' | '>')
+}
+
+impl fmt::Display for AttributeKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl Borrow<str> for AttributeKey {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+/// An attribute value.
+///
+/// Any string is legal (mirrors `dom::AttributeValue`); its own type keeps the
+/// pair symmetric — a [`BTreeMap`] key and value that are each a value
+/// object, not one validated and the other a naked `String`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AttributeValue(String);
+
+impl AttributeValue {
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// One element's attributes.
+///
+/// A first-class collection (`ADR-0010` rule 3) — no public `Vec`/`BTreeMap`
+/// — backed by a [`BTreeMap`] for the same reason `dom::AttributeMap` is:
+/// fast lookup and a deterministic, name-sorted iteration order. Lookup is by
+/// `&str` ([`Borrow`] on [`AttributeKey`]), so `core/dom`'s `AttributeName`
+/// never leaks.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AttributeList {
-    entries: Vec<(String, String)>,
+    entries: BTreeMap<AttributeKey, AttributeValue>,
 }
 
 impl AttributeList {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: BTreeMap::new(),
         }
     }
 
-    /// Builds the list from `(name, value)` pairs already in source order.
-    /// Crate-internal — the projection is the only producer.
-    pub(crate) fn from_pairs(pairs: impl IntoIterator<Item = (String, String)>) -> Self {
+    /// Builds the list from `(key, value)` pairs. Crate-internal — the
+    /// projection is the only producer.
+    pub(crate) fn from_pairs(
+        pairs: impl IntoIterator<Item = (AttributeKey, AttributeValue)>,
+    ) -> Self {
         Self {
             entries: pairs.into_iter().collect(),
         }
@@ -127,25 +214,22 @@ impl AttributeList {
     /// The value of `name`, or `None`.
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&str> {
-        self.entries
-            .iter()
-            .find(|(candidate, _)| candidate == name)
-            .map(|(_, value)| value.as_str())
+        self.entries.get(name).map(AttributeValue::as_str)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
         self.entries
             .iter()
-            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .map(|(key, value)| (key.as_str(), value.as_str()))
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 }
