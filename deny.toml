@@ -31,6 +31,15 @@ allow = [
 	"MPL-2.0",
 	# Public-domain dedication — `tiny-keccak`, transitive via `rhai` -> `ahash`.
 	"CC0-1.0",
+	# --- TLS stack for `core/network` (v0.5 C0 spike; used from C1) ---
+	# Permissive, OpenBSD-style. `ring` (Apache-2.0 AND ISC), `rustls-webpki` (ISC),
+	# `untrusted` (ISC); `rustls` itself is `Apache-2.0 OR ISC OR MIT`.
+	"ISC",
+	# `subtle` (constant-time primitives, transitive via `rustls`).
+	"BSD-3-Clause",
+	# Community Data License Agreement – Permissive 2.0 — `webpki-roots` ships the
+	# Mozilla CA set under this data licence.
+	"CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 # The workspace crates carry no `license` key (the repo ships no LICENSE file

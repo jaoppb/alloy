@@ -24,7 +24,8 @@ use std::process::ExitCode;
 use clap::{CommandFactory, Parser};
 use dom::serialize_html;
 use engine::profiles;
-use rhai_runtime::{RhaiEngine, run_with_fallback};
+use rhai_bindings::run_dom_with_fallback;
+use rhai_runtime::RhaiEngine;
 
 use crate::error::AlloyError;
 
@@ -70,7 +71,7 @@ fn run_script(path: &Path) -> Result<(), AlloyError> {
     })?;
 
     let engine = RhaiEngine::new();
-    let (tree, value) = run_with_fallback(
+    let (tree, value) = run_dom_with_fallback(
         &engine,
         profiles::dom_parser(),
         &source,

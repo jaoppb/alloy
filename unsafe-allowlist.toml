@@ -1,0 +1,70 @@
+# unsafe-allowlist.toml — the reviewed record of every dependency permitted to
+# contain `unsafe`, per ADR-0018 ("`unsafe` governed by threat surface").
+#
+# Every hand-written crate in this workspace keeps `#![forbid(unsafe_code)]`
+# without exception. This file governs the *dependency tree*. It grows ONLY by
+# review, never by accident, and MUST NEVER contain a crate that decodes bytes
+# coming from the network (ADR-0018 rule, row 1) — the `unsafe-audit` CI job
+# asserts that.
+#
+# `reason` must name the ADR-0018 row it invokes:
+#   row 1 — attacker-controlled bytes; FORBIDDEN by default. Only ever present as an
+#           explicit, temporary EXCEPTION recorded in ADR-0018 + the relevant PRD.
+#   row 2 — trusted muscle script (Rhai binding dispatch); nominal
+#   row 3 — platform FFI with no alternative; nominal
+#
+# Convenience `unsafe` (SIMD, custom allocators) is NEVER allowlisted (row 4).
+
+[[allow]]
+crate = "rhai"
+row = 2
+reason = """
+`rhai =1.26.0` has four `unsafe` blocks, three on the binding-registration /
+native-call seam (transmute_copy behind a TypeId check — the standard dynamic
+dispatch pattern). The muscle script is modelled as buggy, not adversarial
+(PRD-003:21-24); the author is the user. This entry is time-limited: in v0.7
+`core/js` runs adversarial script and its engine choice (ADR-0012) falls under
+row 1, not row 2. See docs/reports/VIOLACAO-N02-UNSAFE-NO-RHAI.md.
+"""
+
+# --- v0.5 network track (C0 spike finding; consumed from C1) ----------------
+# EXCEPTION — the first and, for v0.5, only row-1 entry. See
+# docs/reports/SPIKE-C0-TLS-PROVIDER.md and ADR-0018 §"The RustCrypto carve-out".
+[[allow]]
+crate = "ring"
+row = 1
+reason = """
+row 1 EXCEPTION. `ring =0.17.14` is the `rustls` CryptoProvider
+(`rustls::crypto::ring::default_provider()`): hand-written x86-64/aarch64 assembly
+plus a little C, compiled at build time with `cc`, on the surface that decrypts TLS
+records and verifies certificate signatures — exactly what ADR-0018 row 1 forbids
+for third parties.
+
+Accepted knowingly and temporarily under ADR-0018's pre-authorised carve-out. The
+Phase C0 spike (docs/reports/SPIKE-C0-TLS-PROVIDER.md) found the pure-Rust
+alternative is NO-GO: `rustls-rustcrypto` is `0.0.2-alpha` (no stable release since
+2024), forces a `deny.toml`-banned duplicate `rustls-webpki` (0.102 vs 0.103), and
+is not itself `unsafe`-free (AES-NI / SHA / curve25519-dalek intrinsics across ~54
+crates). `ring` concentrates the assembly `unsafe` in one FIPS-lineage,
+widely-audited crate (26-crate tree vs 105); `rustls` itself, `rustls-webpki` and
+`untrusted` — the parts that parse attacker bytes — carry no `unsafe` in `src/`.
+
+Time-limited: revisit when a stable pure-Rust RustCrypto `CryptoProvider` pins
+cleanly against current `rustls` + `rustls-webpki`, or if FIPS forces `aws-lc-rs`.
+To be recorded in full in PRD-009 §threat-model (Phase P). `aws-lc-rs` is the other
+pre-authorised option (heavier 3-OS build, no `unsafe` advantage over `ring`).
+"""
+
+# --- Reserved, added when the v0.5 window track lands (Phase C2) ------------
+# [[allow]]
+# crate = "winit"        # row 3 — OS windowing FFI, no unsafe-free 3-OS alternative
+# [[allow]]
+# crate = "softbuffer"   # row 3 — OS surface blit FFI
+
+# --- Spike finding (v0.5 Phase 0) -----------------------------------------------
+# `cargo-geiger 0.13` installs and runs under toolchain 1.97.1, but its full
+# `unsafe`-counting scan hits a target-resolution bug on this workspace
+# (phantom `core/engine/tests/engine_conformance.rs`). `cargo geiger
+# --forbid-only` works. Phase P must settle the enforcement mechanism: pin a
+# working cargo-geiger, curate a `--forbid-only` baseline, or switch to
+# `cargo-acl` / a dylint. Until then the `unsafe-audit` job is advisory.

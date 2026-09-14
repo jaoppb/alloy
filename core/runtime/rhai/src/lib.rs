@@ -1,8 +1,10 @@
 //! # `rhai-runtime` — the Rhai adapter for the `engine` port
 //!
-//! This is the **only** crate in the workspace allowed to name a `rhai` type.
-//! It implements [`engine::RuntimeEngine`] / [`engine::ExecutionContext`] on top
-//! of [`rhai::Engine`] / [`rhai::Scope`], translating in both directions:
+//! One of the two crates that name a `rhai` type (the other is the sibling
+//! `rhai-bindings`, which holds the domain-coupled bridges). This crate owns the
+//! `engine`-port implementation and names **no** domain crate (v0.5 report
+//! §2.12). It implements [`engine::RuntimeEngine`] / [`engine::ExecutionContext`]
+//! on top of [`rhai::Engine`] / [`rhai::Scope`], translating in both directions:
 //!
 //! - [`engine::EngineValue`] ⇄ [`rhai::Dynamic`] (`infrastructure::marshal`) — a
 //!   pure `match`, no raw pointer reads (PRD-002 invariant 1).
@@ -26,6 +28,6 @@
 mod infrastructure;
 
 pub use infrastructure::{
-    GuardedBinding, NODE_HANDLE_BINDINGS, NodeHandle, PanicHookGuard, RhaiCompiledScript,
-    RhaiContext, RhaiEngine, install_guarded_table, minimal_document, run_with_fallback,
+    GuardedBinding, PanicHookGuard, RhaiCompiledScript, RhaiContext, RhaiEngine,
+    install_guarded_table, run_with_fallback, to_eval_error,
 };

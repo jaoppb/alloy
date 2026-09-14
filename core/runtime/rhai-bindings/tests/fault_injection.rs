@@ -2,14 +2,15 @@
 //!
 //! For every capability, a guarded binding whose handler `panic!`s is trapped
 //! as `EngineError::ScriptPanic`, the test process stays alive, and the context
-//! remains usable. `run_with_fallback` recovers from every failure class,
+//! remains usable. `run_dom_with_fallback` recovers from every failure class,
 //! including the embedded default script itself failing.
 
 use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionLimits, FunctionName,
     RuntimeEngine, native_fn, profiles,
 };
-use rhai_runtime::{RhaiEngine, minimal_document, run_with_fallback};
+use rhai_bindings::{minimal_document, run_dom_with_fallback};
+use rhai_runtime::RhaiEngine;
 
 const ALL_CAPABILITIES: [Capability; 9] = [
     Capability::DOM_READ,
@@ -63,7 +64,7 @@ fn a_panicking_guarded_binding_is_trapped_for_every_capability() {
 }
 
 #[test]
-fn run_with_fallback_contains_every_failure_mode() {
+fn run_dom_with_fallback_contains_every_failure_mode() {
     let engine = RhaiEngine::new();
 
     // 1. Each broken-primary class (compile / DOM / runtime) falls back to the
@@ -78,7 +79,7 @@ fn run_with_fallback_contains_every_failure_mode() {
     ];
     for (label, primary) in broken_primaries {
         let (tree, value) =
-            run_with_fallback(&engine, profiles::dom_parser(), primary, None, DEFAULT_DOM);
+            run_dom_with_fallback(&engine, profiles::dom_parser(), primary, None, DEFAULT_DOM);
         assert!(
             value.is_none(),
             "{label}: a fallback path carries no primary value"
@@ -92,7 +93,7 @@ fn run_with_fallback_contains_every_failure_mode() {
 
     // The execution-limit class, on a deliberately tiny ceiling so the test is fast.
     let tight = RhaiEngine::with_limits(ExecutionLimits::strict().with_max_operations(20_000));
-    let (tree, value) = run_with_fallback(
+    let (tree, value) = run_dom_with_fallback(
         &tight,
         profiles::dom_parser(),
         "let n = 0; while true { n += 1; }",
@@ -108,7 +109,7 @@ fn run_with_fallback_contains_every_failure_mode() {
 
     // A capability-denied primary also falls back. Here the caps also deny the
     // default script, so it is `minimal_document()` that wins — still well-formed.
-    let (tree, value) = run_with_fallback(
+    let (tree, value) = run_dom_with_fallback(
         &engine,
         CapabilitySet::new(Capability::DOM_READ),
         r#"document.create_element("div")"#,
@@ -123,7 +124,7 @@ fn run_with_fallback_contains_every_failure_mode() {
     );
 
     // 2. When the embedded default *also* fails, the Rust minimal document wins.
-    let (tree, value) = run_with_fallback(
+    let (tree, value) = run_dom_with_fallback(
         &engine,
         profiles::dom_parser(),
         "@@@ broken primary @@@",
@@ -138,7 +139,7 @@ fn run_with_fallback_contains_every_failure_mode() {
     );
 
     // 3. A healthy primary keeps its return value and its tree.
-    let (tree, value) = run_with_fallback(
+    let (tree, value) = run_dom_with_fallback(
         &engine,
         profiles::dom_parser(),
         "let h = document.create_element(\"section\"); document.append_child(h); 41 + 1",
@@ -163,7 +164,7 @@ fn the_fallback_runs_on_a_clean_tree_not_the_primary_partial() {
         let bad = [1];
         bad[9]
     "#;
-    let (tree, value) = run_with_fallback(
+    let (tree, value) = run_dom_with_fallback(
         &engine,
         profiles::dom_parser(),
         partial_then_fail,

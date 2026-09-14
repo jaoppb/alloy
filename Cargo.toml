@@ -46,6 +46,22 @@ tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json", "f
 # Typed errors outside the engine port (ADR-0015); `core/engine` keeps its manual `Display`.
 thiserror = "=2.0.17"
 
+# --- TLS stack for `core/network` (v0.5 C1) — finalised by the Phase C0 spike ---------------
+# `docs/reports/SPIKE-C0-TLS-PROVIDER.md`: the pure-Rust RustCrypto provider
+# (`rustls-rustcrypto`) is NO-GO — alpha-only (`0.0.2-alpha`, no stable release), forces a
+# `deny.toml`-banned duplicate `rustls-webpki`, and is not itself `unsafe`-free (AES-NI / SHA /
+# dalek intrinsics). The pre-authorised `ADR-0018` fallback applies. Not yet in any crate's
+# `[dependencies]` — C1 opts in.
+# core/network C1 — TLS 1.2/1.3 state machine (sans-I/O); `ring` provider selected via feature.
+rustls = { version = "=0.23.43", default-features = false, features = ["std", "tls12", "ring"] }
+# core/network C1 — embedded Mozilla trust roots (NOT the OS trust store; v0.5 report decision).
+webpki-roots = "=1.0.9"
+# core/network C1 — `rustls::crypto::ring::default_provider()` primitives. ADR-0018 row-1
+# EXCEPTION (hand-written assembly + C on the TLS-record decrypt surface); recorded in
+# `unsafe-allowlist.toml` and ADR-0018 §"The RustCrypto carve-out". Temporary: revisit when a
+# stable pure-Rust RustCrypto provider pins against current `rustls-webpki`.
+ring = "=0.17.14"
+
 # Strict lint gate (review G3), inherited via `lints.workspace = true`. `priority = -1`
 # lets the specific lints below override the group denies.
 [workspace.lints.clippy]

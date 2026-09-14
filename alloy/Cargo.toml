@@ -15,6 +15,7 @@ path = "src/main.rs"
 dom = { path = "../core/dom" }
 engine = { path = "../core/engine" }
 rhai-runtime = { path = "../core/runtime/rhai" }
+rhai-bindings = { path = "../core/runtime/rhai-bindings" }
 clap = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

@@ -15,6 +15,7 @@ use engine::{
     Arity, Capability, CapabilitySet, EngineError, EngineValue, ExecutionContext, FunctionName,
     RuntimeEngine, VariableName, native_fn, profiles,
 };
+use rhai_bindings::bind_dom;
 use rhai_runtime::RhaiEngine;
 
 #[test]
@@ -121,8 +122,8 @@ fn each_bound_context_mutates_only_its_own_dom_tree() {
     let mut context_b = engine
         .create_context(profiles::dom_parser())
         .expect("context b");
-    context_a.bind_dom(Arc::clone(&tree_a)).expect("bind a");
-    context_b.bind_dom(Arc::clone(&tree_b)).expect("bind b");
+    bind_dom(&mut context_a, Arc::clone(&tree_a)).expect("bind a");
+    bind_dom(&mut context_b, Arc::clone(&tree_b)).expect("bind b");
 
     engine
         .eval_value(

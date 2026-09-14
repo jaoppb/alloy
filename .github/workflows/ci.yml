@@ -111,6 +111,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-noengine-
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
+      - run: cargo test -p css --no-default-features
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
   fault-injection:
@@ -132,10 +133,11 @@ jobs:
           key: ${{ runner.os }}-cargo-fault-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-fault-
       # A panic injected into a guarded binding must be trapped as ScriptPanic
-      # with the process alive; run_with_fallback must recover from every error
-      # class. --test-threads=1 keeps the process-global panic hook deterministic.
-      # Fails immediately if any profile sets `panic = "abort"`.
-      - run: cargo test -p rhai-runtime --test fault_injection -- --test-threads=1
+      # with the process alive; run_dom_with_fallback must recover from every
+      # error class. --test-threads=1 keeps the process-global panic hook
+      # deterministic. Fails immediately if any profile sets `panic = "abort"`.
+      # The suite moved to `rhai-bindings` with the DOM bridge (v0.5 report §2.12).
+      - run: cargo test -p rhai-bindings --test fault_injection -- --test-threads=1
 
 
   supply-chain:
@@ -154,6 +156,38 @@ jobs:
         run: |
           test -x ~/.cargo/bin/cargo-deny || cargo install cargo-deny --locked --version ^0.20
       - run: cargo deny check
+
+  # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
+  # Advisory for now (v0.5 Phase 0 spike): `cargo-geiger 0.13` runs under the
+  # pinned toolchain but its full unsafe-count scan hits a target-resolution bug
+  # on this workspace; `--forbid-only` works. Phase P settles the enforcement
+  # mechanism and flips `continue-on-error` off. `unsafe-allowlist.toml` is the
+  # reviewed record of every dependency permitted to carry `unsafe`.
+  unsafe-audit:
+    name: unsafe audit (advisory)
+    needs: rust-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/bin/cargo-geiger
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-geiger-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-geiger-
+      - name: Install cargo-geiger
+        run: test -x ~/.cargo/bin/cargo-geiger || cargo install cargo-geiger --locked
+      - name: forbid(unsafe_code) tree
+        run: cargo geiger --manifest-path "$PWD/alloy/Cargo.toml" --forbid-only --output-format Ascii
+      - name: allowlist is present and non-empty
+        run: test -s unsafe-allowlist.toml && grep -q '\[\[allow\]\]' unsafe-allowlist.toml
 
   # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
   arch-lint:

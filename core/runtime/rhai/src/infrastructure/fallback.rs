@@ -1,93 +1,57 @@
-//! **C-09**: trap + fallback. `catch_unwind` in
-//! [`RhaiEngine`][crate::RhaiEngine] already turns a panic into
-//! [`EngineError::ScriptPanic`] with the host alive; this module adds the
-//! fallback of `PRD-003:66-69`:
+//! **C-09**: trap + fallback — the *shape*, not the payload.
 //!
-//! 1. Run the primary script into a fresh [`DomTree`].
-//! 2. On **any** `Err` (compile, limit, permission, panic, DOM): write a
-//!    diagnostic to `stderr` (the `DevTools` event bus of `PRD-003:67` is a stub
-//!    in v0.2).
-//! 3. Run the embedded `default_dom.rhai` in a **new** guarded context over a
-//!    **clean** tree — never the partial one.
-//! 4. If that also fails, build `<html><body></body></html>` in Rust with
-//!    [`minimal_document`].
+//! `catch_unwind` in [`RhaiEngine`][crate::RhaiEngine] already turns a panic into
+//! [`EngineError::ScriptPanic`] with the host alive; this module adds the generic
+//! fallback skeleton of `PRD-003:66-69`:
 //!
-//! A [`PanicHookGuard`] is installed only around each evaluation so the default
-//! panic backtrace never reaches `stderr` (the panic is trapped regardless).
+//! 1. Run the primary closure.
+//! 2. On **any** `Err` (compile, limit, permission, panic, …): write a
+//!    diagnostic (with a [`SourceLocation`] when the error carries one).
+//! 3. Run the caller's `default` closure.
+//! 4. If that also fails, use the caller's built-in `last_resort`.
+//!
+//! The domain-specific instances (a bound `DomTree`, and later the muscle-policy
+//! cycle) live in `rhai-bindings`; this crate owns only the skeleton, so
+//! `rhai-runtime` names no domain type (v0.5 report §2.12).
+//!
+//! A [`PanicHookGuard`] is installed by the caller around each evaluation so the
+//! default panic backtrace never reaches `stderr` (the panic is trapped
+//! regardless).
 
 use std::panic::{self, PanicHookInfo};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
-use dom::{DomTree, TagName};
-use engine::{CapabilitySet, EngineError, EngineValue, RuntimeEngine, SourceLocation};
+use engine::{EngineError, EngineValue, SourceLocation};
 
-use crate::RhaiEngine;
-
-/// Run `primary_source` with a bound DOM and fall back safely on error.
+/// Run `primary` and fall back safely on error.
 ///
-/// On failure log it and fall back to `default_dom_source`, then to
-/// [`minimal_document`]. Always returns a well-formed tree; never panics. The
-/// second element is the primary script's return value — `Some` only when the
-/// primary ran to completion, `None` on any fallback path (a fallback script's
-/// return value carries no meaning).
+/// On a primary failure, log it and run `default`; if that also fails, call
+/// `last_resort`. Always returns a `T`; never panics. The second element is the
+/// primary closure's return value — `Some` only when the primary ran to
+/// completion, `None` on any fallback path (a fallback's return value carries no
+/// meaning).
 #[must_use]
-pub fn run_with_fallback(
-    engine: &RhaiEngine,
-    capabilities: CapabilitySet,
-    primary_source: &str,
+pub fn run_with_fallback<T>(
     primary_path: Option<&Path>,
-    default_dom_source: &str,
-) -> (DomTree, Option<EngineValue>) {
-    match evaluate_into_tree(engine, capabilities, primary_source) {
-        Ok((tree, value)) => (tree, Some(value)),
+    primary: impl FnOnce() -> Result<(T, EngineValue), EngineError>,
+    default: impl FnOnce() -> Result<T, EngineError>,
+    last_resort: impl FnOnce() -> T,
+) -> (T, Option<EngineValue>) {
+    match primary() {
+        Ok((value, returned)) => (value, Some(returned)),
         Err(error) => {
             report_failure(primary_path, &error);
-            (recover(engine, capabilities, default_dom_source), None)
+            match default() {
+                Ok(value) => (value, None),
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        "the embedded default script also failed; using the built-in last resort"
+                    );
+                    (last_resort(), None)
+                }
+            }
         }
-    }
-}
-
-fn recover(engine: &RhaiEngine, capabilities: CapabilitySet, default_dom_source: &str) -> DomTree {
-    match evaluate_into_tree(engine, capabilities, default_dom_source) {
-        Ok((tree, _value)) => tree,
-        Err(error) => {
-            tracing::error!(
-                %error,
-                "the embedded default DOM script also failed; using the built-in minimal document"
-            );
-            minimal_document()
-        }
-    }
-}
-
-fn evaluate_into_tree(
-    engine: &RhaiEngine,
-    capabilities: CapabilitySet,
-    source: &str,
-) -> Result<(DomTree, EngineValue), EngineError> {
-    let tree = Arc::new(Mutex::new(DomTree::new()));
-    let mut context = engine.create_context(capabilities)?;
-    context.bind_dom(Arc::clone(&tree))?;
-
-    let value = {
-        let _quiet = PanicHookGuard::install();
-        engine.eval_value(&mut context, source)?
-    };
-
-    drop(context);
-    Ok((unwrap_tree(tree), value))
-}
-
-fn unwrap_tree(tree: Arc<Mutex<DomTree>>) -> DomTree {
-    match Arc::try_unwrap(tree) {
-        Ok(mutex) => mutex
-            .into_inner()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
-        Err(shared) => shared
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone(),
     }
 }
 
@@ -107,21 +71,6 @@ const fn source_location(error: &EngineError) -> Option<SourceLocation> {
         }
         _ => None,
     }
-}
-
-/// The last-resort document: `<html><body></body></html>`, built without a
-/// script. This routine is not optional — a fault in the embedded fallback
-/// script must not reopen the hole C-09 closes.
-#[must_use]
-pub fn minimal_document() -> DomTree {
-    let mut tree = DomTree::new();
-    if let (Ok(html_tag), Ok(body_tag)) = (TagName::new("html"), TagName::new("body")) {
-        let html = tree.create_element(html_tag);
-        let body = tree.create_element(body_tag);
-        let _ = tree.append_child(tree.document(), html);
-        let _ = tree.append_child(html, body);
-    }
-    tree
 }
 
 /// The shape `std::panic::take_hook` returns / `set_hook` accepts.
