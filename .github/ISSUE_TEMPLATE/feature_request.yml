@@ -1,0 +1,53 @@
+name: Feature Request
+description: Propose a new feature, subsystem, or enhancement for Alloy.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Before filing, skim [`docs/adr/README.md`](https://github.com/jaoppb/alloy/blob/main/docs/adr/README.md)
+              and [`docs/requirements/`](https://github.com/jaoppb/alloy/tree/main/docs/requirements) — your idea may
+              already be planned, partially specified, or intentionally out of scope for an existing ADR.
+
+    - type: textarea
+      id: problem
+      attributes:
+          label: What problem does this solve?
+          description: Describe the use case or limitation that motivates this request.
+      validations:
+          required: true
+
+    - type: textarea
+      id: proposal
+      attributes:
+          label: Proposed solution
+          description: What would you like to see happen? If you have an idea of which crate/layer this belongs to
+              (per `CLAUDE.md`'s crate map and `domain`/`application`/`infrastructure` layering), mention it.
+      validations:
+          required: true
+
+    - type: dropdown
+      id: side
+      attributes:
+          label: Skeleton or Muscle?
+          description: Per ADR-0003 — does this belong in Rust (rigid, memory-safe interfaces) or as Rhai-scripted
+              behavior (policy, routing, composition)?
+          options:
+              - Skeleton (Rust)
+              - Muscle (Rhai script)
+              - Not sure / needs discussion
+      validations:
+          required: false
+
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Alternatives considered
+          description: Any alternative approaches or workarounds you've considered.
+
+    - type: textarea
+      id: context
+      attributes:
+          label: Additional context
+          description: Related ADRs, PRDs, issues, or external references.
