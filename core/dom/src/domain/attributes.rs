@@ -31,6 +31,13 @@ impl AttributeName {
     pub fn style() -> Self {
         Self("style".to_string())
     }
+
+    /// The `class` attribute — a whitespace-separated set of names rather than
+    /// one string (HTML §3.2.6.7).
+    #[must_use]
+    pub fn class() -> Self {
+        Self("class".to_string())
+    }
 }
 
 const fn is_forbidden(character: char) -> bool {

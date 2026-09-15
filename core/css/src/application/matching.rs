@@ -24,9 +24,6 @@ use crate::domain::selector::{
 };
 use crate::domain::specificity::Specificity;
 
-/// The `class` attribute, whose value is a whitespace-separated set rather than
-/// one string (HTML §3.2.6.7).
-const CLASS_ATTRIBUTE: &str = "class";
 /// The `id` attribute a `#name` component is compared against.
 const ID_ATTRIBUTE: &str = "id";
 
@@ -180,7 +177,9 @@ fn type_matches(selector: &TypeSelector, node: NodeRef<'_>) -> bool {
 }
 
 fn classes_match(classes: &IdentifierList, node: NodeRef<'_>) -> bool {
-    let list = node.attribute(CLASS_ATTRIBUTE).unwrap_or_default();
+    let list = node
+        .attribute(dom::AttributeName::class().as_str())
+        .unwrap_or_default();
     classes
         .iter()
         .all(|name| class_list_contains(list, name.as_str()))
