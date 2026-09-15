@@ -38,6 +38,12 @@ impl AttributeName {
     pub fn class() -> Self {
         Self("class".to_string())
     }
+
+    /// The `id` attribute a `#name` selector component is compared against.
+    #[must_use]
+    pub fn id() -> Self {
+        Self("id".to_string())
+    }
 }
 
 const fn is_forbidden(character: char) -> bool {

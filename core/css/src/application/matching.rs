@@ -24,9 +24,6 @@ use crate::domain::selector::{
 };
 use crate::domain::specificity::Specificity;
 
-/// The `id` attribute a `#name` component is compared against.
-const ID_ATTRIBUTE: &str = "id";
-
 /// Whether `selector` selects `node`.
 ///
 /// `node` travels by value: [`NodeRef`] is `Copy` and two words wide, so a
@@ -192,7 +189,7 @@ fn class_list_contains(list: &str, name: &str) -> bool {
 }
 
 fn ids_match(ids: &IdentifierList, node: NodeRef<'_>) -> bool {
-    let actual = node.attribute(ID_ATTRIBUTE);
+    let actual = node.attribute(dom::AttributeName::id().as_str());
     ids.iter().all(|name| actual == Some(name.as_str()))
 }
 
