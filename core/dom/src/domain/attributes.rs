@@ -24,6 +24,13 @@ impl AttributeName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The `style` attribute — one element's own inline declaration block
+    /// (CSS Cascade L4 §6.4.3).
+    #[must_use]
+    pub fn style() -> Self {
+        Self("style".to_string())
+    }
 }
 
 const fn is_forbidden(character: char) -> bool {

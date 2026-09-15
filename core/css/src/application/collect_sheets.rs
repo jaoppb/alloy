@@ -18,9 +18,6 @@ use crate::domain::error::CssError;
 use crate::domain::stylesheet_set::{Origin, StyleSheetSet};
 use crate::infrastructure::parser::{parse_inline_style_recording, parse_stylesheet};
 
-/// The attribute whose value is one element's own declaration block.
-const STYLE_ATTRIBUTE: &str = "style";
-
 /// Every author rule and inline block the document carries, in document order.
 ///
 /// The `Err` is the one a stylesheet parse raises — hostile nesting
@@ -48,7 +45,7 @@ fn collect_from_node(
 
 /// One element's `style=` attribute.
 fn collect_inline_block(node: NodeRef<'_>, sheets: &mut StyleSheetSet) -> Result<(), CssError> {
-    let Some(source) = node.attribute(STYLE_ATTRIBUTE) else {
+    let Some(source) = node.attribute(dom::AttributeName::style().as_str()) else {
         return Ok(());
     };
     let block = parse_inline_style_recording(source, sheets)?;
