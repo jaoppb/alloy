@@ -15,13 +15,14 @@
 //!
 //! ## `DrawText` (v0.5 B3)
 //!
-//! The backend never touches a font file or a curve — it holds an
-//! [`Arc<dyn FontProvider>`](crate::application::FontProvider) and blits the
+//! The backend never touches a font file or a curve — it holds an `Arc<F>`
+//! bound to [`FontProvider`](crate::application::FontProvider) and blits the
 //! [`GlyphBitmap`](crate::domain::font::GlyphBitmap) each glyph resolves to,
-//! the same clip/opacity/blend pipeline `DrawRect` already uses. `new()`
-//! defaults to [`SyntheticFontProvider`] — deterministic, no filesystem — so
-//! every existing caller keeps working without naming a font provider;
-//! [`Self::with_font_provider`] swaps in a real one.
+//! the same clip/opacity/blend pipeline `DrawRect` already uses. `F` defaults
+//! to [`SyntheticFontProvider`] — deterministic, no filesystem — so every
+//! existing caller keeps working without naming a font provider or a type
+//! parameter; [`Self::with_font_provider`] swaps in a real one, monomorphized
+//! rather than boxed.
 //!
 //! [`SyntheticFontProvider`]: crate::infrastructure::font::SyntheticFontProvider
 //!
@@ -57,18 +58,18 @@ const CANVAS: Color = Color::WHITE;
 
 /// A CPU rasterizer with a clip stack, an opacity stack, and a bound font
 /// provider (v0.5 B3).
-pub struct SoftwareCpuBackend {
+pub struct SoftwareCpuBackend<F: FontProvider = SyntheticFontProvider> {
     state: FrameState,
     frame: Option<Framebuffer>,
     clips: Vec<Rect>,
     opacities: Vec<Opacity>,
-    fonts: Arc<dyn FontProvider>,
+    fonts: Arc<F>,
 }
 
-impl core::fmt::Debug for SoftwareCpuBackend {
-    // `dyn FontProvider` carries no `Debug` bound (a port trait, not a
-    // diagnostic one); named as its registered-adapter count instead of
-    // deriving, the same choice `TtfParserProvider`'s own `Debug` makes.
+impl<F: FontProvider> core::fmt::Debug for SoftwareCpuBackend<F> {
+    // `FontProvider` carries no `Debug` bound (a port trait, not a
+    // diagnostic one); the bound font is omitted instead of deriving, the
+    // same choice `TtfParserProvider`'s own `Debug` makes.
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("SoftwareCpuBackend")
@@ -80,7 +81,7 @@ impl core::fmt::Debug for SoftwareCpuBackend {
     }
 }
 
-impl SoftwareCpuBackend {
+impl SoftwareCpuBackend<SyntheticFontProvider> {
     /// A backend with the deterministic [`SyntheticFontProvider`] bound — what
     /// every golden and conformance test wants, and a safe default for any
     /// caller that has not registered a real font.
@@ -88,14 +89,16 @@ impl SoftwareCpuBackend {
     pub fn new() -> Self {
         Self::with_font_provider(Arc::new(SyntheticFontProvider::new()))
     }
+}
 
+impl<F: FontProvider> SoftwareCpuBackend<F> {
     /// A backend bound to `fonts` — e.g. a [`TtfParserProvider`] or
     /// [`SystemFontProvider`] with real faces registered.
     ///
     /// [`TtfParserProvider`]: crate::infrastructure::font::TtfParserProvider
     /// [`SystemFontProvider`]: crate::infrastructure::font::SystemFontProvider
     #[must_use]
-    pub fn with_font_provider(fonts: Arc<dyn FontProvider>) -> Self {
+    pub const fn with_font_provider(fonts: Arc<F>) -> Self {
         Self {
             state: FrameState::Idle,
             frame: None,
@@ -301,7 +304,7 @@ fn scale_by_full(first: u32, second: u32) -> u32 {
         .unwrap_or(0)
 }
 
-impl Default for SoftwareCpuBackend {
+impl Default for SoftwareCpuBackend<SyntheticFontProvider> {
     fn default() -> Self {
         Self::new()
     }
@@ -397,7 +400,7 @@ fn scale_byte_to_full(byte: u8) -> u32 {
         .unwrap_or(0)
 }
 
-impl RenderBackend for SoftwareCpuBackend {
+impl<F: FontProvider> RenderBackend for SoftwareCpuBackend<F> {
     fn tier(&self) -> BackendTier {
         BackendTier::Software
     }
