@@ -112,6 +112,13 @@ jobs:
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
+      - run: cargo test -p network --no-default-features
+      # PRD-007 / PRD-009 / v0.5 report §2.12 (R): core/css, core/network and
+      # core/runtime/rhai must each stay free of the engine, a script runtime
+      # or another subsystem — arch-lint.toml's deny-scope-dep and
+      # restrict-use rules hold this line and the `arch-lint` job below
+      # enforces them on every push, so no manual `cargo tree` grep is needed
+      # here.
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
   fault-injection:

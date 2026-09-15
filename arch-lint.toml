@@ -18,6 +18,9 @@ exclude = [
     # that panics on divergence by design.
     "core/css/src/application/conformance.rs",
     "core/css/tests/manifest_runner.rs",
+    # The network conformance suite is the same assertion-code carve-out
+    # (ADR-0011 item 6): `pub`, not `#[cfg(test)]`, panics on the first violation.
+    "core/network/src/application/conformance.rs",
 ]
 respect_gitignore = true
 
@@ -87,6 +90,18 @@ paths = ["core/css/src/application/**"]
 name = "css"
 paths = ["core/css/**"]
 
+[[scopes]]
+name = "network_domain"
+paths = ["core/network/src/domain/**"]
+
+[[scopes]]
+name = "network_application"
+paths = ["core/network/src/application/**"]
+
+[[scopes]]
+name = "network"
+paths = ["core/network/**"]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -149,6 +164,20 @@ message = "CSS domain layer must not depend on application ports, engine, runtim
 from = "css"
 to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
 message = "core/css must not depend on engine, concrete script runtimes, the bindings crate, or CLI (PRD-007). It may depend on dom and graphics."
+
+# Network domain layer must not depend on the application layer or any adapter crate.
+[[deny-scope-dep]]
+from = "network_domain"
+to = ["network_application", "engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "Network domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+
+# core/network is a pure transport-and-policy domain: no engine, no runtime, no
+# other subsystem. The scriptable RequestPolicy of Phase M lives in
+# rhai-bindings; the `layering` CI job holds this line (PRD-009, ADR-0019).
+[[deny-scope-dep]]
+from = "network"
+to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli", "dom", "css", "graphics"]
+message = "core/network must not depend on engine, DOM, CSS, graphics, script runtimes, the bindings crate, or CLI (PRD-009)."
 
 # --- import restrictions ---------------------------------------------------
 
