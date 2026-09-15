@@ -81,7 +81,7 @@ fn paragraph_style(sheet: &str, attribute: Option<&str>) -> ComputedStyle {
     let (dom, styled) = resolve(sheet, attribute);
     let id = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("the document has a paragraph");
     *styled.node(id).expect("the paragraph is styled").style()
 }
@@ -150,7 +150,7 @@ fn the_author_colour_is_inherited_by_a_descendant_that_no_rule_selects() {
     let (dom, styled) = resolve("body { color: #008000 }", None);
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("a paragraph");
 
     assert_eq!(
@@ -169,7 +169,7 @@ fn a_media_gated_rule_only_applies_once_the_producer_has_discharged_it() {
     let ungated = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("a paragraph");
     assert_eq!(
         ungated.node(paragraph).expect("styled").style().color(),
@@ -314,8 +314,9 @@ fn the_ua_sheet_still_gives_a_heading_and_a_paragraph_their_classic_shape() {
 }
 
 fn styled_id(dom: &DomSnapshot, tag: &str) -> css::SnapshotId {
+    let tag_name = dom::TagName::new(tag).expect("a valid tag name");
     dom.nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(tag))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&tag_name))
         .expect("the document has the requested tag")
 }
 
@@ -355,7 +356,7 @@ fn the_style_element_itself_is_never_painted() {
     let (dom, styled) = resolve("style { color: #ff0000 }", None);
     let element = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("style"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::Style))
         .expect("the style element");
 
     assert!(
@@ -385,7 +386,7 @@ fn a_recovered_rule_leaves_a_note_without_costing_the_rules_around_it() {
     let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("a paragraph");
     let style = styled.node(paragraph).expect("styled").style();
 

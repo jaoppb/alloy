@@ -68,7 +68,7 @@ fn collect_style_element(
     node: NodeRef<'_>,
     sheets: &mut StyleSheetSet,
 ) -> Result<(), CssError> {
-    if node.tag() != Some(dom::TagName::Style.as_str()) {
+    if node.tag() != Some(&dom::TagName::Style) {
         return Ok(());
     }
     let source = style_element_text(snapshot, node);

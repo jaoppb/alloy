@@ -207,7 +207,7 @@ fn compound_matches(
 fn type_matches(selector: &TypeSelector, node: NodeRef<'_>) -> bool {
     match selector {
         TypeSelector::Universal => true,
-        TypeSelector::Named(name) => node.tag() == Some(name.as_str()),
+        TypeSelector::Named(name) => node.tag().is_some_and(|tag| tag.as_str() == name.as_str()),
     }
 }
 

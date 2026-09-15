@@ -231,7 +231,7 @@ fn text(tree: &mut dom::DomTree, parent: dom::NodeId, content: &str) {
 
 fn paragraph_of(dom: &DomSnapshot) -> SnapshotId {
     dom.nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some("p"))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("the fixture has a paragraph")
 }
 
