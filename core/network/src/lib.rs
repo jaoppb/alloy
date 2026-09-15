@@ -94,15 +94,16 @@ pub use domain::defect::{
 };
 pub use domain::error::NetworkError;
 pub use domain::header_map::{HeaderMap, HeaderName, HeaderValue};
-pub use domain::media_type::{Charset, MediaType};
+pub use domain::media_type::{Charset, MediaType, MediaTypeName};
 pub use domain::method::Method;
 pub use domain::phase::ProtocolPhase;
 pub use domain::request::HttpRequest;
 pub use domain::response::HttpResponse;
 pub use domain::scheme::Scheme;
 pub use domain::status::StatusCode;
-pub use domain::target::{Path, Query, RequestTarget};
+pub use domain::target::{Path, Query, QueryParam, RequestTarget};
 pub use domain::url::Url;
+pub use domain::version::HttpVersion;
 pub use infrastructure::deadline::{Deadline, PhaseTimeouts};
 pub use infrastructure::inflate;
 pub use infrastructure::limits::{ByteCap, FieldCap, WireLimits};

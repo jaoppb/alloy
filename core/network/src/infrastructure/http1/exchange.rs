@@ -1,9 +1,10 @@
 //! Reading one complete HTTP/1.1 response off a reader.
 //!
-//! The composition point: head, framing, body, content coding, charset. It
-//! takes a `&mut dyn BufRead`, not a socket, so the same code path serves the
+//! The composition point: head, framing, body, content coding, charset. It is
+//! generic over any `BufRead`, not a socket, so the same code path serves the
 //! real transport, `MockTransport::with_wire_response`, and every hostile
-//! fixture in `core/network/tests/hostile_responses.rs`.
+//! fixture in `core/network/tests/hostile_responses.rs` — statically
+//! dispatched, so no `dyn` trait object sits on this hot path.
 
 use std::io::BufRead;
 
@@ -26,8 +27,8 @@ use crate::infrastructure::limits::WireLimits;
 /// [`NetworkError::Framing`], [`NetworkError::LimitExceeded`],
 /// [`NetworkError::Decode`], [`NetworkError::Timeout`],
 /// [`NetworkError::Transport`].
-pub fn read_response(
-    reader: &mut dyn BufRead,
+pub fn read_response<R: BufRead>(
+    reader: &mut R,
     method: Method,
     limits: WireLimits,
     deadline: &Deadline,

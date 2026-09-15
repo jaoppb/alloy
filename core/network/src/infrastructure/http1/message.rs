@@ -20,6 +20,7 @@ use crate::domain::header_map::{HeaderMap, HeaderName, HeaderValue};
 use crate::domain::phase::ProtocolPhase;
 use crate::domain::request::HttpRequest;
 use crate::domain::status::StatusCode;
+use crate::domain::version::HttpVersion;
 use crate::infrastructure::deadline::Deadline;
 use crate::infrastructure::limits::{ByteCap, WireLimits};
 
@@ -116,8 +117,8 @@ fn write_field(wire: &mut Vec<u8>, name: &HeaderName, value: &HeaderValue) {
 /// [`NetworkError::Malformed`] for a head this parser cannot accept,
 /// [`NetworkError::LimitExceeded`] for a line or a field count past its
 /// ceiling, [`NetworkError::Timeout`] when the header budget runs out.
-pub fn read_head(
-    reader: &mut dyn BufRead,
+pub fn read_head<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<(StatusCode, HeaderMap), NetworkError> {
@@ -127,7 +128,7 @@ pub fn read_head(
         if !status.is_informational() {
             return Ok((status, fields));
         }
-        if status.code() == 101 {
+        if status == StatusCode::SWITCHING_PROTOCOLS {
             return Err(NetworkError::malformed(
                 ProtocolPhase::Header,
                 MalformedPart::UnsupportedTransferEncoding,
@@ -136,8 +137,8 @@ pub fn read_head(
     }
 }
 
-fn read_status_line(
-    reader: &mut dyn BufRead,
+fn read_status_line<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<StatusCode, NetworkError> {
@@ -151,8 +152,8 @@ fn read_status_line(
     parse_status_line(&line)
 }
 
-fn read_field_section(
-    reader: &mut dyn BufRead,
+fn read_field_section<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<HeaderMap, NetworkError> {
@@ -195,13 +196,10 @@ pub fn parse_status_line(line: &[u8]) -> Result<StatusCode, NetworkError> {
         NetworkError::malformed(ProtocolPhase::Header, MalformedPart::StatusLineVersion)
     })?;
     let mut parts = text.split(' ');
-    let version = parts.next().unwrap_or_default();
-    if version != "HTTP/1.1" && version != "HTTP/1.0" {
-        return Err(NetworkError::malformed(
-            ProtocolPhase::Header,
-            MalformedPart::StatusLineVersion,
-        ));
-    }
+    let version_text = parts.next().unwrap_or_default();
+    HttpVersion::parse(version_text).ok_or_else(|| {
+        NetworkError::malformed(ProtocolPhase::Header, MalformedPart::StatusLineVersion)
+    })?;
     let digits = parts.next().unwrap_or_default();
     let code = digits.parse::<u16>().map_err(|_| {
         NetworkError::malformed(ProtocolPhase::Header, MalformedPart::StatusLineCode)
@@ -247,8 +245,8 @@ pub fn parse_field_line(line: &[u8]) -> Result<(HeaderName, HeaderValue), Networ
 /// [`NetworkError::LimitExceeded`] when no `\n` arrived within `cap`,
 /// [`NetworkError::Transport`] for an I/O failure,
 /// [`NetworkError::Timeout`] when the header budget is spent.
-pub fn read_line(
-    reader: &mut dyn BufRead,
+pub fn read_line<R: BufRead>(
+    reader: &mut R,
     cap: ByteCap,
     limit: WireLimit,
     deadline: &Deadline,
@@ -256,7 +254,7 @@ pub fn read_line(
     deadline.check(ProtocolPhase::Header)?;
     let ceiling = u64::try_from(cap.bytes().saturating_add(2)).unwrap_or(u64::MAX);
     let mut buffer = Vec::new();
-    let mut limited = Read::take(&mut *reader, ceiling);
+    let mut limited = Read::take(reader, ceiling);
     let read = limited
         .read_until(b'\n', &mut buffer)
         .map_err(|error| NetworkError::transport(ProtocolPhase::Header, error.to_string()))?;

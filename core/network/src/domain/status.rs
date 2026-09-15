@@ -16,6 +16,10 @@ const HIGHEST: u16 = 599;
 pub struct StatusCode(u16);
 
 impl StatusCode {
+    /// `101 Switching Protocols` — changes the protocol, so this engine
+    /// refuses it rather than skip it like every other `1xx` (RFC 9110
+    /// §15.2.2).
+    pub const SWITCHING_PROTOCOLS: Self = Self(101);
     /// `200 OK`, the status a fixture reaches for most often.
     pub const OK: Self = Self(200);
     /// `301 Moved Permanently`.

@@ -116,8 +116,8 @@ fn declared_length_framing(
 /// [`NetworkError::LimitExceeded`] at the ceiling, [`NetworkError::Timeout`]
 /// when the body budget is spent, [`NetworkError::Transport`] for an I/O
 /// failure.
-pub fn read_body(
-    reader: &mut dyn BufRead,
+pub fn read_body<R: BufRead>(
+    reader: &mut R,
     framing: BodyFraming,
     limits: WireLimits,
     deadline: &Deadline,
@@ -137,8 +137,8 @@ pub fn read_body(
 ///
 /// [`NetworkError::Framing`] with [`FramingDefect::BodyShorterThanDeclared`]
 /// on an early end of stream.
-pub fn read_exactly(
-    reader: &mut dyn BufRead,
+pub fn read_exactly<R: BufRead>(
+    reader: &mut R,
     count: usize,
     deadline: &Deadline,
 ) -> Result<Vec<u8>, NetworkError> {
@@ -166,8 +166,8 @@ pub fn read_exactly(
     Ok(collected)
 }
 
-fn read_until_close(
-    reader: &mut dyn BufRead,
+fn read_until_close<R: BufRead>(
+    reader: &mut R,
     limits: WireLimits,
     deadline: &Deadline,
 ) -> Result<Vec<u8>, NetworkError> {

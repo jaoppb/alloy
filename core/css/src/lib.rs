@@ -20,12 +20,13 @@
 //! - [`domain`] — the four boundary aggregates ([`DomSnapshot`],
 //!   [`StyleSheetSet`], [`StyledTree`], [`LayoutBoxTree`]) plus
 //!   [`ViewportConstraints`]; the value objects ([`Length`], [`CssColor`],
-//!   [`Identifier`], [`Specificity`], [`SnapshotId`], [`SourceSpan`]); the
-//!   selector family ([`SelectorList`], [`ComplexSelector`],
-//!   [`CompoundSelector`], [`Combinator`], [`PseudoClass`]); the declaration and
-//!   media vocabulary ([`Declaration`], [`MediaQuery`]); the computed-value
-//!   enums ([`Display`], [`CssStage`], [`Origin`], [`SnapshotNodeKind`]); and
-//!   the typed [`CssError`].
+//!   [`Identifier`], [`Specificity`], [`SnapshotId`], [`SourceSpan`],
+//!   [`AttributeKey`], [`AttributeValue`]); the selector family
+//!   ([`SelectorList`], [`ComplexSelector`], [`CompoundSelector`],
+//!   [`Combinator`], [`PseudoClass`]); the declaration and media vocabulary
+//!   ([`Declaration`], [`MediaQuery`]); the computed-value enums ([`Display`],
+//!   [`CssStage`], [`Origin`], [`SnapshotNodeKind`]); and the typed
+//!   [`CssError`].
 //! - [`application`] — the three ports ([`CascadeResolver`], [`LayoutEngine`],
 //!   [`TextMeasurer`]), the explicit [`snapshot`] mapping (`dom::DomTree →
 //!   DomSnapshot`), selector [`matches`]ing, [`collect_style_sheets`], and the
@@ -121,11 +122,13 @@ pub use application::conformance;
 pub use application::matching::{matches, strongest_match};
 pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
 pub use application::snapshot::snapshot;
+pub use dom::TagName;
 pub use domain::color::CssColor;
 pub use domain::computed::{ComputedStyle, Display, LengthEdges};
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{
-    AttributeList, ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind,
+    AttributeKey, AttributeList, AttributeValue, ChildIds, DomSnapshot, NodeRef, SnapshotId,
+    SnapshotNodeKind,
 };
 pub use domain::error::{CssError, CssStage, SourceSpan};
 pub use domain::identifier::Identifier;

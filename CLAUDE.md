@@ -1,6 +1,11 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Gemini CLI — see `GEMINI.md`, a pointer to this file) when
+working with code in this repository. Rules below are not style preferences — several were learned the hard way from
+review feedback on PRs #1–#11 and are stated as directives in the section they belong to (Commands, Architecture, Clean
+Code / Object Calisthenics) rather than collected in a separate log, so read the whole file, not just the parts that
+look new. Do not fork guidance into `GEMINI.md`: this file is the single source and `GEMINI.md` stays a pointer, never a
+copy.
 
 ## Current State
 
@@ -100,7 +105,12 @@ cargo fmt --all
 Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint`, prettier and
 markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
 Clippy warnings are errors — never leave one behind. The strict lint set lives in `[workspace.lints.clippy]` (root
-`Cargo.toml`) plus `clippy.toml`; `arch-lint.toml` adds the `tracing` / no-`unwrap` code-pattern rules.
+`Cargo.toml`) plus `clippy.toml`; `arch-lint.toml` adds the `tracing` / no-`unwrap` code-pattern rules. Before writing a
+new architectural or dependency-direction check, extend `arch-lint.toml` with a rule — a bespoke ad hoc script (a
+`cargo tree | grep`, a manual dependency scan) duplicates a mechanism that almost certainly already exists there.
+
+Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `setup-node`, `cache`, …) and `node-version` on
+their current stable major/LTS — check before pinning a version, not after review flags a stale one.
 
 Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
 Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.
@@ -148,6 +158,11 @@ src/infrastructure/   # adapters implementing those ports (vulkano, sockets, rha
 Dependencies point inward only: `domain` → nothing, `application` → `domain`, `infrastructure` → both. UI-ish crates
 (`devtools`, `extension`) use Feature-Sliced Design (`app/`, `features/`, `widgets/`, `shared/`) instead.
 
+Decide layer placement before the first commit of a new type, not after review: a parsing/serialization detail that
+encodes a domain rule (e.g. `TagName::is_void()`) belongs on the `domain/` type itself, never in `application/`; a
+concrete infrastructure crate (`notify`, `vulkano`, `rhai`) is never called directly from `application` — always through
+a port trait `infrastructure` implements.
+
 Crates communicate by passing immutable aggregates down a pipeline:
 `HtmlStream → DomTree → StyledTree → LayoutBoxTree → DisplayList → RenderBackend`. Cross-crate conversions go through
 explicit mapping functions/DTOs — no type leaking.
@@ -161,6 +176,12 @@ explicit mapping functions/DTOs — no type leaking.
   the previous AST alive and reports to DevTools — never leaves a half-loaded state. Rust keeps all durable state.
 - **Graphics tiers** (ADR-0009): Vulkan (`vulkano`) → OpenGL (`glow`/`glutin`) → CPU software rasterizer for headless
   CI. Layout code emits a declarative `DisplayList` and stays GPU-API agnostic.
+- **Structured logging only**: `tracing::info!`/`warn!`/`error!` (ADR-0014), never `println!`/`eprintln!`, from the
+  first line of new code in any crate that logs — this applies even on a branch forked before ADR-0014 landed.
+- **PRD/ADR claims are checkable, not aspirational**: when a change adds a dependency or crosses a boundary that a
+  `docs/requirements/PRD-*.md` or ADR makes a claim about (e.g. PRD-001's "zero unsafe memory operations exposed to
+  script runtimes"), grep that claim against the new code before opening the PR and either satisfy it or open a tracked,
+  explicit exception in the same PR — never let review discover a claim the change silently broke.
 
 ### Clean Code + Object Calisthenics (ADR-0010, enforced)
 
@@ -180,14 +201,23 @@ are the reference.
   `Attachment::Before`).
 - **Errors, not surprises.** Library code returns a typed `Result` (`DomError`, `EngineError`); no `unwrap` / `expect` /
   `panic!` on a path a caller can reach. `expect` is allowed only for a genuinely impossible state, with a message
-  saying why it can't happen. Trapped script panics are the one deliberate exception (`catch_unwind`, C-09).
+  saying why it can't happen. Trapped script panics are the one deliberate exception (`catch_unwind`, C-09). Derive
+  error enums with `thiserror` (ADR-0015) from the start — `core/engine` is the one deliberate hand-rolled
+  `Display`/`Error` exception (see Object Calisthenics below); everywhere else a hand-written impl is a mistake to fix
+  before it ships, not after review.
 - **Comments explain _why_, not _what_.** Cite the ADR/PRD/criterion a decision serves. Delete commented-out code.
 - **DRY, and the Boy Scout Rule.** No copy-paste logic; leave every file you touch a little cleaner than you found it.
 
 **Object Calisthenics (mechanically enforced):**
 
-- No naked primitives in domain models — newtypes (`NodeId(u32)`, `TagName(String)`, `Px(f32)`, `Color(u32)`).
-- First-class collections (`Children`, `AttributeMap`, `RuleSet`, `HeaderMap`) — no public `Vec` / `HashMap`.
+- No naked primitives in domain models — newtypes (`NodeId(u32)`, `TagName(String)`, `Px(f32)`, `Color(u32)`). Applies
+  to identifiers too: a value with a valid/invalid distinction (an identifier format, a closed vocabulary like an HTML
+  tag, an HTTP method, a media type) is a newtype or enum from the first commit — never a bare `&str`/`String` with call
+  sites doing string comparisons (`FunctionName`, `VariableName`, `TagName`, `AttributeName`, `MediaType` are the
+  reference examples; this is the single most common review finding to date, catch it before review does).
+- First-class collections (`Children`, `AttributeMap`, `RuleSet`, `HeaderMap`) — no public `Vec` / `HashMap`. Pick the
+  backing structure for the access pattern the type actually needs (ordering, dedup, `O(1)`/`O(log n)` lookup), not the
+  first one that compiles — a `Vec<(K, V)>` standing in for a keyed lookup is a defect, not a style choice.
 - No `else` (early return / `match` / `if let`; `let … else` also counts).
 - One level of indentation per function.
 - One dot per line (Law of Demeter; builder chains are fine).
@@ -205,4 +235,5 @@ definitions live in `.agents/skills/` (`.cursor` is a symlink to `.agents`); Cla
 directory, so read the relevant `SKILL.md` before following the flow. `docs/requirements/PRD-*.md` are the authoritative
 inputs, `docs/adr/*.md` the constraints.
 
-New architectural decisions get an ADR in `docs/adr/` (MADR format) plus a row in `docs/adr/README.md`.
+New architectural decisions get an ADR in `docs/adr/` (MADR format) plus a row in `docs/adr/README.md`, written in the
+same PR as the code it justifies — not as a follow-up after review asks for it.

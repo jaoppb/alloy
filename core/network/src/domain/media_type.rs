@@ -59,12 +59,54 @@ impl fmt::Display for Charset {
     }
 }
 
+/// A validated, lowercased media-type name half — the `type` or the
+/// `subtype` of a `type/subtype` pair (RFC 6838 §4.2 `restricted-name`).
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MediaTypeName(String);
+
+impl MediaTypeName {
+    /// Validate and lowercase a type or subtype name.
+    ///
+    /// # Errors
+    ///
+    /// [`NetworkError::Decode`] with [`DecodeDefect::MalformedMediaType`] when
+    /// the name is empty or carries a character outside RFC 6838's
+    /// `restricted-name-chars`.
+    pub fn new(raw: &str) -> Result<Self, NetworkError> {
+        if raw.is_empty() || !raw.chars().all(is_restricted_name_character) {
+            return Err(NetworkError::decode(DecodeDefect::MalformedMediaType));
+        }
+        Ok(Self(raw.to_ascii_lowercase()))
+    }
+
+    /// The lowercased name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// RFC 6838 §4.2 `restricted-name-chars`.
+const fn is_restricted_name_character(character: char) -> bool {
+    character.is_ascii_alphanumeric()
+        || matches!(
+            character,
+            '!' | '#' | '$' | '&' | '-' | '^' | '_' | '.' | '+'
+        )
+}
+
+impl fmt::Display for MediaTypeName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
 /// A parsed `Content-Type`: a type, a subtype, and the `charset` parameter if
 /// the sender gave one.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MediaType {
-    type_name: String,
-    subtype: String,
+    type_name: MediaTypeName,
+    subtype: MediaTypeName,
     charset: Option<Charset>,
 }
 
@@ -92,8 +134,8 @@ impl MediaType {
         }
         let charset = Self::charset_parameter(parts)?;
         Ok(Self {
-            type_name: type_name.trim().to_ascii_lowercase(),
-            subtype: subtype.trim().to_ascii_lowercase(),
+            type_name: MediaTypeName::new(type_name.trim())?,
+            subtype: MediaTypeName::new(subtype.trim())?,
             charset,
         })
     }
@@ -115,23 +157,27 @@ impl MediaType {
 
     /// Build a media type from already-normalised parts.
     #[must_use]
-    pub fn new(type_name: &str, subtype: &str, charset: Option<Charset>) -> Self {
+    pub const fn new(
+        type_name: MediaTypeName,
+        subtype: MediaTypeName,
+        charset: Option<Charset>,
+    ) -> Self {
         Self {
-            type_name: type_name.to_ascii_lowercase(),
-            subtype: subtype.to_ascii_lowercase(),
+            type_name,
+            subtype,
             charset,
         }
     }
 
     /// The type half, lowercased — `text` in `text/html`.
     #[must_use]
-    pub fn type_name(&self) -> &str {
+    pub const fn type_name(&self) -> &MediaTypeName {
         &self.type_name
     }
 
     /// The subtype half, lowercased — `html` in `text/html`.
     #[must_use]
-    pub fn subtype(&self) -> &str {
+    pub const fn subtype(&self) -> &MediaTypeName {
         &self.subtype
     }
 
@@ -153,10 +199,10 @@ impl MediaType {
     /// destroy it, so the transport leaves every other media type as bytes.
     #[must_use]
     pub fn is_textual(&self) -> bool {
-        if self.type_name == "text" {
+        if self.type_name.as_str() == "text" {
             return true;
         }
-        self.type_name == "application"
+        self.type_name.as_str() == "application"
             && matches!(
                 self.subtype.as_str(),
                 "xhtml+xml" | "xml" | "json" | "javascript" | "ecmascript"

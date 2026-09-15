@@ -133,7 +133,7 @@ message = "core/dom must not depend on engine, concrete script runtimes, the bin
 # later CSS/graphics/network/window bridge lives in rhai-bindings (v0.5 §2.12).
 [[deny-scope-dep]]
 from = "runtime_rhai"
-to = ["dom", "runtime_rhai_bindings", "alloy_cli"]
+to = ["dom", "graphics", "css", "runtime_rhai_bindings", "alloy_cli"]
 message = "core/runtime/rhai must name no domain crate — the bridges live in rhai-bindings (v0.5 report §2.12)."
 
 # Graphics domain layer must not depend on application layer or other subsystems
@@ -195,6 +195,36 @@ deny = [
     "rlua::*",
 ]
 message = "core/engine must remain script-interpreter free (ADR-0002:49 / ADR-0011 item 2)."
+
+# CSS must not import any concrete script runtime crate (PRD-007:64-67)
+[[restrict-use]]
+name = "css-interpreter-free"
+scope = "css"
+deny = [
+    "rhai::*",
+    "boa_engine::*",
+    "rquickjs::*",
+    "deno_core::*",
+    "v8::*",
+    "mlua::*",
+    "rlua::*",
+]
+message = "core/css must remain script-interpreter free (PRD-007:64-67)."
+
+# DOM must not import any concrete script runtime crate
+[[restrict-use]]
+name = "dom-interpreter-free"
+scope = "dom"
+deny = [
+    "rhai::*",
+    "boa_engine::*",
+    "rquickjs::*",
+    "deno_core::*",
+    "v8::*",
+    "mlua::*",
+    "rlua::*",
+]
+message = "core/dom must remain script-interpreter free."
 
 # Crate preference: prefer tracing over log
 [[require-use]]
