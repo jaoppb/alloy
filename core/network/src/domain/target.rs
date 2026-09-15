@@ -59,12 +59,16 @@ impl fmt::Display for Path {
     }
 }
 
-/// One percent-decoded `key=value` pair of a query string, in the order it
-/// appeared. A key with no `=` decodes to a bare key with no value.
+/// One decoded `key=value` pair of a query string, in the order it appeared.
+///
+/// Decoding follows the WHATWG URL Standard's `application/x-www-form-urlencoded`
+/// parser (§5, "urlencoded parsing"), the algorithm every browser runs on a
+/// query string: a key with no `=` decodes to an empty-string value (`?flag`
+/// and `?flag=` are indistinguishable), never `Option::None`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct QueryParam {
     key: String,
-    value: Option<String>,
+    value: String,
 }
 
 impl QueryParam {
@@ -74,17 +78,18 @@ impl QueryParam {
         &self.key
     }
 
-    /// The decoded value, if the pair carried one (`?flag` vs `?flag=1`).
+    /// The decoded value — empty when the pair carried none (`?flag`).
     #[must_use]
-    pub fn value(&self) -> Option<&str> {
-        self.value.as_deref()
+    pub fn value(&self) -> &str {
+        &self.value
     }
 }
 
 /// A validated query string — the text after `?`, without the `?`.
 ///
-/// Parsed into its ordered `key=value` pairs (RFC 3986 §3.4) rather than kept
-/// as one string a caller would have to re-split and percent-decode itself.
+/// Parsed into its ordered `key=value` pairs the way the WHATWG URL Standard's
+/// `application/x-www-form-urlencoded` parser does, rather than kept as one
+/// string a caller would have to re-split and percent-decode itself.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Query {
     raw: String,
@@ -96,16 +101,19 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// [`UrlDefect::MalformedPath`] when a character is not permitted, or a
-    /// `%` escape is not followed by two hexadecimal digits.
+    /// [`UrlDefect::MalformedPath`] when the raw text carries a character
+    /// that has no business on the request line (a control character, a raw
+    /// space, an embedded fragment marker). Once past that wire-safety check,
+    /// decoding the pairs themselves can never fail — the WHATWG algorithm is
+    /// total, the same way a browser never rejects a query string as
+    /// unparsable.
     pub fn new(raw: &str) -> Result<Self, UrlDefect> {
         if raw.chars().any(is_forbidden_in_target) {
             return Err(UrlDefect::MalformedPath);
         }
-        let params = parse_params(raw)?;
         Ok(Self {
             raw: raw.to_owned(),
-            params,
+            params: parse_params(raw),
         })
     }
 
@@ -127,7 +135,7 @@ impl Query {
         self.params
             .iter()
             .find(|param| param.key() == key)
-            .and_then(QueryParam::value)
+            .map(QueryParam::value)
     }
 }
 
@@ -137,43 +145,76 @@ impl fmt::Display for Query {
     }
 }
 
-fn parse_params(raw: &str) -> Result<Vec<QueryParam>, UrlDefect> {
-    if raw.is_empty() {
-        return Ok(Vec::new());
+/// WHATWG URL §5, "urlencoded parsing": split on `&`, drop empty sequences,
+/// keep every other one — including a lone bare key — as a pair.
+fn parse_params(raw: &str) -> Vec<QueryParam> {
+    raw.split('&')
+        .filter(|pair| !pair.is_empty())
+        .map(parse_param)
+        .collect()
+}
+
+/// A pair with no `=` names an empty-string value, never "no value" — the
+/// same rule `URLSearchParams` uses, so `?flag` round-trips the same way in
+/// this engine as it would in a browser.
+fn parse_param(pair: &str) -> QueryParam {
+    let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+    QueryParam {
+        key: decode_form_component(name),
+        value: decode_form_component(value),
     }
-    raw.split('&').map(parse_param).collect()
 }
 
-fn parse_param(pair: &str) -> Result<QueryParam, UrlDefect> {
-    let Some((key, value)) = pair.split_once('=') else {
-        return Ok(QueryParam {
-            key: percent_decode(pair)?,
-            value: None,
-        });
-    };
-    Ok(QueryParam {
-        key: percent_decode(key)?,
-        value: Some(percent_decode(value)?),
-    })
+/// WHATWG URL §5: replace `+` with space, percent-decode leniently, then
+/// UTF-8 decode with the replacement character standing in for anything
+/// that isn't valid UTF-8. Unlike RFC 3986 percent-decoding this can never
+/// fail — a malformed escape is not a parse error, it is data, exactly as a
+/// browser treats it.
+fn decode_form_component(text: &str) -> String {
+    let space_replaced = text.replace('+', " ");
+    let decoded = percent_decode_lenient(space_replaced.as_bytes());
+    String::from_utf8_lossy(&decoded).into_owned()
 }
 
-/// Decode `%XX` escapes (RFC 3986 §2.1); every other byte passes through.
-fn percent_decode(text: &str) -> Result<String, UrlDefect> {
-    let mut bytes = text.bytes();
-    let mut decoded = Vec::with_capacity(text.len());
-    while let Some(byte) = bytes.next() {
-        decoded.push(decode_next_byte(byte, &mut bytes)?);
+fn percent_decode_lenient(bytes: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut cursor = bytes.iter().copied();
+    while let Some(byte) = cursor.next() {
+        push_decoded_byte(byte, &mut cursor, &mut output);
     }
-    String::from_utf8(decoded).map_err(|_| UrlDefect::MalformedPath)
+    output
 }
 
-fn decode_next_byte(byte: u8, rest: &mut impl Iterator<Item = u8>) -> Result<u8, UrlDefect> {
+/// Consume one input byte from `cursor`, and — for a `%` that opens a valid
+/// two-digit hex escape — the two bytes it decodes. A `%` that does not open
+/// a valid escape passes through untouched and consumes nothing extra, so a
+/// stray `%` in the middle of an otherwise well-formed query never loses
+/// data.
+fn push_decoded_byte(
+    byte: u8,
+    cursor: &mut (impl Iterator<Item = u8> + Clone),
+    output: &mut Vec<u8>,
+) {
     if byte != b'%' {
-        return Ok(byte);
+        output.push(byte);
+        return;
     }
-    let high = rest.next().ok_or(UrlDefect::MalformedPath)?;
-    let low = rest.next().ok_or(UrlDefect::MalformedPath)?;
-    hex_pair(high, low).ok_or(UrlDefect::MalformedPath)
+    let mut lookahead = cursor.clone();
+    let Some(high) = lookahead.next() else {
+        output.push(byte);
+        return;
+    };
+    let Some(low) = lookahead.next() else {
+        output.push(byte);
+        return;
+    };
+    let Some(escaped) = hex_pair(high, low) else {
+        output.push(byte);
+        return;
+    };
+    output.push(escaped);
+    cursor.next();
+    cursor.next();
 }
 
 fn hex_pair(high: u8, low: u8) -> Option<u8> {

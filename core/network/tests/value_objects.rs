@@ -88,17 +88,30 @@ fn a_query_string_parses_into_ordered_decoded_pairs() {
     let mut params = query.params();
     let first = params.next().unwrap();
     assert_eq!(first.key(), "a");
-    assert_eq!(first.value(), Some("1"));
+    assert_eq!(first.value(), "1");
     let second = params.next().unwrap();
     assert_eq!(second.key(), "flag");
-    assert_eq!(second.value(), None);
+    assert_eq!(second.value(), "");
     assert_eq!(query.get("b"), Some("hello world"));
     assert_eq!(query.as_str(), "a=1&flag&b=hello%20world");
 }
 
 #[test]
-fn a_query_string_with_a_truncated_percent_escape_is_a_typed_refusal() {
-    assert!(Url::parse("https://example.com/?a=%2").is_err());
+fn a_plus_sign_decodes_to_a_space_per_whatwg_urlencoded_parsing() {
+    let query = Query::new("q=hello+world").unwrap();
+    assert_eq!(query.get("q"), Some("hello world"));
+}
+
+#[test]
+fn a_truncated_percent_escape_passes_through_literally_per_whatwg_urlencoded_parsing() {
+    let query = Url::parse("https://example.com/?a=%2").unwrap();
+    assert_eq!(query.query().and_then(|query| query.get("a")), Some("%2"));
+}
+
+#[test]
+fn a_non_hexadecimal_percent_escape_passes_through_literally() {
+    let query = Query::new("a=100%25%zz").unwrap();
+    assert_eq!(query.get("a"), Some("100%%zz"));
 }
 
 #[test]
