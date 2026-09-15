@@ -5,8 +5,8 @@
 //! holds does the walk look leftward — which is why a page-wide sheet costs one
 //! compound test per node instead of one subtree walk per rule.
 //!
-//! The walk is an explicit work stack of `(step index, candidate)` frames, the
-//! same discipline as `application/snapshot.rs:22-31`: a selector nested a
+//! The walk is an explicit work stack of [`MatchFrame`]s, the same discipline
+//! as `application/snapshot.rs:22-31`: a selector nested a
 //! thousand combinators deep is a heap allocation, never a blown stack.
 //! Termination is structural — every frame pushed carries a **strictly smaller**
 //! step index, so the walk cannot cycle.
@@ -24,6 +24,46 @@ use crate::domain::selector::{
 };
 use crate::domain::specificity::Specificity;
 
+/// One frame of the right-to-left match walk: a selector step index paired
+/// with the snapshot node it must be tested against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MatchFrame {
+    step_index: usize,
+    candidate: SnapshotId,
+}
+
+impl MatchFrame {
+    const fn new(step_index: usize, candidate: SnapshotId) -> Self {
+        Self {
+            step_index,
+            candidate,
+        }
+    }
+}
+
+/// The explicit work stack [`matches`] drives instead of recursing — the same
+/// discipline as `application/snapshot.rs:22-31` (module doc).
+#[derive(Debug, Default)]
+struct WorkStack {
+    frames: Vec<MatchFrame>,
+}
+
+impl WorkStack {
+    fn starting_from(frame: MatchFrame) -> Self {
+        Self {
+            frames: vec![frame],
+        }
+    }
+
+    fn push(&mut self, frame: MatchFrame) {
+        self.frames.push(frame);
+    }
+
+    fn pop(&mut self) -> Option<MatchFrame> {
+        self.frames.pop()
+    }
+}
+
 /// Whether `selector` selects `node`.
 ///
 /// `node` travels by value: [`NodeRef`] is `Copy` and two words wide, so a
@@ -33,9 +73,9 @@ pub fn matches(selector: &ComplexSelector, node: NodeRef<'_>, snapshot: &DomSnap
     let Some(subject) = selector.subject_index() else {
         return false;
     };
-    let mut work: Vec<(usize, SnapshotId)> = vec![(subject, node.id())];
-    while let Some((index, candidate)) = work.pop() {
-        if step_reached_the_leftmost(selector, index, candidate, snapshot, &mut work) {
+    let mut work = WorkStack::starting_from(MatchFrame::new(subject, node.id()));
+    while let Some(frame) = work.pop() {
+        if step_reached_the_leftmost(selector, frame, snapshot, &mut work) {
             return true;
         }
     }
@@ -65,18 +105,17 @@ pub fn strongest_match(
 /// alternative is re-deriving the frontier the caller just computed.
 fn step_reached_the_leftmost(
     selector: &ComplexSelector,
-    index: usize,
-    candidate: SnapshotId,
+    frame: MatchFrame,
     snapshot: &DomSnapshot,
-    work: &mut Vec<(usize, SnapshotId)>,
+    work: &mut WorkStack,
 ) -> bool {
-    let Some((step, node)) = frame(selector, index, candidate, snapshot) else {
+    let Some((step, node)) = step_and_node(selector, frame, snapshot) else {
         return false;
     };
     if !compound_matches(step.compound(), node, snapshot) {
         return false;
     }
-    let Some(previous) = index.checked_sub(1) else {
+    let Some(previous) = frame.step_index.checked_sub(1) else {
         return true;
     };
     push_candidates(work, previous, step.combinator(), node, snapshot);
@@ -84,28 +123,27 @@ fn step_reached_the_leftmost(
 }
 
 /// The step and node one frame names, or `None` when either id is foreign.
-fn frame<'selector, 'snapshot>(
+fn step_and_node<'selector, 'snapshot>(
     selector: &'selector ComplexSelector,
-    index: usize,
-    candidate: SnapshotId,
+    frame: MatchFrame,
     snapshot: &'snapshot DomSnapshot,
 ) -> Option<(&'selector SelectorStep, NodeRef<'snapshot>)> {
-    let step = selector.step(index)?;
-    let node = snapshot.node(candidate)?;
+    let step = selector.step(frame.step_index)?;
+    let node = snapshot.node(frame.candidate)?;
     Some((step, node))
 }
 
 /// Pushes every node that could satisfy step `previous`, given that the step to
 /// its right matched `node`.
 fn push_candidates(
-    work: &mut Vec<(usize, SnapshotId)>,
+    work: &mut WorkStack,
     previous: usize,
     combinator: Combinator,
     node: NodeRef<'_>,
     snapshot: &DomSnapshot,
 ) {
     for candidate in candidates_for(combinator, node, snapshot) {
-        work.push((previous, candidate));
+        work.push(MatchFrame::new(previous, candidate));
     }
 }
 
