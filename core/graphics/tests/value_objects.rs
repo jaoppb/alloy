@@ -305,5 +305,8 @@ fn graphics_error_implements_std_error() {
 
 #[test]
 fn the_port_schema_version_is_recorded_in_exactly_one_place() {
-    assert_eq!(graphics::PORT_SCHEMA_VERSION, 1);
+    // 2 since v0.5 Phase B3: GraphicsError::FontUnavailable (additive, the
+    // enum is #[non_exhaustive]) and the new FontProvider port alongside
+    // RenderBackend.
+    assert_eq!(graphics::PORT_SCHEMA_VERSION, 2);
 }

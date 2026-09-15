@@ -18,6 +18,11 @@ software-backend = []
 
 [dependencies]
 thiserror = { workspace = true }
+# B3 real text rasterization: TtfParserProvider / SystemFontProvider. Always on —
+# SyntheticFontProvider (the deterministic default every golden/conformance test
+# uses) lives in this crate too, so `--no-default-features` still needs the type
+# even with `software-backend` off.
+ttf-parser = { workspace = true }
 
 [lints]
 workspace = true

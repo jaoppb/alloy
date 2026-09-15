@@ -152,6 +152,16 @@ no-engine:
     else \
         echo "✓ core/network is engine/rhai/subsystem free"; \
     fi
+    @if {{cargo}} tree -p window --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics|network) '; then \
+        echo "✗ core/window linked the engine, a script runtime or another subsystem"; exit 1; \
+    else \
+        echo "✓ core/window is engine/rhai/subsystem free"; \
+    fi
+    @if {{cargo}} tree -p window --no-default-features --edges normal --prefix none | grep -Eiq '^(winit|softbuffer) '; then \
+        echo "✗ core/window --no-default-features still links winit/softbuffer"; exit 1; \
+    else \
+        echo "✓ core/window --no-default-features (no-window) links neither winit nor softbuffer"; \
+    fi
 
 # --- misc -------------------------------------------------------------
 

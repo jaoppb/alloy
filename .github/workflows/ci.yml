@@ -113,6 +113,7 @@ jobs:
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
       - run: cargo test -p network --no-default-features
+      - run: cargo test -p window --no-default-features
       # PRD-007: core/css realises the cascade/layout ports without linking the
       # engine or a script runtime — the scriptable adapter lives in
       # rhai-bindings. It may depend on dom and graphics, and nothing else.
@@ -142,6 +143,27 @@ jobs:
             exit 1
           fi
           echo "✓ core/runtime/rhai is domain-crate free"
+      # PRD-010 / ADR-0019: core/window is a pure window-system-and-presenter
+      # domain — no engine, no runtime, no other subsystem, and (unlike
+      # core/css) no core/graphics either; FrameView is the seam that keeps
+      # that edge from existing. The scriptable UI policy of Phase M lives in
+      # rhai-bindings.
+      - name: window links no engine, runtime or other subsystem
+        run: |
+          if cargo tree -p window --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics|network) '; then
+            echo "✗ core/window linked the engine, a script runtime or another subsystem"
+            exit 1
+          fi
+          echo "✓ core/window is engine/rhai/subsystem free"
+      # ADR-0011 item 6: --no-default-features is the no-window build — it must
+      # link neither winit nor softbuffer at all.
+      - name: window --no-default-features links neither winit nor softbuffer
+        run: |
+          if cargo tree -p window --no-default-features --edges normal --prefix none | grep -Eiq '^(winit|softbuffer) '; then
+            echo "✗ core/window --no-default-features still links winit/softbuffer"
+            exit 1
+          fi
+          echo "✓ core/window --no-default-features (no-window) links neither winit nor softbuffer"
 
   # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
   css-conformance:
