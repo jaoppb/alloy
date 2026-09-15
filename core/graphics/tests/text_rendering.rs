@@ -26,7 +26,7 @@ fn reference(name: &str) -> PathBuf {
 const FONT_SIZE: Au = Au::from_raw(16 * graphics::AU_PER_PX);
 const TEXT_FONT: FontId = FontId::new(1);
 
-fn synthetic_provider() -> Arc<dyn FontProvider> {
+fn synthetic_provider() -> Arc<SyntheticFontProvider> {
     Arc::new(SyntheticFontProvider::new().with_size(TEXT_FONT, FONT_SIZE))
 }
 
