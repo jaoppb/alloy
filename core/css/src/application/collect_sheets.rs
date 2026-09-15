@@ -18,8 +18,6 @@ use crate::domain::error::CssError;
 use crate::domain::stylesheet_set::{Origin, StyleSheetSet};
 use crate::infrastructure::parser::{parse_inline_style_recording, parse_stylesheet};
 
-/// The element whose character data is a stylesheet.
-const STYLE_ELEMENT: &str = "style";
 /// The attribute whose value is one element's own declaration block.
 const STYLE_ATTRIBUTE: &str = "style";
 
@@ -73,7 +71,7 @@ fn collect_style_element(
     node: NodeRef<'_>,
     sheets: &mut StyleSheetSet,
 ) -> Result<(), CssError> {
-    if node.tag() != Some(STYLE_ELEMENT) {
+    if node.tag() != Some(dom::TagName::Style.as_str()) {
         return Ok(());
     }
     let source = style_element_text(snapshot, node);
