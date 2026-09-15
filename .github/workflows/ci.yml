@@ -156,14 +156,11 @@ jobs:
           fi
           echo "✓ core/window is engine/rhai/subsystem free"
       # ADR-0011 item 6: --no-default-features is the no-window build — it must
-      # link neither winit nor softbuffer at all.
-      - name: window --no-default-features links neither winit nor softbuffer
-        run: |
-          if cargo tree -p window --no-default-features --edges normal --prefix none | grep -Eiq '^(winit|softbuffer) '; then
-            echo "✗ core/window --no-default-features still links winit/softbuffer"
-            exit 1
-          fi
-          echo "✓ core/window --no-default-features (no-window) links neither winit nor softbuffer"
+      # link neither winit nor softbuffer at all. Enforced by the `arch-lint`
+      # job's `window-backend-confined` restrict-use rule (arch-lint.toml),
+      # which confines every `winit`/`softbuffer` import to the three
+      # infra files gated by the `winit-system` feature — not a bespoke
+      # `cargo tree | grep` step here.
 
   # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
   css-conformance:

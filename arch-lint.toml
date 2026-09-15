@@ -117,6 +117,20 @@ paths = ["core/window/src/application/**"]
 name = "window"
 paths = ["core/window/**"]
 
+# Everything in `window` except the three files `infrastructure/mod.rs` names as
+# the sole `winit`/`softbuffer` adapter (see that file's doc comment). Backs the
+# `window-backend-confined` restrict-use rule below, the arch-lint replacement
+# for a `cargo tree -p window --no-default-features | grep` CI step.
+[[scopes]]
+name = "window_winit_free"
+paths = [
+    "core/window/src/domain/**",
+    "core/window/src/application/**",
+    "core/window/src/lib.rs",
+    "core/window/src/infrastructure/mod.rs",
+    "core/window/src/infrastructure/headless.rs",
+]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -226,6 +240,17 @@ deny = [
     "rlua::*",
 ]
 message = "core/engine must remain script-interpreter free (ADR-0002:49 / ADR-0011 item 2)."
+
+# ADR-0011 item 6: `winit`/`softbuffer` are optional deps behind the `winit-system`
+# feature (default on) — `infrastructure/{winit_system,softbuffer_presenter,event_map}.rs`
+# are the only files in `core/window` allowed to name them. Confining the import
+# is what makes the `--no-default-features` (`no-window`) build link neither at
+# all; replaces a bespoke `cargo tree | grep` CI step with this mechanism.
+[[restrict-use]]
+name = "window-backend-confined"
+scope = "window_winit_free"
+deny = ["winit::*", "softbuffer::*"]
+message = "winit/softbuffer must stay confined to infrastructure/{winit_system,softbuffer_presenter,event_map} (ADR-0011 item 6)"
 
 # Crate preference: prefer tracing over log
 [[require-use]]
