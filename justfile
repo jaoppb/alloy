@@ -82,7 +82,7 @@ fix:
 # --- quality gates -------------------------------------------------
 
 # Full local gate (CI minus the 3-OS matrix)
-gate: fmt-check lint check test deny coverage arch no-engine
+gate: fmt-check lint check test deny coverage arch no-engine css-conformance
     @echo "✓ all local gates passed"
 
 # Alias for `gate`
@@ -116,6 +116,11 @@ coverage-html:
     @command -v cargo-llvm-cov >/dev/null || { echo "cargo-llvm-cov not found — run: just setup"; exit 1; }
     {{cargo}} llvm-cov --package {{cov_pkg}} --all-features --html
     @echo "report: target/llvm-cov/html/index.html"
+
+# CSS support manifest: MANIFEST.md, the registries and the parser must agree
+# in every direction (relatório §2.8:350-354). No bless path by design.
+css-conformance:
+    {{cargo}} test -p css --test manifest_runner
 
 # Architecture gate: layers, dependencies, `tracing` + no-`unwrap` (arch-lint)
 arch:

@@ -1,0 +1,87 @@
+/*
+ * The embedded user-agent stylesheet (v0.5 B2, `plano:435-443`).
+ *
+ * Parsed once by `UaCascade::new()` (`core/css/src/infrastructure/ua_sheet.rs`)
+ * and cascaded as `Origin::UserAgent` rules, ahead of the document's own —
+ * this file *is* the base layer B1 used to hard-code in
+ * `style_for_tag` (removed in this change). Every value here reproduces
+ * exactly what that Rust function set, so a document with no author CSS
+ * renders unchanged.
+ *
+ * Everything not overridden here already has the right computed value from
+ * `ComputedStyle::initial()` — block display and zero margin — so an
+ * ordinary element (`div`, `html`, …) needs no rule at all.
+ */
+
+head,
+style,
+script,
+title,
+meta,
+link,
+base {
+	display: none;
+}
+
+span,
+a,
+em,
+strong,
+b,
+i,
+code,
+small,
+label {
+	display: inline;
+}
+
+h1 {
+	display: block;
+	font-size: 2em;
+	margin: 0.67em 0;
+}
+
+h2 {
+	display: block;
+	font-size: 1.5em;
+	margin: 0.67em 0;
+}
+
+h3 {
+	display: block;
+	font-size: 1.17em;
+	margin: 0.67em 0;
+}
+
+h4 {
+	display: block;
+	font-size: 1em;
+	margin: 0.67em 0;
+}
+
+h5 {
+	display: block;
+	font-size: 0.83em;
+	margin: 0.67em 0;
+}
+
+h6 {
+	display: block;
+	font-size: 0.67em;
+	margin: 0.67em 0;
+}
+
+p {
+	display: block;
+	margin: 16px 0;
+}
+
+body {
+	display: block;
+	margin: 8px;
+}
+
+blockquote {
+	display: block;
+	margin: 16px 40px;
+}

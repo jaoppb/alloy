@@ -24,6 +24,26 @@ impl AttributeName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The `style` attribute — one element's own inline declaration block
+    /// (CSS Cascade L4 §6.4.3).
+    #[must_use]
+    pub fn style() -> Self {
+        Self("style".to_string())
+    }
+
+    /// The `class` attribute — a whitespace-separated set of names rather than
+    /// one string (HTML §3.2.6.7).
+    #[must_use]
+    pub fn class() -> Self {
+        Self("class".to_string())
+    }
+
+    /// The `id` attribute a `#name` selector component is compared against.
+    #[must_use]
+    pub fn id() -> Self {
+        Self("id".to_string())
+    }
 }
 
 const fn is_forbidden(character: char) -> bool {

@@ -46,6 +46,28 @@ impl LengthEdges {
         Self::new(length, Length::ZERO, length, Length::ZERO)
     }
 
+    /// The same quartet with one side replaced — what the `margin-top` /
+    /// `padding-left` longhands apply, leaving the other three alone.
+    #[must_use]
+    pub const fn with_top(self, top: Length) -> Self {
+        Self { top, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_right(self, right: Length) -> Self {
+        Self { right, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_bottom(self, bottom: Length) -> Self {
+        Self { bottom, ..self }
+    }
+
+    #[must_use]
+    pub const fn with_left(self, left: Length) -> Self {
+        Self { left, ..self }
+    }
+
     #[must_use]
     pub const fn top(self) -> Length {
         self.top

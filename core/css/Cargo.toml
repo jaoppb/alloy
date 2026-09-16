@@ -23,8 +23,8 @@ builtin-adapters = []
 [dependencies]
 dom = { path = "../dom" }
 # `graphics` is imported for its shared fixed-point units only — `Au` / `Px` /
-# `Color` / `Rect` / `Point` / `Size` (`ADR-0016`, plan §1.4). No rasterizer
-# type crosses into `css`.
+# `Color` / `Opacity` / `Rect` / `Point` / `Size` (`ADR-0016`, plan §1.4). No
+# rasterizer type crosses into `css`.
 graphics = { path = "../graphics" }
 thiserror = { workspace = true }
 
