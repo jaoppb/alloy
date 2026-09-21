@@ -52,7 +52,7 @@ fn the_reference_pipeline_stacks_block_boxes_in_document_order() {
     let styled = UaCascade::new()
         .resolve(&dom, &StyleSheetSet::new())
         .expect("cascade resolves");
-    let boxes = BlockLayout::new()
+    let boxes = BlockLayout::monospace()
         .layout(&styled, &ViewportConstraints::new(au(800), au(600)))
         .expect("layout succeeds");
 
@@ -86,7 +86,7 @@ fn a_heading_is_laid_out_above_the_following_paragraph() {
     let styled = UaCascade::new()
         .resolve(&dom, &StyleSheetSet::new())
         .expect("cascade resolves");
-    let boxes = BlockLayout::new()
+    let boxes = BlockLayout::monospace()
         .layout(&styled, &ViewportConstraints::new(au(800), au(600)))
         .expect("layout succeeds");
 
@@ -108,6 +108,6 @@ fn a_heading_is_laid_out_above_the_following_paragraph() {
 /// The [`css::SnapshotId`] of the sole element in `dom` tagged `name`.
 fn element_id(dom: &css::DomSnapshot, name: &str) -> css::SnapshotId {
     dom.nodes_in_document_order()
-        .find(|&id| dom.node(id).and_then(css::NodeRef::tag) == Some(name))
+        .find(|&id| dom.node(id).and_then(css::NodeRef::tag_str) == Some(name))
         .unwrap_or_else(|| panic!("no `<{name}>` element in the snapshot"))
 }

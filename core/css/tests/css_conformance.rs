@@ -7,7 +7,7 @@ use css::{BlockLayout, MockCascadeResolver, MockLayoutEngine, UaCascade};
 
 #[test]
 fn the_builtin_rust_adapters_pass_conformance() {
-    run_css_conformance(&UaCascade::new(), &BlockLayout::new());
+    run_css_conformance(&UaCascade::new(), &BlockLayout::monospace());
 }
 
 #[test]

@@ -85,7 +85,7 @@ fn layout_once() -> css::LayoutBoxTree {
     let styled = UaCascade::new()
         .resolve(&dom, &sheet)
         .expect("cascade resolves");
-    BlockLayout::new()
+    BlockLayout::monospace()
         .layout(&styled, &ViewportConstraints::new(au(800), au(600)))
         .expect("layout succeeds")
 }

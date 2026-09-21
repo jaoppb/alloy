@@ -149,36 +149,51 @@ impl DoctypeToken {
     }
 }
 
+use crate::domain::tag::TagName;
+
 /// A `StartTag` or `EndTag` token payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagToken {
-    name: String,
+    tag: TagName,
     attributes: AttributeList,
     self_closing: bool,
 }
 
 impl TagToken {
-    /// Create a new tag token with lowercased name.
-    pub fn new(
-        name: impl Into<String>,
+    /// Create a new tag token with a strongly-typed [`TagName`].
+    #[must_use]
+    pub const fn new(tag: TagName, attributes: AttributeList, self_closing: bool) -> Self {
+        Self {
+            tag,
+            attributes,
+            self_closing,
+        }
+    }
+
+    /// Parse and validate a tag token from a raw tag name.
+    pub fn parse(
+        name: &str,
         attributes: AttributeList,
         self_closing: bool,
     ) -> Result<Self, HtmlError> {
-        let name_string = name.into().to_ascii_lowercase();
-        if name_string.is_empty() {
-            return Err(HtmlError::InvalidTag("tag name cannot be empty".into()));
-        }
+        let tag = TagName::new(name)?;
         Ok(Self {
-            name: name_string,
+            tag,
             attributes,
             self_closing,
         })
     }
 
-    /// The tag name.
+    /// The strongly-typed tag name.
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
+    pub const fn tag(&self) -> &TagName {
+        &self.tag
+    }
+
+    /// The tag name as a string slice.
+    #[must_use]
+    pub const fn name(&self) -> &str {
+        self.tag.as_str()
     }
 
     /// The collection of attributes.

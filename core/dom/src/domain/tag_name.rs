@@ -95,6 +95,7 @@ define_tags! {
         Footer => "footer",
         Address => "address",
         Main => "main",
+        Hgroup => "hgroup",
 
         // Grouping
         P => "p",
@@ -200,6 +201,111 @@ impl TagName {
         let lower = raw.to_ascii_lowercase();
         Ok(Self::from_standard_name(&lower).unwrap_or(Self::Custom(lower)))
     }
+
+    /// The `<img>` void element tag.
+    #[must_use]
+    pub const fn img() -> Self {
+        Self::Img
+    }
+
+    /// The `<video>` element tag.
+    #[must_use]
+    pub const fn video() -> Self {
+        Self::Video
+    }
+
+    /// The `<canvas>` element tag.
+    #[must_use]
+    pub const fn canvas() -> Self {
+        Self::Canvas
+    }
+
+    /// The `<iframe>` element tag.
+    #[must_use]
+    pub const fn iframe() -> Self {
+        Self::Iframe
+    }
+
+    /// The `<object>` element tag.
+    #[must_use]
+    pub const fn object() -> Self {
+        Self::Object
+    }
+
+    /// The `<embed>` void element tag.
+    #[must_use]
+    pub const fn embed() -> Self {
+        Self::Embed
+    }
+
+    /// The `<svg>` element tag.
+    #[must_use]
+    pub const fn svg() -> Self {
+        Self::Svg
+    }
+
+    /// The `<div>` element tag.
+    #[must_use]
+    pub const fn div() -> Self {
+        Self::Div
+    }
+
+    /// The `<p>` element tag.
+    #[must_use]
+    pub const fn p() -> Self {
+        Self::P
+    }
+
+    /// The `<span>` element tag.
+    #[must_use]
+    pub const fn span() -> Self {
+        Self::Span
+    }
+
+    /// The `<html>` element tag.
+    #[must_use]
+    pub const fn html() -> Self {
+        Self::Html
+    }
+
+    /// The `<head>` element tag.
+    #[must_use]
+    pub const fn head() -> Self {
+        Self::Head
+    }
+
+    /// The `<body>` element tag.
+    #[must_use]
+    pub const fn body() -> Self {
+        Self::Body
+    }
+
+    /// The `<style>` element tag.
+    #[must_use]
+    pub const fn style() -> Self {
+        Self::Style
+    }
+
+    /// The `<script>` element tag.
+    #[must_use]
+    pub const fn script() -> Self {
+        Self::Script
+    }
+
+    /// Whether this tag is a replaced element whose size comes from a resource.
+    #[must_use]
+    pub const fn is_replaced(&self) -> bool {
+        matches!(
+            self,
+            Self::Img
+                | Self::Video
+                | Self::Canvas
+                | Self::Iframe
+                | Self::Object
+                | Self::Embed
+                | Self::Svg
+        )
+    }
 }
 
 fn starts_with_letter(raw: &str) -> bool {
@@ -215,5 +321,29 @@ const fn is_tag_character(character: char) -> bool {
 impl fmt::Display for TagName {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
+    }
+}
+
+impl PartialEq<str> for TagName {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for TagName {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<TagName> for str {
+    fn eq(&self, other: &TagName) -> bool {
+        self == other.as_str()
+    }
+}
+
+impl PartialEq<TagName> for &str {
+    fn eq(&self, other: &TagName) -> bool {
+        *self == other.as_str()
     }
 }

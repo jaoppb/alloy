@@ -14,7 +14,8 @@ pub use application::conformance::run_html_conformance;
 pub use application::ports::{RawKind, TokenSink, TokenSinkResult, TreeSink};
 pub use domain::error::HtmlError;
 pub use domain::tag::{
-    closes_list_item, closes_paragraph, is_block_tag, is_heading_tag, is_rawtext_tag, is_void_tag,
+    TagName, closes_list_item, closes_paragraph, is_block_tag, is_heading_tag, is_rawtext_tag,
+    is_void_tag,
 };
 pub use domain::token::{AttributeEntry, AttributeList, DoctypeToken, TagToken, Token};
 pub use infrastructure::dom_sink::DomTreeSink;
@@ -89,7 +90,7 @@ pub fn parse(html: &str) -> Result<dom::DomTree, HtmlError> {
 }
 
 /// Parses an HTML input string pumping events into an arbitrary [`TreeSink`].
-pub fn parse_with_sink(html: &str, sink: &mut dyn TreeSink) -> Result<(), HtmlError> {
+pub fn parse_with_sink<S: TreeSink + ?Sized>(html: &str, sink: &mut S) -> Result<(), HtmlError> {
     let mut builder = TreeBuilder::new(sink);
     let tokenizer = Tokenizer::new(html);
     tokenizer.run(&mut builder)

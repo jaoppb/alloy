@@ -55,7 +55,7 @@ fn layout_boxes(tree: &dom::DomTree, root: dom::NodeId, source: &str) -> css::La
     let styled = UaCascade::new()
         .resolve(&dom, &sheet)
         .expect("cascade resolves");
-    BlockLayout::new()
+    BlockLayout::monospace()
         .layout(&styled, &ViewportConstraints::new(au(800), au(600)))
         .expect("layout succeeds")
 }

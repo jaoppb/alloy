@@ -13,6 +13,7 @@
 
 use graphics::{Au, Point, Rect};
 
+use crate::application::ports::TextMeasurer;
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
 use crate::domain::error::CssError;
@@ -92,8 +93,8 @@ impl Line {
 
 /// Lays a run of inline-level nodes out inside a content box `content_width`
 /// wide.
-pub fn layout(
-    context: &LayoutContext<'_>,
+pub fn layout<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     items: &[SnapshotId],
     content_width: Au,
     font_size: Au,
@@ -113,8 +114,8 @@ pub fn layout(
 
 /// Walks one inline-level node, appending its measured pieces in document
 /// order. An inline box contributes nothing itself; its descendants do.
-fn collect(
-    context: &LayoutContext<'_>,
+fn collect<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     parent_font_size: Au,
     pieces: &mut Vec<Piece>,
@@ -135,8 +136,8 @@ fn collect(
     )
 }
 
-fn collect_children(
-    context: &LayoutContext<'_>,
+fn collect_children<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     styled: &StyledNode,
     font_size: Au,
     pieces: &mut Vec<Piece>,
@@ -163,8 +164,8 @@ impl Setting {
     }
 }
 
-fn append_text(
-    context: &LayoutContext<'_>,
+fn append_text<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     text: &str,
@@ -179,8 +180,8 @@ fn append_text(
 /// `white-space: normal` / `nowrap`: every run of white space becomes one
 /// space, and a hyphen inside a word is a further break opportunity
 /// (a simplified UAX #14).
-fn append_collapsed(
-    context: &LayoutContext<'_>,
+fn append_collapsed<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     text: &str,
@@ -198,8 +199,8 @@ fn append_collapsed(
 }
 
 /// A run made only of white space still separates its neighbours.
-fn append_border_space(
-    context: &LayoutContext<'_>,
+fn append_border_space<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     any: bool,
@@ -208,8 +209,8 @@ fn append_border_space(
     append_space_when(context, node_id, setting, any, pieces)
 }
 
-fn append_words(
-    context: &LayoutContext<'_>,
+fn append_words<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     words: &[&str],
@@ -222,8 +223,8 @@ fn append_words(
     Ok(())
 }
 
-fn append_separator(
-    context: &LayoutContext<'_>,
+fn append_separator<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     index: usize,
@@ -234,8 +235,8 @@ fn append_separator(
 
 /// A hyphenated word breaks after each hyphen, with the hyphen staying on the
 /// left-hand part — the one UAX #14 rule this cut implements beyond the space.
-fn append_word_parts(
-    context: &LayoutContext<'_>,
+fn append_word_parts<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     word: &str,
@@ -274,8 +275,8 @@ fn push_remainder(parts: &mut Vec<String>, current: String) {
     parts.push(current);
 }
 
-fn append_space_when(
-    context: &LayoutContext<'_>,
+fn append_space_when<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     wanted: bool,
@@ -290,8 +291,8 @@ fn append_space_when(
 }
 
 /// `white-space: pre`: nothing collapses, and only a `\n` breaks a line.
-fn append_preserved(
-    context: &LayoutContext<'_>,
+fn append_preserved<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     text: &str,
@@ -304,8 +305,8 @@ fn append_preserved(
     Ok(())
 }
 
-fn append_forced_break(
-    context: &LayoutContext<'_>,
+fn append_forced_break<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     index: usize,
@@ -319,8 +320,8 @@ fn append_forced_break(
     Ok(())
 }
 
-fn append_preserved_line(
-    context: &LayoutContext<'_>,
+fn append_preserved_line<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     setting: Setting,
     line: &str,
@@ -602,8 +603,8 @@ fn widened_width(piece: Piece, extra: Extra, index: usize) -> Au {
 
 /// One fragment per inline node, in document order: an inline box first, then
 /// the boxes it contains.
-fn emit(
-    context: &LayoutContext<'_>,
+fn emit<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     items: &[SnapshotId],
     placements: &Placements,
 ) -> Result<Fragments, CssError> {
@@ -614,8 +615,8 @@ fn emit(
     Ok(fragments)
 }
 
-fn emit_node(
-    context: &LayoutContext<'_>,
+fn emit_node<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     placements: &Placements,
     fragments: &mut Fragments,
@@ -634,8 +635,8 @@ fn emit_node(
     emit_children(context, styled, placements, fragments)
 }
 
-fn emit_children(
-    context: &LayoutContext<'_>,
+fn emit_children<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     styled: &StyledNode,
     placements: &Placements,
     fragments: &mut Fragments,
@@ -647,8 +648,8 @@ fn emit_children(
 }
 
 /// The bounding rectangle of everything `node_id`'s subtree put on a line.
-fn union_of(
-    context: &LayoutContext<'_>,
+fn union_of<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     placements: &Placements,
 ) -> Result<Option<Rect>, CssError> {

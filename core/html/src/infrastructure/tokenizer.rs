@@ -2,6 +2,7 @@
 
 use crate::application::ports::{RawKind, TokenSink, TokenSinkResult};
 use crate::domain::error::HtmlError;
+use crate::domain::tag::TagName;
 use crate::domain::token::{AttributeEntry, AttributeList, DoctypeToken, TagToken, Token};
 
 /// Internal tokenizer state machine states.
@@ -594,7 +595,8 @@ impl<'a> Tokenizer<'a> {
                         }
                     }
                     self.state = State::Data;
-                    if let Ok(end_tag) = TagToken::new(tag_name, AttributeList::new(), false) {
+                    if let Ok(tag) = TagName::new(tag_name) {
+                        let end_tag = TagToken::new(tag, AttributeList::new(), false);
                         self.pending_token = Some(Token::EndTag(end_tag));
                     }
                     return Token::Character(content);
@@ -620,22 +622,22 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn build_start_tag(&mut self) -> Result<Token, HtmlError> {
-        let tag = TagToken::new(
-            core::mem::take(&mut self.current_tag_name),
+        let raw_name = core::mem::take(&mut self.current_tag_name);
+        let tag = TagName::new(&raw_name)?;
+        let token = TagToken::new(
+            tag,
             core::mem::take(&mut self.current_attributes),
             self.is_self_closing,
-        )?;
+        );
         self.is_self_closing = false;
-        Ok(Token::StartTag(tag))
+        Ok(Token::StartTag(token))
     }
 
     fn build_end_tag(&mut self) -> Result<Token, HtmlError> {
-        let tag = TagToken::new(
-            core::mem::take(&mut self.current_tag_name),
-            AttributeList::new(),
-            false,
-        )?;
-        Ok(Token::EndTag(tag))
+        let raw_name = core::mem::take(&mut self.current_tag_name);
+        let tag = TagName::new(&raw_name)?;
+        let token = TagToken::new(tag, AttributeList::new(), false);
+        Ok(Token::EndTag(token))
     }
 }
 

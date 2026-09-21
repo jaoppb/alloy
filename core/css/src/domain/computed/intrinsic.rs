@@ -38,20 +38,30 @@ impl IntrinsicSize {
     }
 }
 
+use dom::TagName;
+
 /// The elements whose size comes from a resource rather than from CSS
 /// (HTML Living Standard, "replaced elements").
 ///
 /// Deliberately a short, closed list: an element outside it is laid out from
 /// its own content, which is the correct answer for every non-replaced tag.
-const REPLACED_TAGS: [&str; 7] = ["img", "video", "canvas", "iframe", "object", "embed", "svg"];
+const REPLACED_TAGS: [TagName; 7] = [
+    TagName::img(),
+    TagName::video(),
+    TagName::canvas(),
+    TagName::iframe(),
+    TagName::object(),
+    TagName::embed(),
+    TagName::svg(),
+];
 
 /// The marker an element with this tag is born with.
 #[must_use]
-pub(crate) fn for_tag(tag: Option<&str>) -> IntrinsicSize {
-    let Some(name) = tag else {
+pub(crate) fn for_tag(tag: Option<&TagName>) -> IntrinsicSize {
+    let Some(tag) = tag else {
         return IntrinsicSize::Resolved;
     };
-    if REPLACED_TAGS.contains(&name) {
+    if REPLACED_TAGS.contains(tag) {
         return IntrinsicSize::Pending;
     }
     IntrinsicSize::Resolved

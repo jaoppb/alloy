@@ -2,17 +2,17 @@
 
 use crate::application::ports::{RawKind, TokenSink, TokenSinkResult, TreeSink};
 use crate::domain::error::HtmlError;
-use crate::domain::tag::{closes_list_item, closes_paragraph, is_void_tag};
+use crate::domain::tag::TagName;
 use crate::domain::token::{AttributeList, TagToken, Token};
 
 struct OpenElement {
-    tag: String,
+    tag: TagName,
     node: dom::NodeId,
 }
 
 /// Builds a tree structure by consuming tokens and applying HTML5 tree construction rules.
-pub struct TreeBuilder<'a> {
-    sink: &'a mut dyn TreeSink,
+pub struct TreeBuilder<'a, S: TreeSink + ?Sized> {
+    sink: &'a mut S,
     open_elements: Vec<OpenElement>,
     html_node: Option<dom::NodeId>,
     head_node: Option<dom::NodeId>,
@@ -20,10 +20,10 @@ pub struct TreeBuilder<'a> {
     in_head: bool,
 }
 
-impl<'a> TreeBuilder<'a> {
+impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
     /// Create a new tree builder using the specified [`TreeSink`].
     #[must_use]
-    pub fn new(sink: &'a mut dyn TreeSink) -> Self {
+    pub const fn new(sink: &'a mut S) -> Self {
         Self {
             sink,
             open_elements: Vec::new(),
@@ -53,12 +53,14 @@ impl<'a> TreeBuilder<'a> {
         }
 
         let empty_attrs = AttributeList::new();
-        let node = self.sink.create_element("html", &empty_attrs)?;
+        let node = self
+            .sink
+            .create_element(TagName::html().as_str(), &empty_attrs)?;
         let root = self.sink.root_node();
         self.sink.append_child(root, node)?;
         self.html_node = Some(node);
         self.open_elements.push(OpenElement {
-            tag: "html".to_string(),
+            tag: TagName::html(),
             node,
         });
         Ok(node)
@@ -76,41 +78,35 @@ impl<'a> TreeBuilder<'a> {
 
         let html = self.html_node.unwrap_or_else(|| self.sink.root_node());
         let empty_attrs = AttributeList::new();
-        let node = self.sink.create_element("body", &empty_attrs)?;
+        let node = self
+            .sink
+            .create_element(TagName::body().as_str(), &empty_attrs)?;
         self.sink.append_child(html, node)?;
         self.body_node = Some(node);
         self.open_elements.push(OpenElement {
-            tag: "body".to_string(),
+            tag: TagName::body(),
             node,
         });
         Ok(node)
     }
 
     fn pop_head(&mut self) {
-        while let Some(index) = self.open_elements.iter().rposition(|e| e.tag == "head") {
+        while let Some(index) = self.open_elements.iter().rposition(|e| e.tag.is_head()) {
             self.open_elements.truncate(index);
         }
         self.in_head = false;
     }
 
     fn handle_start_tag(&mut self, tag: &TagToken) -> Result<TokenSinkResult, HtmlError> {
-        let name = tag.name().to_string();
-        if name == "html" {
-            return self.process_html_start_tag(tag);
-        }
-        if name == "head" {
-            return self.process_head_start_tag(tag);
-        }
-        if name == "body" {
-            return self.process_body_start_tag(tag);
+        let tag_name = tag.tag();
+        match tag_name {
+            TagName::Html => return self.process_html_start_tag(tag),
+            TagName::Head => return self.process_head_start_tag(tag),
+            TagName::Body => return self.process_body_start_tag(tag),
+            _ => {}
         }
 
-        if self.in_head
-            && !matches!(
-                name.as_str(),
-                "title" | "meta" | "style" | "link" | "script" | "noscript"
-            )
-        {
+        if self.in_head && !tag_name.is_head_content() {
             self.pop_head();
         }
 
@@ -118,24 +114,26 @@ impl<'a> TreeBuilder<'a> {
             self.ensure_body_element()?;
         }
 
-        self.apply_omission_rules(&name);
+        self.apply_omission_rules(tag_name);
 
         let parent = self.current_parent();
-        let node = self.sink.create_element(&name, tag.attributes())?;
+        let node = self
+            .sink
+            .create_element(tag_name.as_str(), tag.attributes())?;
         self.sink.append_child(parent, node)?;
 
-        let is_void = is_void_tag(&name) || tag.is_self_closing();
+        let is_void = tag_name.is_void() || tag.is_self_closing();
         if !is_void {
             self.open_elements.push(OpenElement {
-                tag: name.clone(),
+                tag: tag_name.clone(),
                 node,
             });
         }
 
-        if name == "script" {
+        if matches!(tag_name, TagName::Script) {
             return Ok(TokenSinkResult::SwitchToRawText(RawKind::Script));
         }
-        if name == "style" {
+        if matches!(tag_name, TagName::Style) {
             return Ok(TokenSinkResult::SwitchToRawText(RawKind::Style));
         }
 
@@ -147,11 +145,13 @@ impl<'a> TreeBuilder<'a> {
             return Ok(TokenSinkResult::Continue);
         }
         let root = self.sink.root_node();
-        let node = self.sink.create_element("html", tag.attributes())?;
+        let node = self
+            .sink
+            .create_element(tag.tag().as_str(), tag.attributes())?;
         self.sink.append_child(root, node)?;
         self.html_node = Some(node);
         self.open_elements.push(OpenElement {
-            tag: "html".to_string(),
+            tag: tag.tag().clone(),
             node,
         });
         Ok(TokenSinkResult::Continue)
@@ -163,12 +163,14 @@ impl<'a> TreeBuilder<'a> {
             return Ok(TokenSinkResult::Continue);
         }
         let parent = self.current_parent();
-        let node = self.sink.create_element("head", tag.attributes())?;
+        let node = self
+            .sink
+            .create_element(tag.tag().as_str(), tag.attributes())?;
         self.sink.append_child(parent, node)?;
         self.head_node = Some(node);
         self.in_head = true;
         self.open_elements.push(OpenElement {
-            tag: "head".to_string(),
+            tag: tag.tag().clone(),
             node,
         });
         Ok(TokenSinkResult::Continue)
@@ -183,39 +185,45 @@ impl<'a> TreeBuilder<'a> {
             return Ok(TokenSinkResult::Continue);
         }
         let parent = self.html_node.unwrap_or_else(|| self.sink.root_node());
-        let node = self.sink.create_element("body", tag.attributes())?;
+        let node = self
+            .sink
+            .create_element(tag.tag().as_str(), tag.attributes())?;
         self.sink.append_child(parent, node)?;
         self.body_node = Some(node);
         self.open_elements.push(OpenElement {
-            tag: "body".to_string(),
+            tag: tag.tag().clone(),
             node,
         });
         Ok(TokenSinkResult::Continue)
     }
 
-    fn apply_omission_rules(&mut self, tag_name: &str) {
-        if closes_paragraph(tag_name) {
-            self.pop_matching_tag("p");
+    fn apply_omission_rules(&mut self, tag: &TagName) {
+        if tag.closes_paragraph() {
+            self.pop_matching_tag(&TagName::P);
         }
-        if closes_list_item(tag_name) {
-            self.pop_matching_tag("li");
+        if tag.closes_list_item() {
+            self.pop_matching_tag(&TagName::Li);
         }
     }
 
-    fn pop_matching_tag(&mut self, target_tag: &str) {
-        if let Some(pos) = self.open_elements.iter().rposition(|e| e.tag == target_tag) {
+    fn pop_matching_tag(&mut self, target_tag: &TagName) {
+        if let Some(pos) = self
+            .open_elements
+            .iter()
+            .rposition(|e| &e.tag == target_tag)
+        {
             self.open_elements.truncate(pos);
         }
     }
 
     fn handle_end_tag(&mut self, tag: &TagToken) {
-        let name = tag.name();
-        if name == "head" {
+        let tag_name = tag.tag();
+        if tag_name.is_head() {
             self.pop_head();
             return;
         }
 
-        if let Some(pos) = self.open_elements.iter().rposition(|e| e.tag == name) {
+        if let Some(pos) = self.open_elements.iter().rposition(|e| &e.tag == tag_name) {
             self.open_elements.truncate(pos);
         }
     }
@@ -248,7 +256,7 @@ impl<'a> TreeBuilder<'a> {
     }
 }
 
-impl TokenSink for TreeBuilder<'_> {
+impl<S: TreeSink + ?Sized> TokenSink for TreeBuilder<'_, S> {
     fn process_token(&mut self, token: Token) -> Result<TokenSinkResult, HtmlError> {
         match token {
             Token::StartTag(ref tag) => self.handle_start_tag(tag),

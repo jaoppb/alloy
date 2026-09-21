@@ -26,13 +26,13 @@ pub const MAX_LAYOUT_DEPTH: usize = 256;
 
 /// Everything a formatting context may read: the tree it is laying out and the
 /// text measurer behind the port.
-pub struct LayoutContext<'tree> {
+pub struct LayoutContext<'tree, M> {
     styled: &'tree StyledTree,
-    measurer: &'tree dyn TextMeasurer,
+    measurer: &'tree M,
 }
 
-impl<'tree> LayoutContext<'tree> {
-    pub const fn new(styled: &'tree StyledTree, measurer: &'tree dyn TextMeasurer) -> Self {
+impl<'tree, M: TextMeasurer> LayoutContext<'tree, M> {
+    pub const fn new(styled: &'tree StyledTree, measurer: &'tree M) -> Self {
         Self { styled, measurer }
     }
 

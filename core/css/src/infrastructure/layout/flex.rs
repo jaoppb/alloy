@@ -34,6 +34,7 @@
 
 use graphics::{Au, Point, Px};
 
+use crate::application::ports::TextMeasurer;
 use crate::domain::computed::flex::{
     AlignContent, AlignItems, FlexDirection, FlexFactor, FlexStyle, FlexWrap, JustifyContent,
 };
@@ -50,8 +51,8 @@ use crate::infrastructure::layout::fragment::Fragments;
 
 /// Lays a `display: flex` container's in-flow children out inside a content
 /// box `content_width` wide.
-pub fn layout(
-    context: &LayoutContext<'_>,
+pub fn layout<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node: &StyledNode,
     content_width: Au,
     font_size: Au,
@@ -144,8 +145,8 @@ fn container_axes(
     }
 }
 
-fn in_flow_children(
-    context: &LayoutContext<'_>,
+fn in_flow_children<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node: &StyledNode,
 ) -> Result<Vec<SnapshotId>, CssError> {
     let mut kept = Vec::new();
@@ -235,9 +236,8 @@ impl Axis {
 /// Everything every step of this file reads and never mutates: the ambient
 /// layout inputs plus the three container-level Flexbox properties that apply
 /// to every item and every line alike.
-#[derive(Clone, Copy)]
-struct FlexContext<'tree> {
-    context: &'tree LayoutContext<'tree>,
+struct FlexContext<'tree, M> {
+    context: &'tree LayoutContext<'tree, M>,
     font_size: Au,
     content_width: Au,
     input: BlockInput,
@@ -246,6 +246,14 @@ struct FlexContext<'tree> {
     align_items: AlignItems,
     main_available: Option<Au>,
 }
+
+impl<M> Clone for FlexContext<'_, M> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<M> Copy for FlexContext<'_, M> {}
 
 // ---- item resolution: flex-basis (CSS Flexbox L1 §9.2) --------------------
 
@@ -259,8 +267,8 @@ struct ResolvedItem {
     outer_basis: Au,
 }
 
-fn resolve_items(
-    flex_ctx: FlexContext<'_>,
+fn resolve_items<M: TextMeasurer>(
+    flex_ctx: FlexContext<'_, M>,
     child_ids: &[SnapshotId],
 ) -> Result<Vec<ResolvedItem>, CssError> {
     let mut items = Vec::with_capacity(child_ids.len());
@@ -270,7 +278,10 @@ fn resolve_items(
     Ok(items)
 }
 
-fn resolve_item(flex_ctx: FlexContext<'_>, id: SnapshotId) -> Result<ResolvedItem, CssError> {
+fn resolve_item<M: TextMeasurer>(
+    flex_ctx: FlexContext<'_, M>,
+    id: SnapshotId,
+) -> Result<ResolvedItem, CssError> {
     let styled = flex_ctx.context.node(id)?;
     let style = styled.style();
     let font_size = box_model::font_size_of(style, flex_ctx.font_size);
@@ -387,8 +398,8 @@ struct LineLayout {
     main_extent: Au,
 }
 
-fn run_pass_a(
-    flex_ctx: FlexContext<'_>,
+fn run_pass_a<M: TextMeasurer>(
+    flex_ctx: FlexContext<'_, M>,
     lines: &[Vec<ResolvedItem>],
 ) -> Result<Vec<LineLayout>, CssError> {
     let mut laid_out = Vec::with_capacity(lines.len());
@@ -398,8 +409,8 @@ fn run_pass_a(
     Ok(laid_out)
 }
 
-fn layout_line_pass_a(
-    flex_ctx: FlexContext<'_>,
+fn layout_line_pass_a<M: TextMeasurer>(
+    flex_ctx: FlexContext<'_, M>,
     line: &[ResolvedItem],
 ) -> Result<LineLayout, CssError> {
     let (resolved_mains, leftover) = resolve_main_sizes(line, flex_ctx.main_available);
@@ -633,8 +644,8 @@ const fn mirror_main_origin(axis: Axis, main_extent: Au, origin: Au, border_size
 
 // ---- cross-axis placement: align-items / align-self (CSS Flexbox L1 §9.6) -
 
-fn emit_lines(
-    flex_ctx: FlexContext<'_>,
+fn emit_lines<M: TextMeasurer>(
+    flex_ctx: FlexContext<'_, M>,
     lines: Vec<LineLayout>,
     cross_start: Au,
     cross_sizes: Vec<Au>,
@@ -661,8 +672,8 @@ fn emit_lines(
     Ok(fragments)
 }
 
-fn place_line(
-    flex_ctx: FlexContext<'_>,
+fn place_line<M: TextMeasurer>(
+    flex_ctx: FlexContext<'_, M>,
     fragments: &mut Fragments,
     line: LineLayout,
     cross_start: Au,

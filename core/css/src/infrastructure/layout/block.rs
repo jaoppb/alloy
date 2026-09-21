@@ -13,8 +13,6 @@
 //! holds a page-global cursor, which is what lets the three contexts nest
 //! without knowing about each other.
 
-use std::sync::Arc;
-
 use core::fmt;
 
 use graphics::{Au, Point};
@@ -42,47 +40,46 @@ use crate::infrastructure::text_metrics::MonospaceMetrics;
 /// The built-in layout engine: normal flow, an inline formatting context, and
 /// Flexbox.
 #[derive(Clone)]
-pub struct BlockLayout {
-    measurer: Arc<dyn TextMeasurer>,
+pub struct BlockLayout<M = MonospaceMetrics> {
+    measurer: M,
 }
 
-impl BlockLayout {
-    /// A layout engine measuring text with the deterministic
-    /// [`MonospaceMetrics`].
+impl<M: TextMeasurer> BlockLayout<M> {
+    /// A layout engine measuring text through `measurer` — received from parameter.
     #[must_use]
-    pub fn new() -> Self {
-        Self {
-            measurer: Arc::new(MonospaceMetrics::new()),
-        }
-    }
-
-    /// A layout engine measuring text through `measurer` — the seam a real
-    /// font-backed measurer enters by, with no font type named here.
-    #[must_use]
-    pub const fn with_measurer(measurer: Arc<dyn TextMeasurer>) -> Self {
+    pub const fn new(measurer: M) -> Self {
         Self { measurer }
     }
 }
 
-impl Default for BlockLayout {
-    fn default() -> Self {
-        Self::new()
+impl BlockLayout<MonospaceMetrics> {
+    /// A layout engine measuring text with the deterministic
+    /// [`MonospaceMetrics`].
+    #[must_use]
+    pub const fn monospace() -> Self {
+        Self::new(MonospaceMetrics::new())
     }
 }
 
-impl fmt::Debug for BlockLayout {
+impl<M: TextMeasurer + Default> Default for BlockLayout<M> {
+    fn default() -> Self {
+        Self::new(M::default())
+    }
+}
+
+impl<M: TextMeasurer> fmt::Debug for BlockLayout<M> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("BlockLayout")
     }
 }
 
-impl LayoutEngine for BlockLayout {
+impl<M: TextMeasurer + Send + Sync> LayoutEngine for BlockLayout<M> {
     fn layout(
         &self,
         styled: &StyledTree,
         constraints: &ViewportConstraints,
     ) -> Result<LayoutBoxTree, CssError> {
-        let context = LayoutContext::new(styled, self.measurer.as_ref());
+        let context = LayoutContext::new(styled, &self.measurer);
         let root = styled.root();
         let mut builder = LayoutBoxTreeBuilder::new();
         if !generates_box(&context, root) {
@@ -106,7 +103,7 @@ fn place_root(result: BlockResult) -> Fragments {
     result.into_fragments().translated(horizontal, vertical)
 }
 
-fn generates_box(context: &LayoutContext<'_>, node: SnapshotId) -> bool {
+fn generates_box<M: TextMeasurer>(context: &LayoutContext<'_, M>, node: SnapshotId) -> bool {
     let Ok(styled) = context.node(node) else {
         return false;
     };
@@ -119,8 +116,8 @@ const fn display_of(styled: &StyledNode) -> Display {
 }
 
 /// Lays one box out inside the containing block `input` describes.
-pub(crate) fn layout_box(
-    context: &LayoutContext<'_>,
+pub(crate) fn layout_box<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
     input: BlockInput,
 ) -> Result<BlockResult, CssError> {
@@ -162,8 +159,8 @@ impl Resolved {
 
 /// Folds a box's own metrics and its children's flow into one [`BlockResult`],
 /// applying the two margin-collapsing decisions only a parent can make.
-fn assemble(
-    context: &LayoutContext<'_>,
+fn assemble<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node: &StyledNode,
     resolved: Resolved,
     children: ContentFlow,
@@ -284,8 +281,8 @@ const fn flow_of(
 /// into the content box. `content_height` is exactly what `assemble` already
 /// resolved via `used_content_height` — computed once, so the fragment drawn
 /// here and the border-box height `assemble` reports can never disagree.
-fn assemble_fragments(
-    context: &LayoutContext<'_>,
+fn assemble_fragments<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node: &StyledNode,
     resolved: Resolved,
     children: ContentFlow,
@@ -334,8 +331,8 @@ const fn marker_for(node: &StyledNode, metrics: BoxMetrics) -> IntrinsicSize {
     IntrinsicSize::Resolved
 }
 
-fn box_generating_children(
-    context: &LayoutContext<'_>,
+fn box_generating_children<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node: &StyledNode,
 ) -> Result<ChildIds, CssError> {
     let mut kept = Vec::new();
@@ -363,8 +360,8 @@ enum Segment {
 }
 
 /// The children of `node`, laid out inside a content box `content_width` wide.
-fn layout_content(
-    context: &LayoutContext<'_>,
+fn layout_content<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     node: &StyledNode,
     content_width: Au,
     font_size: Au,
@@ -385,7 +382,10 @@ fn layout_content(
 /// block-level boxes, in document order. A node that is itself a text node
 /// contributes itself — that is how a text node blockified by a flex container
 /// still gets a line box.
-fn segments_of(context: &LayoutContext<'_>, node: &StyledNode) -> Result<Vec<Segment>, CssError> {
+fn segments_of<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node: &StyledNode,
+) -> Result<Vec<Segment>, CssError> {
     let mut segments = Vec::new();
     for child in node.children().iter() {
         push_child(context, &mut segments, child)?;
@@ -394,8 +394,8 @@ fn segments_of(context: &LayoutContext<'_>, node: &StyledNode) -> Result<Vec<Seg
     Ok(segments)
 }
 
-fn push_child(
-    context: &LayoutContext<'_>,
+fn push_child<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     segments: &mut Vec<Segment>,
     child: SnapshotId,
 ) -> Result<(), CssError> {
@@ -427,8 +427,8 @@ fn push_own_text(node: &StyledNode, segments: &mut Vec<Segment>) {
     segments.push(Segment::Inline(vec![node.node()]));
 }
 
-fn stack_segments(
-    context: &LayoutContext<'_>,
+fn stack_segments<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
     segments: &[Segment],
     content_width: Au,
     font_size: Au,
@@ -491,9 +491,9 @@ impl BlockStack {
         }
     }
 
-    fn absorb(
+    fn absorb<M: TextMeasurer>(
         &mut self,
-        context: &LayoutContext<'_>,
+        context: &LayoutContext<'_, M>,
         segment: &Segment,
         flowing: Flowing,
     ) -> Result<(), CssError> {
@@ -503,9 +503,9 @@ impl BlockStack {
         }
     }
 
-    fn absorb_block(
+    fn absorb_block<M: TextMeasurer>(
         &mut self,
-        context: &LayoutContext<'_>,
+        context: &LayoutContext<'_, M>,
         child: SnapshotId,
         flowing: Flowing,
     ) -> Result<(), CssError> {
@@ -519,9 +519,9 @@ impl BlockStack {
         Ok(())
     }
 
-    fn absorb_inline(
+    fn absorb_inline<M: TextMeasurer>(
         &mut self,
-        context: &LayoutContext<'_>,
+        context: &LayoutContext<'_, M>,
         items: &[SnapshotId],
         flowing: Flowing,
     ) -> Result<(), CssError> {
