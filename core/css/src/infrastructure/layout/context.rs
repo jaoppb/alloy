@@ -225,6 +225,19 @@ impl BlockResult {
     pub fn into_fragments(self) -> Fragments {
         self.fragments
     }
+
+    /// Returns a new result with every fragment translated by `(dx, dy)`.
+    ///
+    /// Used by [`crate::infrastructure::layout::block`] to apply the visual
+    /// offset of `position: relative` after normal-flow placement. The box
+    /// still occupies its normal-flow space (size and margins are unchanged);
+    /// only the paint position shifts (CSS Positioned Layout L3 §4.3).
+    pub fn with_relative_offset(self, dx: Au, dy: Au) -> Self {
+        Self {
+            fragments: self.fragments.translated(dx, dy),
+            ..self
+        }
+    }
 }
 
 /// What a formatting context makes of a box's children: their total height,

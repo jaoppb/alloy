@@ -21,6 +21,9 @@ use crate::application::ports::{LayoutEngine, TextMeasurer};
 use crate::domain::computed::display::Display;
 use crate::domain::computed::inline_style::TextAlign;
 use crate::domain::computed::intrinsic::IntrinsicSize;
+use crate::domain::computed::position::PositionType;
+use crate::domain::computed::sizing::Sizing;
+use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
 use crate::domain::error::CssError;
 use crate::domain::layout_box_tree::{LayoutBoxTree, LayoutBoxTreeBuilder};
@@ -132,13 +135,56 @@ pub(crate) fn layout_box<M: TextMeasurer>(
         .forced_content_width()
         .unwrap_or_else(|| metrics.content_width_within(input.containing_width()));
     let children = layout_content(context, node, content_width, font_size, input)?;
-    assemble(
+    let result = assemble(
         context,
         node,
         Resolved::new(metrics, content_width),
         children,
         input,
-    )
+    )?;
+    Ok(apply_relative_insets(
+        style,
+        font_size,
+        input.containing_width(),
+        result,
+    ))
+}
+
+/// Applies the visual offset of `position: relative` to a laid-out result.
+///
+/// A relatively-positioned box keeps its normal-flow position for purposes of
+/// margin collapse and sibling layout; only its paint rect shifts by the
+/// resolved `top` and `left` insets (CSS Positioned Layout L3 §4.3, §9.4.3).
+///
+/// `top` / `left` resolve `%` against `containing_width` (the horizontal
+/// dimension for both, per CSS 2.1 §10.1). When `top` is `auto` and `left` is
+/// `auto` — the common non-positioned case — this is a no-op.
+fn apply_relative_insets(
+    style: &ComputedStyle,
+    font_size: Au,
+    containing_width: Au,
+    result: BlockResult,
+) -> BlockResult {
+    if style.position().position() != PositionType::Relative {
+        return result;
+    }
+    let position = style.position();
+    let dx = resolve_inset(position.left(), font_size, containing_width);
+    let dy = resolve_inset(position.top(), font_size, containing_width);
+    result.with_relative_offset(dx, dy)
+}
+
+/// Resolves one inset (`top` / `left`) to an [`Au`] offset.
+///
+/// `auto` and unresolvable percentages produce zero — the box does not move on
+/// that axis. A `%` inset resolves against `containing_width` (CSS 2.1 §10.1).
+fn resolve_inset(sizing: Sizing, font_size: Au, containing_width: Au) -> Au {
+    match sizing {
+        Sizing::Auto => Au::ZERO,
+        Sizing::Fixed(length) => length
+            .resolve_to_au(font_size, containing_width)
+            .unwrap_or(Au::ZERO),
+    }
 }
 
 /// What resolving a node's own box produced, before its children are folded in.
