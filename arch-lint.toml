@@ -24,6 +24,10 @@ exclude = [
     # The window conformance suite is the same assertion-code carve-out
     # (ADR-0011 item 6): `pub`, not `#[cfg(test)]`, panics on the first violation.
     "core/window/src/application/conformance.rs",
+    # The HTML port conformance suite is the same assertion-code carve-out
+    # (ADR-0011 item 6), and the manifest runner is a two-way-consistency gate.
+    "core/html/src/application/conformance.rs",
+    "core/html/tests/manifest_runner.rs",
 ]
 respect_gitignore = true
 
@@ -135,6 +139,18 @@ paths = [
     "core/window/src/infrastructure/headless.rs",
 ]
 
+[[scopes]]
+name = "html_domain"
+paths = ["core/html/src/domain/**"]
+
+[[scopes]]
+name = "html_application"
+paths = ["core/html/src/application/**"]
+
+[[scopes]]
+name = "html"
+paths = ["core/html/**"]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -234,6 +250,18 @@ message = "Window domain layer must not depend on application ports, engine, run
 from = "window"
 to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli", "dom", "css", "graphics", "network"]
 message = "core/window must not depend on engine, DOM, CSS, graphics, network, script runtimes, the bindings crate, or CLI (PRD-010)."
+
+# HTML domain layer must not depend on the application layer or any adapter crate.
+[[deny-scope-dep]]
+from = "html_domain"
+to = ["html_application", "engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "HTML domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+
+# core/html realizes the TokenSink/TreeSink ports over core/dom without naming the engine or a script runtime.
+[[deny-scope-dep]]
+from = "html"
+to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "core/html must not depend on engine, concrete script runtimes, the bindings crate, or CLI (PRD-008). It may depend on dom."
 
 # --- import restrictions ---------------------------------------------------
 

@@ -24,16 +24,22 @@ pub mod infrastructure;
 pub const PORT_SCHEMA_VERSION: u32 = 1;
 
 pub use application::conformance::run_html_conformance;
-pub use application::ports::{RawKind, TokenSink, TokenSinkResult, TreeSink};
+pub use application::ports::{RawKind, ScriptDescriptor, TokenSink, TokenSinkResult, TreeSink};
+pub use domain::attribute::{AttributeEntry, AttributeList, AttributeName, AttributeValue};
 pub use domain::error::HtmlError;
+pub use domain::handle::NodeHandle;
+pub use domain::location::SourceLocation;
 pub use domain::tag::{
     TagName, closes_list_item, closes_paragraph, is_block_tag, is_heading_tag, is_rawtext_tag,
     is_void_tag,
 };
-pub use domain::token::{AttributeEntry, AttributeList, DoctypeToken, TagToken, Token};
+pub use domain::tag_name::TagName;
+pub use domain::text::Text;
+pub use domain::token::{DoctypeToken, TagToken, Token};
+#[cfg(feature = "dom")]
 pub use infrastructure::dom_sink::DomTreeSink;
 pub use infrastructure::mock::{MockEvent, MockTreeSink};
-pub use infrastructure::tokenizer::Tokenizer;
+pub use infrastructure::tokenizer::{Tokenizer, TokenizerRunResult};
 pub use infrastructure::tree_builder::TreeBuilder;
 
 /// Declared HTML tags supported by this implementation in the v0.5 cut.
@@ -96,6 +102,7 @@ pub const SUPPORTED_SYNTAX: &[&str] = &[
 ];
 
 /// Parses an HTML input string into a complete [`dom::DomTree`].
+#[cfg(feature = "dom")]
 pub fn parse(html: &str) -> Result<dom::DomTree, HtmlError> {
     let mut sink = DomTreeSink::new();
     parse_with_sink(html, &mut sink)?;

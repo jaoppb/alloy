@@ -253,7 +253,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [inflate, png_decode, css_parse]
+        target: [inflate, png_decode, css_parse, html_parse]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
