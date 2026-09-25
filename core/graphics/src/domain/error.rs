@@ -10,6 +10,7 @@ use core::fmt;
 use crate::domain::command_index::CommandIndex;
 use crate::domain::command_kind::CommandKind;
 use crate::domain::font::FontId;
+use crate::domain::image::ImageId;
 use crate::domain::tier::BackendTier;
 
 /// A failure raised while building, submitting or reading back a display list.
@@ -62,6 +63,11 @@ pub enum GraphicsError {
     /// empty [`crate::domain::font::GlyphBitmap`], which is not an error.
     #[error("font {font} is not registered with this backend")]
     FontUnavailable { font: FontId },
+
+    /// `DrawImage` named an [`ImageId`] its [`ImageProvider`](crate::application::ImageProvider)
+    /// does not have registered (v0.5 Phase X).
+    #[error("image {image} is not registered with this backend")]
+    ImageUnavailable { image: ImageId },
 }
 
 /// Why a command was refused at the builder boundary.

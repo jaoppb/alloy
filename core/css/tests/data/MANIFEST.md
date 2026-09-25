@@ -22,31 +22,63 @@ the runner — all three, or CI is red.
 The CSS properties the parser accepts inside a declaration block and the cascade resolves to a computed value. A
 declaration naming anything else is dropped on its own, with a note, leaving the rest of its rule intact.
 
-| token              | since | notes                                                                                 |
-| ------------------ | ----- | ------------------------------------------------------------------------------------- |
-| `display`          | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4 |
-| `color`            | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)  |
-| `background-color` | B1    | not inherited; same value grammar as `color`                                          |
-| `margin`           | B1    | the 1–4 component shorthand (CSS Box Model §8.3)                                      |
-| `margin-top`       | B1    | longhand; overwrites only its own side                                                |
-| `margin-right`     | B1    | longhand                                                                              |
-| `margin-bottom`    | B1    | longhand                                                                              |
-| `margin-left`      | B1    | longhand                                                                              |
-| `padding`          | B1    | the 1–4 component shorthand                                                           |
-| `padding-top`      | B1    | longhand                                                                              |
-| `padding-right`    | B1    | longhand                                                                              |
-| `padding-bottom`   | B1    | longhand                                                                              |
-| `padding-left`     | B1    | longhand                                                                              |
-| `font-size`        | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                     |
+| token                 | since | notes                                                                                              |
+| --------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| `display`             | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4              |
+| `color`               | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)               |
+| `background-color`    | B1    | not inherited; same value grammar as `color`                                                       |
+| `margin`              | B1    | the 1–4 component shorthand (CSS Box Model §8.3)                                                   |
+| `margin-top`          | B1    | longhand; overwrites only its own side                                                             |
+| `margin-right`        | B1    | longhand                                                                                           |
+| `margin-bottom`       | B1    | longhand                                                                                           |
+| `margin-left`         | B1    | longhand                                                                                           |
+| `padding`             | B1    | the 1–4 component shorthand                                                                        |
+| `padding-top`         | B1    | longhand                                                                                           |
+| `padding-right`       | B1    | longhand                                                                                           |
+| `padding-bottom`      | B1    | longhand                                                                                           |
+| `padding-left`        | B1    | longhand                                                                                           |
+| `font-size`           | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                                  |
+| `border-width`        | B4    | the 1–4 component shorthand; `border-style` / `border-color` stay out of the cut                   |
+| `width`               | B4    | `Sizing::Auto` or a `Length`; the flow content width when auto                                     |
+| `height`              | B4    | `Sizing::Auto` or a `Length`; a `%` against an indefinite container computes to auto               |
+| `box-sizing`          | B4    | `content-box` (initial) / `border-box` (CSS Box Sizing L3 §5)                                      |
+| `text-align`          | B4    | inherited; `left` (initial) / `right` / `center` / `justify`                                       |
+| `white-space`         | B4    | not inherited; `normal` (initial) / `pre` / `nowrap`                                               |
+| `border-top-width`    | B4    | longhand; overwrites only its own side                                                             |
+| `border-right-width`  | B4    | longhand                                                                                           |
+| `border-bottom-width` | B4    | longhand                                                                                           |
+| `border-left-width`   | B4    | longhand                                                                                           |
+| `flex-direction`      | B4    | `row` (initial) / `row-reverse` / `column` / `column-reverse`                                      |
+| `flex-wrap`           | B4    | `nowrap` (initial) / `wrap` / `wrap-reverse` — see the Flexbox simplifications below               |
+| `justify-content`     | B4    | `flex-start` (initial) / `flex-end` / `center` / `space-between` / `space-around` / `space-evenly` |
+| `align-items`         | B4    | `stretch` (initial) / `flex-start` / `flex-end` / `center` / `baseline`                            |
+| `align-content`       | B4    | `stretch` (initial) / `flex-start` / `flex-end` / `center` / `space-between` / `space-around`      |
+| `align-self`          | B4    | `auto` (initial, defers to `align-items`) / same keywords as `align-items`                         |
+| `flex-grow`           | B4    | a non-negative number; initial `0`                                                                 |
+| `flex-shrink`         | B4    | a non-negative number; initial `1`                                                                 |
+| `flex-basis`          | B4    | `auto` (initial) or a `Sizing` length/percentage                                                   |
 
 Every property above also accepts the CSS-wide keywords `initial` and `inherit` (B2, CSS Cascade L4 §7.1): `initial`
 resets to the value `ComputedStyle::initial()` gives it, `inherit` copies the parent's computed value even for a
 property that does not normally inherit. `unset` and `revert` are not recognised.
 
-Declared **out** for v0.5, and refused with a note: `float`, `position`, `width`, `height`, `border`, `z-index`,
-`box-sizing`, `flex-direction` and every other property. `!important` is parsed, preserved on the declaration, **and**
-wins the cascade as of B2 (`plano:435-443`): CSS Cascade L4 §4.2's origin/importance ordering, `User` origin included by
-construction even though nothing sources it yet.
+Declared **out** for v0.5, and refused with a note: `float`, `position`, `border` (the full shorthand — only its
+`-width` is in the cut), `z-index`, `border-style`, `border-color`, and every other property. `!important` is parsed,
+preserved on the declaration, **and** wins the cascade as of B2 (`plano:435-443`): CSS Cascade L4 §4.2's
+origin/importance ordering, `User` origin included by construction even though nothing sources it yet.
+
+### Flexbox simplifications (B4)
+
+The Flexbox algorithm (`core/css/src/infrastructure/layout/flex.rs`) is deliberately not the full CSS Flexbox L1 §9
+algorithm. Four cuts, each pre-approved by the v0.5 B4 handoff as an explicit relief valve rather than a silent
+shrinkage:
+
+| gap                                                                                                    | behaviour instead                                                                                                                                                                  | tracked for |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| multi-line wrapping needs an intrinsic-sizing pass to size a `column` container with an auto main size | `flex-wrap: wrap` / `wrap-reverse` only break lines when the main axis has a **definite** size to overflow against; an auto-sized `column` container never wraps                   | v0.7        |
+| no first-baseline-of-line algorithm                                                                    | `align-items: baseline` / `align-self: baseline` behave like `flex-start`                                                                                                          | v0.7        |
+| no shrink-to-fit (min/max-content) intrinsic sizing pass                                               | an item with both `flex-basis: auto` and an `auto` own main-size property gets a hypothetical main size of `0` instead of a content-based measurement                              | v0.7        |
+| same missing shrink-to-fit pass, on the cross axis                                                     | in a `column` container, a non-`stretch` item with an `auto` own width still fills the cross axis exactly as `stretch` would; an item with an explicit `width` positions correctly | v0.7        |
 
 ## Selectors
 

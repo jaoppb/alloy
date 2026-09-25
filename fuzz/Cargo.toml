@@ -1,0 +1,25 @@
+[package]
+name = "alloy-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+network = { path = "../core/network", default-features = false }
+graphics = { path = "../core/graphics" }
+
+[[bin]]
+name = "inflate"
+path = "fuzz_targets/inflate.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "png_decode"
+path = "fuzz_targets/png_decode.rs"
+test = false
+doc = false

@@ -59,6 +59,17 @@ impl Length {
         }
     }
 
+    /// Whether this length is a fraction of a reference length.
+    ///
+    /// Layout asks because a percentage resolves against the containing block,
+    /// and a containing block whose own size is indefinite — a `height: auto`
+    /// parent — cannot answer. CSS 2.1 §10.5 makes such a percentage compute to
+    /// `auto`, which is a question about the **unit**, not about the magnitude.
+    #[must_use]
+    pub const fn is_percentage(self) -> bool {
+        matches!(self, Self::Percent(_))
+    }
+
     /// Resolves to a computed [`Au`], or `None` when the magnitude is
     /// non-finite (`NaN` / `±inf` has no correct reading — same rule as
     /// [`graphics::Au::from_px`]).

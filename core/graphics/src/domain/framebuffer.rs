@@ -36,6 +36,20 @@ impl Framebuffer {
         Some(Self { size, pixels })
     }
 
+    /// Constructs a framebuffer directly from RGBA8 pixel bytes.
+    ///
+    /// Returns `None` if `pixels.len()` does not exactly match
+    /// `size.pixel_count() * BYTES_PER_PIXEL`.
+    #[must_use]
+    pub fn from_rgba8(size: SurfaceSize, pixels: Vec<u8>) -> Option<Self> {
+        let count = size.pixel_count()?;
+        let bytes = count.checked_mul(BYTES_PER_PIXEL)?;
+        if pixels.len() != bytes {
+            return None;
+        }
+        Some(Self { size, pixels })
+    }
+
     #[must_use]
     pub const fn size(&self) -> SurfaceSize {
         self.size
