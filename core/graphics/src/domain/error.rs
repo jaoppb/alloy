@@ -9,6 +9,7 @@ use core::fmt;
 
 use crate::domain::command_index::CommandIndex;
 use crate::domain::command_kind::CommandKind;
+use crate::domain::font::FontId;
 use crate::domain::tier::BackendTier;
 
 /// A failure raised while building, submitting or reading back a display list.
@@ -54,6 +55,13 @@ pub enum GraphicsError {
         attempted: FrameOperation,
         state: FrameState,
     },
+
+    /// `DrawText` named a [`FontId`] its [`FontProvider`](crate::application::FontProvider)
+    /// does not have registered (v0.5 B3). The command names a font, not a
+    /// missing glyph — an unmapped glyph within a known font rasterizes to an
+    /// empty [`crate::domain::font::GlyphBitmap`], which is not an error.
+    #[error("font {font} is not registered with this backend")]
+    FontUnavailable { font: FontId },
 }
 
 /// Why a command was refused at the builder boundary.

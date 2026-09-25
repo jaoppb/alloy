@@ -55,11 +55,32 @@ To be recorded in full in PRD-009 §threat-model (Phase P). `aws-lc-rs` is the o
 pre-authorised option (heavier 3-OS build, no `unsafe` advantage over `ring`).
 """
 
-# --- Reserved, added when the v0.5 window track lands (Phase C2) ------------
-# [[allow]]
-# crate = "winit"        # row 3 — OS windowing FFI, no unsafe-free 3-OS alternative
-# [[allow]]
-# crate = "softbuffer"   # row 3 — OS surface blit FFI
+# --- v0.5 window track (Phase C2) -------------------------------------------
+[[allow]]
+crate = "winit"
+row = 3
+reason = """
+`winit =0.30.13` opens native windows and drives the OS event loop
+(`ADR-0019`) — window creation, surface binding and message-pump FFI on
+X11/Wayland/Win32/AppKit, none of which has an `unsafe`-free implementation on
+any of the 3 target OSes (`breadx`/`x11rb` are X11-only; every platform
+windowing crate still crosses into C FFI at the syscall/Objective-C-message
+boundary). This is platform FFI with no hostile input on the wire: `winit`
+processes OS window-manager and input-device events, not attacker-controlled
+network bytes, so it falls under ADR-0018 row 3, not row 1.
+"""
+
+[[allow]]
+crate = "softbuffer"
+row = 3
+reason = """
+`softbuffer =0.4.8` blits a `core/window::FrameView` onto a window's native
+surface (Wayland `wl_shm`, X11 `XShm`/`MIT-SHM`, Win32 `GDI`, AppKit
+`CALayer`) — the same class of OS surface FFI as `winit`, and the reason
+`core/window::infrastructure::softbuffer_presenter` exists instead of a
+hand-rolled blit. No hostile bytes on this surface either: it copies a buffer
+this workspace already produced into OS-owned shared memory.
+"""
 
 # --- Spike finding (v0.5 Phase 0) -----------------------------------------------
 # `cargo-geiger 0.13` installs and runs under toolchain 1.97.1, but its full

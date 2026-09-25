@@ -8,6 +8,7 @@
 //! mocks prove the ports swap (`PRD-007:94`).
 
 pub mod cascade;
+pub mod font_backed_measurer;
 pub mod layout;
 pub mod mock;
 pub mod parser;

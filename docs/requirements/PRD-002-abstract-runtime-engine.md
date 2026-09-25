@@ -136,10 +136,11 @@ a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signa
 
 ### 4.2 Boundary-schema migrations (`engine::PORT_SCHEMA_VERSION`)
 
-| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                                                              | Adapter action                                                                                                                                                                                                                           |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                             | —                                                                                                                                                                                                                                        |
-| **2**   | Review response & v0.2 I1. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. `SourceLocation` is an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column`. `EngineError` gains additive `Dom { operation: String, reason: String }` variant. | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. Handle `EngineError::Dom`. |
+| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Adapter action                                                                                                                                                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                                    | —                                                                                                                                                                                                                                        |
+| **2**   | Review response & v0.2 I1. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. `SourceLocation` is an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column`. `EngineError` gains additive `Dom { operation: String, reason: String }` variant.        | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. Handle `EngineError::Dom`. |
+| **3**   | v0.5 Phase EE. `EngineError` gains additive `Subsystem { subsystem: SubsystemName, operation: String, reason: String }`, where `SubsystemName` is a new `#[non_exhaustive]` enum (`Dom` / `Css` / `Graphics` / `Network` / `Window`). `Dom { operation, reason }` is `#[deprecated]` but **not removed** — still constructible, still matchable. `EngineError::dom(op, reason)` now delegates to `EngineError::subsystem(SubsystemName::Dom, op, reason)`. | Match `EngineError::Subsystem { subsystem, .. }` instead of the deprecated `EngineError::Dom { .. }`; a consumer that still matches `Dom` keeps compiling (with a deprecation warning) until the v0.7 schema-4 removal.                  |
 
 ### 4.3 v0.2 F6/I1 amendment — `EngineError::Dom`
 
@@ -171,6 +172,30 @@ Blanket impls (`impl<C: ExecutionContext + 'static> DynExecutionContext for C`,
 `impl<E: RuntimeEngine> DynRuntimeEngine for E where E::Context: 'static, E::CompiledScript: 'static`) give every
 adapter the companion for free. **No existing signature changes**, so this amendment does not move `PORT_SCHEMA_VERSION`
 on its own. `engine::conformance::run_dyn_suite` is its conformance form; `MockEngine` and `RhaiEngine` both pass it.
+
+### 4.5 v0.5 Phase EE amendment — `EngineError::Subsystem`
+
+`EngineError::Dom { operation, reason }` (§4.3) named exactly one subsystem. v0.5 adds three more script bridges —
+`core/css` (the scriptable cascade adapter, Phase M), `core/network` (the scriptable `RequestPolicy`, Phase M) and
+`core/window` (UI/window bindings, Phase M) — and a fourth bespoke variant per subsystem would leave the enum growing
+one arm per crate forever, with no bound. `EngineError` instead gains one generalized variant:
+
+```rust
+#[non_exhaustive]
+pub enum SubsystemName { Dom, Css, Graphics, Network, Window }
+
+Subsystem { subsystem: SubsystemName, operation: String, reason: String }
+```
+
+raised when a subsystem operation invoked from a script fails for a reason other than a missing capability — the same
+shape `Dom` always was, generalized by an added `subsystem` discriminant. `Dom { operation, reason }` is marked
+`#[deprecated]` but **kept, not removed**: the one existing caller (`EngineError::dom`, used by
+`core/runtime/rhai-bindings::dom_bindings`) now delegates to `Self::subsystem(SubsystemName::Dom, ..)`, so it produces
+`Subsystem` without any call-site changing. `Dom`'s full removal — dropping the deprecated variant — is deferred to a
+v0.7 `PORT_SCHEMA_VERSION` 4 change, once `core/js` (the next consumer of this pattern) has landed and the deprecation
+window has been open a full release. Naming `Css` / `Graphics` / `Network` / `Window` in `SubsystemName` now, ahead of
+Phase M actually raising them, is the same anticipatory-naming precedent `Capability` already set in v0.1
+(`NETWORK_LISTEN` and `DEVTOOLS_INSPECT` had no producer for several releases either).
 
 ---
 
