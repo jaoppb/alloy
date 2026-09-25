@@ -87,6 +87,20 @@ fn url_parsing_names_the_precise_defect() {
 }
 
 #[test]
+fn a_bracketed_ipv6_host_keeps_its_optional_port() {
+    let bare = url("http://[::1]/");
+    assert_eq!(bare.host().as_str(), "[::1]");
+    assert_eq!(bare.port().number(), 80);
+    assert_eq!(
+        url("http://[2001:DB8::1]:8080/").to_text(),
+        "http://[2001:db8::1]:8080/"
+    );
+    for bad in ["[]", "[::g]", "[::1", "a[::1]", "[a b]"] {
+        assert_eq!(Host::new(bad), Err(UrlDefect::MalformedHost), "{bad}");
+    }
+}
+
+#[test]
 fn join_resolves_every_reference_form_against_the_base() {
     let base = url("https://example.com/dir/page?old=1");
     let join = |reference: &str| base.join(reference).unwrap().to_text();
