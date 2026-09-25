@@ -11,6 +11,9 @@
 //!   (v0.5 Phase I4) — real network I/O and a real display, so this path has
 //!   no automated coverage; the golden e2e suite (`alloy/tests/e2e_golden.rs`)
 //!   exercises the same [`alloy::run_browser`] loop over mocks instead.
+//!   `ALLOY_LOG=alloy=debug,network=debug alloy <url> 2>alloy.log` reports how
+//!   much author CSS survived the v0.5 cut (stylesheet fetches, rules kept vs.
+//!   dropped, the final `css cascade input`).
 
 #![forbid(unsafe_code)]
 

@@ -131,6 +131,13 @@ impl WindowSystem for WinitSystem {
             WinitPumpStatus::Exit(_) => Ok(PumpStatus::Exit),
         }
     }
+
+    fn request_redraw(&mut self) {
+        let Some(window) = self.handler.window.as_ref() else {
+            return;
+        };
+        window.request_redraw();
+    }
 }
 
 /// The `winit::application::ApplicationHandler` this adapter drives —

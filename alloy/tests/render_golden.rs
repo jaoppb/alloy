@@ -71,6 +71,40 @@ fn invalid_surface_dimensions_are_refused() {
     ));
 }
 
+/// `height` sits outside the `@media` block so the body box is 60px tall in
+/// both cases; only the `background-color` is media-gated, so the sampled
+/// pixel isolates whether the query fired.
+fn media_page(query: &str) -> String {
+    format!(
+        "<html><head><style>body {{ height: 60px }} \
+         @media {query} {{ body {{ background-color: #00ff00 }} }}</style></head>\
+         <body>hi</body></html>"
+    )
+}
+
+const GREEN: graphics::Color = graphics::Color::rgb(0x00, 0xFF, 0x00);
+
+#[test]
+fn a_supported_media_query_applies_once_the_pipeline_knows_the_viewport() {
+    let options = RenderOptions::new(200, 120);
+
+    let fires = render_html_to_png(&media_page("(min-width: 1px)"), &options).expect("render");
+    let fired_frame = decode_png(&fires).expect("valid PNG");
+    assert_eq!(
+        fired_frame.pixel(20, 30),
+        Some(GREEN),
+        "`@media (min-width: 1px)` must apply at a 200px-wide viewport"
+    );
+
+    let skipped = render_html_to_png(&media_page("(min-width: 5000px)"), &options).expect("render");
+    let skipped_frame = decode_png(&skipped).expect("valid PNG");
+    assert_ne!(
+        skipped_frame.pixel(20, 30),
+        Some(GREEN),
+        "`@media (min-width: 5000px)` must not apply at 200px wide"
+    );
+}
+
 #[test]
 fn rendering_html_with_svg_and_unregistered_images_does_not_crash() {
     let html = "<html><body><svg width=\"24\" height=\"24\"></svg><img src=\"missing.png\"><img alt=\"no src\"></body></html>";

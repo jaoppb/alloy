@@ -60,14 +60,24 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Bumped on any change a resolver, a layout engine or a
 /// producer could notice; **frozen at I3** (end of B4), after which a change
-/// also needs a migration note in `PRD-007`. `3` is v0.5 Phase B4: `ComputedStyle`
+/// also needs a migration note in `PRD-007`. `3` was v0.5 Phase B4: `ComputedStyle`
 /// gains `border` / `width` / `height` / `box_sizing` / `text_align` /
 /// `white_space` / `flex`, `StyledNode` gains `text` and `intrinsic_size`, and
 /// `LayoutBox` is constructed from a `BoxEdges` grouping margin/border/padding
-/// instead of a bare margin, plus an `IntrinsicSize` — every one of these is a
-/// new or regrouped field a downstream consumer could observe, not a value
-/// change, so nothing here breaks existing `match` arms.
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+/// instead of a bare margin, plus an `IntrinsicSize`.
+///
+/// `4` is the v0.5 fonts increment: `ComputedStyle` gains an inherited
+/// `font_family` (a [`FontFamilyList`]). A new field a consumer could observe,
+/// not a value change — nothing here breaks existing `match` arms. Post-freeze,
+/// so `PRD-007` carries the migration note.
+///
+/// `5` widens the parse surface for the v0.7 CSS work, brought forward for the
+/// "unstyled real sites" follow-up: the `background` and `border` **shorthands**
+/// are now accepted, each narrowed to the one component this cut can act on
+/// (`background` → its colour, `border` → its width). No new `ComputedStyle`
+/// field — the same computed values a producer already reads, populated from
+/// more inputs. Post-freeze, so `PRD-007` carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 5;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -78,14 +88,19 @@ pub const PORT_SCHEMA_VERSION: u32 = 3;
 /// table of `core/css/tests/data/MANIFEST.md`, and what [`parse_stylesheet`]
 /// actually accepts all agree — in every direction.
 ///
-/// Jumps from 14 to 33 in v0.5 B4: the box model and inline formatting context
+/// Jumped from 14 to 33 in v0.5 B4: the box model and inline formatting context
 /// add six shorthands/singulars and the four `border-*-width` longhands
 /// (`border-style`/`border-color` stay outside the cut — only a border's width
-/// is geometry), and Flexbox adds its nine properties.
-pub const SUPPORTED_PROPERTIES: [&str; 33] = [
+/// is geometry), and Flexbox adds its nine properties. The v0.5 fonts increment
+/// adds `font-family` (34). The "unstyled real sites" follow-up adds the
+/// `background` and `border` shorthands, each narrowed to one component — colour
+/// and width respectively (36).
+pub const SUPPORTED_PROPERTIES: [&str; 36] = [
     "display",
     "color",
     "background-color",
+    "background",
+    "border",
     "margin",
     "margin-top",
     "margin-right",
@@ -97,6 +112,7 @@ pub const SUPPORTED_PROPERTIES: [&str; 33] = [
     "padding-bottom",
     "padding-left",
     "font-size",
+    "font-family",
     "border-width",
     "border-top-width",
     "border-right-width",
@@ -155,7 +171,9 @@ pub use application::snapshot::snapshot;
 pub use dom::TagName;
 pub use domain::color::{CssColor, ParseColorError};
 pub use domain::computed::display::ParseDisplayError;
-pub use domain::computed::{ComputedStyle, Display, LengthEdges};
+pub use domain::computed::{
+    ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, LengthEdges,
+};
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{
     AttributeKey, AttributeList, AttributeValue, ChildIds, DomSnapshot, NodeRef, SnapshotId,

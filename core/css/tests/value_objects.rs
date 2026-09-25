@@ -234,12 +234,15 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 3,
-        "B4 reshaped ComputedStyle, StyledNode and LayoutBox (ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 5,
+        "version 5 accepts the `background` / `border` shorthands (ADR-0011 item 3, post-I3 — PRD-007)"
     );
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 33);
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 36);
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"font-family"));
     assert!(SUPPORTED_PROPERTIES.contains(&"margin-left"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"background"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"border"));
     assert_eq!(SUPPORTED_SELECTORS.len(), 19);
     assert!(SUPPORTED_SELECTORS.contains(&":nth-child()"));
 }
