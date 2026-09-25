@@ -55,3 +55,15 @@ pub trait TextMeasurer: Send + Sync {
     /// The extent of `run` set in `style`.
     fn measure(&self, run: &TextRun, style: &ComputedText) -> Result<TextMetrics, CssError>;
 }
+
+impl<T: TextMeasurer + ?Sized> TextMeasurer for &T {
+    fn measure(&self, run: &TextRun, style: &ComputedText) -> Result<TextMetrics, CssError> {
+        (**self).measure(run, style)
+    }
+}
+
+impl<T: TextMeasurer + ?Sized> TextMeasurer for std::sync::Arc<T> {
+    fn measure(&self, run: &TextRun, style: &ComputedText) -> Result<TextMetrics, CssError> {
+        (**self).measure(run, style)
+    }
+}

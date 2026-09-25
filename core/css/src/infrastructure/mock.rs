@@ -9,10 +9,11 @@ use graphics::{Au, Point, Rect, Size};
 
 use crate::application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
 use crate::domain::color::CssColor;
+use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot};
 use crate::domain::error::CssError;
-use crate::domain::layout_box_tree::{EdgeSizes, LayoutBox, LayoutBoxTree, LayoutBoxTreeBuilder};
+use crate::domain::layout_box_tree::{BoxEdges, LayoutBox, LayoutBoxTree, LayoutBoxTreeBuilder};
 use crate::domain::styled_tree::StyledTree;
 use crate::domain::stylesheet_set::StyleSheetSet;
 use crate::domain::text::{ComputedText, TextMetrics, TextRun};
@@ -76,8 +77,8 @@ impl LayoutEngine for MockLayoutEngine {
             builder.push(LayoutBox::new(
                 styled_node.node(),
                 content,
-                EdgeSizes::ZERO,
-                EdgeSizes::ZERO,
+                BoxEdges::ZERO,
+                IntrinsicSize::Resolved,
                 ChildIds::from_ids(styled_node.children().iter()),
             ));
         }

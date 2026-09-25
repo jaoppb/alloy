@@ -318,6 +318,12 @@ impl<'snapshot> NodeRef<'snapshot> {
         self.element().map(|element| &element.tag)
     }
 
+    /// The tag name as a string slice, or `None` for a non-element.
+    #[must_use]
+    pub fn tag_str(self) -> Option<&'snapshot str> {
+        self.element().map(|element| element.tag.as_str())
+    }
+
     /// The value of attribute `name`, or `None`.
     #[must_use]
     pub fn attribute(self, name: &str) -> Option<&'snapshot str> {
