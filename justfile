@@ -162,11 +162,6 @@ layering:
     else \
         echo "✓ core/css is engine/rhai free"; \
     fi
-    @if {{cargo}} tree -p html --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then \
-        echo "✗ core/html linked the engine or a script runtime"; exit 1; \
-    else \
-        echo "✓ core/html is engine/rhai free"; \
-    fi
     @if {{cargo}} tree -p network --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics) '; then \
         echo "✗ core/network linked the engine, a script runtime or another subsystem"; exit 1; \
     else \

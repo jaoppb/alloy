@@ -24,10 +24,6 @@ use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::tokenizer::tokenize;
 
-/// How many hex digits a `#rrggbb` colour carries.
-const LONG_HEX_DIGITS: usize = 6;
-/// How many a `#rgb` colour carries.
-const SHORT_HEX_DIGITS: usize = 3;
 /// A percentage's divisor, turning `50%` into the unit fraction `0.5`.
 const PERCENT_DIVISOR: f32 = 100.0;
 
@@ -95,8 +91,8 @@ fn expand_edges(lengths: &[Length]) -> Option<LengthEdges> {
 #[must_use]
 pub(crate) fn parse_color(tokens: &[Token]) -> Option<CssColor> {
     match tokens {
-        [Token::Hash(digits)] => hex_color(digits),
-        [Token::Ident(name)] => named_color(&name.to_ascii_lowercase()),
+        [Token::Hash(digits)] => CssColor::from_hex_digits(digits),
+        [Token::Ident(name)] => CssColor::from_keyword(&name.to_ascii_lowercase()),
         _ => functional_color(tokens),
     }
 }
@@ -190,69 +186,10 @@ fn alpha_channel(tokens: &[Token]) -> Option<u8> {
     }
 }
 
-fn hex_color(digits: &str) -> Option<CssColor> {
-    let expanded = expand_hex(digits)?;
-    let mut channels = expanded.as_bytes().chunks_exact(2).map(pair_value);
-    let red = channels.next()??;
-    let green = channels.next()??;
-    let blue = channels.next()??;
-    Some(CssColor::rgb(red, green, blue))
-}
-
-/// `#rgb` is `#rrggbb` with each digit doubled (CSS Color L4 §6.1).
-fn expand_hex(digits: &str) -> Option<String> {
-    if digits.len() == LONG_HEX_DIGITS {
-        return Some(digits.to_owned());
-    }
-    if digits.len() != SHORT_HEX_DIGITS {
-        return None;
-    }
-    Some(digits.chars().flat_map(|digit| [digit, digit]).collect())
-}
-
-/// One `rr` / `gg` / `bb` pair as a channel value.
-fn pair_value(pair: &[u8]) -> Option<u8> {
-    let text = core::str::from_utf8(pair).ok()?;
-    u8::from_str_radix(text, 16).ok()
-}
-
-/// The colour keywords B1 recognises. B2 replaces this with the full CSS Color
-/// L4 name table; until then an unknown name drops the declaration with a note
-/// rather than painting something arbitrary.
-fn named_color(name: &str) -> Option<CssColor> {
-    match name {
-        "transparent" => Some(CssColor::TRANSPARENT),
-        "black" => Some(CssColor::rgb(0x00, 0x00, 0x00)),
-        "silver" => Some(CssColor::rgb(0xC0, 0xC0, 0xC0)),
-        "gray" | "grey" => Some(CssColor::rgb(0x80, 0x80, 0x80)),
-        "white" => Some(CssColor::rgb(0xFF, 0xFF, 0xFF)),
-        "maroon" => Some(CssColor::rgb(0x80, 0x00, 0x00)),
-        "red" => Some(CssColor::rgb(0xFF, 0x00, 0x00)),
-        "purple" => Some(CssColor::rgb(0x80, 0x00, 0x80)),
-        "green" => Some(CssColor::rgb(0x00, 0x80, 0x00)),
-        "lime" => Some(CssColor::rgb(0x00, 0xFF, 0x00)),
-        "olive" => Some(CssColor::rgb(0x80, 0x80, 0x00)),
-        "yellow" => Some(CssColor::rgb(0xFF, 0xFF, 0x00)),
-        "navy" => Some(CssColor::rgb(0x00, 0x00, 0x80)),
-        "blue" => Some(CssColor::rgb(0x00, 0x00, 0xFF)),
-        "teal" => Some(CssColor::rgb(0x00, 0x80, 0x80)),
-        "aqua" | "cyan" => Some(CssColor::rgb(0x00, 0xFF, 0xFF)),
-        "fuchsia" | "magenta" => Some(CssColor::rgb(0xFF, 0x00, 0xFF)),
-        "orange" => Some(CssColor::rgb(0xFF, 0xA5, 0x00)),
-        _ => None,
-    }
-}
-
 /// The `display` keywords [`Display`] carries.
 #[must_use]
 pub(crate) fn parse_display(tokens: &[Token]) -> Option<Display> {
-    keyword(tokens).and_then(|name| match name.as_str() {
-        "none" => Some(Display::None),
-        "block" => Some(Display::Block),
-        "inline" => Some(Display::Inline),
-        "flex" => Some(Display::Flex),
-        _ => None,
-    })
+    keyword(tokens).and_then(|name| name.parse().ok())
 }
 
 // ---- v0.5 B4: the properties the real layout engine reads -----------------

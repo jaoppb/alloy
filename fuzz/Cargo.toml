@@ -30,3 +30,5 @@ name = "css_parse"
 path = "fuzz_targets/css_parse.rs"
 test = false
 doc = false
+
+[workspace]

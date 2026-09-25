@@ -153,7 +153,8 @@ pub use application::matching::{matches, strongest_match};
 pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
 pub use application::snapshot::snapshot;
 pub use dom::TagName;
-pub use domain::color::CssColor;
+pub use domain::color::{CssColor, ParseColorError};
+pub use domain::computed::display::ParseDisplayError;
 pub use domain::computed::{ComputedStyle, Display, LengthEdges};
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{

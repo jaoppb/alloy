@@ -20,11 +20,11 @@ use rhai::{Array, CustomType, Dynamic, EvalAltResult, TypeBuilder};
 use rhai_runtime::{PanicHookGuard, RhaiContext, RhaiEngine, to_eval_error};
 
 #[allow(clippy::unnecessary_box_returns)]
-fn css_error(operation: &str, error_message: impl Into<String>) -> Box<EvalAltResult> {
+fn css_error(operation: &str, error: impl core::fmt::Display) -> Box<EvalAltResult> {
     to_eval_error(EngineError::subsystem(
         SubsystemName::Css,
         operation,
-        error_message,
+        error.to_string(),
     ))
 }
 
@@ -256,7 +256,9 @@ impl StyledTreeHandle {
         self.require(Capability::GRAPHICS_DRAW)?;
         let unsigned = usize::try_from(node_index)
             .map_err(|error| css_error("set_color", format!("{error}")))?;
-        let color = parse_css_color(color_text).map_err(|error| css_error("set_color", error))?;
+        let color = color_text
+            .parse::<CssColor>()
+            .map_err(|error| css_error("set_color", error))?;
         let current = self.current_style(unsigned)?;
         let updated = current.with_color(color);
         self.overrides
@@ -274,7 +276,8 @@ impl StyledTreeHandle {
         self.require(Capability::GRAPHICS_DRAW)?;
         let unsigned = usize::try_from(node_index)
             .map_err(|error| css_error("set_background_color", format!("{error}")))?;
-        let color = parse_css_color(color_text)
+        let color = color_text
+            .parse::<CssColor>()
             .map_err(|error| css_error("set_background_color", error))?;
         let current = self.current_style(unsigned)?;
         let updated = current.with_background_color(color);
@@ -289,18 +292,9 @@ impl StyledTreeHandle {
         self.require(Capability::GRAPHICS_DRAW)?;
         let unsigned = usize::try_from(node_index)
             .map_err(|error| css_error("set_display", format!("{error}")))?;
-        let display = match display_text {
-            "none" => Display::None,
-            "block" => Display::Block,
-            "inline" => Display::Inline,
-            "flex" => Display::Flex,
-            other => {
-                return Err(css_error(
-                    "set_display",
-                    format!("unsupported display keyword `{other}`"),
-                ));
-            }
-        };
+        let display = display_text
+            .parse::<Display>()
+            .map_err(|error| css_error("set_display", error))?;
         let current = self.current_style(unsigned)?;
         let updated = current.with_display(display);
         self.overrides
@@ -309,47 +303,6 @@ impl StyledTreeHandle {
             .insert(unsigned, updated);
         Ok(())
     }
-}
-
-fn parse_css_color(text: &str) -> Result<CssColor, String> {
-    let lower = text.trim().to_ascii_lowercase();
-    match lower.as_str() {
-        "black" => Ok(CssColor::BLACK),
-        "transparent" => Ok(CssColor::TRANSPARENT),
-        "white" => Ok(CssColor::rgb(255, 255, 255)),
-        "red" => Ok(CssColor::rgb(255, 0, 0)),
-        "green" => Ok(CssColor::rgb(0, 128, 0)),
-        "blue" => Ok(CssColor::rgb(0, 0, 255)),
-        _ => parse_hex_color(&lower),
-    }
-}
-
-fn parse_hex_color(text: &str) -> Result<CssColor, String> {
-    let hex_part = text
-        .strip_prefix('#')
-        .ok_or_else(|| format!("unrecognised colour literal `{text}`"))?;
-    if hex_part.len() == 6 {
-        let red = u8::from_str_radix(hex_part.get(0..2).unwrap_or("00"), 16)
-            .map_err(|error| format!("invalid hex colour: {error}"))?;
-        let green = u8::from_str_radix(hex_part.get(2..4).unwrap_or("00"), 16)
-            .map_err(|error| format!("invalid hex colour: {error}"))?;
-        let blue = u8::from_str_radix(hex_part.get(4..6).unwrap_or("00"), 16)
-            .map_err(|error| format!("invalid hex colour: {error}"))?;
-        return Ok(CssColor::rgb(red, green, blue));
-    }
-    if hex_part.len() == 3 {
-        let red_char = hex_part.chars().next().unwrap_or('0');
-        let green_char = hex_part.chars().nth(1).unwrap_or('0');
-        let blue_char = hex_part.chars().nth(2).unwrap_or('0');
-        let red = u8::from_str_radix(&format!("{red_char}{red_char}"), 16)
-            .map_err(|error| format!("invalid hex colour: {error}"))?;
-        let green = u8::from_str_radix(&format!("{green_char}{green_char}"), 16)
-            .map_err(|error| format!("invalid hex colour: {error}"))?;
-        let blue = u8::from_str_radix(&format!("{blue_char}{blue_char}"), 16)
-            .map_err(|error| format!("invalid hex colour: {error}"))?;
-        return Ok(CssColor::rgb(red, green, blue));
-    }
-    Err(format!("unsupported hex colour length in `{text}`"))
 }
 
 impl EngineType for StyledTreeHandle {

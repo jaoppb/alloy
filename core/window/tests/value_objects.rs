@@ -168,3 +168,48 @@ fn a_resized_event_carries_the_reported_size() {
     };
     assert_eq!(reported, size);
 }
+
+// ---- Attributes and errors ----
+
+#[test]
+fn window_attributes_carry_a_title_and_size_and_a_title_prints_verbatim() {
+    let size = SurfaceSize::new(320, 200).unwrap();
+    let attributes = WindowAttributes::new("Alloy", size);
+    assert_eq!(attributes.title().as_str(), "Alloy");
+    assert_eq!(attributes.initial_size(), size);
+    assert_eq!(WindowTitle::from(String::from("Tab")).to_string(), "Tab");
+    assert_eq!(WindowTitle::default().as_str(), "");
+}
+
+#[test]
+fn a_window_id_round_trips_and_prints_with_its_number() {
+    let identifier = WindowId::from_raw(7);
+    assert_eq!(identifier.into_raw(), 7);
+    assert_eq!(identifier.to_string(), "window#7");
+}
+
+#[test]
+fn window_errors_name_the_operation_and_the_cause() {
+    let operations = [
+        (WindowOperation::CreateWindow, "create_window"),
+        (WindowOperation::PumpEvents, "pump_events"),
+        (WindowOperation::Present, "present"),
+    ];
+    for (operation, name) in operations {
+        assert_eq!(operation.name(), name);
+        assert_eq!(operation.to_string(), name);
+    }
+    assert_eq!(
+        WindowError::no_window_yet(WindowOperation::Present).to_string(),
+        "present was attempted before any window was created"
+    );
+    assert_eq!(
+        WindowError::creation_failed("no display").to_string(),
+        "the window could not be created — no display"
+    );
+    assert_eq!(
+        WindowError::operation_failed(WindowId::from_raw(2), WindowOperation::Present, "lost")
+            .to_string(),
+        "present failed for window#2 — lost"
+    );
+}
