@@ -5,6 +5,14 @@
 //! aggregate is born whole — B4 gives it a formatting context).
 
 use core::fmt;
+use core::str::FromStr;
+
+use thiserror::Error;
+
+/// A `display` keyword this cut does not carry.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[error("unsupported display keyword `{0}`")]
+pub struct ParseDisplayError(String);
 
 /// How an element generates boxes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -45,5 +53,41 @@ impl Display {
 impl fmt::Display for Display {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.keyword())
+    }
+}
+
+impl FromStr for Display {
+    type Err = ParseDisplayError;
+
+    /// The exact lowercase stylesheet keyword.
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "none" => Ok(Self::None),
+            "block" => Ok(Self::Block),
+            "inline" => Ok(Self::Inline),
+            "flex" => Ok(Self::Flex),
+            other => Err(ParseDisplayError(other.to_owned())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keyword_round_trips_and_unknown_is_typed() {
+        for display in [
+            Display::None,
+            Display::Block,
+            Display::Inline,
+            Display::Flex,
+        ] {
+            assert_eq!(display.keyword().parse(), Ok(display));
+        }
+        assert_eq!(
+            "grid".parse::<Display>(),
+            Err(ParseDisplayError("grid".to_owned()))
+        );
     }
 }

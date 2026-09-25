@@ -106,6 +106,10 @@ name = "network"
 paths = ["core/network/**"]
 
 [[scopes]]
+name = "html"
+paths = ["core/html/**"]
+
+[[scopes]]
 name = "window_domain"
 paths = ["core/window/src/domain/**"]
 
@@ -207,6 +211,13 @@ message = "Network domain layer must not depend on application ports, engine, ru
 from = "network"
 to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli", "dom", "css", "graphics"]
 message = "core/network must not depend on engine, DOM, CSS, graphics, script runtimes, the bindings crate, or CLI (PRD-009)."
+
+# core/html realises the TokenSink/TreeSink ports over core/dom without naming
+# the engine or a script runtime (PRD-008, B5). It MAY depend on core/dom.
+[[deny-scope-dep]]
+from = "html"
+to = ["engine", "runtime_rhai", "runtime_rhai_bindings", "alloy_cli"]
+message = "core/html must not depend on engine, concrete script runtimes, the bindings crate, or CLI (PRD-008). It may depend on dom."
 
 # Window domain layer must not depend on the application layer or any adapter crate.
 [[deny-scope-dep]]
