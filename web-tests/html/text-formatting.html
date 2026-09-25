@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HTML Test: Text Formatting &amp; Inlines</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .inline-sample {
+      background-color: #ffffff;
+      padding: 16px;
+    }
+    pre {
+      background-color: #2d3436;
+      color: #dfe6e9;
+      padding: 12px;
+      font-size: 13px;
+    }
+    code {
+      background-color: #dfe6e9;
+      color: #d63031;
+      padding: 2px;
+    }
+    .custom-span {
+      color: #0984e3;
+      background-color: #dfe6e9;
+      padding: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>HTML Test: Text Formatting &amp; Inline Elements</h1>
+    <span class="badge">SPEC: WHATWG HTML §4.5 / Alloy PRD-008</span>
+    <div class="criteria-pass">
+      PASS: Texto inline com formatações (strong, em, code, span) renderiza em linha; pre preserva quebras e espaçamentos; br quebra a linha sem novo parágrafo; hr desenha linha divisória.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Inlines criando quebras de linha automáticas como se fossem blocos ou pre perdendo espaçamento bruto.
+    </div>
+  </div>
+
+  <div class="inline-sample">
+    <p>
+      Este parágrafo contém <strong>texto em negrito (strong)</strong> e também <em>texto em itálico/ênfase (em)</em>.
+      Podemos ver um identificador em <code>código inline (code)</code> e um <span class="custom-span">span estilizado</span> dentro da mesma linha.
+    </p>
+
+    <p>
+      Primeira linha antes do br.<br>
+      Segunda linha após a quebra com br.<br>
+      Terceira linha com br consecutivo.
+    </p>
+
+    <hr>
+
+    <p>Abaixo está um bloco de texto pré-formatado (pre):</p>
+    <pre>fn main() {
+    let message = "Alloy Web Engine";
+    println!("{}", message);
+}</pre>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

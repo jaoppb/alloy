@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Alloy Web Test Suite Dashboard</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .dashboard-container {
+      max-width: 800px;
+    }
+    .category-card {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 20px;
+      border-left-width: 4px;
+    }
+    .cat-html {
+      border-color: #e67e22;
+    }
+    .cat-css {
+      border-color: #3498db;
+    }
+    .cat-showcase {
+      border-color: #2ecc71;
+    }
+    .cat-nav {
+      border-color: #9b59b6;
+    }
+    .test-list {
+      margin-top: 12px;
+      padding-left: 20px;
+    }
+    .test-item {
+      margin-bottom: 8px;
+    }
+    .test-link {
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .test-desc {
+      color: #7f8c8d;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    .server-status {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      background-color: #2c3e50;
+      color: #ffffff;
+      padding: 12px;
+      margin-bottom: 20px;
+    }
+    .dot-online {
+      width: 12px;
+      height: 12px;
+      background-color: #2ecc71;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <header>
+      <h1>Alloy Browser &mdash; Web Test Suite</h1>
+      <p>Banco de testes locais estáticos (HTML5 &amp; CSS) padronizados e autocontidos.</p>
+    </header>
+
+    <div class="server-status">
+      <div class="dot-online"></div>
+      <div><strong>Servidor Caddy Local Ativo:</strong> http://localhost:8080 (Zero dependências externas)</div>
+    </div>
+
+    <!-- Categoria HTML -->
+    <div class="category-card cat-html">
+      <h2>1. HTML5 Parser &amp; Syntax Tests</h2>
+      <p>Testes estruturais do tokenizador e árvore DOM conforme especificação WHATWG e Alloy PRD-008.</p>
+      <ul class="test-list">
+        <li class="test-item">
+          <a class="test-link" href="/html/semantic-tags.html">Semantic &amp; Structural Tags</a>
+          <div class="test-desc">Valida article, section, nav, header, footer, main, h1-h6, p e blockquote.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/html/text-formatting.html">Text Formatting &amp; Inlines</a>
+          <div class="test-desc">Valida strong, em, code, pre, span, br e hr em contextos inline.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/html/lists-omission.html">Lists &amp; Tag Omission</a>
+          <div class="test-desc">Valida auto-fechamento de &lt;li&gt; sem fechamento explícito em listas ul/ol.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/html/entities-syntax.html">Entities &amp; Syntax Rules</a>
+          <div class="test-desc">Valida entidades nomeadas, decimais, hexadecimais, comentários e atributos.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/html/graceful-degradation.html">Graceful Degradation (HTML)</a>
+          <div class="test-desc">Valida resiliência diante de tags customizadas e tags fora da especificação v0.5.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Categoria CSS -->
+    <div class="category-card cat-css">
+      <h2>2. CSS Layout &amp; Cascade Tests</h2>
+      <p>Testes de motor de layout (Box Model, Flexbox L1, Inline Formatting) e Seletores (L4).</p>
+      <ul class="test-list">
+        <li class="test-item">
+          <a class="test-link" href="/css/box-model/margin-collapse.html">Box Model: Vertical Margin Collapse</a>
+          <div class="test-desc">Valida colapso de margens verticais adjacentes entre elementos de bloco.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/box-model/padding-border.html">Box Model: Padding &amp; Border Width</a>
+          <div class="test-desc">Valida espaçamentos internos assimétricos e border-width nos quatro lados.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/box-model/box-sizing.html">Box Model: Box Sizing</a>
+          <div class="test-desc">Compara content-box vs border-box e o cálculo da largura total contra régua.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/flexbox/direction-justify.html">Flexbox: Direction &amp; Justify Content</a>
+          <div class="test-desc">Valida row, row-reverse, flex-start, center e space-between no eixo principal.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/flexbox/align-items-self.html">Flexbox: Align Items &amp; Align Self</a>
+          <div class="test-desc">Valida alinhamento no eixo cruzado (center, flex-end) e sobreposição por item.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/flexbox/grow-shrink-basis.html">Flexbox: Grow, Shrink &amp; Basis</a>
+          <div class="test-desc">Valida distribuição proporcional de espaço livre com flex-grow e tamanhos base.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/flexbox/wrap.html">Flexbox: Multi-line Wrap</a>
+          <div class="test-desc">Valida quebra de linhas automáticas com flex-wrap: wrap vs nowrap.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/inline-text/white-space.html">Inline Text: White Space</a>
+          <div class="test-desc">Valida colapso e preservação de espaços com normal, nowrap e pre.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/inline-text/text-align.html">Inline Text: Text Align</a>
+          <div class="test-desc">Valida alinhamento de texto (left, center, right, justify).</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/selectors/combinators.html">Selectors: Combinators &amp; Attributes</a>
+          <div class="test-desc">Valida filho direto (&gt;), descendente ( ), irmãos (+, ~) e atributos [attr=val].</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/selectors/pseudo-classes.html">Selectors: Structural Pseudo-Classes</a>
+          <div class="test-desc">Valida :first-child, :last-child e fórmulas :nth-child(even, odd, an+b).</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/selectors/cascade.html">Selectors: Cascade, Specificity &amp; Inheritance</a>
+          <div class="test-desc">Valida resolução de ID vs classe, !important, inherit e initial.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/media-queries/min-max-width.html">Selectors: Media Queries (@media)</a>
+          <div class="test-desc">Valida regras condicionais responsivas para min-width e max-width.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/css/graceful-degradation.html">Graceful Degradation (CSS)</a>
+          <div class="test-desc">Valida que propriedades e seletores não suportados são descartados com segurança.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Categoria Showcase -->
+    <div class="category-card cat-showcase">
+      <h2>3. Integrated Showcases</h2>
+      <p>Páginas realistas combinando HTML5, Flexbox, Box Model e imagens locais.</p>
+      <ul class="test-list">
+        <li class="test-item">
+          <a class="test-link" href="/showcase/card-component.html">UI Card Component</a>
+          <div class="test-desc">Componente de cartão completo com imagem local, flexbox e tipografia hierárquica.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/showcase/article-page.html">Article Page Layout</a>
+          <div class="test-desc">Estrutura completa de artigo de blog com citações, listas e rodapé.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Categoria Navegação e Interação -->
+    <div class="category-card cat-nav">
+      <h2>4. Navigation &amp; Interaction Tests</h2>
+      <p>Testes de clique em links, resolução de URLs relativas/absolutas, transição de páginas e tratamento de erros 404.</p>
+      <ul class="test-list">
+        <li class="test-item">
+          <a class="test-link" href="/navigation/page-a.html">Page Navigation Flow (Page A &rarr; Page B)</a>
+          <div class="test-desc">Valida o clique em links <a>, disparo da requisição de rede e transição completa de documento.</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/navigation/link-resolution.html">URL Resolution Patterns</a>
+          <div class="test-desc">Valida resolução de links relativos, links com .., absolutos da raiz (/), query strings e fragmentos (#).</div>
+        </li>
+        <li class="test-item">
+          <a class="test-link" href="/navigation/error-404.html">Broken Links &amp; 404 Error Handling</a>
+          <div class="test-desc">Valida a resiliência do motor e feedback visual ao navegar para URLs inexistentes no servidor.</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

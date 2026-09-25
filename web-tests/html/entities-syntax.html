@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HTML Test: Entities &amp; Syntax</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .syntax-card {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .sample-box {
+      background-color: #f1f2f6;
+      padding: 10px;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>HTML Test: Character Entities &amp; Syntax Rules</h1>
+    <span class="badge">SPEC: WHATWG HTML §13.2.5 / Alloy PRD-008</span>
+    <div class="criteria-pass">
+      PASS: Entidades nomeadas (&amp;copy;, &amp;lt;, &amp;gt;, &amp;amp;), decimais (&amp;#169;) e hexadecimais (&amp;#xA9;) são decodificadas como símbolos corretos; comentários não são renderizados na tela; atributos sem aspas e booleanos são aceitos sem erro.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Entidades exibidas literalmente como texto com &amp; ou comentários visíveis na tela.
+    </div>
+  </div>
+
+  <div class="syntax-card">
+    <h2>1. Resolução de Entidades de Caracteres</h2>
+    <div class="sample-box">
+      <p>Nomeadas: &amp;copy; &copy; | &amp;lt; &lt; | &amp;gt; &gt; | &amp;amp; &amp; | &amp;quot; &quot; | &amp;apos; &apos;</p>
+      <p>Decimal: &amp;#169; &#169; | &amp;#60; &#60; | &amp;#62; &#62;</p>
+      <p>Hexadecimal: &amp;#xA9; &#xA9; | &amp;#x3C; &#x3C; | &amp;#x3E; &#x3E;</p>
+    </div>
+  </div>
+
+  <!-- Este é um comentário HTML que NÃO deve aparecer visualmente na página -->
+
+  <div class="syntax-card">
+    <h2>2. Sintaxe de Atributos (Quotes e Booleanos)</h2>
+    <!-- Atributo sem aspas: class=sample-box -->
+    <div class=sample-box>
+      <p>Elemento com atributo de classe sem aspas (class=sample-box).</p>
+      <!-- Atributo com aspas simples -->
+      <p id='single-quote-id'>Elemento com atributo id em aspas simples.</p>
+      <!-- Atributo booleano -->
+      <p bool-attribute>Elemento com atributo booleano sem valor.</p>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

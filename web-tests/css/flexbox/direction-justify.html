@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Flexbox Direction &amp; Justify Content</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .flex-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .flex-row {
+      display: flex;
+      flex-direction: row;
+      background-color: #ecf0f1;
+      padding: 8px;
+      margin-bottom: 12px;
+      width: 400px;
+    }
+    .flex-row-rev {
+      display: flex;
+      flex-direction: row-reverse;
+      background-color: #ecf0f1;
+      padding: 8px;
+      margin-bottom: 12px;
+      width: 400px;
+    }
+    .justify-center {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      background-color: #ecf0f1;
+      padding: 8px;
+      margin-bottom: 12px;
+      width: 400px;
+    }
+    .justify-space-between {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      background-color: #ecf0f1;
+      padding: 8px;
+      margin-bottom: 12px;
+      width: 400px;
+    }
+    .item {
+      width: 50px;
+      height: 40px;
+      background-color: #3498db;
+      color: #ffffff;
+      text-align: center;
+      padding: 4px;
+    }
+    .item-1 { background-color: #e74c3c; }
+    .item-2 { background-color: #f39c12; }
+    .item-3 { background-color: #2ecc71; }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Flexbox Direction &amp; Justify Content</h1>
+    <span class="badge">SPEC: CSS Flexbox L1 §9 / Alloy core/css B4</span>
+    <div class="criteria-pass">
+      PASS: flex-direction: row posiciona os itens 1, 2, 3 da esquerda para a direita; row-reverse inverte a ordem física na tela (3, 2, 1 ou alinhado à direita); justify-content: center agrupa no centro; space-between distribui o espaço nos extremos.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Itens quebrando em linhas verticais inesperadas ou justify-content não calculando o espaçamento livre do eixo principal.
+    </div>
+  </div>
+
+  <div class="flex-section">
+    <h2>1. flex-direction: row (ordem 1, 2, 3)</h2>
+    <div class="flex-row">
+      <div class="item item-1">1</div>
+      <div class="item item-2">2</div>
+      <div class="item item-3">3</div>
+    </div>
+
+    <h2>2. flex-direction: row-reverse</h2>
+    <div class="flex-row-rev">
+      <div class="item item-1">1</div>
+      <div class="item item-2">2</div>
+      <div class="item item-3">3</div>
+    </div>
+
+    <h2>3. justify-content: center</h2>
+    <div class="justify-center">
+      <div class="item item-1">1</div>
+      <div class="item item-2">2</div>
+      <div class="item item-3">3</div>
+    </div>
+
+    <h2>4. justify-content: space-between</h2>
+    <div class="justify-space-between">
+      <div class="item item-1">1</div>
+      <div class="item item-2">2</div>
+      <div class="item item-3">3</div>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

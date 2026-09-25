@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Combinators and Selectors</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .combinator-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .parent {
+      background-color: #f1f2f6;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    /* Child combinator: apenas filhos diretos */
+    .parent > .target-child {
+      background-color: #2ecc71;
+      color: #ffffff;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+    /* Descendant combinator: qualquer nível de profundidade */
+    .parent .target-descendant {
+      background-color: #3498db;
+      color: #ffffff;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+    /* Next-sibling combinator: E + F */
+    .trigger + .adjacent-target {
+      background-color: #9b59b6;
+      color: #ffffff;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+    /* Subsequent-sibling combinator: E ~ F */
+    .trigger-sub ~ .general-sibling {
+      background-color: #e67e22;
+      color: #ffffff;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+    /* Attribute selectors */
+    div[data-status="active"] {
+      background-color: #1abc9c;
+      color: #ffffff;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Combinators &amp; Attribute Selectors</h1>
+    <span class="badge">SPEC: Selectors L4 / Alloy core/css B1</span>
+    <div class="criteria-pass">
+      PASS: &gt; colore apenas filhos diretos de verde (#2ecc71); espaço colore descendentes de azul (#3498db); + colore apenas o irmão imediatamente seguinte de roxo (#9b59b6); ~ colore irmãos subsequentes de laranja (#e67e22); [data-status="active"] colore o elemento de turquesa (#1abc9c).
+    </div>
+    <div class="criteria-fail">
+      FAIL: Combinadores casando elementos não elegíveis ou falha no seletor de atributo.
+    </div>
+  </div>
+
+  <div class="combinator-section">
+    <h2>1. Filho Direto (&gt;) vs Descendente (espaço)</h2>
+    <div class="parent">
+      <div class="target-child">Filho Direto (.parent &gt; .target-child &rarr; Verde)</div>
+      <div>
+        <div class="target-descendant">Descendente Aninhado (.parent .target-descendant &rarr; Azul)</div>
+      </div>
+    </div>
+
+    <h2>2. Irmão Adjacente (+) e Irmão Geral (~)</h2>
+    <div class="parent">
+      <div class="trigger">Elemento Gatilho (+)</div>
+      <div class="adjacent-target">Irmão Imediato (.trigger + .adjacent-target &rarr; Roxo)</div>
+      <div class="trigger-sub">Elemento Gatilho (~)</div>
+      <p>Parágrafo intermediário</p>
+      <div class="general-sibling">Irmão Subsequente (.trigger-sub ~ .general-sibling &rarr; Laranja)</div>
+    </div>
+
+    <h2>3. Seletor de Atributo ([data-status="active"])</h2>
+    <div class="parent">
+      <div data-status="active">Elemento com [data-status="active"] &rarr; Turquesa</div>
+      <div data-status="inactive">Elemento com [data-status="inactive"] (sem estilo especial)</div>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>
