@@ -12,10 +12,10 @@ use crate::error::AlloyError;
 
 /// Fetches `url` through `policy` then `transport`, and parses the response
 /// body as HTML.
-pub fn navigate(
+pub fn navigate<T: HttpTransport, P: RequestPolicy>(
     url: &Url,
-    transport: &dyn HttpTransport,
-    policy: &dyn RequestPolicy,
+    transport: &T,
+    policy: &P,
 ) -> Result<DomTree, AlloyError> {
     let requested = HttpRequest::get(url.clone());
     let request = match policy.decide(&requested)? {

@@ -22,12 +22,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use alloy::run_browser_until;
+use alloy::application::paint::DEFAULT_FONT;
+use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
 use graphics::golden::assert_matches_golden;
-use graphics::{Color, Framebuffer, SurfaceSize as GraphicsSurfaceSize};
+use graphics::{Color, Framebuffer, SurfaceSize as GraphicsSurfaceSize, SyntheticFontProvider};
 use network::{
-    AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, HttpTransport, MockTransport,
-    RequestPolicy, StatusCode, Url,
+    AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
+    Url,
 };
 use window::{
     FrameView, HeadlessWindowSystem, RecordingPresenter, WindowAttributes, WindowSystem,
@@ -70,18 +71,17 @@ fn image_response() -> HttpResponse {
     )
 }
 
-fn mock_transport(base: &Url) -> Arc<dyn HttpTransport> {
+fn mock_transport(base: &Url) -> MockTransport {
     let page_url = base.join("i4_page.html").expect("valid relative URL");
     let style_url = base.join("style.css").expect("valid relative URL");
     let image_url = base.join("pic.png").expect("valid relative URL");
-    let transport = MockTransport::new()
+    MockTransport::new()
         .with_response(
             page_url,
             text_response(PAGE_HTML, "text/html; charset=utf-8"),
         )
         .with_response(style_url, text_response(PAGE_CSS, "text/css"))
-        .with_response(image_url, image_response());
-    Arc::new(transport)
+        .with_response(image_url, image_response())
 }
 
 /// Straight-alpha `RGBA8` from a `FrameView`'s premultiplied `0xAARRGGBB` —
@@ -104,8 +104,15 @@ fn framebuffer_from_frame_view(view: FrameView<'_>) -> Framebuffer {
 fn navigated_page_with_stylesheet_and_image_matches_golden_reference() {
     let base = Url::parse("http://example.invalid/").expect("valid base URL");
     let page_url = base.join("i4_page.html").expect("valid relative URL");
-    let transport = mock_transport(&base);
-    let policy: Arc<dyn RequestPolicy> = Arc::new(AllowAllPolicy::new());
+    // The deterministic synthetic font (not the host's system font) keeps the
+    // committed golden byte-identical across machines.
+    let font_provider =
+        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    let services = BrowserServices::new(
+        font_provider,
+        Arc::new(mock_transport(&base)),
+        Arc::new(AllowAllPolicy::new()),
+    );
 
     // A small viewport keeps the committed golden PNG small — this test
     // proves the pipeline wiring, not a real page's dimensions.
@@ -119,8 +126,7 @@ fn navigated_page_with_stylesheet_and_image_matches_golden_reference() {
 
     let stats = run_browser_until(
         &page_url,
-        transport,
-        policy,
+        services,
         &mut system,
         &mut presenter,
         attributes.initial_size(),

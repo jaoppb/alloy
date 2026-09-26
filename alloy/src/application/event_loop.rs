@@ -11,26 +11,24 @@
 //! once** per cycle. Ten resizes or fifty image arrivals queued between two
 //! pump cycles cost one relayout, not ten or fifty.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
-use graphics::{Au, FontProvider, Framebuffer, ImageId, SyntheticFontProvider};
+use graphics::{Au, FontProvider, Framebuffer, ImageId};
 use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
 use window::{
     FrameView, PhysicalPosition, PointerButton, Presenter, PumpStatus, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
 };
 
-use crate::application::paint::DEFAULT_FONT;
-use crate::application::pipeline::{
-    DEFAULT_FONT_SIZE, LinkTarget, RenderOptions, default_runtime_font_provider,
-    render_dom_with_links,
-};
-use crate::application::{navigation, subresource};
+use crate::application::browser_services::BrowserServices;
+use crate::application::image_store::ImageStore;
+use crate::application::navigation;
+use crate::application::pipeline::{LinkTarget, RenderOptions, render_dom_with_links};
+use crate::application::subresource::{SubresourceDiscoverer, SubresourceRequest};
 use crate::error::AlloyError;
 
 /// What a background fetch produced, drained by the loop's own thread.
@@ -66,79 +64,57 @@ pub struct LoopStats {
 /// every relayout is the same "immutable snapshot in, immutable snapshot out"
 /// discipline the render pipeline itself uses (`ADR-0010:114-117`), applied
 /// to the state a live session must keep between frames.
-struct Session {
+struct Session<F, T, P, D> {
+    services: BrowserServices<F, T, P, D>,
     dom_tree: Option<DomTree>,
     base_url: Option<Url>,
     extra_sheets: StyleSheetSet,
-    images: BTreeMap<ImageId, Framebuffer>,
+    images: ImageStore,
     links: Vec<LinkTarget>,
     pointer_pos: Option<PhysicalPosition>,
     dirty: bool,
     viewport: window::SurfaceSize,
     stats: LoopStats,
-    font_provider: Arc<dyn FontProvider>,
-    policy: Arc<dyn RequestPolicy>,
 }
 
-impl Session {
-    fn new(
-        viewport: window::SurfaceSize,
-        font_provider: Arc<dyn FontProvider>,
-        policy: Arc<dyn RequestPolicy>,
-    ) -> Self {
+impl<F, T, P, D> Session<F, T, P, D>
+where
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    fn new(viewport: window::SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
         Self {
+            services,
             dom_tree: None,
             base_url: None,
             extra_sheets: StyleSheetSet::new(),
-            images: BTreeMap::new(),
+            images: ImageStore::new(),
             links: Vec::new(),
             pointer_pos: None,
             dirty: false,
             viewport,
-            stats: LoopStats {
-                relayouts: 0,
-                navigations: 0,
-                stylesheets_loaded: 0,
-                images_loaded: 0,
-            },
-            font_provider,
-            policy,
+            stats: LoopStats::default(),
         }
     }
 
     /// Applies one drained background-fetch result, spawning whatever
     /// follow-up fetches it reveals (a fresh document's subresources).
-    fn apply(
-        &mut self,
-        message: LoopMessage,
-        transport: &Arc<dyn HttpTransport>,
-        sender: &Sender<LoopMessage>,
-    ) {
+    fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
         match message {
             LoopMessage::Navigation(Ok((dom_tree, base_url))) => {
                 tracing::info!(url = %base_url, "navigation complete");
-                self.extra_sheets = StyleSheetSet::new();
-                self.images.clear();
-                self.links.clear();
+                self.reset_document_state();
                 self.base_url = Some(base_url.clone());
-                self.spawn_subresources(&dom_tree, &base_url, transport, sender);
+                self.spawn_subresources(&dom_tree, &base_url, sender);
                 self.dom_tree = Some(dom_tree);
                 self.dirty = true;
                 self.stats.navigations = self.stats.navigations.saturating_add(1);
             }
             LoopMessage::Navigation(Err(error)) => {
                 tracing::error!(%error, "navigation failed");
-                let escaped_error = error.to_string().replace('&', "&amp;").replace('<', "&lt;");
-                let error_html = format!(
-                    "<!DOCTYPE html><html><head><title>Navigation Error</title><style>body {{ margin: 32px; background-color: #fdf2e9; color: #78281f; }} h1 {{ color: #c0392b; }} .error-box {{ background-color: #ffffff; padding: 16px; border-width: 2px; }}</style></head><body><h1>Navigation Error</h1><div class=\"error-box\"><p><strong>Failed to load:</strong> {escaped_error}</p></div></body></html>"
-                );
-                if let Ok(error_tree) = html::parse(&error_html) {
-                    self.extra_sheets = StyleSheetSet::new();
-                    self.images.clear();
-                    self.links.clear();
-                    self.dom_tree = Some(error_tree);
-                    self.dirty = true;
-                }
+                self.show_navigation_error(&error);
             }
             LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
             LoopMessage::Stylesheet(Err(error)) => {
@@ -155,6 +131,28 @@ impl Session {
         }
     }
 
+    /// A new document starts from no sheets, images or links.
+    fn reset_document_state(&mut self) {
+        self.extra_sheets = StyleSheetSet::new();
+        self.images.clear();
+        self.links.clear();
+    }
+
+    /// Replaces the page with a visible error document — a failed navigation
+    /// must be seen, not just logged.
+    fn show_navigation_error(&mut self, error: &AlloyError) {
+        let escaped_error = error.to_string().replace('&', "&amp;").replace('<', "&lt;");
+        let error_html = format!(
+            "<!DOCTYPE html><html><head><title>Navigation Error</title><style>body {{ margin: 32px; background-color: #fdf2e9; color: #78281f; }} h1 {{ color: #c0392b; }} .error-box {{ background-color: #ffffff; padding: 16px; border-width: 2px; }}</style></head><body><h1>Navigation Error</h1><div class=\"error-box\"><p><strong>Failed to load:</strong> {escaped_error}</p></div></body></html>"
+        );
+        let Ok(error_tree) = html::parse(&error_html) else {
+            return;
+        };
+        self.reset_document_state();
+        self.dom_tree = Some(error_tree);
+        self.dirty = true;
+    }
+
     fn absorb_stylesheet(&mut self, text: &str) {
         if let Ok(sheet) = css::parse_stylesheet(text, Origin::Author) {
             self.extra_sheets.absorb(sheet);
@@ -163,27 +161,23 @@ impl Session {
         }
     }
 
-    /// Discovers `<link rel=stylesheet>` and `<img>` in `dom_tree`, registers
-    /// a placeholder for every image found (see
+    /// Asks the discoverer what `dom_tree` references, registers a
+    /// placeholder for every image found (see
     /// `subresource::placeholder_framebuffer`), and spawns one worker thread
     /// per subresource.
     fn spawn_subresources(
         &mut self,
         dom_tree: &DomTree,
         base_url: &Url,
-        transport: &Arc<dyn HttpTransport>,
         sender: &Sender<LoopMessage>,
     ) {
         let snapshot = css::snapshot(dom_tree, dom_tree.document());
-        let found = subresource::discover(&snapshot, base_url);
-        for url in found.stylesheets {
-            spawn_stylesheet_fetch(url, Arc::clone(transport), sender.clone());
-        }
-        for (id, url) in found.images {
-            self.images
-                .entry(id)
-                .or_insert_with(subresource::placeholder_framebuffer);
-            spawn_image_fetch(id, url, Arc::clone(transport), sender.clone());
+        let found = self.services.discoverer().discover(&snapshot, base_url);
+        for request in found {
+            if let SubresourceRequest::Image(image) = &request {
+                self.images.reserve_placeholder(image.id());
+            }
+            spawn_subresource_fetch(request, Arc::clone(self.services.transport()), sender);
         }
     }
 
@@ -192,12 +186,11 @@ impl Session {
     }
 }
 
-fn spawn_navigation(
-    url: Url,
-    transport: Arc<dyn HttpTransport>,
-    policy: Arc<dyn RequestPolicy>,
-    sender: Sender<LoopMessage>,
-) {
+fn spawn_navigation<T, P>(url: Url, transport: Arc<T>, policy: Arc<P>, sender: Sender<LoopMessage>)
+where
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+{
     thread::spawn(move || {
         let result = navigation::navigate(&url, transport.as_ref(), policy.as_ref())
             .map(|dom_tree| (dom_tree, url));
@@ -205,35 +198,35 @@ fn spawn_navigation(
     });
 }
 
-fn spawn_stylesheet_fetch(
-    url: Url,
-    transport: Arc<dyn HttpTransport>,
-    sender: Sender<LoopMessage>,
+fn spawn_subresource_fetch<T: HttpTransport + 'static>(
+    request: SubresourceRequest,
+    transport: Arc<T>,
+    sender: &Sender<LoopMessage>,
 ) {
+    let sender = sender.clone();
     thread::spawn(move || {
-        let result = fetch_text(&url, transport.as_ref());
-        let _ = sender.send(LoopMessage::Stylesheet(result));
+        let _ = sender.send(fetch_subresource(request, transport.as_ref()));
     });
 }
 
-fn spawn_image_fetch(
-    id: ImageId,
-    url: Url,
-    transport: Arc<dyn HttpTransport>,
-    sender: Sender<LoopMessage>,
-) {
-    thread::spawn(move || {
-        let result = fetch_image(&url, transport.as_ref());
-        let _ = sender.send(LoopMessage::Image(id, result));
-    });
+/// The one place a [`SubresourceRequest`] variant maps to how it is fetched.
+fn fetch_subresource<T: HttpTransport>(request: SubresourceRequest, transport: &T) -> LoopMessage {
+    match request {
+        SubresourceRequest::Stylesheet(stylesheet) => {
+            LoopMessage::Stylesheet(fetch_text(stylesheet.url(), transport))
+        }
+        SubresourceRequest::Image(image) => {
+            LoopMessage::Image(image.id(), fetch_image(image.url(), transport))
+        }
+    }
 }
 
-fn fetch_text(url: &Url, transport: &dyn HttpTransport) -> Result<String, AlloyError> {
+fn fetch_text<T: HttpTransport>(url: &Url, transport: &T) -> Result<String, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
     Ok(response.body().as_str().unwrap_or_default().to_owned())
 }
 
-fn fetch_image(url: &Url, transport: &dyn HttpTransport) -> Result<Framebuffer, AlloyError> {
+fn fetch_image<T: HttpTransport>(url: &Url, transport: &T) -> Result<Framebuffer, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
     Ok(graphics::png::decode(response.body().as_bytes())?)
 }
@@ -261,33 +254,30 @@ pub fn initial_window_attributes() -> Result<WindowAttributes, AlloyError> {
 /// [`WindowSystem::create_window`] with [`initial_window_attributes`] is the
 /// caller's job, because the real `winit` [`Presenter`] adapter
 /// (`SoftbufferPresenter`) needs the window handle `create_window` produces
-/// to construct itself, and that handle is not part of the object-safe
-/// [`WindowSystem`] trait this function is generic over.
+/// to construct itself, and that handle is not part of the [`WindowSystem`]
+/// trait this function is generic over.
 ///
 /// Generic over [`WindowSystem`]/[`Presenter`] on purpose — the real `winit`
 /// backend and the headless reference (`window::HeadlessWindowSystem` /
 /// `RecordingPresenter`) drive the exact same loop, which is what lets the
 /// e2e golden test exercise this function directly rather than a parallel
 /// test-only copy of it.
-// `Arc<dyn HttpTransport>` by value is the intended public-API shape (the
-// caller hands over shared ownership once, cleanly, instead of managing a
-// local binding); `run_loop` only ever needs to borrow it, which is why it
-// takes `&Arc<_>` instead.
-#[allow(clippy::needless_pass_by_value)]
-pub fn run_browser(
+pub fn run_browser<S, R, F, T, P, D>(
     url: &Url,
-    transport: Arc<dyn HttpTransport>,
-    policy: Arc<dyn RequestPolicy>,
-    system: &mut dyn WindowSystem,
-    presenter: &mut dyn Presenter,
+    services: BrowserServices<F, T, P, D>,
+    system: &mut S,
+    presenter: &mut R,
     initial_size: window::SurfaceSize,
-) -> Result<LoopStats, AlloyError> {
-    let mut session = Session::new(
-        initial_size,
-        default_runtime_font_provider(),
-        Arc::clone(&policy),
-    );
-    run_loop(url, &transport, system, presenter, &mut session, |_| false)
+) -> Result<LoopStats, AlloyError>
+where
+    S: WindowSystem,
+    R: Presenter,
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    run_browser_until(url, services, system, presenter, initial_size, |_| false)
 }
 
 /// The same session as [`run_browser`], but returns as soon as `should_stop`
@@ -299,48 +289,46 @@ pub fn run_browser(
 /// presented frame, without racing the background fetch threads against a
 /// scripted close event — and for a one-shot render, via
 /// [`run_browser_until_first_frame`].
-#[allow(clippy::needless_pass_by_value)]
-pub fn run_browser_until(
+pub fn run_browser_until<S, R, F, T, P, D>(
     url: &Url,
-    transport: Arc<dyn HttpTransport>,
-    policy: Arc<dyn RequestPolicy>,
-    system: &mut dyn WindowSystem,
-    presenter: &mut dyn Presenter,
+    services: BrowserServices<F, T, P, D>,
+    system: &mut S,
+    presenter: &mut R,
     initial_size: window::SurfaceSize,
     should_stop: impl FnMut(&LoopStats) -> bool,
-) -> Result<LoopStats, AlloyError> {
-    let font_provider =
-        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let mut session = Session::new(initial_size, font_provider, Arc::clone(&policy));
-    run_loop(
-        url,
-        &transport,
-        system,
-        presenter,
-        &mut session,
-        should_stop,
-    )
+) -> Result<LoopStats, AlloyError>
+where
+    S: WindowSystem,
+    R: Presenter,
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    let mut session = Session::new(initial_size, services);
+    run_loop(url, system, presenter, &mut session, should_stop)
 }
 
 /// [`run_browser_until`], stopping as soon as the first frame has been laid
 /// out and presented.
-pub fn run_browser_until_first_frame(
+pub fn run_browser_until_first_frame<S, R, F, T, P, D>(
     url: &Url,
-    transport: Arc<dyn HttpTransport>,
-    policy: Arc<dyn RequestPolicy>,
-    system: &mut dyn WindowSystem,
-    presenter: &mut dyn Presenter,
+    services: BrowserServices<F, T, P, D>,
+    system: &mut S,
+    presenter: &mut R,
     initial_size: window::SurfaceSize,
-) -> Result<LoopStats, AlloyError> {
-    run_browser_until(
-        url,
-        transport,
-        policy,
-        system,
-        presenter,
-        initial_size,
-        |stats| stats.relayouts >= 1,
-    )
+) -> Result<LoopStats, AlloyError>
+where
+    S: WindowSystem,
+    R: Presenter,
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    run_browser_until(url, services, system, presenter, initial_size, |stats| {
+        stats.relayouts >= 1
+    })
 }
 
 /// How long a pump cycle sleeps when neither a window event nor a
@@ -349,25 +337,31 @@ pub fn run_browser_until_first_frame(
 /// blocking primitive spanning both the window and the `mpsc` channel.
 const IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(4);
 
-fn run_loop(
+fn run_loop<S, R, F, T, P, D>(
     url: &Url,
-    transport: &Arc<dyn HttpTransport>,
-    system: &mut dyn WindowSystem,
-    presenter: &mut dyn Presenter,
-    session: &mut Session,
+    system: &mut S,
+    presenter: &mut R,
+    session: &mut Session<F, T, P, D>,
     mut should_stop: impl FnMut(&LoopStats) -> bool,
-) -> Result<LoopStats, AlloyError> {
+) -> Result<LoopStats, AlloyError>
+where
+    S: WindowSystem,
+    R: Presenter,
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
     let (sender, receiver) = mpsc::channel();
     spawn_navigation(
         url.clone(),
-        Arc::clone(transport),
-        Arc::clone(&session.policy),
+        Arc::clone(session.services.transport()),
+        Arc::clone(session.services.policy()),
         sender.clone(),
     );
 
     loop {
-        let (outcome, did_work) =
-            pump_once(system, presenter, &receiver, transport, &sender, session)?;
+        let (outcome, did_work) = pump_once(system, presenter, &receiver, &sender, session)?;
         if outcome == PumpStatus::Exit || should_stop(&session.stats) {
             return Ok(session.stats);
         }
@@ -386,14 +380,21 @@ fn run_loop(
 /// idle-sleep before the next cycle, purely to avoid busy-spinning a CPU core;
 /// it plays no part in the coalescing invariant itself, which is entirely
 /// "drain everything currently available, then relay out at most once".
-fn pump_once(
-    system: &mut dyn WindowSystem,
-    presenter: &mut dyn Presenter,
+fn pump_once<S, R, F, T, P, D>(
+    system: &mut S,
+    presenter: &mut R,
     receiver: &Receiver<LoopMessage>,
-    transport: &Arc<dyn HttpTransport>,
     sender: &Sender<LoopMessage>,
-    session: &mut Session,
-) -> Result<(PumpStatus, bool), AlloyError> {
+    session: &mut Session<F, T, P, D>,
+) -> Result<(PumpStatus, bool), AlloyError>
+where
+    S: WindowSystem,
+    R: Presenter,
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
     let mut close_requested = false;
     let mut latest_resize = None;
     let mut saw_window_event = false;
@@ -431,8 +432,8 @@ fn pump_once(
             tracing::info!(url = %target_url, "link clicked, navigating");
             spawn_navigation(
                 target_url,
-                Arc::clone(transport),
-                Arc::clone(&session.policy),
+                Arc::clone(session.services.transport()),
+                Arc::clone(session.services.policy()),
                 sender.clone(),
             );
         } else {
@@ -443,7 +444,7 @@ fn pump_once(
     let mut saw_message = false;
     while let Ok(message) = receiver.try_recv() {
         saw_message = true;
-        session.apply(message, transport, sender);
+        session.apply(message, sender);
     }
 
     if session.dirty {
@@ -484,10 +485,14 @@ fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str> {
     None
 }
 
-fn present_if_ready(
-    presenter: &mut dyn Presenter,
-    session: &mut Session,
-) -> Result<(), AlloyError> {
+fn present_if_ready<R, F, T, P, D>(
+    presenter: &mut R,
+    session: &mut Session<F, T, P, D>,
+) -> Result<(), AlloyError>
+where
+    R: Presenter,
+    F: FontProvider + 'static,
+{
     let Some(dom_tree) = session.dom_tree.as_ref() else {
         return Ok(());
     };
@@ -499,7 +504,7 @@ fn present_if_ready(
         session.extra_sheets.clone(),
         &session.images,
         graphics_size,
-        Arc::clone(&session.font_provider),
+        Arc::clone(session.services.font_provider()),
     )?;
     session.links = links;
     let pixels = frame_pixels(&framebuffer);
@@ -557,26 +562,34 @@ fn pack_argb(alpha: u8, red: u8, green: u8, blue: u8) -> u32 {
 mod tests {
     use std::sync::mpsc;
 
-    use network::MockTransport;
+    use graphics::SyntheticFontProvider;
+    use network::{AllowAllPolicy, MockTransport};
     use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
-    use super::{
-        Arc, DEFAULT_FONT, DEFAULT_FONT_SIZE, HttpTransport, ImageId, LoopMessage, Session,
-        SyntheticFontProvider, WindowEvent, pump_once, subresource,
-    };
+    use super::{Arc, BrowserServices, ImageId, LoopMessage, Session, WindowEvent, pump_once};
     use crate::application::event_loop::initial_window_attributes;
+    use crate::application::paint::DEFAULT_FONT;
+    use crate::application::pipeline::DEFAULT_FONT_SIZE;
+    use crate::application::subresource::{MarkupDiscoverer, placeholder_framebuffer};
 
-    fn loaded_session(viewport: SurfaceSize) -> Session {
+    type TestSession =
+        Session<SyntheticFontProvider, MockTransport, AllowAllPolicy, MarkupDiscoverer>;
+
+    fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
         let font_provider =
             Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-        let policy = Arc::new(network::AllowAllPolicy);
-        let mut session = Session::new(viewport, font_provider, policy);
-        session.dom_tree = Some(html::parse("<html><body>hi</body></html>").unwrap());
-        session
+        let services = BrowserServices::new(
+            font_provider,
+            Arc::new(transport),
+            Arc::new(AllowAllPolicy::new()),
+        );
+        Session::new(viewport, services)
     }
 
-    fn mock_transport() -> Arc<dyn HttpTransport> {
-        Arc::new(MockTransport::new())
+    fn loaded_session(viewport: SurfaceSize) -> TestSession {
+        let mut session = session_over(MockTransport::new(), viewport);
+        session.dom_tree = Some(html::parse("<html><body>hi</body></html>").unwrap());
+        session
     }
 
     #[test]
@@ -591,14 +604,12 @@ mod tests {
 
         let mut presenter = RecordingPresenter::new();
         let (sender, receiver) = mpsc::channel();
-        let transport = mock_transport();
         let mut session = loaded_session(attributes.initial_size());
 
         pump_once(
             &mut system,
             &mut presenter,
             &receiver,
-            &transport,
             &sender,
             &mut session,
         )
@@ -622,13 +633,12 @@ mod tests {
 
         let mut presenter = RecordingPresenter::new();
         let (sender, receiver) = mpsc::channel();
-        let transport = mock_transport();
         let mut session = loaded_session(attributes.initial_size());
         for index in 0..50u32 {
             sender
                 .send(LoopMessage::Image(
                     ImageId::new(index),
-                    Ok(subresource::placeholder_framebuffer()),
+                    Ok(placeholder_framebuffer()),
                 ))
                 .unwrap();
         }
@@ -637,7 +647,6 @@ mod tests {
             &mut system,
             &mut presenter,
             &receiver,
-            &transport,
             &sender,
             &mut session,
         )
@@ -663,9 +672,10 @@ mod tests {
             network::HeaderMap::new(),
             network::Body::from_text("<html><body>target</body></html>"),
         );
-        let transport: Arc<dyn HttpTransport> =
-            Arc::new(MockTransport::new().with_response(target_url, response));
-        let mut session = loaded_session(attributes.initial_size());
+        let mut session = session_over(
+            MockTransport::new().with_response(target_url, response),
+            attributes.initial_size(),
+        );
         session.base_url = Some(network::Url::parse("http://example.com/index.html").unwrap());
         session.dom_tree = Some(
             html::parse("<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>").unwrap(),
@@ -677,7 +687,6 @@ mod tests {
             &mut system,
             &mut presenter,
             &receiver,
-            &transport,
             &sender,
             &mut session,
         )
@@ -698,7 +707,6 @@ mod tests {
             &mut system,
             &mut presenter,
             &receiver,
-            &transport,
             &sender,
             &mut session,
         )

@@ -21,13 +21,13 @@ use std::sync::Arc;
 use alloy::error::AlloyError;
 use alloy::logging;
 use alloy::{
-    RenderOptions, default_runtime_font_provider, initial_window_attributes,
+    BrowserServices, RenderOptions, default_runtime_font_provider, initial_window_attributes,
     render_html_with_font_provider, run_browser,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use dom::serialize_html;
 use engine::profiles;
-use network::{AllowAllPolicy, HttpTransport, RealHttpTransport, RequestPolicy, Url};
+use network::{AllowAllPolicy, RealHttpTransport, Url};
 use rhai_bindings::run_dom_with_fallback;
 use rhai_runtime::RhaiEngine;
 use window::{SoftbufferPresenter, WindowSystem, WinitSystem};
@@ -108,8 +108,11 @@ fn run(cli: &Cli) -> Result<(), AlloyError> {
 /// not this binary's default). Runs until the window closes.
 fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     let url = Url::parse(raw_url)?;
-    let transport: Arc<dyn HttpTransport> = Arc::new(RealHttpTransport::new()?);
-    let policy: Arc<dyn RequestPolicy> = Arc::new(AllowAllPolicy::new());
+    let services = BrowserServices::new(
+        default_runtime_font_provider(),
+        Arc::new(RealHttpTransport::new()?),
+        Arc::new(AllowAllPolicy::new()),
+    );
 
     let mut system = WinitSystem::new()?;
     let attributes = initial_window_attributes()?;
@@ -126,8 +129,7 @@ fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
 
     let stats = run_browser(
         &url,
-        transport,
-        policy,
+        services,
         &mut system,
         &mut presenter,
         attributes.initial_size(),

@@ -9,7 +9,9 @@
 
 use std::sync::Arc;
 
-use alloy::run_browser_until;
+use alloy::application::paint::DEFAULT_FONT;
+use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
+use graphics::SyntheticFontProvider;
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
@@ -18,6 +20,20 @@ use window::{
     HeadlessWindowSystem, PhysicalPosition, PointerButton, PumpStatus, RecordingPresenter,
     WindowAttributes, WindowError, WindowEvent, WindowId, WindowSystem, WindowTitle,
 };
+
+/// The deterministic synthetic font keeps these tests independent of the
+/// host's installed fonts.
+fn services(
+    transport: MockTransport,
+) -> BrowserServices<SyntheticFontProvider, MockTransport, AllowAllPolicy> {
+    let font_provider =
+        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    BrowserServices::new(
+        font_provider,
+        Arc::new(transport),
+        Arc::new(AllowAllPolicy::new()),
+    )
+}
 
 fn text_response(body: &str) -> HttpResponse {
     let mut headers = HeaderMap::new();
@@ -93,12 +109,9 @@ fn clicking_a_link_navigates_to_destination_page() {
     let url_a = Url::parse("http://example.com/page-a.html").unwrap();
     let url_b = Url::parse("http://example.com/page-b.html").unwrap();
 
-    let transport = Arc::new(
-        MockTransport::new()
-            .with_response(url_a.clone(), text_response(page_a))
-            .with_response(url_b, text_response(page_b)),
-    );
-    let policy = Arc::new(AllowAllPolicy::new());
+    let transport = MockTransport::new()
+        .with_response(url_a.clone(), text_response(page_a))
+        .with_response(url_b, text_response(page_b));
     let mut system = DelayedClickWindowSystem::new(PhysicalPosition::new(20.0, 20.0), 5);
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
@@ -107,8 +120,7 @@ fn clicking_a_link_navigates_to_destination_page() {
 
     let stats = run_browser_until(
         &url_a,
-        transport,
-        policy,
+        services(transport),
         &mut system,
         &mut presenter,
         size,
@@ -135,10 +147,8 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
 
     let start_url = Url::parse("http://example.com/index.html").unwrap();
 
-    let transport = Arc::new(
-        MockTransport::new().with_response(start_url.clone(), text_response(page_with_anchor)),
-    );
-    let policy = Arc::new(AllowAllPolicy::new());
+    let transport =
+        MockTransport::new().with_response(start_url.clone(), text_response(page_with_anchor));
     let mut system = DelayedClickWindowSystem::new(PhysicalPosition::new(20.0, 20.0), 5);
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
@@ -149,8 +159,7 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
     let mut poll_cycles = 0;
     let stats = run_browser_until(
         &start_url,
-        transport,
-        policy,
+        services(transport),
         &mut system,
         &mut presenter,
         size,

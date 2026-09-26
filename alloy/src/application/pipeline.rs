@@ -7,7 +7,6 @@
 //! difference between the two is what happens to the [`graphics::Framebuffer`]
 //! it produces (encoded to a PNG file, or blitted to a live window).
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use css::{
@@ -15,13 +14,13 @@ use css::{
     StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
 };
 use graphics::{
-    Au, DisplayListBuilder, FontProvider, Framebuffer, GenericFamily, GraphicsError, ImageId,
-    ImageProvider, Rect, RenderBackend, SoftwareCpuBackend, SurfaceSize, SyntheticFontProvider,
-    SystemFontProvider,
+    Au, DisplayListBuilder, FontProvider, Framebuffer, Rect, RenderBackend, SoftwareCpuBackend,
+    SurfaceSize, SyntheticFontProvider,
 };
 
+use crate::application::image_store::ImageStore;
 use crate::application::paint::{DEFAULT_FONT, paint_box_tree};
-use crate::application::subresource;
+use crate::application::runtime_font::RuntimeFontProvider;
 use crate::error::AlloyError;
 
 /// The font size used for font registration in rendering (16px).
@@ -64,23 +63,11 @@ impl Default for RenderOptions {
     }
 }
 
-/// Resolves the default font provider for runtime rendering.
-///
-/// Attempts to resolve a system sans-serif font, falling back to
-/// [`SyntheticFontProvider`] if no candidate font exists or parses on the host
-/// system.
+/// Resolves the default font provider for runtime rendering — see
+/// [`RuntimeFontProvider::resolve`].
 #[must_use]
-pub fn default_runtime_font_provider() -> Arc<dyn FontProvider> {
-    match SystemFontProvider::resolve(GenericFamily::SansSerif, DEFAULT_FONT, DEFAULT_FONT_SIZE) {
-        Ok(system) => Arc::new(system),
-        Err(err) => {
-            tracing::warn!(
-                %err,
-                "could not resolve system sans-serif font; falling back to synthetic font provider"
-            );
-            Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE))
-        }
-    }
+pub fn default_runtime_font_provider() -> Arc<RuntimeFontProvider> {
+    Arc::new(RuntimeFontProvider::resolve())
 }
 
 /// Renders HTML source text to a PNG byte vector using the specified options and synthetic font.
@@ -90,24 +77,24 @@ pub fn render_html_to_png(html_str: &str, options: &RenderOptions) -> Result<Vec
     let framebuffer = render_dom(
         &dom_tree,
         StyleSheetSet::default(),
-        &BTreeMap::new(),
+        &ImageStore::new(),
         surface_size,
     )?;
     Ok(graphics::png::encode(&framebuffer))
 }
 
 /// Renders HTML source text to a PNG byte vector using a custom [`FontProvider`].
-pub fn render_html_with_font_provider(
+pub fn render_html_with_font_provider<F: FontProvider + 'static>(
     html_str: &str,
     options: &RenderOptions,
-    font_provider: Arc<dyn FontProvider>,
+    font_provider: Arc<F>,
 ) -> Result<Vec<u8>, AlloyError> {
     let surface_size = options.surface_size()?;
     let dom_tree = html::parse(html_str)?;
     let framebuffer = render_dom_with_font_provider(
         &dom_tree,
         StyleSheetSet::default(),
-        &BTreeMap::new(),
+        &ImageStore::new(),
         surface_size,
         font_provider,
     )?;
@@ -139,29 +126,29 @@ pub struct LinkTarget {
 pub fn render_dom(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
-    images: &BTreeMap<ImageId, Framebuffer>,
+    images: &ImageStore,
     surface_size: SurfaceSize,
 ) -> Result<Framebuffer, AlloyError> {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let (framebuffer, _) = render_dom_internal(
+    let (framebuffer, _) = render_document(
         dom_tree,
         extra_sheets,
         images,
         surface_size,
         font_provider,
-        false,
+        &BlockLayout::monospace(),
     )?;
     Ok(framebuffer)
 }
 
 /// Renders an already-parsed document with a specified [`FontProvider`] and real font metrics.
-pub fn render_dom_with_font_provider(
+pub fn render_dom_with_font_provider<F: FontProvider + 'static>(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
-    images: &BTreeMap<ImageId, Framebuffer>,
+    images: &ImageStore,
     surface_size: SurfaceSize,
-    font_provider: Arc<dyn FontProvider>,
+    font_provider: Arc<F>,
 ) -> Result<Framebuffer, AlloyError> {
     let (framebuffer, _) =
         render_dom_with_links(dom_tree, extra_sheets, images, surface_size, font_provider)?;
@@ -170,42 +157,41 @@ pub fn render_dom_with_font_provider(
 
 /// Renders an already-parsed document with real font metrics, returning both
 /// the rendered [`Framebuffer`] and clickable [`LinkTarget`]s.
-pub fn render_dom_with_links(
+pub fn render_dom_with_links<F: FontProvider + 'static>(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
-    images: &BTreeMap<ImageId, Framebuffer>,
+    images: &ImageStore,
     surface_size: SurfaceSize,
-    font_provider: Arc<dyn FontProvider>,
+    font_provider: Arc<F>,
 ) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
-    render_dom_internal(
+    // `FontBackedMeasurer` (core/css) still takes a trait object; the `Arc<F>`
+    // coerces at this one boundary, so alloy names no `dyn` itself.
+    let measured_fonts = Arc::clone(&font_provider);
+    let measurer = FontBackedMeasurer::new(measured_fonts, DEFAULT_FONT);
+    render_document(
         dom_tree,
         extra_sheets,
         images,
         surface_size,
         font_provider,
-        true,
+        &BlockLayout::new(measurer),
     )
 }
 
-fn render_dom_internal(
+fn render_document<F: FontProvider + 'static, M: TextMeasurer + Send + Sync>(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
-    images: &BTreeMap<ImageId, Framebuffer>,
+    images: &ImageStore,
     surface_size: SurfaceSize,
-    font_provider: Arc<dyn FontProvider>,
-    use_font_measurer: bool,
+    font_provider: Arc<F>,
+    layout: &BlockLayout<M>,
 ) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
     sheets.absorb(extra_sheets);
     let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
     let constraints = make_constraints(surface_size)?;
-    let box_tree = if use_font_measurer {
-        let measurer = FontBackedMeasurer::new(Arc::clone(&font_provider), DEFAULT_FONT);
-        BlockLayout::new(measurer).layout(&styled_tree, &constraints)?
-    } else {
-        BlockLayout::monospace().layout(&styled_tree, &constraints)?
-    };
+    let box_tree = layout.layout(&styled_tree, &constraints)?;
 
     let link_targets = collect_link_targets(&box_tree, &snapshot);
 
@@ -219,7 +205,7 @@ fn render_dom_internal(
     )?;
     let display_list = builder.build()?;
 
-    let image_provider = build_image_provider(images);
+    let image_provider = Arc::new(images.snapshot());
     let mut backend = SoftwareCpuBackend::with_providers(font_provider, image_provider);
     backend.begin_frame(surface_size)?;
     backend.submit(&display_list)?;
@@ -240,7 +226,7 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
             let Some(node) = snapshot.node(id) else {
                 break;
             };
-            if node.tag() == Some("a")
+            if node.tag_str() == Some("a")
                 && let Some(href) = node.attribute("href")
             {
                 targets.push(LinkTarget {
@@ -253,33 +239,6 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
         }
     }
     targets
-}
-
-#[derive(Clone, Debug)]
-struct SessionImageProvider {
-    images: BTreeMap<ImageId, Arc<Framebuffer>>,
-    placeholder: Arc<Framebuffer>,
-}
-
-impl ImageProvider for SessionImageProvider {
-    fn get(&self, image: ImageId) -> Result<Arc<Framebuffer>, GraphicsError> {
-        if let Some(frame) = self.images.get(&image) {
-            return Ok(Arc::clone(frame));
-        }
-        Ok(Arc::clone(&self.placeholder))
-    }
-}
-
-fn build_image_provider(images: &BTreeMap<ImageId, Framebuffer>) -> Arc<dyn ImageProvider> {
-    let map = images
-        .iter()
-        .map(|(&id, frame)| (id, Arc::new(frame.clone())))
-        .collect();
-    let placeholder = Arc::new(subresource::placeholder_framebuffer());
-    Arc::new(SessionImageProvider {
-        images: map,
-        placeholder,
-    })
 }
 
 fn make_constraints(surface_size: SurfaceSize) -> Result<ViewportConstraints, AlloyError> {
