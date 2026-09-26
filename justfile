@@ -141,9 +141,10 @@ arch:
     arch-lint check
 
 # Prove core/engine links no script interpreter (ADR-0002 / ADR-0011 item 2) and
-# that core/runtime/rhai names no domain crate (v0.5 report §2.12 — the R split).
+# that the no-window build links no winit/softbuffer.
 # Renamed from `no-engine` in v0.5 Phase P (kept as an alias below) — it now
-# covers every subsystem's layering rule, not only the engine's.
+# covers every subsystem's layering rule, not only the engine's. The per-crate
+# import boundaries (css/network/window/rhai-runtime) live in arch-lint.toml — `just arch`.
 layering:
     @{{cargo}} tree -p engine --edges normal --prefix none
     @if {{cargo}} tree -p engine --edges normal --prefix none \
@@ -151,26 +152,6 @@ layering:
         echo "✗ core/engine linked a script interpreter"; exit 1; \
     else \
         echo "✓ core/engine is interpreter-free"; \
-    fi
-    @if {{cargo}} tree -p rhai-runtime --edges normal --prefix none | grep -Eq '^dom '; then \
-        echo "✗ core/runtime/rhai depends on core/dom — the bridge belongs in rhai-bindings"; exit 1; \
-    else \
-        echo "✓ core/runtime/rhai is domain-crate free"; \
-    fi
-    @if {{cargo}} tree -p css --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then \
-        echo "✗ core/css linked the engine or a script runtime"; exit 1; \
-    else \
-        echo "✓ core/css is engine/rhai free"; \
-    fi
-    @if {{cargo}} tree -p network --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics) '; then \
-        echo "✗ core/network linked the engine, a script runtime or another subsystem"; exit 1; \
-    else \
-        echo "✓ core/network is engine/rhai/subsystem free"; \
-    fi
-    @if {{cargo}} tree -p window --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics|network) '; then \
-        echo "✗ core/window linked the engine, a script runtime or another subsystem"; exit 1; \
-    else \
-        echo "✓ core/window is engine/rhai/subsystem free"; \
     fi
     @if {{cargo}} tree -p window --no-default-features --edges normal --prefix none | grep -Eiq '^(winit|softbuffer) '; then \
         echo "✗ core/window --no-default-features still links winit/softbuffer"; exit 1; \
@@ -201,7 +182,7 @@ setup:
     rustup component add rustfmt clippy llvm-tools-preview
     @command -v cargo-deny     >/dev/null || {{cargo}} install --locked cargo-deny
     @command -v cargo-llvm-cov >/dev/null || {{cargo}} install --locked cargo-llvm-cov
-    @command -v arch-lint      >/dev/null || {{cargo}} install --locked arch-lint-cli
+    @command -v arch-lint      >/dev/null || {{cargo}} install --locked arch-lint-cli --version '^0.6'
     {{pnpm}} exec lefthook install
 
 # (Re)install the lefthook git hooks

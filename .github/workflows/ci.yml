@@ -117,47 +117,10 @@ jobs:
       - run: cargo test -p html --no-default-features
       - run: cargo test -p network --no-default-features
       - run: cargo test -p window --no-default-features
-      # PRD-007: core/css realises the cascade/layout ports without linking the
-      # engine or a script runtime — the scriptable adapter lives in
-      # rhai-bindings. It may depend on dom and graphics, and nothing else.
-      - name: css links no engine or script runtime
-        run: |
-          if cargo tree -p css --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings) '; then
-            echo "✗ core/css linked the engine or a script runtime"
-            exit 1
-          fi
-          echo "✓ core/css is engine/rhai free"
-      # PRD-009 / ADR-0019: core/network is a pure transport-and-policy domain.
-      # The scriptable RequestPolicy lives in rhai-bindings (Phase M).
-      - name: network links no engine, runtime or other subsystem
-        run: |
-          if cargo tree -p network --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics) '; then
-            echo "✗ core/network linked the engine, a script runtime or another subsystem"
-            exit 1
-          fi
-          echo "✓ core/network is engine/rhai/subsystem free"
-      # v0.5 report §2.12 (R): the pure Rhai backend must name no domain crate —
-      # the domain bridges live in `rhai-bindings`. `just no-engine` also asserts
-      # `rhai-runtime -> !dom` locally; this keeps it green in CI.
-      - name: rhai-runtime links no domain crate
-        run: |
-          if cargo tree -p rhai-runtime --edges normal --prefix none | grep -Eq '^dom '; then
-            echo "✗ core/runtime/rhai depends on core/dom — move the bridge to rhai-bindings"
-            exit 1
-          fi
-          echo "✓ core/runtime/rhai is domain-crate free"
-      # PRD-010 / ADR-0019: core/window is a pure window-system-and-presenter
-      # domain — no engine, no runtime, no other subsystem, and (unlike
-      # core/css) no core/graphics either; FrameView is the seam that keeps
-      # that edge from existing. The scriptable UI policy of Phase M lives in
-      # rhai-bindings.
-      - name: window links no engine, runtime or other subsystem
-        run: |
-          if cargo tree -p window --edges normal --prefix none | grep -Eiq '^(engine|rhai|rhai-runtime|rhai-bindings|dom|css|graphics|network) '; then
-            echo "✗ core/window linked the engine, a script runtime or another subsystem"
-            exit 1
-          fi
-          echo "✓ core/window is engine/rhai/subsystem free"
+      # PRD-007 / PRD-008 / PRD-009 / PRD-010 / v0.5 report §2.12 (R): the
+      # engine/script-runtime/subsystem import boundaries of core/css, core/network,
+      # core/window and core/runtime/rhai are `restrict-use` rules in arch-lint.toml,
+      # enforced by the `arch-lint` job below — no `cargo tree` grep needed here.
       # ADR-0011 item 6: --no-default-features is the no-window build — it must
       # link neither winit nor softbuffer at all. Enforced by the `arch-lint`
       # job's `window-backend-confined` restrict-use rule (arch-lint.toml),
@@ -334,10 +297,10 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/arch-lint
-          key: arch-lint-bin-0.5
+          key: arch-lint-bin-0.6
       - name: Install arch-lint
         run: |
-          test -x ~/.cargo/bin/arch-lint || cargo install arch-lint-cli --locked --version ^0.5
+          test -x ~/.cargo/bin/arch-lint || cargo install arch-lint-cli --locked --version ^0.6
       - run: arch-lint check
 
   coverage:
