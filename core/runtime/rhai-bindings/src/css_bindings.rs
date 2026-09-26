@@ -77,7 +77,7 @@ impl SnapshotHandle {
             .snapshot
             .node(id)
             .ok_or_else(|| css_error("tag", "invalid node id"))?;
-        Ok(node_ref.tag().unwrap_or("").to_owned())
+        Ok(node_ref.tag_str().unwrap_or("").to_owned())
     }
 
     fn attribute(&self, node_index: i64, name: &str) -> Result<Dynamic, Box<EvalAltResult>> {

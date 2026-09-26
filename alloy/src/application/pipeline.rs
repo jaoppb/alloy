@@ -59,7 +59,7 @@ pub fn render_html_to_png(html_str: &str, options: &RenderOptions) -> Result<Vec
     let sheets = css::collect_style_sheets(&snapshot)?;
     let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
     let constraints = make_constraints(surface_size)?;
-    let box_tree = BlockLayout::new().layout(&styled_tree, &constraints)?;
+    let box_tree = BlockLayout::monospace().layout(&styled_tree, &constraints)?;
 
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));

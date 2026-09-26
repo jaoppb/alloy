@@ -6,9 +6,9 @@
 
 use network::{
     Authority, Body, Charset, DecodeDefect, FramingDefect, HeaderMap, HeaderName, HeaderValue,
-    Host, HttpRequest, HttpResponse, MalformedPart, MediaType, Method, NetworkError, Path, Port,
-    ProtocolPhase, Query, RedirectDefect, RequestTarget, Scheme, StatusCode, Url, UrlDefect,
-    WireLimit,
+    Host, HttpRequest, HttpResponse, MalformedPart, MediaType, MediaTypeName, Method, NetworkError,
+    Path, Port, ProtocolPhase, Query, RedirectDefect, RequestTarget, Scheme, StatusCode, Url,
+    UrlDefect, WireLimit,
 };
 
 fn url(raw: &str) -> Url {
@@ -312,8 +312,8 @@ fn charset_labels_fold_into_the_two_supported_encodings() {
 #[test]
 fn a_media_type_parses_lowercases_and_prints_back() {
     let parsed = MediaType::parse("Text/HTML ; Foo=bar; charset=\"UTF-8\"").unwrap();
-    assert_eq!(parsed.type_name(), "text");
-    assert_eq!(parsed.subtype(), "html");
+    assert_eq!(parsed.type_name().as_str(), "text");
+    assert_eq!(parsed.subtype().as_str(), "html");
     assert_eq!(parsed.charset(), Some(Charset::Utf8));
     assert_eq!(parsed.essence(), "text/html");
     assert_eq!(parsed.to_string(), "text/html; charset=utf-8");
@@ -321,7 +321,12 @@ fn a_media_type_parses_lowercases_and_prints_back() {
         MediaType::parse("image/png").unwrap().to_string(),
         "image/png"
     );
-    assert_eq!(MediaType::new("Text", "CSS", None).essence(), "text/css");
+    let type_name = MediaTypeName::new("Text").unwrap();
+    let subtype = MediaTypeName::new("CSS").unwrap();
+    assert_eq!(
+        MediaType::new(type_name, subtype, None).essence(),
+        "text/css"
+    );
 }
 
 #[test]
