@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Media Queries</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .mq-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .responsive-card {
+      padding: 16px;
+      color: #ffffff;
+      font-size: 16px;
+      text-align: center;
+      background-color: #95a5a6; /* Cor padrão */
+    }
+
+    /* Aplica quando a largura da viewport for pelo menos 500px */
+    @media (min-width: 500px) {
+      .responsive-card {
+        background-color: #2ecc71; /* Verde em telas médias/largas */
+      }
+    }
+
+    /* Aplica quando a largura da viewport for no máximo 350px */
+    @media (max-width: 350px) {
+      .responsive-card {
+        background-color: #e74c3c; /* Vermelho em telas estreitas */
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Responsive Media Queries (@media)</h1>
+    <span class="badge">SPEC: CSS Media Queries L4 / Alloy core/css B1</span>
+    <div class="criteria-pass">
+      PASS: Em viewport &gt;= 500px a caixa é verde (#2ecc71); em viewport &lt;= 350px a caixa é vermelha (#e74c3c); em larguras intermediárias (351px a 499px) a caixa é cinza (#95a5a6).
+    </div>
+    <div class="criteria-fail">
+      FAIL: Regras de @media sendo ignoradas ou aplicadas independentemente da largura da viewport de renderização.
+    </div>
+  </div>
+
+  <div class="mq-section">
+    <h2>Cartão Responsivo Sensível ao Viewport</h2>
+    <div class="responsive-card">
+      Largura &gt;= 500px: Verde | &lt;= 350px: Vermelho | 351px-499px: Cinza
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>

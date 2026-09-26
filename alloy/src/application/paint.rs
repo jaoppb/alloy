@@ -10,26 +10,30 @@ use graphics::{
     GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
 };
 
+use crate::application::image_store::ImageStore;
+
 /// Default font identifier used for text painting in the headless pipeline.
 pub const DEFAULT_FONT: FontId = FontId::new(1);
 
 /// Paints all boxes in document order to the display list builder.
-pub fn paint_box_tree(
+pub fn paint_box_tree<F: FontProvider>(
     box_tree: &LayoutBoxTree,
     styled_tree: &StyledTree,
-    font_provider: &dyn FontProvider,
+    images: &ImageStore,
+    font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     for laid_out in box_tree.boxes_in_document_order() {
-        paint_single_box(laid_out, styled_tree, font_provider, builder)?;
+        paint_single_box(laid_out, styled_tree, images, font_provider, builder)?;
     }
     Ok(())
 }
 
-fn paint_single_box(
+fn paint_single_box<F: FontProvider>(
     laid_out: &LayoutBox,
     styled_tree: &StyledTree,
-    font_provider: &dyn FontProvider,
+    images: &ImageStore,
+    font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     let Some(styled_node) = styled_tree.node(laid_out.node()) else {
@@ -39,7 +43,7 @@ fn paint_single_box(
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
     paint_text(laid_out, styled_node, font_provider, builder)?;
-    paint_image(laid_out, builder)
+    paint_image(laid_out, images, builder)
 }
 
 fn paint_background(
@@ -142,9 +146,12 @@ fn paint_border_sides(
 
 fn paint_image(
     laid_out: &LayoutBox,
+    images: &ImageStore,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    if !laid_out.intrinsic_size().is_pending() {
+    let raw_id = u32::try_from(laid_out.node().index()).unwrap_or(u32::MAX);
+    let image_id = ImageId::new(raw_id);
+    if !images.contains(image_id) {
         return Ok(());
     }
     let content = laid_out.content();
@@ -152,15 +159,13 @@ fn paint_image(
         return Ok(());
     }
     let area = rect_to_px_rect(content);
-    let raw_id = u32::try_from(laid_out.node().index()).unwrap_or(0);
-    let image_id = ImageId::new(raw_id);
     builder.draw_image(image_id, area, area)
 }
 
-fn paint_text(
+fn paint_text<F: FontProvider>(
     laid_out: &LayoutBox,
     styled_node: &StyledNode,
-    font_provider: &dyn FontProvider,
+    font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     let Some(text_run) = styled_node.text() else {
@@ -192,12 +197,12 @@ fn paint_text(
     Ok(())
 }
 
-fn layout_glyphs(
+fn layout_glyphs<F: FontProvider>(
     text: &str,
     content: Rect,
     styled_node: &StyledNode,
     metrics: FaceMetrics,
-    font_provider: &dyn FontProvider,
+    font_provider: &F,
 ) -> Result<GlyphRun, GraphicsError> {
     let white_space = styled_node.style().white_space();
     let min_x = content.min_x();
@@ -243,11 +248,11 @@ fn layout_glyphs(
     Ok(run)
 }
 
-fn append_word_glyphs(
+fn append_word_glyphs<F: FontProvider>(
     word: &str,
     mut pen_x: Au,
     baseline_y: Au,
-    font_provider: &dyn FontProvider,
+    font_provider: &F,
     run: &mut GlyphRun,
 ) -> Result<Au, GraphicsError> {
     for ch in word.chars() {
@@ -261,7 +266,7 @@ fn append_word_glyphs(
     Ok(pen_x)
 }
 
-fn measure_text_run(text: &str, font_provider: &dyn FontProvider) -> Result<Au, GraphicsError> {
+fn measure_text_run<F: FontProvider>(text: &str, font_provider: &F) -> Result<Au, GraphicsError> {
     let mut total = Au::ZERO;
     for ch in text.chars() {
         let glyph = font_provider.glyph_for_char(DEFAULT_FONT, ch)?;
@@ -271,13 +276,13 @@ fn measure_text_run(text: &str, font_provider: &dyn FontProvider) -> Result<Au, 
     Ok(total)
 }
 
-fn layout_preformatted(
+fn layout_preformatted<F: FontProvider>(
     text: &str,
     min_x: Au,
     line_height: Au,
     ascent: Au,
     min_y: Au,
-    font_provider: &dyn FontProvider,
+    font_provider: &F,
     run: &mut GlyphRun,
 ) -> Result<(), GraphicsError> {
     let mut baseline_y = min_y.saturating_add(ascent);

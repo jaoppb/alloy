@@ -1,0 +1,10 @@
+services:
+  caddy:
+    image: caddy:alpine
+    container_name: alloy-web-tests
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/srv:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro

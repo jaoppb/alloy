@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSS Test: Cascade &amp; Specificity</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .cascade-section {
+      background-color: #ffffff;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    /* Especificidade: ID (1,0,0) vs Classe (0,1,0) vs Tipo (0,0,1) */
+    div.spec-box {
+      background-color: #e74c3c; /* Classe (0,1,1) */
+      color: #ffffff;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    #spec-winner {
+      background-color: #2ecc71; /* ID (1,0,0) deve vencer */
+    }
+
+    /* !important vence até mesmo maior especificidade */
+    #override-id {
+      background-color: #e74c3c;
+      color: #ffffff;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .important-rule {
+      background-color: #3498db !important; /* Vence o ID */
+    }
+
+    /* inherit e initial */
+    .parent-prop {
+      color: #8e44ad;
+      background-color: #f1f2f6;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .child-inherit {
+      color: inherit;
+      padding: 4px;
+    }
+    .child-initial {
+      color: initial;
+      padding: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-meta">
+    <h1>CSS Test: Cascade, Specificity &amp; Inheritance</h1>
+    <span class="badge">SPEC: CSS Cascade L4 / Alloy core/css B1-B2</span>
+    <div class="criteria-pass">
+      PASS: Teste 1 fica verde (#2ecc71) porque o ID vence a classe; Teste 2 fica azul (#3498db) porque !important vence o ID; Teste 3 herda a cor roxa (#8e44ad) com inherit; Teste 4 redefine a cor inicial com initial.
+    </div>
+    <div class="criteria-fail">
+      FAIL: Regras de menor especificidade sobrescrevendo regras de maior peso ou !important sendo ignorado.
+    </div>
+  </div>
+
+  <div class="cascade-section">
+    <h2>1. Resolução de Especificidade (ID vs Classe)</h2>
+    <div id="spec-winner" class="spec-box">
+      Esta caixa deve ser VERDE (#2ecc71) - ID vence Classe
+    </div>
+
+    <h2>2. Regra !important (Classe !important vs ID)</h2>
+    <div id="override-id" class="important-rule">
+      Esta caixa deve ser AZUL (#3498db) - !important vence ID
+    </div>
+
+    <h2>3. Herança Explícita (inherit vs initial)</h2>
+    <div class="parent-prop">
+      Texto pai em roxo (#8e44ad).
+      <p class="child-inherit">Filho com color: inherit &rarr; Roxo herdado</p>
+      <p class="child-initial">Filho com color: initial &rarr; Cor inicial padrão do agente de usuário</p>
+    </div>
+  </div>
+
+  <div class="nav-back">
+    <a href="/index.html">&larr; Voltar para a página inicial de testes</a>
+  </div>
+</body>
+</html>
