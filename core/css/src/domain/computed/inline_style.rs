@@ -93,3 +93,39 @@ impl fmt::Display for WhiteSpace {
         formatter.write_str(self.keyword())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_align_defaults_left_and_prints_each_keyword() {
+        assert_eq!(TextAlign::default(), TextAlign::Left);
+        for (align, keyword) in [
+            (TextAlign::Left, "left"),
+            (TextAlign::Right, "right"),
+            (TextAlign::Center, "center"),
+            (TextAlign::Justify, "justify"),
+        ] {
+            assert_eq!(align.keyword(), keyword);
+            assert_eq!(align.to_string(), keyword);
+        }
+    }
+
+    #[test]
+    fn white_space_answers_the_three_questions_the_inline_context_asks() {
+        // (mode, collapses spaces, allows soft wrap, preserves newlines)
+        let table = [
+            (WhiteSpace::Normal, true, true, false),
+            (WhiteSpace::NoWrap, true, false, false),
+            (WhiteSpace::Pre, false, false, true),
+        ];
+        for (mode, collapses, wraps, newlines) in table {
+            assert_eq!(mode.collapses_spaces(), collapses, "{mode}");
+            assert_eq!(mode.allows_soft_wrap(), wraps, "{mode}");
+            assert_eq!(mode.preserves_newlines(), newlines, "{mode}");
+        }
+        assert_eq!(WhiteSpace::default(), WhiteSpace::Normal);
+        assert_eq!(WhiteSpace::NoWrap.to_string(), "nowrap");
+    }
+}

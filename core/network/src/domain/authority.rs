@@ -28,7 +28,7 @@ impl Host {
         if raw.is_empty() {
             return Err(UrlDefect::MissingHost);
         }
-        if raw.chars().any(is_forbidden_in_host) {
+        if !is_well_formed_host(raw) {
             return Err(UrlDefect::MalformedHost);
         }
         Ok(Self(raw.to_ascii_lowercase()))
@@ -41,18 +41,43 @@ impl Host {
     }
 }
 
-/// `[` and `]` are permitted for IPv6 literals; `:` is not — the port is split
-/// off before a `Host` is ever built.
+/// An IPv6 literal is bracketed and may hold `:`; a registered name may not —
+/// its port is split off before a `Host` is ever built.
+fn is_well_formed_host(raw: &str) -> bool {
+    let bracketed = raw
+        .strip_prefix('[')
+        .and_then(|inner| inner.strip_suffix(']'));
+    bracketed.map_or_else(
+        || !raw.chars().any(is_forbidden_in_host),
+        |literal| !literal.is_empty() && literal.chars().all(is_ip_literal_character),
+    )
+}
+
+const fn is_ip_literal_character(character: char) -> bool {
+    character.is_ascii_hexdigit() || matches!(character, ':' | '.')
+}
+
 const fn is_forbidden_in_host(character: char) -> bool {
-    if matches!(character, '[' | ']') {
-        return false;
-    }
     !character.is_ascii()
         || character.is_ascii_control()
         || character.is_ascii_whitespace()
         || matches!(
             character,
-            ':' | '/' | '?' | '#' | '@' | '\\' | '"' | '\'' | '<' | '>' | '{' | '}' | '|' | '^'
+            '[' | ']'
+                | ':'
+                | '/'
+                | '?'
+                | '#'
+                | '@'
+                | '\\'
+                | '"'
+                | '\''
+                | '<'
+                | '>'
+                | '{'
+                | '}'
+                | '|'
+                | '^'
         )
 }
 

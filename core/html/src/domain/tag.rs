@@ -498,3 +498,169 @@ pub fn closes_list_item(tag: &str) -> bool {
 pub fn is_heading_tag(name: &str) -> bool {
     TagName::new(name).is_ok_and(|t| t.is_heading())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_standard_name_parses_case_insensitively_to_its_variant() {
+        assert_eq!(TagName::new("DIV"), Ok(TagName::Div));
+        assert_eq!("h3".parse::<TagName>(), Ok(TagName::H3));
+        assert_eq!(TagName::try_from("Span"), Ok(TagName::Span));
+        assert_eq!(TagName::try_from("br".to_owned()), Ok(TagName::Br));
+    }
+
+    #[test]
+    fn an_unknown_but_well_formed_name_is_a_custom_element() {
+        let tag = TagName::new("My-Widget").expect("valid custom element");
+        assert_eq!(tag, TagName::Custom("my-widget".to_owned()));
+        assert_eq!(tag.as_str(), "my-widget");
+        assert_eq!(tag.to_string(), "my-widget");
+    }
+
+    #[test]
+    fn a_malformed_name_is_a_typed_error() {
+        for raw in ["", "1div", "-x", "a b", "a_b"] {
+            assert_eq!(
+                TagName::new(raw),
+                Err(HtmlError::InvalidTag(raw.to_owned()))
+            );
+        }
+    }
+
+    #[test]
+    fn named_constructors_match_the_parsed_tag() {
+        let pairs = [
+            (TagName::html(), "html"),
+            (TagName::head(), "head"),
+            (TagName::body(), "body"),
+            (TagName::title(), "title"),
+            (TagName::style(), "style"),
+            (TagName::script(), "script"),
+            (TagName::p(), "p"),
+            (TagName::li(), "li"),
+            (TagName::div(), "div"),
+            (TagName::span(), "span"),
+            (TagName::a(), "a"),
+            (TagName::img(), "img"),
+            (TagName::video(), "video"),
+            (TagName::meta(), "meta"),
+            (TagName::link(), "link"),
+            (TagName::noscript(), "noscript"),
+        ];
+        for (constructed, name) in pairs {
+            assert_eq!(TagName::new(name), Ok(constructed));
+        }
+    }
+
+    #[test]
+    fn only_the_w3c_void_elements_are_void() {
+        for name in [
+            "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+            "source", "track", "wbr",
+        ] {
+            assert!(is_void_tag(name), "{name} must be void");
+        }
+        assert!(!is_void_tag("div"));
+        assert!(!is_void_tag("1bad"));
+    }
+
+    #[test]
+    fn only_script_and_style_are_rawtext() {
+        assert!(is_rawtext_tag("script"));
+        assert!(is_rawtext_tag("STYLE"));
+        assert!(!is_rawtext_tag("p"));
+        assert!(!is_rawtext_tag(""));
+    }
+
+    #[test]
+    fn block_level_membership_follows_the_content_model() {
+        for name in [
+            "address",
+            "article",
+            "aside",
+            "blockquote",
+            "details",
+            "dialog",
+            "dd",
+            "div",
+            "dl",
+            "dt",
+            "fieldset",
+            "figcaption",
+            "figure",
+            "footer",
+            "form",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "header",
+            "hgroup",
+            "hr",
+            "main",
+            "menu",
+            "nav",
+            "ol",
+            "p",
+            "pre",
+            "section",
+            "table",
+            "ul",
+        ] {
+            assert!(is_block_tag(name), "{name} must be block");
+            assert!(closes_paragraph(name), "{name} must close an open <p>");
+        }
+        assert!(!is_block_tag("span"));
+        assert!(!closes_paragraph("span"));
+    }
+
+    #[test]
+    fn only_li_closes_a_list_item() {
+        assert!(closes_list_item("li"));
+        assert!(!closes_list_item("ul"));
+    }
+
+    #[test]
+    fn headings_are_h1_through_h6() {
+        for name in ["h1", "h2", "h3", "h4", "h5", "h6"] {
+            assert!(is_heading_tag(name));
+        }
+        assert!(!is_heading_tag("header"));
+    }
+
+    #[test]
+    fn head_content_excludes_body_flow() {
+        for tag in [
+            TagName::Title,
+            TagName::Meta,
+            TagName::Style,
+            TagName::Link,
+            TagName::Script,
+            TagName::Noscript,
+        ] {
+            assert!(tag.is_head_content());
+        }
+        assert!(!TagName::Div.is_head_content());
+    }
+
+    #[test]
+    fn structural_predicates_identify_exactly_one_tag() {
+        assert!(TagName::Html.is_html() && !TagName::Head.is_html());
+        assert!(TagName::Head.is_head() && !TagName::Body.is_head());
+        assert!(TagName::Body.is_body() && !TagName::Html.is_body());
+    }
+
+    #[test]
+    fn comparison_with_a_string_ignores_ascii_case_in_both_directions() {
+        let tag = TagName::Div;
+        assert_eq!(tag, *"DIV");
+        assert_eq!(tag, "Div");
+        assert_eq!(*"dIv", tag);
+        assert_eq!("div", tag);
+        assert!(tag != "span");
+    }
+}

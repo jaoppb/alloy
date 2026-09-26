@@ -11,6 +11,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 network = { path = "../core/network", default-features = false }
 graphics = { path = "../core/graphics" }
+css = { path = "../core/css" }
 
 [[bin]]
 name = "inflate"
@@ -23,3 +24,11 @@ name = "png_decode"
 path = "fuzz_targets/png_decode.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "css_parse"
+path = "fuzz_targets/css_parse.rs"
+test = false
+doc = false
+
+[workspace]

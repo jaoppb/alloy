@@ -178,6 +178,10 @@ fn subsystem_profiles_match_prd_003() {
         Capability::DOM_READ | Capability::GRAPHICS_DRAW
     );
     assert_eq!(
+        profiles::css_cascade().granted(),
+        Capability::DOM_READ | Capability::GRAPHICS_DRAW
+    );
+    assert_eq!(
         profiles::network_interceptor().granted(),
         Capability::NETWORK_FETCH | Capability::FS_WRITE_CACHE
     );

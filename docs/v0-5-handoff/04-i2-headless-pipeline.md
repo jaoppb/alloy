@@ -54,11 +54,11 @@ grep -n "graphics\|css\|html" alloy/Cargo.toml
 
 ## Definition of Done
 
-- [ ] `alloy render page.html -o out.png` produz um PNG.
-- [ ] O PNG é byte-idêntico entre execuções (determinismo, ADR-0016).
-- [ ] Golden ponta a ponta em CI.
-- [ ] `--script <path>` continua funcionando como antes (nenhuma regressão do caminho v0.1/v0.2).
-- [ ] `cargo test --workspace` continua todo verde.
+- [x] `alloy render page.html -o out.png` produz um PNG.
+- [x] O PNG é byte-idêntico entre execuções (determinismo, ADR-0016).
+- [x] Golden ponta a ponta em CI.
+- [x] `--script <path>` continua funcionando como antes (nenhuma regressão do caminho v0.1/v0.2).
+- [x] `cargo test --workspace` continua todo verde.
 - [ ] **Checkpoint:** depois do commit, `git push -u origin feat/v0-5` e abrir um PR draft "v0.5 · I2 render headless"
       via `gh`.
 

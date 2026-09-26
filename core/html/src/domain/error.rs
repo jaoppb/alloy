@@ -37,3 +37,28 @@ impl HtmlError {
         Self::ParseError(message.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_variant_names_its_cause() {
+        assert_eq!(
+            HtmlError::parse("stray <").to_string(),
+            "Parse syntax error: stray <"
+        );
+        assert_eq!(
+            HtmlError::UnexpectedEof { state: "Data" }.to_string(),
+            "Unexpected end of input in state Data"
+        );
+        assert_eq!(
+            HtmlError::InvalidTag("1x".into()).to_string(),
+            "Invalid tag name: 1x"
+        );
+        assert_eq!(
+            HtmlError::InvalidAttribute("a b".into()).to_string(),
+            "Invalid attribute: a b"
+        );
+    }
+}
