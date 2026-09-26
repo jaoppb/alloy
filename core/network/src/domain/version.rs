@@ -44,3 +44,23 @@ impl fmt::Display for HttpVersion {
         formatter.write_str(self.as_str())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_two_supported_versions_round_trip_through_their_wire_token() {
+        for version in [HttpVersion::Http10, HttpVersion::Http11] {
+            assert_eq!(HttpVersion::parse(version.as_str()), Some(version));
+            assert_eq!(version.to_string(), version.as_str());
+        }
+    }
+
+    #[test]
+    fn any_other_token_is_refused() {
+        for raw in ["HTTP/2", "HTTP/0.9", "http/1.1", ""] {
+            assert_eq!(HttpVersion::parse(raw), None);
+        }
+    }
+}

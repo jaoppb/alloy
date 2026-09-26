@@ -79,3 +79,37 @@ impl fmt::Display for BoxSizing {
         formatter.write_str(self.keyword())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_is_the_default_and_never_resolves() {
+        assert_eq!(Sizing::default(), Sizing::Auto);
+        assert!(Sizing::Auto.is_auto());
+        assert_eq!(
+            Sizing::Auto.resolve(Au::from_raw(16 * 64), Au::from_raw(100 * 64)),
+            None
+        );
+        assert_eq!(Sizing::Auto.to_string(), "auto");
+    }
+
+    #[test]
+    fn a_fixed_length_resolves_and_prints_as_its_length() {
+        let sizing = Sizing::Fixed(Length::pixels(10.0));
+        assert!(!sizing.is_auto());
+        assert_eq!(
+            sizing.resolve(Au::from_raw(16 * 64), Au::from_raw(100 * 64)),
+            Length::pixels(10.0).resolve_to_au(Au::from_raw(16 * 64), Au::from_raw(100 * 64))
+        );
+        assert_eq!(sizing.to_string(), Length::pixels(10.0).to_string());
+    }
+
+    #[test]
+    fn box_sizing_defaults_to_the_content_box_and_prints_its_keyword() {
+        assert_eq!(BoxSizing::default(), BoxSizing::ContentBox);
+        assert_eq!(BoxSizing::ContentBox.to_string(), "content-box");
+        assert_eq!(BoxSizing::BorderBox.to_string(), "border-box");
+    }
+}

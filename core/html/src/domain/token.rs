@@ -236,3 +236,82 @@ pub enum Token {
     /// End of stream.
     EndOfFile,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attribute(name: &str, value: &str) -> AttributeEntry {
+        AttributeEntry::new(name, value).expect("valid attribute")
+    }
+
+    #[test]
+    fn an_attribute_name_is_lowercased_and_never_empty() {
+        let entry = attribute("HREF", "/x");
+        assert_eq!((entry.name(), entry.value()), ("href", "/x"));
+        assert_eq!(
+            AttributeEntry::new("", "v"),
+            Err(HtmlError::InvalidAttribute(
+                "attribute name cannot be empty".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn the_attribute_list_keeps_insertion_order_and_looks_up_by_name() {
+        let mut list = AttributeList::new();
+        assert!(list.is_empty());
+        list.push(attribute("id", "a"));
+        list.push(attribute("class", "b"));
+
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.get("class"), Some("b"));
+        assert_eq!(list.get("missing"), None);
+        let names: Vec<&str> = list.iter().map(AttributeEntry::name).collect();
+        assert_eq!(names, ["id", "class"]);
+        assert_eq!(list.as_slice().len(), 2);
+        assert_eq!((&list).into_iter().count(), 2);
+    }
+
+    #[test]
+    fn a_doctype_lowercases_its_name_and_exposes_every_field() {
+        let doctype = DoctypeToken::new(
+            Some("HTML".into()),
+            Some("pub".into()),
+            Some("sys".into()),
+            true,
+        );
+        assert_eq!(doctype.name(), Some("html"));
+        assert_eq!(doctype.public_id(), Some("pub"));
+        assert_eq!(doctype.system_id(), Some("sys"));
+        assert!(doctype.force_quirks());
+
+        let empty = DoctypeToken::default();
+        assert_eq!(empty.name(), None);
+        assert!(!empty.force_quirks());
+    }
+
+    #[test]
+    fn a_tag_token_validates_its_name_and_tracks_self_closing() {
+        let mut token = TagToken::parse("BR", AttributeList::new(), false).expect("valid tag");
+        assert_eq!(token.tag(), &TagName::Br);
+        assert_eq!(token.name(), "br");
+        assert!(!token.is_self_closing());
+
+        token.set_self_closing(true);
+        token.attributes_mut().push(attribute("id", "x"));
+        assert!(token.is_self_closing());
+        assert_eq!(token.attributes().get("id"), Some("x"));
+
+        assert_eq!(
+            TagToken::parse("1x", AttributeList::new(), false),
+            Err(HtmlError::InvalidTag("1x".into()))
+        );
+    }
+
+    #[test]
+    fn a_typed_tag_token_is_built_without_re_validation() {
+        let token = TagToken::new(TagName::P, AttributeList::new(), false);
+        assert_eq!(token.name(), "p");
+    }
+}
