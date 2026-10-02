@@ -18,7 +18,7 @@
 mod css_bindings;
 mod dom_bindings;
 mod dom_fallback;
-mod net_bindings;
+mod network_bindings;
 mod window_bindings;
 
 pub use css_bindings::{
@@ -26,7 +26,10 @@ pub use css_bindings::{
 };
 pub use dom_bindings::{NODE_HANDLE_BINDINGS, NodeHandle};
 pub use dom_fallback::{bind_dom, minimal_document, run_dom_with_fallback};
-pub use net_bindings::{NETWORK_BINDINGS, ScriptRequestPolicy, register_net_bindings};
+#[allow(deprecated)]
+pub use network_bindings::{
+    NETWORK_BINDINGS, ScriptRequestPolicy, register_net_bindings, register_network_bindings,
+};
 pub use window_bindings::{WINDOW_BINDINGS, register_window_bindings, run_ui_event_with_fallback};
 
 /// Embedded default UI policy script (`scripts/default_ui.rhai`).

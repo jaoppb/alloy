@@ -21,7 +21,8 @@ use engine::{
 use network::{HttpRequest, PolicyVerdict, RequestPolicy, Url};
 use rhai_bindings::{
     NETWORK_BINDINGS, ScriptCascadeResolver, ScriptRequestPolicy, WINDOW_BINDINGS,
-    minimal_document, run_dom_with_fallback, run_ui_event_with_fallback,
+    minimal_document, register_network_bindings, register_window_bindings, run_dom_with_fallback,
+    run_ui_event_with_fallback,
 };
 use rhai_runtime::RhaiEngine;
 
@@ -324,4 +325,28 @@ fn panicking_cascade_script_falls_back_to_ua_cascade() {
         outcome.is_ok(),
         "cascade should fall back to UaCascade on panic"
     );
+}
+
+#[test]
+fn registered_network_bindings_can_be_installed_and_invoked() {
+    let engine = RhaiEngine::new();
+    let mut context = engine
+        .create_context(profiles::network_interceptor())
+        .expect("context");
+    register_network_bindings(&mut context).expect("register");
+
+    let result = engine.eval_value(&mut context, r#"allow("request")"#);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn registered_window_bindings_can_be_installed_and_invoked() {
+    let engine = RhaiEngine::new();
+    let mut context = engine
+        .create_context(profiles::ui_window())
+        .expect("context");
+    register_window_bindings(&mut context).expect("register");
+
+    let result = engine.eval_value(&mut context, "repaint()");
+    assert!(result.is_ok());
 }

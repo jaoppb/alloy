@@ -5,13 +5,21 @@ fn on_init() {
     // Cascade policy initialization
 }
 
+fn on_event(event) {
+    // Style invalidation or lifecycle events
+}
+
+fn on_process(state) {
+    // Computed style batch processing
+}
+
 // Inspect DOM snapshot and apply computed styling overrides
 let total = dom.len();
-let i = 0;
-while i < total {
-    let tag_name = dom.tag(i);
+let current_index = 0;
+while current_index < total {
+    let tag_name = dom.tag(current_index);
     if tag_name == "h1" {
-        tree.set_color(i, "#ff0000");
+        tree.set_color(current_index, "#ff0000");
     }
-    i += 1;
+    current_index += 1;
 }

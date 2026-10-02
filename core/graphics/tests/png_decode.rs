@@ -276,3 +276,71 @@ fn multiple_idat_chunks_are_concatenated() {
     let decoded = decode_png(&png).expect("multiple IDATs should decode seamlessly");
     assert_eq!(decoded.pixel(0, 0), Some(Color::rgba(12, 34, 56, 78)));
 }
+
+#[test]
+fn refuses_trailing_data_after_iend() {
+    let mut png = build_png(1, 1, 6, 8, &[0, 255, 0, 0, 255]);
+    png.extend_from_slice(b"extra garbage bytes after IEND");
+
+    assert_eq!(decode_png(&png), Err(PngDecodeError::TrailingData));
+}
+
+#[test]
+fn refuses_duplicate_ihdr() {
+    let mut png = Vec::new();
+    png.extend_from_slice(&SIGNATURE);
+
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(&1_u32.to_be_bytes());
+    ihdr.extend_from_slice(&1_u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    append_chunk(&mut png, *b"IHDR", &ihdr);
+    append_chunk(&mut png, *b"IHDR", &ihdr);
+
+    let raw = [0, 255, 0, 0, 255];
+    let zlib_data = wrap_zlib_stored(&raw);
+    append_chunk(&mut png, *b"IDAT", &zlib_data);
+    append_chunk(&mut png, *b"IEND", &[]);
+
+    assert_eq!(decode_png(&png), Err(PngDecodeError::DuplicateIhdr));
+}
+
+#[test]
+fn refuses_ihdr_with_extra_payload() {
+    let mut png = Vec::new();
+    png.extend_from_slice(&SIGNATURE);
+
+    // 14 bytes instead of 13
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(&1_u32.to_be_bytes());
+    ihdr.extend_from_slice(&1_u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0, 0xff]);
+    append_chunk(&mut png, *b"IHDR", &ihdr);
+
+    assert_eq!(decode_png(&png), Err(PngDecodeError::Truncated));
+}
+
+#[test]
+fn handles_large_chunk_length_without_allocation_panic() {
+    let mut malicious = Vec::new();
+    malicious.extend_from_slice(&SIGNATURE);
+    // Chunk length: 0x8000_0000 (exceeds 2^31 - 1 limit)
+    malicious.extend_from_slice(&0x8000_0000_u32.to_be_bytes());
+    malicious.extend_from_slice(b"IHDR");
+    malicious.extend_from_slice(&[0; 13]);
+    malicious.extend_from_slice(&[0; 4]);
+
+    assert_eq!(decode_png(&malicious), Err(PngDecodeError::Truncated));
+}
+
+#[test]
+fn decodes_committed_golden_file_from_disk() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("golden")
+        .join("boxes.png");
+    let bytes = std::fs::read(&path).expect("boxes.png exists");
+    let frame = decode_png(&bytes).expect("committed golden boxes.png must decode via decode_png");
+    assert_eq!(frame.width(), 32);
+    assert_eq!(frame.height(), 32);
+}

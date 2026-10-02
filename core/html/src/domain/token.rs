@@ -1,102 +1,10 @@
 //! Value objects representing HTML5 tokens.
 
+use crate::domain::attribute::AttributeList;
 use crate::domain::error::HtmlError;
-
-/// An attribute entry belonging to a tag.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AttributeEntry {
-    name: String,
-    value: String,
-}
-
-impl AttributeEntry {
-    /// Create a validated, lowercased attribute entry.
-    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Result<Self, HtmlError> {
-        let name_string = name.into().to_ascii_lowercase();
-        if name_string.is_empty() {
-            return Err(HtmlError::InvalidAttribute(
-                "attribute name cannot be empty".into(),
-            ));
-        }
-        Ok(Self {
-            name: name_string,
-            value: value.into(),
-        })
-    }
-
-    /// The attribute name.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// The attribute value.
-    #[must_use]
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-}
-
-/// A first-class collection of element attributes.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AttributeList {
-    entries: Vec<AttributeEntry>,
-}
-
-impl AttributeList {
-    /// Create an empty attribute collection.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-
-    /// Push an entry to the collection.
-    pub fn push(&mut self, entry: AttributeEntry) {
-        self.entries.push(entry);
-    }
-
-    /// Number of attributes in the collection.
-    #[must_use]
-    pub const fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Checks if the collection is empty.
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    /// Iterator over the attribute entries.
-    pub fn iter(&self) -> core::slice::Iter<'_, AttributeEntry> {
-        self.entries.iter()
-    }
-    /// Slice of the attribute entries.
-    #[must_use]
-    pub fn as_slice(&self) -> &[AttributeEntry] {
-        &self.entries
-    }
-
-    /// Find an attribute value by name.
-    #[must_use]
-    pub fn get(&self, name: &str) -> Option<&str> {
-        self.entries
-            .iter()
-            .find(|entry| entry.name() == name)
-            .map(AttributeEntry::value)
-    }
-}
-
-impl<'a> IntoIterator for &'a AttributeList {
-    type Item = &'a AttributeEntry;
-    type IntoIter = core::slice::Iter<'a, AttributeEntry>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
+use crate::domain::location::SourceLocation;
+use crate::domain::tag::TagName;
+use crate::domain::text::Text;
 
 /// A DOCTYPE token representation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -117,14 +25,14 @@ impl DoctypeToken {
         force_quirks: bool,
     ) -> Self {
         Self {
-            name: name.map(|s| s.to_ascii_lowercase()),
+            name: name.map(|raw| raw.to_ascii_lowercase()),
             public_id,
             system_id,
             force_quirks,
         }
     }
 
-    /// The DOCTYPE root name (e.g. `"html"`).
+    /// The DOCTYPE root name, lowercased (e.g. `"html"`).
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
@@ -149,22 +57,20 @@ impl DoctypeToken {
     }
 }
 
-use crate::domain::tag::TagName;
-
 /// A `StartTag` or `EndTag` token payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagToken {
-    tag: TagName,
+    name: TagName,
     attributes: AttributeList,
     self_closing: bool,
 }
 
 impl TagToken {
-    /// Create a new tag token with a strongly-typed [`TagName`].
+    /// Create a new tag token with a validated tag name.
     #[must_use]
-    pub const fn new(tag: TagName, attributes: AttributeList, self_closing: bool) -> Self {
+    pub const fn new(name: TagName, attributes: AttributeList, self_closing: bool) -> Self {
         Self {
-            tag,
+            name,
             attributes,
             self_closing,
         }
@@ -173,27 +79,34 @@ impl TagToken {
     /// Parse and validate a tag token from a raw tag name.
     pub fn parse(
         name: &str,
+        location: SourceLocation,
         attributes: AttributeList,
         self_closing: bool,
     ) -> Result<Self, HtmlError> {
-        let tag = TagName::new(name)?;
+        let tag = TagName::new(name, location)?;
         Ok(Self {
-            tag,
+            name: tag,
             attributes,
             self_closing,
         })
     }
 
+    /// The tag name VO.
+    #[must_use]
+    pub const fn tag_name(&self) -> &TagName {
+        &self.name
+    }
+
     /// The strongly-typed tag name.
     #[must_use]
     pub const fn tag(&self) -> &TagName {
-        &self.tag
+        &self.name
     }
 
-    /// The tag name as a string slice.
+    /// The tag name as string slice.
     #[must_use]
     pub const fn name(&self) -> &str {
-        self.tag.as_str()
+        self.name.as_str()
     }
 
     /// The collection of attributes.
@@ -202,7 +115,7 @@ impl TagToken {
         &self.attributes
     }
 
-    /// Mutable reference to attributes for building tokens.
+    /// Mutable reference to attributes.
     pub const fn attributes_mut(&mut self) -> &mut AttributeList {
         &mut self.attributes
     }
@@ -230,9 +143,9 @@ pub enum Token {
     /// Closing tag.
     EndTag(TagToken),
     /// Sequence of character data.
-    Character(String),
+    Character(Text),
     /// Comment data.
-    Comment(String),
+    Comment(Text),
     /// End of stream.
     EndOfFile,
 }
@@ -240,21 +153,13 @@ pub enum Token {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::attribute::{AttributeEntry, AttributeName, AttributeValue};
 
     fn attribute(name: &str, value: &str) -> AttributeEntry {
-        AttributeEntry::new(name, value).expect("valid attribute")
-    }
-
-    #[test]
-    fn an_attribute_name_is_lowercased_and_never_empty() {
-        let entry = attribute("HREF", "/x");
-        assert_eq!((entry.name(), entry.value()), ("href", "/x"));
-        assert_eq!(
-            AttributeEntry::new("", "v"),
-            Err(HtmlError::InvalidAttribute(
-                "attribute name cannot be empty".into()
-            ))
-        );
+        AttributeEntry::new(
+            AttributeName::new_unchecked(name),
+            AttributeValue::new(value),
+        )
     }
 
     #[test]
@@ -265,12 +170,10 @@ mod tests {
         list.push(attribute("class", "b"));
 
         assert_eq!(list.len(), 2);
-        assert_eq!(list.get("class"), Some("b"));
-        assert_eq!(list.get("missing"), None);
-        let names: Vec<&str> = list.iter().map(AttributeEntry::name).collect();
+        assert_eq!(list.get_value_str("class"), Some("b"));
+        assert_eq!(list.get_value_str("missing"), None);
+        let names: Vec<&str> = list.iter().map(|entry| entry.name().as_str()).collect();
         assert_eq!(names, ["id", "class"]);
-        assert_eq!(list.as_slice().len(), 2);
-        assert_eq!((&list).into_iter().count(), 2);
     }
 
     #[test]
@@ -293,7 +196,9 @@ mod tests {
 
     #[test]
     fn a_tag_token_validates_its_name_and_tracks_self_closing() {
-        let mut token = TagToken::parse("BR", AttributeList::new(), false).expect("valid tag");
+        let location = SourceLocation::initial();
+        let mut token =
+            TagToken::parse("BR", location, AttributeList::new(), false).expect("valid tag");
         assert_eq!(token.tag(), &TagName::Br);
         assert_eq!(token.name(), "br");
         assert!(!token.is_self_closing());
@@ -301,11 +206,11 @@ mod tests {
         token.set_self_closing(true);
         token.attributes_mut().push(attribute("id", "x"));
         assert!(token.is_self_closing());
-        assert_eq!(token.attributes().get("id"), Some("x"));
+        assert_eq!(token.attributes().get_value_str("id"), Some("x"));
 
         assert_eq!(
-            TagToken::parse("1x", AttributeList::new(), false),
-            Err(HtmlError::InvalidTag("1x".into()))
+            TagToken::parse("1x", location, AttributeList::new(), false),
+            Err(HtmlError::invalid_tag("1x", location))
         );
     }
 
@@ -313,5 +218,18 @@ mod tests {
     fn a_typed_tag_token_is_built_without_re_validation() {
         let token = TagToken::new(TagName::P, AttributeList::new(), false);
         assert_eq!(token.name(), "p");
+    }
+
+    #[test]
+    fn character_and_comment_tokens_carry_their_text() {
+        assert!(matches!(
+            Token::Character(Text::new("hello")),
+            Token::Character(_)
+        ));
+        assert!(matches!(
+            Token::Comment(Text::new("note")),
+            Token::Comment(_)
+        ));
+        assert_eq!(Token::EndOfFile, Token::EndOfFile);
     }
 }
