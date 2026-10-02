@@ -33,6 +33,9 @@ pub fn consume_character_reference(cursor: &mut Cursor<'_>, output: &mut String)
 }
 
 /// Resolves a named or numeric entity name.
+///
+/// Named references cover only a small subset of the WHATWG table; the rest is tracked in
+/// <https://github.com/jaoppb/alloy/issues/31>.
 #[must_use]
 pub fn resolve_entity(name: &str) -> Option<String> {
     if let Some(stripped) = name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")) {
