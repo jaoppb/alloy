@@ -1,31 +1,12 @@
 //! Integration and domain tests for CSS Grid Layout Level 1/2.
 //! Covers track sizing, template areas, auto-flow, line placement, and gap.
 
-pub mod domain {
-    pub use css::domain::*;
-    pub mod computed {
-        pub use css::domain::computed::*;
-        pub mod grid {
-            pub use crate::grid::*;
-        }
-    }
-}
-pub mod infrastructure {
-    pub use css::infrastructure::*;
-}
-
-#[path = "../src/domain/computed/grid.rs"]
-pub mod grid;
-
-#[path = "../src/infrastructure/cascade/grid_values.rs"]
-pub mod grid_values;
-
-use css::domain::length::Length;
-use grid::{
+use css::domain::computed::grid::{
     GridAutoFlow, GridFr, GridGap, GridLine, GridPlacement, GridSpan, GridStyle, GridTemplateAreas,
     MaxTrackBreadth, MinTrackBreadth, TrackList, TrackSize,
 };
-use grid_values::{apply, inherit, reset, tokenize_value};
+use css::domain::length::Length;
+use css::infrastructure::cascade::grid_values::{self, apply, inherit, reset, tokenize_value};
 
 #[test]
 fn initial_grid_style_has_standard_defaults() {

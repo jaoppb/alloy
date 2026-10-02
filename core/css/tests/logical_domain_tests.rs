@@ -2,31 +2,15 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
-#[path = "../src/domain/computed/logical.rs"]
-pub mod logical;
-
-pub mod domain {
-    pub use css::domain::*;
-    pub mod computed {
-        pub use css::domain::computed::*;
-        pub mod logical {
-            pub use crate::logical::*;
-        }
-    }
-}
-pub use css::infrastructure;
-
-#[path = "../src/infrastructure/cascade/logical_values.rs"]
-pub mod logical_values;
-
 use css::ComputedStyle;
 use css::Length;
-use css::infrastructure::parser::token::Token;
-use css::infrastructure::parser::tokenize;
-use logical::{
+use css::domain::computed::logical::{
     Direction, LogicalAxis, LogicalEdges, LogicalInsets, LogicalSide, LogicalSizing, LogicalStyle,
     PhysicalAxis, PhysicalSide, WritingContext, WritingMode,
 };
+use css::infrastructure::cascade::logical_values;
+use css::infrastructure::parser::token::Token;
+use css::infrastructure::parser::tokenize;
 
 fn tokens(input: &str) -> Vec<Token> {
     tokenize(input)

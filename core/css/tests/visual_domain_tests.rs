@@ -2,33 +2,17 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
-#[path = "../src/domain/computed/visual.rs"]
-pub mod visual;
-
-pub mod domain {
-    pub use css::domain::*;
-    pub mod computed {
-        pub use crate::visual;
-        pub use css::domain::computed::*;
-    }
-}
-
-pub use css::infrastructure;
-
-#[path = "../src/infrastructure/cascade/visual_values.rs"]
-pub mod visual_values;
-
 use css::domain::color::CssColor;
 use css::domain::computed::sizing::Sizing;
 use css::domain::length::Length;
 use css::infrastructure::parser::tokenize;
 
-use visual::{
+use css::domain::computed::visual::{
     BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, BorderColorEdges,
     BorderRadius, BorderStyle, BorderStyleEdges, BoxShadow, BoxShadowList, Opacity,
     ShadowPlacement, VisualStyle,
 };
-use visual_values::{
+use css::infrastructure::cascade::visual_values::{
     apply_visual_property, inherit_visual_property, parse_background_image,
     parse_background_position, parse_background_repeat, parse_background_size, parse_border_color,
     parse_border_color_shorthand, parse_border_radius_corner, parse_border_radius_shorthand,

@@ -2,26 +2,12 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../src/domain/computed/variables.rs"]
-pub mod variables;
-
-pub mod domain {
-    pub use css::domain::declaration;
-    pub use css::domain::identifier;
-    pub mod computed {
-        pub use crate::variables;
-    }
-}
-
-#[path = "../src/infrastructure/cascade/variable_values.rs"]
-pub mod variable_values;
-
-use domain::computed::variables::{
+use css::domain::computed::variables::{
     CustomPropertiesMap, VariableError, VariableName, VariableValue,
 };
-use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
-use domain::identifier::Identifier;
-use variable_values::{
+use css::domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
+use css::domain::identifier::Identifier;
+use css::infrastructure::cascade::variable_values::{
     detect_cycle, extract_custom_properties, inherit_custom_properties,
     parse_custom_properties_block, parse_custom_property, resolve_declaration_value,
     resolve_variable, substitute_variables,
