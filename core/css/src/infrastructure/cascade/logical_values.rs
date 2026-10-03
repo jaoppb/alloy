@@ -9,6 +9,13 @@ use crate::domain::computed::sizing::Sizing;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
+// `parse_single_sizing` is the name the `inset-*` arms below were written
+// against; it is the canonical `parse_sizing` (one `auto` or one length), not a
+// second implementation.
+use crate::infrastructure::parser::values::{
+    length_from_token, parse_border_shorthand, parse_length, parse_sizing,
+    parse_sizing as parse_single_sizing,
+};
 
 /// Applies a logical property declaration using default writing context (horizontal-tb, ltr).
 #[must_use]
@@ -311,46 +318,6 @@ fn apply_insets(
     }
 }
 
-fn length_from_token(token: &Token) -> Option<Length> {
-    match token {
-        Token::Dimension(mag, unit) => match unit.to_ascii_lowercase().as_str() {
-            "px" => Some(Length::Pixels(*mag)),
-            "em" => Some(Length::Em(*mag)),
-            "rem" => Some(Length::Rem(*mag)),
-            "pt" => Some(Length::Points(*mag)),
-            _ => None,
-        },
-        Token::Percentage(mag) => Some(Length::Percent(*mag)),
-        Token::Number(mag) if *mag == 0.0 => Some(Length::ZERO),
-        _ => None,
-    }
-}
-
-fn parse_length(tokens: &[Token]) -> Option<Length> {
-    match tokens {
-        [only] => length_from_token(only),
-        _ => None,
-    }
-}
-
-fn parse_border_shorthand(tokens: &[Token]) -> Option<Length> {
-    if tokens
-        .iter()
-        .any(|t| matches!(t, Token::Ident(name) if name.eq_ignore_ascii_case("none")))
-    {
-        return Some(Length::ZERO);
-    }
-    tokens.iter().find_map(length_from_token)
-}
-
-fn parse_sizing(tokens: &[Token]) -> Option<Sizing> {
-    match tokens {
-        [Token::Ident(name)] if name.eq_ignore_ascii_case("auto") => Some(Sizing::Auto),
-        [only] => length_from_token(only).map(Sizing::Fixed),
-        _ => None,
-    }
-}
-
 fn parse_one_or_two_lengths(tokens: &[Token]) -> Option<(Length, Length)> {
     match tokens {
         [single] => {
@@ -366,23 +333,15 @@ fn parse_one_or_two_lengths(tokens: &[Token]) -> Option<(Length, Length)> {
     }
 }
 
-fn parse_single_sizing(tokens: &[Token]) -> Option<Sizing> {
-    match tokens {
-        [Token::Ident(name)] if name.eq_ignore_ascii_case("auto") => Some(Sizing::Auto),
-        [only] => length_from_token(only).map(Sizing::Fixed),
-        _ => None,
-    }
-}
-
 fn parse_one_or_two_sizings(tokens: &[Token]) -> Option<(Sizing, Sizing)> {
     match tokens {
         [single] => {
-            let sizing = parse_single_sizing(core::slice::from_ref(single))?;
+            let sizing = parse_sizing(core::slice::from_ref(single))?;
             Some((sizing, sizing))
         }
         [first, second] => {
-            let start = parse_single_sizing(core::slice::from_ref(first))?;
-            let end = parse_single_sizing(core::slice::from_ref(second))?;
+            let start = parse_sizing(core::slice::from_ref(first))?;
+            let end = parse_sizing(core::slice::from_ref(second))?;
             Some((start, end))
         }
         _ => None,

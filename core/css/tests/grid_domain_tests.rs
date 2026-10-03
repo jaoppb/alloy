@@ -2,8 +2,8 @@
 //! Covers track sizing, template areas, auto-flow, line placement, and gap.
 
 use css::domain::computed::grid::{
-    GridAutoFlow, GridFr, GridGap, GridLine, GridPlacement, GridSpan, GridStyle, GridTemplateAreas,
-    MaxTrackBreadth, MinTrackBreadth, TrackList, TrackSize,
+    GridAreaName, GridAutoFlow, GridFr, GridGap, GridLine, GridLineName, GridPlacement, GridSpan,
+    GridStyle, GridTemplateAreas, MaxTrackBreadth, MinTrackBreadth, TrackList, TrackSize,
 };
 use css::domain::length::Length;
 use css::infrastructure::cascade::grid_values::{self, apply, inherit, reset, tokenize_value};
@@ -366,9 +366,55 @@ fn display_implementations_are_clean() {
     let track = TrackSize::minmax(MinTrackBreadth::pixels(100.0), MaxTrackBreadth::fr(fr));
     assert_eq!(format!("{track}"), "minmax(100px, 2.5fr)");
 
-    let track_list = TrackList::from_tracks(&[TrackSize::pixels(50.0), TrackSize::Auto]);
+    let track_list = TrackList::from_tracks(&[TrackSize::pixels(50.0), TrackSize::Auto])
+        .expect("two tracks fit the capacity");
     assert_eq!(format!("{track_list}"), "50px auto");
 
     let gap = GridGap::new(Length::pixels(10.0), Length::pixels(20.0));
     assert_eq!(format!("{gap}"), "10px 20px");
+}
+
+#[test]
+fn track_list_from_tracks_refuses_more_than_capacity() {
+    let full = [TrackSize::Auto; TrackList::CAPACITY];
+    let accepted = TrackList::from_tracks(&full).expect("exactly CAPACITY tracks fit");
+    assert_eq!(accepted.len(), TrackList::CAPACITY);
+
+    let overflowing = [TrackSize::Auto; TrackList::CAPACITY + 1];
+    assert!(TrackList::from_tracks(&overflowing).is_none());
+
+    let empty = TrackList::from_tracks(&[]).expect("an empty list is `none`");
+    assert!(empty.is_none());
+}
+
+#[test]
+fn grid_names_preserve_case() {
+    let upper = GridAreaName::new("Nav").expect("valid area name");
+    let lower = GridAreaName::new("nav").expect("valid area name");
+    assert_ne!(upper, lower);
+    assert_eq!(upper.as_str(), "Nav");
+    assert_eq!(format!("{upper}"), "Nav");
+    assert!(GridAreaName::new("NONE").is_none());
+    assert!(GridAreaName::new("a".repeat(GridAreaName::CAPACITY + 1)).is_none());
+
+    let line = GridLineName::new("Header").expect("valid line name");
+    assert_eq!(line.as_str(), "Header");
+    assert_ne!(Some(line), GridLineName::new("header"));
+    assert!(GridLineName::new("Auto").is_none());
+}
+
+#[test]
+fn template_areas_from_matrix_keeps_distinct_case_areas() {
+    let upper = GridAreaName::new("Nav");
+    let lower = GridAreaName::new("nav");
+    let areas = GridTemplateAreas::from_matrix(&[vec![upper, lower], vec![upper, lower]])
+        .expect("two rectangular areas");
+    let upper_rect = areas.find_area("Nav").expect("Nav exists");
+    assert_eq!((upper_rect.row_start(), upper_rect.row_end()), (1, 3));
+    assert_eq!((upper_rect.column_start(), upper_rect.column_end()), (1, 2));
+    let lower_rect = areas.find_area("nav").expect("nav exists");
+    assert_eq!((lower_rect.column_start(), lower_rect.column_end()), (2, 3));
+
+    let split = GridTemplateAreas::from_matrix(&[vec![upper, lower, upper]]);
+    assert!(split.is_none(), "a disjoint area is not a rectangle");
 }

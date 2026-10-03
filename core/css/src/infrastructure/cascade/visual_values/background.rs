@@ -6,7 +6,7 @@ use crate::domain::computed::visual::{
 };
 use crate::infrastructure::parser::token::Token;
 
-use super::helpers::length_from_token;
+use crate::infrastructure::parser::values::length_from_token;
 
 #[must_use]
 pub fn parse_background_image(tokens: &[Token]) -> Option<BackgroundImage> {
@@ -34,9 +34,9 @@ pub fn parse_background_size(tokens: &[Token]) -> Option<BackgroundSize> {
             let width = size_component(single)?;
             Some(BackgroundSize::explicit(width, Sizing::Auto))
         }
-        [w, h] => {
-            let width = size_component(w)?;
-            let height = size_component(h)?;
+        [width_token, height_token] => {
+            let width = size_component(width_token)?;
+            let height = size_component(height_token)?;
             Some(BackgroundSize::explicit(width, height))
         }
         _ => None,

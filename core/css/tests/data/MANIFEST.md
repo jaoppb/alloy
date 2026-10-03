@@ -194,6 +194,23 @@ time, which has no `ParseNote` channel) and declared here in the same spirit as 
 | the list has no length limit in CSS      | at most `FontFamilyList::CAPACITY` (3) families are kept; a real chain ends in a generic and the provider default is a generic, so the dropped tail is equivalent | v0.7        |
 | a family name has no length limit in CSS | a name longer than `FamilyName::CAPACITY` (23) bytes is truncated at a UTF-8 boundary                                                                             | v0.7        |
 
+### Grid storage caps
+
+The grid computed values (`core/css/src/domain/computed/grid/`) are `Copy` and fixed-capacity, for the same reason as
+`font-family`. Unlike the font cuts, exceeding a cap **refuses the whole declaration** (the previous value stands) and
+the cascade parser emits a `tracing::warn!` — a truncated track list or area map would lay out a different grid, which
+is worse than no grid. Names are case-sensitive `<custom-ident>`s (CSS Values 4 §4.2): `Nav` and `nav` are two areas.
+
+| gap                                                       | behaviour instead                                                                              | tracked for |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------- |
+| a track list has no length limit in CSS                   | more than `TrackList::CAPACITY` (16) tracks, after `repeat()` expansion, is refused            | v0.7        |
+| `grid-template-areas` has no cell limit in CSS            | more than `GridTemplateAreas::CAPACITY` (64) cells is refused                                  | v0.7        |
+| area and line names have no length limit in CSS           | a name longer than `GridAreaName::CAPACITY` / `GridLineName::CAPACITY` (32) bytes is refused   | v0.7        |
+| `repeat()` takes `auto-fill` / `auto-fit` and named lines | only an integer count and plain track sizes; a nested `repeat()` is invalid CSS and is refused | v0.7        |
+
+`box-shadow` follows the same rule: more than `BoxShadowList::CAPACITY` (4) shadows is refused with a warning, never
+truncated.
+
 ## Selectors
 
 Written in the `E` / `F` element notation of the CSS specifications: one row is one grammatical form, not one example.

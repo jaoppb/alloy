@@ -71,6 +71,12 @@ impl GridLineName {
     pub const CAPACITY: usize = 32;
 
     /// Validates and constructs a named grid line identifier.
+    ///
+    /// The name is a `<custom-ident>`, so it is stored **case-sensitively**
+    /// (CSS Values 4 §4.2): `Nav` and `nav` are two different names. Only the
+    /// reserved keywords are matched ASCII case-insensitively. A name longer
+    /// than [`Self::CAPACITY`] bytes is `None` — a documented storage cap, which
+    /// the cascade parser reports with a warning.
     #[must_use]
     pub fn new(name: impl AsRef<str>) -> Option<Self> {
         let text = name.as_ref().trim();
@@ -81,10 +87,9 @@ impl GridLineName {
             return None;
         }
         let mut bytes = [0u8; Self::CAPACITY];
-        let lower = text.to_ascii_lowercase();
-        let slice = bytes.get_mut(..lower.len())?;
-        slice.copy_from_slice(lower.as_bytes());
-        let len = u8::try_from(lower.len()).ok()?;
+        let slice = bytes.get_mut(..text.len())?;
+        slice.copy_from_slice(text.as_bytes());
+        let len = u8::try_from(text.len()).ok()?;
         Some(Self { bytes, len })
     }
 

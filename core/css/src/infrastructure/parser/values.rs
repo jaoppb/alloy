@@ -33,7 +33,15 @@ const PERCENT_DIVISOR: f32 = 100.0;
 /// The non-whitespace tokens of a declaration's value.
 #[must_use]
 pub(crate) fn value_tokens(value: &DeclarationValue) -> Vec<Token> {
-    tokenize(value.as_str())
+    significant_tokens(value.as_str())
+}
+
+/// The non-whitespace tokens of raw value text — the one tokenizer path every
+/// value parser shares, so a value tokenized in a test reads exactly as the
+/// cascade sees it.
+#[must_use]
+pub(crate) fn significant_tokens(source: &str) -> Vec<Token> {
+    tokenize(source)
         .iter()
         .map(|spanned| spanned.token().clone())
         .filter(|token| !token.is_whitespace())
@@ -115,7 +123,8 @@ fn functional_color(tokens: &[Token]) -> Option<CssColor> {
 /// A function token's name and its arguments, stripped of the closing `)` —
 /// `value_tokens` already dropped every whitespace token, so the opening `(`
 /// is folded into [`Token::Function`] and never appears on its own.
-fn function_call(tokens: &[Token]) -> Option<(&str, &[Token])> {
+#[must_use]
+pub(crate) fn function_call(tokens: &[Token]) -> Option<(&str, &[Token])> {
     let [
         Token::Function(name),
         arguments @ ..,
@@ -131,7 +140,7 @@ fn function_call(tokens: &[Token]) -> Option<(&str, &[Token])> {
 /// (CSS Color L4 §5.1) — a malformed component (not a bare number) refuses
 /// the whole colour, an out-of-range one clamps rather than refusing.
 fn rgb_color(arguments: &[Token]) -> Option<CssColor> {
-    let parts = comma_separated(arguments);
+    let parts = split_top_level_commas(arguments);
     let [red, green, blue] = parts.as_slice() else {
         return None;
     };
@@ -145,7 +154,7 @@ fn rgb_color(arguments: &[Token]) -> Option<CssColor> {
 /// `rgba(r, g, b, a)`: the same three components as [`rgb_color`], plus an
 /// alpha given as `0`–`1` or a percentage.
 fn rgba_color(arguments: &[Token]) -> Option<CssColor> {
-    let parts = comma_separated(arguments);
+    let parts = split_top_level_commas(arguments);
     let [red, green, blue, alpha] = parts.as_slice() else {
         return None;
     };
@@ -157,10 +166,50 @@ fn rgba_color(arguments: &[Token]) -> Option<CssColor> {
     ))
 }
 
-fn comma_separated(tokens: &[Token]) -> Vec<&[Token]> {
-    tokens
-        .split(|token| matches!(token, Token::Comma))
-        .collect()
+/// `tokens` split at every comma that is not nested inside a function call or
+/// a parenthesised block (CSS Values 4 §2.6, the `#` multiplier separates
+/// top-level items only). Tokens are flat — `rgba(` is one [`Token::Function`]
+/// followed by its arguments and a [`Token::CloseParenthesis`] — so a plain
+/// split would cut `0 1px rgba(0, 0, 0, .2)` into four broken pieces.
+///
+/// Mirrors [`slice::split`]: no comma yields one part, a trailing comma yields
+/// a trailing empty part.
+#[must_use]
+pub(crate) fn split_top_level_commas(tokens: &[Token]) -> Vec<&[Token]> {
+    let mut parts = Vec::new();
+    let mut rest = tokens;
+    while let Some(comma) = top_level_comma(rest) {
+        let (part, tail) = rest.split_at(comma);
+        parts.push(part);
+        rest = tail.get(1..).unwrap_or_default();
+    }
+    parts.push(rest);
+    parts
+}
+
+/// The index of the first comma of `tokens` at parenthesis depth zero.
+fn top_level_comma(tokens: &[Token]) -> Option<usize> {
+    let mut depth: usize = 0;
+    tokens.iter().position(|token| {
+        let at_top_level = depth == 0 && matches!(token, Token::Comma);
+        depth = paren_depth(depth, token);
+        at_top_level
+    })
+}
+
+/// `tokens` cut into component values (CSS Syntax 3 §5.4.7): a whole function
+/// call — through its matching `)` — is one component, every other token is a
+/// component of its own. This is how a multi-token `rgba(…)` or `minmax(…)`
+/// reads as a single value in a space-separated list.
+pub(crate) fn component_values(tokens: &[Token]) -> impl Iterator<Item = &[Token]> {
+    let mut rest = tokens;
+    core::iter::from_fn(move || {
+        let head = rest.first()?;
+        let width = component_width(head, rest).clamp(1, rest.len());
+        let (component, tail) = rest.split_at(width);
+        rest = tail;
+        Some(component)
+    })
 }
 
 /// One `r` / `g` / `b` component: a bare integer, clamped into `[0, 255]`.
@@ -227,28 +276,23 @@ fn names_keyword(tokens: &[Token], keyword: &str) -> bool {
 /// The first run of `tokens` that reads as a colour — one `#hex` / name token,
 /// or a whole `rgb()` / `rgba()` call — scanning past everything else.
 fn first_color(tokens: &[Token]) -> Option<CssColor> {
-    let mut rest = tokens;
-    while let Some(head) = rest.first() {
-        let width = colour_run_len(head, rest).clamp(1, rest.len());
-        let (candidate, tail) = rest.split_at(width);
-        if let Some(color) = parse_color(candidate) {
-            return Some(color);
-        }
-        rest = tail;
-    }
-    None
+    component_values(tokens).find_map(parse_color)
 }
 
-/// How many tokens the colour candidate at `head` spans: a function call runs
+/// How many tokens the component at `head` spans: a function call runs
 /// through its matching `)`, anything else is a single token.
-fn colour_run_len(head: &Token, tokens: &[Token]) -> usize {
+fn component_width(head: &Token, tokens: &[Token]) -> usize {
     match head {
         Token::Function(_) => function_span(tokens),
         _ => 1,
     }
 }
 
-fn function_span(tokens: &[Token]) -> usize {
+/// How many tokens the function call opening `tokens` spans, its matching `)`
+/// included — or all of them when the call is never closed (CSS Syntax 3
+/// §5.4.9: end of input closes an open function).
+#[must_use]
+pub(crate) fn function_span(tokens: &[Token]) -> usize {
     let mut depth: usize = 0;
     for (index, token) in tokens.iter().enumerate() {
         depth = paren_depth(depth, token);
@@ -423,7 +467,7 @@ pub(crate) fn parse_font_family(tokens: &[Token]) -> Option<FontFamilyList> {
     if tokens.is_empty() {
         return None;
     }
-    let parts = comma_separated(tokens);
+    let parts = split_top_level_commas(tokens);
     let families: Option<Vec<FontFamily>> =
         parts.iter().map(|part| family_from_part(part)).collect();
     Some(FontFamilyList::from_families(families?))

@@ -10,7 +10,7 @@ use super::area_rect::GridAreaRect;
 pub struct GridTemplateAreas {
     cells: [Option<GridAreaName>; Self::CAPACITY],
     rows: u8,
-    cols: u8,
+    columns: u8,
 }
 
 impl Default for GridTemplateAreas {
@@ -29,7 +29,7 @@ impl GridTemplateAreas {
         Self {
             cells: [None; Self::CAPACITY],
             rows: 0,
-            cols: 0,
+            columns: 0,
         }
     }
 
@@ -48,138 +48,149 @@ impl GridTemplateAreas {
     /// Number of explicit template columns.
     #[must_use]
     pub fn column_count(&self) -> usize {
-        usize::from(self.cols)
+        usize::from(self.columns)
     }
 
-    /// Validates rectangular invariants and constructs template areas.
+    /// Validates rectangular invariants and constructs template areas. `None`
+    /// for a ragged matrix, a non-rectangular area, or more than
+    /// [`Self::CAPACITY`] cells.
     #[must_use]
     pub fn from_matrix(matrix: &[Vec<Option<GridAreaName>>]) -> Option<Self> {
         if matrix.is_empty() {
             return Some(Self::none());
         }
-        let cols = matrix.first()?.len();
-        if cols == 0 || matrix.iter().any(|r| r.len() != cols) {
+        let columns = matrix.first()?.len();
+        if columns == 0 || matrix.iter().any(|row| row.len() != columns) {
             return None;
         }
-        let rows = matrix.len();
-        if rows.saturating_mul(cols) > Self::CAPACITY {
+        if matrix.len().saturating_mul(columns) > Self::CAPACITY {
             return None;
         }
         let mut cells = [None; Self::CAPACITY];
-        for (r, row) in matrix.iter().enumerate() {
-            for (c, cell) in row.iter().enumerate() {
-                let idx = r.saturating_mul(cols).saturating_add(c);
-                if let Some(slot) = cells.get_mut(idx) {
-                    *slot = *cell;
-                }
-            }
+        for (slot, cell) in cells.iter_mut().zip(matrix.iter().flatten()) {
+            *slot = *cell;
         }
-        let res = Self {
+        let areas = Self {
             cells,
-            rows: u8::try_from(rows).ok()?,
-            cols: u8::try_from(cols).ok()?,
+            rows: u8::try_from(matrix.len()).ok()?,
+            columns: u8::try_from(columns).ok()?,
         };
-        if !res.validate_all_areas_rectangular() {
+        areas.all_areas_rectangular().then_some(areas)
+    }
+
+    fn cell(&self, row: usize, column: usize) -> Option<GridAreaName> {
+        if row >= self.row_count() || column >= self.column_count() {
             return None;
         }
-        Some(res)
+        let index = row
+            .saturating_mul(self.column_count())
+            .saturating_add(column);
+        self.cells.get(index).copied().flatten()
     }
 
-    fn cell(&self, r: usize, c: usize) -> Option<GridAreaName> {
-        let rows = usize::from(self.rows);
-        let cols = usize::from(self.cols);
-        if r >= rows || c >= cols {
-            return None;
-        }
-        let idx = r.saturating_mul(cols).saturating_add(c);
-        self.cells.get(idx).copied().flatten()
+    /// The occupied cells, row-major.
+    fn occupied_cells(&self) -> &[Option<GridAreaName>] {
+        let total = self.row_count().saturating_mul(self.column_count());
+        self.cells.get(..total).unwrap_or(&[])
     }
 
-    fn validate_all_areas_rectangular(&self) -> bool {
-        let mut checked: [Option<GridAreaName>; 16] = [None; 16];
-        let mut checked_len = 0;
-        let rows = usize::from(self.rows);
-        let cols = usize::from(self.cols);
-        for r in 0..rows {
-            for c in 0..cols {
-                let Some(name) = self.cell(r, c) else {
-                    continue;
-                };
-                if checked
-                    .get(..checked_len)
-                    .is_some_and(|s| s.contains(&Some(name)))
-                {
-                    continue;
-                }
-                if let Some(slot) = checked.get_mut(checked_len) {
-                    *slot = Some(name);
-                    checked_len = checked_len.saturating_add(1);
-                }
-                if !self.is_area_rectangular(name) {
-                    return false;
-                }
-            }
-        }
-        true
+    fn all_areas_rectangular(&self) -> bool {
+        self.occupied_cells()
+            .iter()
+            .flatten()
+            .all(|name| self.is_area_rectangular(*name))
     }
 
+    /// An area is valid when its bounding box holds exactly its own cells
+    /// (CSS Grid L1 §7.3: "a single filled-in rectangle").
     fn is_area_rectangular(&self, name: GridAreaName) -> bool {
-        let Some(rect) = self.find_area(name.as_str()) else {
+        let Some(rect) = self.area_rect(name) else {
             return false;
         };
-        let r_start = usize::try_from(rect.row_start()).unwrap_or(0);
-        let r_end = usize::try_from(rect.row_end()).unwrap_or(0);
-        let c_start = usize::try_from(rect.column_start()).unwrap_or(0);
-        let c_end = usize::try_from(rect.column_end()).unwrap_or(0);
-        for r in r_start..r_end {
-            for c in c_start..c_end {
-                if self.cell(r.saturating_sub(1), c.saturating_sub(1)) != Some(name) {
-                    return false;
-                }
-            }
-        }
-        let expected_cells = (usize::try_from(rect.row_span()).unwrap_or(0))
+        let expected_cells = usize::try_from(rect.row_span())
+            .unwrap_or(0)
             .saturating_mul(usize::try_from(rect.column_span()).unwrap_or(0));
         self.count_name_occurrences(name) == expected_cells
     }
 
     fn count_name_occurrences(&self, name: GridAreaName) -> usize {
-        let total = usize::from(self.rows).saturating_mul(usize::from(self.cols));
-        let slice = self.cells.get(..total).unwrap_or(&[]);
-        slice.iter().filter(|&&c| c == Some(name)).count()
+        self.occupied_cells()
+            .iter()
+            .filter(|cell| **cell == Some(name))
+            .count()
     }
 
-    /// Finds 1-based bounding box of an area name.
+    /// Finds the 1-based bounding box of an area name. The lookup is
+    /// case-sensitive, as area names are `<custom-ident>`s (CSS Values 4 §4.2).
     #[must_use]
     pub fn find_area(&self, name: &str) -> Option<GridAreaRect> {
-        let target = GridAreaName::new(name)?;
-        let mut min_r = usize::MAX;
-        let mut max_r = 0;
-        let mut min_c = usize::MAX;
-        let mut max_c = 0;
-        let mut found = false;
+        GridAreaName::new(name).and_then(|target| self.area_rect(target))
+    }
 
-        let rows = usize::from(self.rows);
-        let cols = usize::from(self.cols);
-        for r in 0..rows {
-            for c in 0..cols {
-                if self.cell(r, c) == Some(target) {
-                    found = true;
-                    min_r = min_r.min(r);
-                    max_r = max_r.max(r);
-                    min_c = min_c.min(c);
-                    max_c = max_c.max(c);
-                }
-            }
+    fn area_rect(&self, target: GridAreaName) -> Option<GridAreaRect> {
+        let mut positions = self.positions_of(target);
+        let first = positions.next()?;
+        positions
+            .fold(CellBounds::at(first), CellBounds::including)
+            .to_rect()
+    }
+
+    /// The 0-based `(row, column)` of every cell named `target`.
+    fn positions_of(&self, target: GridAreaName) -> impl Iterator<Item = (usize, usize)> + '_ {
+        let columns = self.column_count().max(1);
+        self.occupied_cells()
+            .chunks(columns)
+            .enumerate()
+            .flat_map(move |(row, cells)| {
+                cells
+                    .iter()
+                    .enumerate()
+                    .filter(move |(_, cell)| **cell == Some(target))
+                    .map(move |(column, _)| (row, column))
+            })
+    }
+}
+
+/// The 0-based, inclusive bounding box of the cells seen so far.
+#[derive(Clone, Copy)]
+struct CellBounds {
+    first_row: usize,
+    last_row: usize,
+    first_column: usize,
+    last_column: usize,
+}
+
+impl CellBounds {
+    /// The bounds of a single cell.
+    const fn at((row, column): (usize, usize)) -> Self {
+        Self {
+            first_row: row,
+            last_row: row,
+            first_column: column,
+            last_column: column,
         }
-        if !found {
-            return None;
+    }
+
+    /// These bounds grown to cover one more cell.
+    fn including(self, (row, column): (usize, usize)) -> Self {
+        Self {
+            first_row: self.first_row.min(row),
+            last_row: self.last_row.max(row),
+            first_column: self.first_column.min(column),
+            last_column: self.last_column.max(column),
         }
-        let r1 = u32::try_from(min_r).ok()?.saturating_add(1);
-        let c1 = u32::try_from(min_c).ok()?.saturating_add(1);
-        let r2 = u32::try_from(max_r).ok()?.saturating_add(2);
-        let c2 = u32::try_from(max_c).ok()?.saturating_add(2);
-        Some(GridAreaRect::new(r1, c1, r2, c2))
+    }
+
+    /// The 1-based grid lines around these cells: a cell at 0-based row `r`
+    /// sits between lines `r + 1` and `r + 2`.
+    fn to_rect(self) -> Option<GridAreaRect> {
+        let line = |index: usize, offset: u32| u32::try_from(index).ok()?.checked_add(offset);
+        Some(GridAreaRect::new(
+            line(self.first_row, 1)?,
+            line(self.first_column, 1)?,
+            line(self.last_row, 2)?,
+            line(self.last_column, 2)?,
+        ))
     }
 }
 
@@ -188,24 +199,28 @@ impl fmt::Display for GridTemplateAreas {
         if self.is_none() {
             return formatter.write_str("none");
         }
-        let rows = usize::from(self.rows);
-        let cols = usize::from(self.cols);
-        for r in 0..rows {
-            if r > 0 {
+        for row in 0..self.row_count() {
+            if row > 0 {
                 formatter.write_str(" ")?;
             }
-            formatter.write_str("\"")?;
-            for c in 0..cols {
-                if c > 0 {
-                    formatter.write_str(" ")?;
-                }
-                match self.cell(r, c) {
-                    Some(name) => write!(formatter, "{name}")?,
-                    None => formatter.write_str(".")?,
-                }
-            }
-            formatter.write_str("\"")?;
+            self.fmt_row(formatter, row)?;
         }
         Ok(())
+    }
+}
+
+impl GridTemplateAreas {
+    fn fmt_row(&self, formatter: &mut fmt::Formatter<'_>, row: usize) -> fmt::Result {
+        formatter.write_str("\"")?;
+        for column in 0..self.column_count() {
+            if column > 0 {
+                formatter.write_str(" ")?;
+            }
+            match self.cell(row, column) {
+                Some(name) => write!(formatter, "{name}")?,
+                None => formatter.write_str(".")?,
+            }
+        }
+        formatter.write_str("\"")
     }
 }

@@ -4,7 +4,7 @@ use crate::domain::computed::visual::BackgroundPosition;
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
 
-use super::helpers::length_from_token;
+use crate::infrastructure::parser::values::length_from_token;
 
 #[must_use]
 pub fn parse_background_position(tokens: &[Token]) -> Option<BackgroundPosition> {
