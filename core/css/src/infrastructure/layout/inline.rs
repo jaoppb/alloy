@@ -6,10 +6,20 @@
 //! font type is named here — filled greedily into lines, and each line is then
 //! aligned by `text-align` (CSS Text L3 §7.3).
 //!
+//! An `inline-block` descendant is an **atomic inline** (CSS 2.1 §9.2.4): it is
+//! laid out as its own block container through
+//! [`block::layout_inline_block`], then sits on a line as one unbreakable piece
+//! the size of its margin box, its baseline on its bottom margin edge (the
+//! CSS 2.1 §10.8.1 rule for an inline-block without in-flow line boxes, applied
+//! to every inline-block here). A `display: none` descendant contributes
+//! nothing.
+//!
 //! Two simplifications are declared in `core/css/tests/data/MANIFEST.md`:
 //! an inline box's fragment is the bounding box of its pieces (so an inline
 //! that spans two lines gets one rectangle, not two), and inline boxes carry no
 //! border or padding of their own.
+
+use std::collections::BTreeMap;
 
 use graphics::{Au, Point, Rect};
 
@@ -20,8 +30,9 @@ use crate::domain::error::CssError;
 use crate::domain::layout_box_tree::BoxEdges;
 use crate::domain::styled_tree::StyledNode;
 use crate::domain::text::TextMetrics;
+use crate::infrastructure::layout::block;
 use crate::infrastructure::layout::box_model;
-use crate::infrastructure::layout::context::{ContentFlow, LayoutContext};
+use crate::infrastructure::layout::context::{BlockInput, BlockResult, ContentFlow, LayoutContext};
 use crate::infrastructure::layout::fragment::{Fragment, Fragments, rect_at};
 
 /// The one space a collapsed run of white space becomes.
@@ -36,6 +47,8 @@ enum PieceKind {
     Space,
     /// A `\n` under `white-space: pre` — a mandatory break.
     Break,
+    /// An atomic inline (`inline-block`): placed like a word, never split.
+    Atomic,
 }
 
 /// One measured piece of an inline run.
@@ -91,61 +104,172 @@ impl Line {
     }
 }
 
-/// Lays a run of inline-level nodes out inside a content box `content_width`
-/// wide.
+/// Lays a run of inline-level nodes out inside the containing block `input`
+/// describes — the content box of the block container the run belongs to.
+/// `input` is what a child of that container is laid out with: an atomic
+/// inline in the run is laid out against it, one level deeper than the
+/// container, so `MAX_LAYOUT_DEPTH` still bounds the recursion.
 pub fn layout<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     items: &[SnapshotId],
-    content_width: Au,
-    font_size: Au,
+    input: BlockInput,
     align: TextAlign,
 ) -> Result<ContentFlow, CssError> {
-    let mut pieces = Vec::new();
+    let mut run = Run::new();
     for item in items {
-        collect(context, *item, font_size, &mut pieces)?;
+        collect(context, *item, input, &mut run)?;
     }
-    let lines = fill_lines(&pieces, content_width);
-    let placements = place(&lines, content_width, align);
-    let fragments = emit(context, items, &placements)?;
-    Ok(ContentFlow::new(placements.height, fragments))
+    let placements = place_run(&run.pieces, input.containing_width(), align);
+    let mut emitter = Emitter::new(context, &placements, run.atoms);
+    for item in items {
+        emitter.emit_node(*item)?;
+    }
+    Ok(ContentFlow::new(placements.height, emitter.finish()))
+}
+
+/// Lays the text a childless node carries itself (a text node blockified by a
+/// flex container, an `<input>`'s synthesized label) out as its container's
+/// only line content. The node *is* the container here, so its own display —
+/// `inline-block` for an `<input>` — is not consulted again, and the font size
+/// `input` carries is already the node's own.
+pub fn layout_own_text<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node_id: SnapshotId,
+    input: BlockInput,
+    align: TextAlign,
+) -> Result<ContentFlow, CssError> {
+    let styled = context.node(node_id)?;
+    let mut pieces = Vec::new();
+    collect_text(context, styled, input.parent_font_size(), &mut pieces)?;
+    let placements = place_run(&pieces, input.containing_width(), align);
+    let mut emitter = Emitter::new(context, &placements, Atoms::new());
+    emitter.emit_box(styled)?;
+    Ok(ContentFlow::new(placements.height, emitter.finish()))
+}
+
+fn place_run(pieces: &[Piece], content_width: Au, align: TextAlign) -> Placements {
+    let lines = fill_lines(pieces, content_width);
+    place(&lines, content_width, align)
 }
 
 // ---- collection and white-space processing --------------------------------
 
+/// What collecting a run produced: its measured pieces in document order, and
+/// the laid-out atomic inlines some of those pieces stand for.
+struct Run {
+    pieces: Vec<Piece>,
+    atoms: Atoms,
+}
+
+impl Run {
+    const fn new() -> Self {
+        Self {
+            pieces: Vec::new(),
+            atoms: Atoms::new(),
+        }
+    }
+}
+
+/// The laid-out atomic inlines of one run, keyed by node — a node is an atom
+/// at most once in a tree, and emission looks each one up by id.
+struct Atoms {
+    results: BTreeMap<SnapshotId, BlockResult>,
+}
+
+impl Atoms {
+    const fn new() -> Self {
+        Self {
+            results: BTreeMap::new(),
+        }
+    }
+
+    fn insert(&mut self, node: SnapshotId, result: BlockResult) {
+        self.results.insert(node, result);
+    }
+
+    fn take(&mut self, node: SnapshotId) -> Option<BlockResult> {
+        self.results.remove(&node)
+    }
+}
+
 /// Walks one inline-level node, appending its measured pieces in document
-/// order. An inline box contributes nothing itself; its descendants do.
+/// order. An inline box contributes nothing itself; its descendants do. An
+/// atomic inline contributes one piece for its whole box, and a `display:
+/// none` node contributes nothing at all.
 fn collect<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
-    parent_font_size: Au,
-    pieces: &mut Vec<Piece>,
+    input: BlockInput,
+    run: &mut Run,
 ) -> Result<(), CssError> {
     let styled = context.node(node_id)?;
     let style = styled.style();
-    let font_size = box_model::font_size_of(style, parent_font_size);
-    let Some(run) = styled.text() else {
-        return collect_children(context, styled, font_size, pieces);
-    };
-    let white_space = style.white_space();
-    append_text(
-        context,
-        node_id,
-        Setting::new(font_size, white_space),
-        run.as_str(),
-        pieces,
-    )
+    let display = style.display();
+    if display.is_none() {
+        return Ok(());
+    }
+    if display.is_atomic_inline() {
+        return collect_atom(context, styled, input, run);
+    }
+    let font_size = box_model::font_size_of(style, input.parent_font_size());
+    if styled.text().is_none() {
+        return collect_children(context, styled, input.with_parent_font_size(font_size), run);
+    }
+    collect_text(context, styled, font_size, &mut run.pieces)
 }
 
 fn collect_children<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     styled: &StyledNode,
+    input: BlockInput,
+    run: &mut Run,
+) -> Result<(), CssError> {
+    for child in styled.children().iter() {
+        collect(context, child, input, run)?;
+    }
+    Ok(())
+}
+
+/// Lays an atomic inline out as a block container and keeps it as one piece
+/// its margin box wide and tall, with its baseline on its bottom margin edge.
+fn collect_atom<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    styled: &StyledNode,
+    input: BlockInput,
+    run: &mut Run,
+) -> Result<(), CssError> {
+    let node_id = styled.node();
+    let result = block::layout_inline_block(context, node_id, input)?;
+    let metrics = TextMetrics::new(result.outer_width(), result.outer_height());
+    let style = styled.style();
+    run.pieces.push(Piece {
+        node: node_id,
+        kind: PieceKind::Atomic,
+        metrics,
+        white_space: style.white_space(),
+    });
+    run.atoms.insert(node_id, result);
+    Ok(())
+}
+
+/// The character data of `styled`, set at `font_size`.
+fn collect_text<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    styled: &StyledNode,
     font_size: Au,
     pieces: &mut Vec<Piece>,
 ) -> Result<(), CssError> {
-    for child in styled.children().iter() {
-        collect(context, child, font_size, pieces)?;
-    }
-    Ok(())
+    let Some(run) = styled.text() else {
+        return Ok(());
+    };
+    let style = styled.style();
+    append_text(
+        context,
+        styled.node(),
+        Setting::new(font_size, style.white_space()),
+        run.as_str(),
+        pieces,
+    )
 }
 
 /// The two things segmentation needs to know about the node the text came from.
@@ -378,7 +502,7 @@ impl LineFiller {
         match piece.kind {
             PieceKind::Break => self.force_break(piece),
             PieceKind::Space => self.hold_space(piece),
-            PieceKind::Word => self.place_word(piece),
+            PieceKind::Word | PieceKind::Atomic => self.place_word(piece),
         }
     }
 
@@ -601,50 +725,81 @@ fn widened_width(piece: Piece, extra: Extra, index: usize) -> Au {
 
 // ---- fragment emission ----------------------------------------------------
 
-/// One fragment per inline node, in document order: an inline box first, then
-/// the boxes it contains.
-fn emit<M: TextMeasurer>(
-    context: &LayoutContext<'_, M>,
-    items: &[SnapshotId],
-    placements: &Placements,
-) -> Result<Fragments, CssError> {
-    let mut fragments = Fragments::new();
-    for item in items {
-        emit_node(context, *item, placements, &mut fragments)?;
-    }
-    Ok(fragments)
+/// Turns placed pieces into fragments: one per inline node, in document
+/// order (an inline box first, then the boxes it contains), and an atomic
+/// inline's own laid-out fragments moved onto its slot on the line.
+struct Emitter<'run, 'tree, M> {
+    context: &'run LayoutContext<'tree, M>,
+    placements: &'run Placements,
+    atoms: Atoms,
+    fragments: Fragments,
 }
 
-fn emit_node<M: TextMeasurer>(
-    context: &LayoutContext<'_, M>,
-    node_id: SnapshotId,
-    placements: &Placements,
-    fragments: &mut Fragments,
-) -> Result<(), CssError> {
-    let styled = context.node(node_id)?;
-    let Some(bounds) = union_of(context, node_id, placements)? else {
-        return Ok(());
-    };
-    fragments.push(Fragment::new(
-        node_id,
-        bounds,
-        BoxEdges::ZERO,
-        styled.intrinsic_size(),
-        ChildIds::from_ids(styled.children().iter()),
-    ));
-    emit_children(context, styled, placements, fragments)
-}
-
-fn emit_children<M: TextMeasurer>(
-    context: &LayoutContext<'_, M>,
-    styled: &StyledNode,
-    placements: &Placements,
-    fragments: &mut Fragments,
-) -> Result<(), CssError> {
-    for child in styled.children().iter() {
-        emit_node(context, child, placements, fragments)?;
+impl<'run, 'tree, M: TextMeasurer> Emitter<'run, 'tree, M> {
+    const fn new(
+        context: &'run LayoutContext<'tree, M>,
+        placements: &'run Placements,
+        atoms: Atoms,
+    ) -> Self {
+        Self {
+            context,
+            placements,
+            atoms,
+            fragments: Fragments::new(),
+        }
     }
-    Ok(())
+
+    fn emit_node(&mut self, node_id: SnapshotId) -> Result<(), CssError> {
+        let styled = self.context.node(node_id)?;
+        let display = styled.style().display();
+        if display.is_none() {
+            return Ok(());
+        }
+        if display.is_atomic_inline() {
+            self.emit_atom(node_id);
+            return Ok(());
+        }
+        self.emit_box(styled)
+    }
+
+    /// An inline box's bounding fragment, then its children's.
+    fn emit_box(&mut self, styled: &StyledNode) -> Result<(), CssError> {
+        let node_id = styled.node();
+        let Some(bounds) = union_of(self.context, node_id, self.placements)? else {
+            return Ok(());
+        };
+        self.fragments.push(Fragment::new(
+            node_id,
+            bounds,
+            BoxEdges::ZERO,
+            styled.intrinsic_size(),
+            ChildIds::from_ids(styled.children().iter()),
+        ));
+        for child in styled.children().iter() {
+            self.emit_node(child)?;
+        }
+        Ok(())
+    }
+
+    /// The atom's piece occupies its margin box; its fragments are relative to
+    /// its border-box origin, one margin in from that.
+    fn emit_atom(&mut self, node_id: SnapshotId) {
+        let Some(result) = self.atoms.take(node_id) else {
+            return;
+        };
+        let Some(slot) = own_rect(node_id, self.placements) else {
+            return;
+        };
+        let margin = result.edges().margin();
+        let horizontal = slot.min_x().saturating_add(margin.left());
+        let vertical = slot.min_y().saturating_add(margin.top());
+        self.fragments
+            .absorb(result.into_fragments().translated(horizontal, vertical));
+    }
+
+    fn finish(self) -> Fragments {
+        self.fragments
+    }
 }
 
 /// The bounding rectangle of everything `node_id`'s subtree put on a line.

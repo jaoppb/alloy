@@ -26,7 +26,7 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 
 | token                        | since | notes                                                                                                                                                                                      |
 | ---------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `display`                    | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4                                                                                                      |
+| `display`                    | B1    | `none` / `block` / `inline` / `flex` (B4) / `inline-block` (atomic; shrink-to-fit by measuring layout; baseline = bottom margin edge) / `list-item` (as `block`, no marker)                |
 | `color`                      | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)                                                                                                       |
 | `background-color`           | B1    | not inherited; same value grammar as `color`                                                                                                                                               |
 | `background`                 | ddg   | shorthand narrowed to the background **colour**; `url()`, gradients, position/size/repeat scanned past, `none` clears; the image is not fetched (v0.7)                                     |

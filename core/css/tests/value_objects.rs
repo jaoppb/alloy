@@ -86,6 +86,22 @@ fn display_none_suppresses_the_box_and_keywords_round_trip() {
     assert_eq!(Display::default(), Display::Block);
 }
 
+/// The UA sheet's `inline-block` (form controls) and `list-item` (`<li>`) must
+/// parse — an unparsed keyword silently drops the whole UA rule (issues #2/#3).
+#[test]
+fn inline_block_and_list_item_parse_and_classify() {
+    assert_eq!("inline-block".parse(), Ok(Display::InlineBlock));
+    assert_eq!("list-item".parse(), Ok(Display::ListItem));
+    assert_eq!(Display::InlineBlock.keyword(), "inline-block");
+    assert_eq!(Display::ListItem.to_string(), "list-item");
+    assert!(Display::InlineBlock.is_inline_level());
+    assert!(Display::InlineBlock.is_atomic_inline());
+    assert!(Display::Inline.is_inline_level());
+    assert!(!Display::Inline.is_atomic_inline());
+    assert!(!Display::ListItem.is_inline_level());
+    assert!(!Display::Block.is_atomic_inline());
+}
+
 #[test]
 fn the_initial_computed_style_is_black_transparent_and_sixteen_pixels() {
     let initial = ComputedStyle::initial();

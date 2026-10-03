@@ -27,11 +27,13 @@ use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
 use crate::domain::error::CssError;
 use crate::domain::layout_box_tree::{LayoutBoxTree, LayoutBoxTreeBuilder};
+use crate::domain::length::Length;
 use crate::domain::styled_tree::{StyledNode, StyledTree};
 use crate::domain::viewport::ViewportConstraints;
 use crate::infrastructure::layout::box_model::{self, BoxMetrics, DEFAULT_FONT_SIZE};
 use crate::infrastructure::layout::context::{
-    BlockInput, BlockResult, BorderBoxSize, ContentFlow, LayoutContext, MAX_LAYOUT_DEPTH,
+    BlockInput, BlockResult, BorderBoxSize, ContainingBlock, ContentFlow, FittedWidth,
+    LayoutContext, MAX_LAYOUT_DEPTH,
 };
 use crate::infrastructure::layout::fragment::{Fragment, Fragments, rect_at};
 use crate::infrastructure::layout::margin_collapse::{
@@ -88,7 +90,8 @@ impl<M: TextMeasurer + Send + Sync> LayoutEngine for BlockLayout<M> {
         if !generates_box(&context, root) {
             return Ok(builder.finish(None));
         }
-        let input = BlockInput::new(constraints.width(), DEFAULT_FONT_SIZE);
+        let viewport = ContainingBlock::new(constraints.width(), Some(constraints.height()));
+        let input = BlockInput::new(viewport, DEFAULT_FONT_SIZE);
         let result = layout_box(&context, root, input)?;
         let placed = place_root(result);
         builder.push_all(placed.into_boxes());
@@ -134,7 +137,8 @@ pub(crate) fn layout_box<M: TextMeasurer>(
     let content_width = input
         .forced_content_width()
         .unwrap_or_else(|| metrics.content_width_within(input.containing_width()));
-    let children = layout_content(context, node, content_width, font_size, input)?;
+    let inner = ContainingBlock::new(content_width, definite_content_height(metrics, input));
+    let children = layout_content(context, node, inner, font_size, input)?;
     let result = assemble(
         context,
         node,
@@ -142,49 +146,143 @@ pub(crate) fn layout_box<M: TextMeasurer>(
         children,
         input,
     )?;
-    Ok(apply_relative_insets(
-        style,
-        font_size,
-        input.containing_width(),
-        result,
-    ))
+    Ok(apply_relative_insets(style, font_size, input, result))
+}
+
+/// Lays an atomic inline-level box (`display: inline-block`) out for a line.
+///
+/// An explicit `width` is used as-is. An `auto` width is shrink-to-fit
+/// (CSS 2.1 §10.3.9), approximated in two passes: lay the box out at the
+/// available width, measure the span its contents actually used, and lay it out
+/// again at that span. Block-level descendants with an `auto` width fill
+/// whatever they are given, so a box containing one stays at the available
+/// width — the missing intrinsic-sizing pass `flex.rs` also declares.
+///
+/// The measured width is remembered per node ([`LayoutContext::remembered_fit`]):
+/// without that, every nesting level would lay its whole subtree out twice and
+/// `n` nested inline-blocks would cost `2^n` layouts.
+pub(crate) fn layout_inline_block<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node_id: SnapshotId,
+    input: BlockInput,
+) -> Result<BlockResult, CssError> {
+    let style = context.node(node_id)?.style();
+    if style.width() != Sizing::Auto {
+        return layout_box(context, node_id, input);
+    }
+    let available = available_content_width(style, input)?;
+    let Some(fitted) = context.remembered_fit(node_id, available) else {
+        return measure_and_fit(context, node_id, input, available);
+    };
+    layout_box(context, node_id, input.with_forced_content_width(fitted))
+}
+
+/// The content width an `auto`-width box would get from its containing block.
+fn available_content_width(style: &ComputedStyle, input: BlockInput) -> Result<Au, CssError> {
+    let font_size = box_model::font_size_of(style, input.parent_font_size());
+    let metrics = box_model::resolve(style, font_size, input.containing_width())?;
+    Ok(metrics.content_width_within(input.containing_width()))
+}
+
+/// The first, measuring pass of shrink-to-fit — and the final one too when the
+/// contents already need the whole available width.
+fn measure_and_fit<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node_id: SnapshotId,
+    input: BlockInput,
+    available: Au,
+) -> Result<BlockResult, CssError> {
+    let measured = layout_box(context, node_id, input)?;
+    let fitted = measured.fitted_content_width();
+    context.remember_fit(node_id, FittedWidth::new(available, fitted));
+    if fitted == available {
+        return Ok(measured);
+    }
+    layout_box(context, node_id, input.with_forced_content_width(fitted))
+}
+
+/// The content height this box's children may resolve percentages against: a
+/// forced height (a flex item) or a declared one, never the height its
+/// content will produce (CSS 2.1 §10.5).
+fn definite_content_height(metrics: BoxMetrics, input: BlockInput) -> Option<Au> {
+    input.forced_content_height().or_else(|| metrics.height())
 }
 
 /// Applies the visual offset of `position: relative` to a laid-out result.
 ///
 /// A relatively-positioned box keeps its normal-flow position for purposes of
-/// margin collapse and sibling layout; only its paint rect shifts by the
-/// resolved `top` and `left` insets (CSS Positioned Layout L3 §4.3, §9.4.3).
-///
-/// `top` / `left` resolve `%` against `containing_width` (the horizontal
-/// dimension for both, per CSS 2.1 §10.1). When `top` is `auto` and `left` is
-/// `auto` — the common non-positioned case — this is a no-op.
+/// margin collapse and sibling layout; only its paint rect shifts (CSS 2.1
+/// §9.4.3, CSS Positioned Layout L3 §3.4). When every inset is `auto` — the
+/// common case — this is a no-op.
 fn apply_relative_insets(
     style: &ComputedStyle,
     font_size: Au,
-    containing_width: Au,
+    input: BlockInput,
     result: BlockResult,
 ) -> BlockResult {
-    if style.position().position() != PositionType::Relative {
+    let position = style.position();
+    if position.position() != PositionType::Relative {
         return result;
     }
-    let position = style.position();
-    let dx = resolve_inset(position.left(), font_size, containing_width);
-    let dy = resolve_inset(position.top(), font_size, containing_width);
+    let horizontal = Some(input.containing_width());
+    let dx = relative_offset(
+        Opposed::new(position.left(), position.right()),
+        font_size,
+        horizontal,
+    );
+    let dy = relative_offset(
+        Opposed::new(position.top(), position.bottom()),
+        font_size,
+        input.containing_height(),
+    );
     result.with_relative_offset(dx, dy)
 }
 
-/// Resolves one inset (`top` / `left`) to an [`Au`] offset.
-///
-/// `auto` and unresolvable percentages produce zero — the box does not move on
-/// that axis. A `%` inset resolves against `containing_width` (CSS 2.1 §10.1).
-fn resolve_inset(sizing: Sizing, font_size: Au, containing_width: Au) -> Au {
-    match sizing {
-        Sizing::Auto => Au::ZERO,
-        Sizing::Fixed(length) => length
-            .resolve_to_au(font_size, containing_width)
-            .unwrap_or(Au::ZERO),
+/// The two insets of one axis: `left`/`right` or `top`/`bottom`.
+#[derive(Clone, Copy)]
+struct Opposed {
+    start: Sizing,
+    end: Sizing,
+}
+
+impl Opposed {
+    const fn new(start: Sizing, end: Sizing) -> Self {
+        Self { start, end }
     }
+}
+
+/// CSS 2.1 §9.4.3: the start inset (`left` / `top`) moves the box by its own
+/// value; failing that, the end inset (`right` / `bottom`) moves it by minus
+/// its value; both `auto` leaves it in place. When both are set the start one
+/// wins (the `direction: ltr` rule — this engine has no `rtl`).
+fn relative_offset(insets: Opposed, font_size: Au, basis: Option<Au>) -> Au {
+    if let Some(offset) = resolve_inset(insets.start, font_size, basis) {
+        return offset;
+    }
+    resolve_inset(insets.end, font_size, basis)
+        .map_or(Au::ZERO, |offset| Au::ZERO.saturating_sub(offset))
+}
+
+/// Resolves one inset to an [`Au`] offset, or `None` when it behaves as `auto`.
+///
+/// A percentage resolves against `basis` — the containing block's width for
+/// `left` / `right`, its height for `top` / `bottom` (CSS 2.1 §9.3.2) — and
+/// against an indefinite height it computes to `auto`.
+fn resolve_inset(sizing: Sizing, font_size: Au, basis: Option<Au>) -> Option<Au> {
+    let Sizing::Fixed(length) = sizing else {
+        return None;
+    };
+    let reference = percentage_basis(length, basis)?;
+    length.resolve_to_au(font_size, reference)
+}
+
+/// What a length's percentage is measured against: `basis` itself, which a
+/// percentage needs to be definite; any other length ignores it.
+fn percentage_basis(length: Length, basis: Option<Au>) -> Option<Au> {
+    if length.is_percentage() {
+        return basis;
+    }
+    Some(basis.unwrap_or(Au::ZERO))
 }
 
 /// What resolving a node's own box produced, before its children are folded in.
@@ -300,7 +398,7 @@ fn used_content_height(
     input: BlockInput,
     escaping: Au,
 ) -> Au {
-    let declared = input.forced_content_height().or_else(|| metrics.height());
+    let declared = definite_content_height(metrics, input);
     declared.unwrap_or_else(|| children.height().saturating_add(escaping))
 }
 
@@ -398,30 +496,37 @@ fn keep_if_boxed(kept: &mut Vec<SnapshotId>, styled: &StyledNode, child: Snapsho
 
 // ---- the block formatting context ----------------------------------------
 
-/// One stretch of a block container's children: either a run of inline-level
-/// boxes forming an anonymous block, or one block-level box.
+/// One stretch of a block container's children: a run of inline-level boxes
+/// forming an anonymous block, one block-level box, or — for a childless node
+/// carrying text of its own (a text node blockified by a flex container, an
+/// `<input>` label) — that text as the container's only line content.
 enum Segment {
     Inline(Vec<SnapshotId>),
     Block(SnapshotId),
+    OwnText(SnapshotId),
 }
 
-/// The children of `node`, laid out inside a content box `content_width` wide.
+/// The children of `node`, laid out inside its content box `inner`.
 fn layout_content<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node: &StyledNode,
-    content_width: Au,
+    inner: ContainingBlock,
     font_size: Au,
     input: BlockInput,
 ) -> Result<ContentFlow, CssError> {
     if display_of(node) == Display::Flex {
-        return flex::layout(context, node, content_width, font_size, input);
+        return flex::layout(context, node, inner, font_size, input);
     }
     let segments = segments_of(context, node)?;
     if segments.is_empty() {
         return Ok(ContentFlow::empty());
     }
     let align = node.style().text_align();
-    stack_segments(context, &segments, content_width, font_size, align, input)
+    stack_segments(
+        context,
+        &segments,
+        Flowing::new(inner, font_size, align, input),
+    )
 }
 
 /// Splits the in-flow children into runs of inline-level boxes and single
@@ -450,7 +555,7 @@ fn push_child<M: TextMeasurer>(
     if display.is_none() {
         return Ok(());
     }
-    if display == Display::Inline {
+    if display.is_inline_level() {
         push_inline(segments, child);
         return Ok(());
     }
@@ -470,24 +575,17 @@ fn push_own_text(node: &StyledNode, segments: &mut Vec<Segment>) {
     if !segments.is_empty() || node.text().is_none() {
         return;
     }
-    segments.push(Segment::Inline(vec![node.node()]));
+    segments.push(Segment::OwnText(node.node()));
 }
 
 fn stack_segments<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     segments: &[Segment],
-    content_width: Au,
-    font_size: Au,
-    align: TextAlign,
-    input: BlockInput,
+    flowing: Flowing,
 ) -> Result<ContentFlow, CssError> {
     let mut stack = BlockStack::new();
     for segment in segments {
-        stack.absorb(
-            context,
-            segment,
-            Flowing::new(content_width, font_size, align, input),
-        )?;
+        stack.absorb(context, segment, flowing)?;
     }
     Ok(stack.finish())
 }
@@ -495,24 +593,31 @@ fn stack_segments<M: TextMeasurer>(
 /// The four values every segment of one block formatting context shares.
 #[derive(Clone, Copy)]
 struct Flowing {
-    content_width: Au,
+    inner: ContainingBlock,
     font_size: Au,
     align: TextAlign,
     input: BlockInput,
 }
 
 impl Flowing {
-    const fn new(content_width: Au, font_size: Au, align: TextAlign, input: BlockInput) -> Self {
+    const fn new(
+        inner: ContainingBlock,
+        font_size: Au,
+        align: TextAlign,
+        input: BlockInput,
+    ) -> Self {
         Self {
-            content_width,
+            inner,
             font_size,
             align,
             input,
         }
     }
 
+    /// The input every child of this container is laid out with: this
+    /// container's content box as its containing block, one level deeper.
     const fn nested(self) -> BlockInput {
-        self.input.nested(self.content_width, self.font_size)
+        self.input.nested(self.inner, self.font_size)
     }
 }
 
@@ -543,10 +648,17 @@ impl BlockStack {
         segment: &Segment,
         flowing: Flowing,
     ) -> Result<(), CssError> {
-        match segment {
-            Segment::Block(child) => self.absorb_block(context, *child, flowing),
-            Segment::Inline(items) => self.absorb_inline(context, items, flowing),
-        }
+        let lines = match segment {
+            Segment::Block(child) => return self.absorb_block(context, *child, flowing),
+            Segment::Inline(items) => {
+                inline::layout(context, items, flowing.nested(), flowing.align)?
+            }
+            Segment::OwnText(node) => {
+                inline::layout_own_text(context, *node, flowing.nested(), flowing.align)?
+            }
+        };
+        self.absorb_lines(lines);
+        Ok(())
     }
 
     fn absorb_block<M: TextMeasurer>(
@@ -565,19 +677,9 @@ impl BlockStack {
         Ok(())
     }
 
-    fn absorb_inline<M: TextMeasurer>(
-        &mut self,
-        context: &LayoutContext<'_, M>,
-        items: &[SnapshotId],
-        flowing: Flowing,
-    ) -> Result<(), CssError> {
-        let flow = inline::layout(
-            context,
-            items,
-            flowing.content_width,
-            flowing.font_size,
-            flowing.align,
-        )?;
+    /// Places one anonymous block of line boxes: it separates the margins on
+    /// either side of it, so nothing collapses through.
+    fn absorb_lines(&mut self, flow: ContentFlow) {
         self.leading.get_or_insert(CollapsedMargin::ZERO);
         let vertical = self.cursor.saturating_add(self.pending.resolve());
         let height = flow.height();
@@ -586,7 +688,6 @@ impl BlockStack {
         self.cursor = vertical.saturating_add(height);
         self.pending = CollapsedMargin::ZERO;
         self.flow = MarginFlow::Separated;
-        Ok(())
     }
 
     /// The first in-flow child's top margin does not push it down inside this

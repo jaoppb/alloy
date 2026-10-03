@@ -282,6 +282,7 @@ pub use domain::dom_snapshot::{
 };
 pub use domain::error::{CssError, CssStage, SourceSpan};
 pub use domain::identifier::Identifier;
+pub use domain::input_type::InputType;
 pub use domain::layout_box_tree::{EdgeSizes, LayoutBox, LayoutBoxTree};
 pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
