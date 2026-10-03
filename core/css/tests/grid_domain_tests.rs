@@ -309,31 +309,31 @@ fn cascade_apply_and_reset_properties() {
 
     // 1. grid-template-columns
     let cols_tok = tokenize_value("100px 1fr");
-    let s1 = apply(initial, "grid-template-columns", &cols_tok).expect("apply template-columns");
+    let s1 = apply(&initial, "grid-template-columns", &cols_tok).expect("apply template-columns");
     assert_eq!(s1.template_columns().len(), 2);
 
     // 2. grid-template-rows
     let rows_tok = tokenize_value("50px 2fr");
-    let s2 = apply(s1, "grid-template-rows", &rows_tok).expect("apply template-rows");
+    let s2 = apply(&s1, "grid-template-rows", &rows_tok).expect("apply template-rows");
     assert_eq!(s2.template_rows().len(), 2);
 
     // 3. grid-auto-columns & grid-auto-rows
     let auto_col = tokenize_value("120px");
-    let s3 = apply(s2, "grid-auto-columns", &auto_col).expect("apply auto-columns");
+    let s3 = apply(&s2, "grid-auto-columns", &auto_col).expect("apply auto-columns");
     assert_eq!(s3.auto_columns(), TrackSize::pixels(120.0));
 
     let auto_row = tokenize_value("min-content");
-    let s4 = apply(s3, "grid-auto-rows", &auto_row).expect("apply auto-rows");
+    let s4 = apply(&s3, "grid-auto-rows", &auto_row).expect("apply auto-rows");
     assert_eq!(s4.auto_rows(), TrackSize::MinContent);
 
     // 4. grid-auto-flow
     let flow_tok = tokenize_value("column dense");
-    let s5 = apply(s4, "grid-auto-flow", &flow_tok).expect("apply auto-flow");
+    let s5 = apply(&s4, "grid-auto-flow", &flow_tok).expect("apply auto-flow");
     assert_eq!(s5.auto_flow(), GridAutoFlow::ColumnDense);
 
     // 5. grid-column and grid-row
     let axis_placement_tok = tokenize_value("2 / span 3");
-    let s6 = apply(s5, "grid-column", &axis_placement_tok).expect("apply grid-column");
+    let s6 = apply(&s5, "grid-column", &axis_placement_tok).expect("apply grid-column");
     assert_eq!(
         s6.column_start(),
         &GridPlacement::Line(GridLine::new(2).unwrap())
@@ -345,16 +345,16 @@ fn cascade_apply_and_reset_properties() {
 
     // 6. gap
     let gap_tok = tokenize_value("8px 16px");
-    let s7 = apply(s6, "gap", &gap_tok).expect("apply gap");
+    let s7 = apply(&s6, "gap", &gap_tok).expect("apply gap");
     assert_eq!(s7.row_gap(), Length::pixels(8.0));
     assert_eq!(s7.column_gap(), Length::pixels(16.0));
 
     // Reset gap
-    let s8 = reset(s7, "gap").expect("reset gap");
+    let s8 = reset(&s7, "gap").expect("reset gap");
     assert_eq!(s8.gap(), GridGap::ZERO);
 
     // Inherit gap from parent
-    let s9 = inherit(s8, &s7, "gap").expect("inherit gap");
+    let s9 = inherit(&s8, &s7, "gap").expect("inherit gap");
     assert_eq!(s9.gap(), s7.gap());
 }
 

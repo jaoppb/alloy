@@ -19,7 +19,7 @@ pub fn tokenize_value(value_text: &str) -> Vec<Token> {
 
 /// Applies a CSS Grid property declaration to [`GridStyle`].
 #[must_use]
-pub fn apply(grid: GridStyle, property: &str, tokens: &[Token]) -> Option<GridStyle> {
+pub fn apply(grid: &GridStyle, property: &str, tokens: &[Token]) -> Option<GridStyle> {
     match property {
         "grid-template-columns" => {
             parse_track_list(tokens).map(|tracks| grid.with_template_columns(tracks))
@@ -57,17 +57,17 @@ pub fn apply(grid: GridStyle, property: &str, tokens: &[Token]) -> Option<GridSt
     }
 }
 
-fn apply_column_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> {
+fn apply_column_shorthand(grid: &GridStyle, tokens: &[Token]) -> Option<GridStyle> {
     let (start, end) = parse_placement_shorthand(tokens)?;
     Some(grid.with_column_start(start).with_column_end(end))
 }
 
-fn apply_row_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> {
+fn apply_row_shorthand(grid: &GridStyle, tokens: &[Token]) -> Option<GridStyle> {
     let (start, end) = parse_placement_shorthand(tokens)?;
     Some(grid.with_row_start(start).with_row_end(end))
 }
 
-fn apply_area_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> {
+fn apply_area_shorthand(grid: &GridStyle, tokens: &[Token]) -> Option<GridStyle> {
     let (row_start, column_start, row_end, column_end) = parse_grid_area_shorthand(tokens)?;
     Some(
         grid.with_row_start(row_start)
@@ -79,17 +79,17 @@ fn apply_area_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> 
 
 /// Resets a CSS Grid property to its initial value.
 #[must_use]
-pub fn reset(grid: GridStyle, property: &str) -> Option<GridStyle> {
+pub fn reset(grid: &GridStyle, property: &str) -> Option<GridStyle> {
     copy_property(grid, &GridStyle::initial(), property)
 }
 
 /// Inherits a CSS Grid property from a parent [`GridStyle`].
 #[must_use]
-pub fn inherit(grid: GridStyle, parent: &GridStyle, property: &str) -> Option<GridStyle> {
+pub fn inherit(grid: &GridStyle, parent: &GridStyle, property: &str) -> Option<GridStyle> {
     copy_property(grid, parent, property)
 }
 
-fn copy_property(grid: GridStyle, source: &GridStyle, property: &str) -> Option<GridStyle> {
+fn copy_property(grid: &GridStyle, source: &GridStyle, property: &str) -> Option<GridStyle> {
     match property {
         "grid-template-columns" => Some(grid.with_template_columns(*source.template_columns())),
         "grid-template-rows" => Some(grid.with_template_rows(*source.template_rows())),
@@ -111,17 +111,17 @@ fn copy_property(grid: GridStyle, source: &GridStyle, property: &str) -> Option<
     }
 }
 
-const fn copy_column(grid: GridStyle, source: &GridStyle) -> GridStyle {
+const fn copy_column(grid: &GridStyle, source: &GridStyle) -> GridStyle {
     grid.with_column_start(*source.column_start())
         .with_column_end(*source.column_end())
 }
 
-const fn copy_row(grid: GridStyle, source: &GridStyle) -> GridStyle {
+const fn copy_row(grid: &GridStyle, source: &GridStyle) -> GridStyle {
     grid.with_row_start(*source.row_start())
         .with_row_end(*source.row_end())
 }
 
-const fn copy_area(grid: GridStyle, source: &GridStyle) -> GridStyle {
+const fn copy_area(grid: &GridStyle, source: &GridStyle) -> GridStyle {
     grid.with_row_start(*source.row_start())
         .with_column_start(*source.column_start())
         .with_row_end(*source.row_end())

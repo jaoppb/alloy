@@ -6,12 +6,12 @@ use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::parse_constraint_sizing;
 
 pub(crate) fn apply(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let constraints = style.constraints();
-    updated(constraints, property, tokens).map(|changed| style.with_constraints(changed))
+    updated(constraints, property, tokens).map(|changed| style.clone().with_constraints(changed))
 }
 
 fn updated(
@@ -20,20 +20,28 @@ fn updated(
     tokens: &[Token],
 ) -> Option<SizingConstraints> {
     match property {
-        "min-width" => parse_constraint_sizing(tokens).map(|val| constraints.with_min_width(val)),
-        "max-width" => parse_constraint_sizing(tokens).map(|val| constraints.with_max_width(val)),
-        "min-height" => parse_constraint_sizing(tokens).map(|val| constraints.with_min_height(val)),
-        "max-height" => parse_constraint_sizing(tokens).map(|val| constraints.with_max_height(val)),
+        "min-width" => {
+            parse_constraint_sizing(tokens).map(|value| constraints.with_min_width(value))
+        }
+        "max-width" => {
+            parse_constraint_sizing(tokens).map(|value| constraints.with_max_width(value))
+        }
+        "min-height" => {
+            parse_constraint_sizing(tokens).map(|value| constraints.with_min_height(value))
+        }
+        "max-height" => {
+            parse_constraint_sizing(tokens).map(|value| constraints.with_max_height(value))
+        }
         _ => None,
     }
 }
 
-pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+pub(crate) fn reset(style: &ComputedStyle, property: &str) -> Option<ComputedStyle> {
     copy_from(style, SizingConstraints::initial(), property)
 }
 
 pub(crate) fn inherit(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     parent: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
@@ -41,7 +49,7 @@ pub(crate) fn inherit(
 }
 
 fn copy_from(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     source: SizingConstraints,
     property: &str,
 ) -> Option<ComputedStyle> {
@@ -53,5 +61,5 @@ fn copy_from(
         "max-height" => current.with_max_height(source.max_height()),
         _ => return None,
     };
-    Some(style.with_constraints(updated))
+    Some(style.clone().with_constraints(updated))
 }

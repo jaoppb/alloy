@@ -185,9 +185,11 @@ shrinkage:
 
 ### Font simplifications (fonts increment)
 
-`font-family` is a `Copy` field of `ComputedStyle` (`core/css/src/domain/computed/font.rs`), which is copied per node
-during layout, so the list is fixed-capacity rather than a `Vec`. Two cuts, silent (the value is parsed only at cascade
-time, which has no `ParseNote` channel) and declared here in the same spirit as the Flexbox cuts:
+`font-family` is an inline field of `ComputedStyle` (`core/css/src/domain/computed/font.rs`), which is cloned at every
+cascade step and stored per styled node, so the list is fixed-capacity rather than a `Vec` that would allocate on each
+clone. (`ComputedStyle` itself is `Clone`, not `Copy`, since `css::PORT_SCHEMA_VERSION` `8`.) Two cuts, silent (the
+value is parsed only at cascade time, which has no `ParseNote` channel) and declared here in the same spirit as the
+Flexbox cuts:
 
 | gap                                      | behaviour instead                                                                                                                                                 | tracked for |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
@@ -196,10 +198,12 @@ time, which has no `ParseNote` channel) and declared here in the same spirit as 
 
 ### Grid storage caps
 
-The grid computed values (`core/css/src/domain/computed/grid/`) are `Copy` and fixed-capacity, for the same reason as
-`font-family`. Unlike the font cuts, exceeding a cap **refuses the whole declaration** (the previous value stands) and
-the cascade parser emits a `tracing::warn!` — a truncated track list or area map would lay out a different grid, which
-is worse than no grid. Names are case-sensitive `<custom-ident>`s (CSS Values 4 §4.2): `Nav` and `nav` are two areas.
+The grid computed values (`core/css/src/domain/computed/grid/`) are `Copy` and fixed-capacity, so a `GridStyle` is one
+flat value; `ComputedStyle` keeps it behind a shared `Arc` that stays empty while every grid property is `initial`, so
+the caps cost nothing on a node that sets no grid property. Unlike the font cuts, exceeding a cap **refuses the whole
+declaration** (the previous value stands) and the cascade parser emits a `tracing::warn!` — a truncated track list or
+area map would lay out a different grid, which is worse than no grid. Names are case-sensitive `<custom-ident>`s (CSS
+Values 4 §4.2): `Nav` and `nav` are two areas.
 
 | gap                                                       | behaviour instead                                                                              | tracked for |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------- |

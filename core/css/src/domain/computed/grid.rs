@@ -1,7 +1,8 @@
 //! Computed-value types for CSS Grid Layout Level 1/2 (CSS Grid L1 §7–§8).
 //!
 //! Grouped into [`GridStyle`] (`ADR-0010` rule 7) to keep [`crate::domain::computed::style::ComputedStyle`]
-//! focused, readable, and `Copy`.
+//! focused and readable. The group is ~2.9 KB, so `ComputedStyle` holds it behind a shared `Arc`, empty
+//! while every grid property is `initial` (schema 8).
 
 #[path = "grid/area_name.rs"]
 pub mod area_name;

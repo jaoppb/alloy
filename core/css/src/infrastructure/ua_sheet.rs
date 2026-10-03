@@ -19,7 +19,7 @@
 //! `infrastructure/cascade/values.rs`'s (B2, same phase). What a node hands
 //! its children beyond its style — its custom properties and its computed
 //! font size — travels in an [`InheritedContexts`] side table built alongside
-//! the styled tree, because neither fits the `Copy` style aggregate.
+//! the styled tree, because neither belongs in the style aggregate.
 
 use std::collections::BTreeMap;
 
@@ -150,9 +150,10 @@ fn cascade_style(
 /// express — the fixed `display` a document, a text run or a comment gets.
 fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> ComputedStyle {
     let base = parent.map_or_else(ComputedStyle::initial, ComputedStyle::inheriting_from);
-    node_ref
-        .tag()
-        .map_or_else(|| style_for_non_element(base, node_ref.kind()), |_tag| base)
+    if node_ref.tag().is_some() {
+        return base;
+    }
+    style_for_non_element(base, node_ref.kind())
 }
 
 /// A non-element node: no selector ever chooses one (`application/matching.rs`
@@ -160,7 +161,7 @@ fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> Computed
 /// one. An element's default is already [`Display::Block`] from
 /// [`ComputedStyle::initial`], which is why this arm is the only one that
 /// still needs Rust after `assets/ua.css` took over every per-tag exception.
-const fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
+fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
     match kind {
         SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
         SnapshotNodeKind::Text => base.with_display(Display::Inline),

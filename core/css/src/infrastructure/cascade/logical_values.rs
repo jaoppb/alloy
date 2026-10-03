@@ -17,6 +17,7 @@ use crate::domain::computed::logical::{
     PhysicalAxis, WritingContext, WritingMode,
 };
 use crate::domain::computed::sizing::Sizing;
+use crate::domain::computed::sizing_constraints::SizingConstraints;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
@@ -38,14 +39,14 @@ pub(crate) fn sets_writing_context(property: &str) -> bool {
 
 /// Applies a logical property declaration using default writing context (horizontal-tb, ltr).
 #[must_use]
-pub fn apply(style: ComputedStyle, property: &str, tokens: &[Token]) -> Option<ComputedStyle> {
+pub fn apply(style: &ComputedStyle, property: &str, tokens: &[Token]) -> Option<ComputedStyle> {
     apply_with_context(style, WritingContext::default(), property, tokens)
 }
 
 /// Applies a logical property declaration using the specified writing context.
 #[must_use]
 pub fn apply_with_context(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
@@ -58,7 +59,7 @@ pub fn apply_with_context(
 }
 
 fn apply_sizing(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
@@ -66,65 +67,66 @@ fn apply_sizing(
     let size = parse_sizing(tokens)?;
     match (property, context.map_axis(LogicalAxis::Inline)) {
         ("inline-size", PhysicalAxis::Horizontal) | ("block-size", PhysicalAxis::Vertical) => {
-            Some(style.with_width(size))
+            Some(style.clone().with_width(size))
         }
         ("inline-size", PhysicalAxis::Vertical) | ("block-size", PhysicalAxis::Horizontal) => {
-            Some(style.with_height(size))
+            Some(style.clone().with_height(size))
         }
         _ => apply_sizing_constraint(style, context, property, size),
     }
 }
 
 fn apply_sizing_constraint(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     size: Sizing,
 ) -> Option<ComputedStyle> {
-    let constraints = style.constraints();
+    let constraints = updated_constraint(style.constraints(), context, property, size)?;
+    Some(style.clone().with_constraints(constraints))
+}
+
+fn updated_constraint(
+    constraints: SizingConstraints,
+    context: WritingContext,
+    property: &str,
+    size: Sizing,
+) -> Option<SizingConstraints> {
     match (property, context.map_axis(LogicalAxis::Inline)) {
         ("min-inline-size", PhysicalAxis::Horizontal)
-        | ("min-block-size", PhysicalAxis::Vertical) => {
-            Some(style.with_constraints(constraints.with_min_width(size)))
-        }
+        | ("min-block-size", PhysicalAxis::Vertical) => Some(constraints.with_min_width(size)),
         ("min-inline-size", PhysicalAxis::Vertical)
-        | ("min-block-size", PhysicalAxis::Horizontal) => {
-            Some(style.with_constraints(constraints.with_min_height(size)))
-        }
+        | ("min-block-size", PhysicalAxis::Horizontal) => Some(constraints.with_min_height(size)),
         ("max-inline-size", PhysicalAxis::Horizontal)
-        | ("max-block-size", PhysicalAxis::Vertical) => {
-            Some(style.with_constraints(constraints.with_max_width(size)))
-        }
+        | ("max-block-size", PhysicalAxis::Vertical) => Some(constraints.with_max_width(size)),
         ("max-inline-size", PhysicalAxis::Vertical)
-        | ("max-block-size", PhysicalAxis::Horizontal) => {
-            Some(style.with_constraints(constraints.with_max_height(size)))
-        }
+        | ("max-block-size", PhysicalAxis::Horizontal) => Some(constraints.with_max_height(size)),
         _ => None,
     }
 }
 
 fn apply_margin(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let edges = apply_box_edge(style.margin(), context, "margin-", property, tokens)?;
-    Some(style.with_margin(edges))
+    Some(style.clone().with_margin(edges))
 }
 
 fn apply_padding(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let edges = apply_box_edge(style.padding(), context, "padding-", property, tokens)?;
-    Some(style.with_padding(edges))
+    Some(style.clone().with_padding(edges))
 }
 
 fn apply_border(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
@@ -132,7 +134,7 @@ fn apply_border(
     apply_border_shorthand(style.border(), context, property, tokens)
         .or_else(|| apply_border_width_shorthand(style.border(), context, property, tokens))
         .or_else(|| apply_border_longhand(style.border(), context, property, tokens))
-        .map(|edges| style.with_border(edges))
+        .map(|edges| style.clone().with_border(edges))
 }
 
 fn apply_border_shorthand(
@@ -280,7 +282,7 @@ const fn apply_pair(
 }
 
 fn apply_insets(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
@@ -294,23 +296,27 @@ fn apply_insets(
     let (start, end) = parse_one_or_two_sizings(tokens)?;
     let with_start = LogicalInsets::apply_to_position(context, position, start_side, start);
     let with_both = LogicalInsets::apply_to_position(context, with_start, end_side, end);
-    Some(style.with_position(with_both))
+    Some(style.clone().with_position(with_both))
 }
 
 fn apply_inset_longhand(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     context: WritingContext,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let side = logical_side_named(property.strip_prefix("inset-")?)?;
     let offset = parse_sizing(tokens)?;
-    Some(style.with_position(LogicalInsets::apply_to_position(
-        context,
-        style.position(),
-        side,
-        offset,
-    )))
+    Some(
+        style
+            .clone()
+            .with_position(LogicalInsets::apply_to_position(
+                context,
+                style.position(),
+                side,
+                offset,
+            )),
+    )
 }
 
 fn parse_one_or_two_lengths(tokens: &[Token]) -> Option<(Length, Length)> {
@@ -539,7 +545,7 @@ enum LogicalLonghand {
 /// `style` with `property` at its CSS `initial` value, or `None` when
 /// `property` is not a logical property this module owns.
 #[must_use]
-pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+pub(crate) fn reset(style: &ComputedStyle, property: &str) -> Option<ComputedStyle> {
     copy_from(style, &ComputedStyle::initial(), property)
 }
 
@@ -550,7 +556,7 @@ pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyl
 /// that side lies physically for the child.
 #[must_use]
 pub(crate) fn inherit(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     parent: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
@@ -558,20 +564,20 @@ pub(crate) fn inherit(
 }
 
 fn copy_from(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     source: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
     copy_writing_context(style, source, property).or_else(|| {
         let longhands = logical_longhands(property)?;
-        Some(longhands.iter().fold(style, |copied, longhand| {
+        Some(longhands.iter().fold(style.clone(), |copied, longhand| {
             copy_longhand(copied, source, *longhand)
         }))
     })
 }
 
 fn copy_writing_context(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     source: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
@@ -582,7 +588,11 @@ fn copy_writing_context(
         DIRECTION => WritingContext::new(context.writing_mode(), source_context.direction()),
         _ => return None,
     };
-    Some(style.with_logical(style.logical().with_context(copied)))
+    Some(
+        style
+            .clone()
+            .with_logical(style.logical().with_context(copied)),
+    )
 }
 
 /// The longhands `property` stands for, or `None` when it is not a logical
@@ -657,7 +667,7 @@ fn size_bound_of(property: &str) -> (SizeBound, &str) {
     (SizeBound::Preferred, property)
 }
 
-const fn copy_longhand(
+fn copy_longhand(
     style: ComputedStyle,
     source: &ComputedStyle,
     longhand: LogicalLonghand,
@@ -672,7 +682,7 @@ const fn copy_longhand(
 /// One logical edge: read on `source` through its context, written on
 /// `style` through the element's, and recorded in the element's
 /// [`LogicalStyle`].
-const fn copy_edge(
+fn copy_edge(
     style: ComputedStyle,
     source: &ComputedStyle,
     edge_box: EdgeBox,
@@ -701,7 +711,7 @@ const fn physical_edges(style: &ComputedStyle, edge_box: EdgeBox) -> LengthEdges
     }
 }
 
-const fn with_physical_edges(
+fn with_physical_edges(
     style: ComputedStyle,
     edge_box: EdgeBox,
     edges: LengthEdges,
@@ -726,11 +736,7 @@ const fn recorded_edge(
     }
 }
 
-const fn copy_inset(
-    style: ComputedStyle,
-    source: &ComputedStyle,
-    side: LogicalSide,
-) -> ComputedStyle {
+fn copy_inset(style: ComputedStyle, source: &ComputedStyle, side: LogicalSide) -> ComputedStyle {
     let offset =
         LogicalInsets::read_from_position(source.logical().context(), source.position(), side);
     let position =
@@ -740,7 +746,7 @@ const fn copy_inset(
     style.with_position(position).with_logical(recorded)
 }
 
-const fn copy_size(
+fn copy_size(
     style: ComputedStyle,
     source: &ComputedStyle,
     bound: SizeBound,
@@ -766,7 +772,7 @@ const fn physical_size(style: &ComputedStyle, bound: SizeBound, axis: PhysicalAx
     }
 }
 
-const fn with_physical_size(
+fn with_physical_size(
     style: ComputedStyle,
     bound: SizeBound,
     axis: PhysicalAxis,

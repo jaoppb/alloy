@@ -35,7 +35,7 @@ fn repeat_with_huge_count_is_rejected_without_allocating() {
 #[test]
 fn huge_repeat_through_the_cascade_leaves_the_template_untouched() {
     let tokens = tokenize_value("repeat(4000000000, 1fr 1fr)");
-    let applied = grid_values::apply(GridStyle::initial(), "grid-template-columns", &tokens);
+    let applied = grid_values::apply(&GridStyle::initial(), "grid-template-columns", &tokens);
     assert!(applied.is_none());
 }
 

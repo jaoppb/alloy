@@ -250,8 +250,9 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 7,
-        "version 7 adds visual decorations, advanced typography, grid, and logical properties (ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 8,
+        "version 8 settles the PR #19 review round: new Display / InputType values, \
+         fallible TrackList, ComputedStyle no longer Copy (ADR-0011 item 3)"
     );
     assert_eq!(SUPPORTED_PROPERTIES.len(), 133);
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));

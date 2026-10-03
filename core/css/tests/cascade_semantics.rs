@@ -86,7 +86,11 @@ impl Resolved {
             .nodes_in_document_order()
             .find(|id| self.dom.node(*id).and_then(css::NodeRef::tag) == Some(&tag_name))
             .expect("the document has the requested tag");
-        *self.styled.node(id).expect("the node is styled").style()
+        self.styled
+            .node(id)
+            .expect("the node is styled")
+            .style()
+            .clone()
     }
 }
 

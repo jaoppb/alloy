@@ -84,7 +84,20 @@ pub mod infrastructure;
 /// and logical properties (`writing-mode`, `direction`, `*-inline*`, `*-block*`) — 84 new properties (49 → 133)
 /// and the corresponding `VisualStyle`, `TextAdvanceStyle`, `GridStyle`, `LogicalStyle`
 /// sub-aggregates on `ComputedStyle`.
-pub const PORT_SCHEMA_VERSION: u32 = 7;
+///
+/// `8` is the PR #19 review round over schema 7's boundary types: `Display`
+/// gains `InlineBlock` and `ListItem`; the closed [`InputType`] vocabulary is
+/// new; `TrackList::from_tracks` answers `Option` (it refuses more than
+/// `TrackList::CAPACITY` tracks); `text_values::apply` takes the parent's
+/// `font-weight`; `VariableError` gains `ExpansionLimit`; custom properties
+/// are cascaded (in a side table, outside `ComputedStyle`); and
+/// `ComputedStyle` is `Clone` but no longer `Copy` — its grid group sits
+/// behind a shared `Arc`, [`ComputedStyle::grid`] lends it as `&GridStyle`,
+/// and the `with_*` builders and `inheriting_from` are no longer `const fn`;
+/// the public cascade helpers `grid_values::{apply, reset, inherit}` and
+/// `logical_values::{apply, apply_with_context}` borrow the style they read
+/// instead of taking it by value. `PRD-007` carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 8;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///

@@ -150,8 +150,9 @@ fn test_logical_sizing_horizontal() {
     let mut style = ComputedStyle::initial();
 
     style =
-        logical_values::apply_with_context(style, ctx, "inline-size", &tokens("100px")).unwrap();
-    style = logical_values::apply_with_context(style, ctx, "block-size", &tokens("200px")).unwrap();
+        logical_values::apply_with_context(&style, ctx, "inline-size", &tokens("100px")).unwrap();
+    style =
+        logical_values::apply_with_context(&style, ctx, "block-size", &tokens("200px")).unwrap();
 
     assert_eq!(
         style.width(),
@@ -162,14 +163,14 @@ fn test_logical_sizing_horizontal() {
         css::domain::computed::sizing::Sizing::Fixed(px(200.0))
     );
 
-    style =
-        logical_values::apply_with_context(style, ctx, "min-inline-size", &tokens("50px")).unwrap();
-    style = logical_values::apply_with_context(style, ctx, "max-inline-size", &tokens("150px"))
+    style = logical_values::apply_with_context(&style, ctx, "min-inline-size", &tokens("50px"))
+        .unwrap();
+    style = logical_values::apply_with_context(&style, ctx, "max-inline-size", &tokens("150px"))
         .unwrap();
     style =
-        logical_values::apply_with_context(style, ctx, "min-block-size", &tokens("80px")).unwrap();
-    style =
-        logical_values::apply_with_context(style, ctx, "max-block-size", &tokens("250px")).unwrap();
+        logical_values::apply_with_context(&style, ctx, "min-block-size", &tokens("80px")).unwrap();
+    style = logical_values::apply_with_context(&style, ctx, "max-block-size", &tokens("250px"))
+        .unwrap();
 
     let c = style.constraints();
     assert_eq!(
@@ -196,8 +197,9 @@ fn test_logical_sizing_vertical() {
     let mut style = ComputedStyle::initial();
 
     style =
-        logical_values::apply_with_context(style, ctx, "inline-size", &tokens("100px")).unwrap();
-    style = logical_values::apply_with_context(style, ctx, "block-size", &tokens("200px")).unwrap();
+        logical_values::apply_with_context(&style, ctx, "inline-size", &tokens("100px")).unwrap();
+    style =
+        logical_values::apply_with_context(&style, ctx, "block-size", &tokens("200px")).unwrap();
 
     // In vertical writing mode: inline-size -> height, block-size -> width
     assert_eq!(
@@ -209,14 +211,14 @@ fn test_logical_sizing_vertical() {
         css::domain::computed::sizing::Sizing::Fixed(px(200.0))
     );
 
-    style =
-        logical_values::apply_with_context(style, ctx, "min-inline-size", &tokens("50px")).unwrap();
-    style = logical_values::apply_with_context(style, ctx, "max-inline-size", &tokens("150px"))
+    style = logical_values::apply_with_context(&style, ctx, "min-inline-size", &tokens("50px"))
+        .unwrap();
+    style = logical_values::apply_with_context(&style, ctx, "max-inline-size", &tokens("150px"))
         .unwrap();
     style =
-        logical_values::apply_with_context(style, ctx, "min-block-size", &tokens("80px")).unwrap();
-    style =
-        logical_values::apply_with_context(style, ctx, "max-block-size", &tokens("250px")).unwrap();
+        logical_values::apply_with_context(&style, ctx, "min-block-size", &tokens("80px")).unwrap();
+    style = logical_values::apply_with_context(&style, ctx, "max-block-size", &tokens("250px"))
+        .unwrap();
 
     let c = style.constraints();
     assert_eq!(
@@ -248,16 +250,16 @@ fn test_logical_margins_ltr_and_rtl() {
 
     let mut style_ltr = ComputedStyle::initial();
     style_ltr =
-        logical_values::apply_with_context(style_ltr, ltr, "margin-inline-start", &tokens("10px"))
+        logical_values::apply_with_context(&style_ltr, ltr, "margin-inline-start", &tokens("10px"))
             .unwrap();
     style_ltr =
-        logical_values::apply_with_context(style_ltr, ltr, "margin-inline-end", &tokens("20px"))
+        logical_values::apply_with_context(&style_ltr, ltr, "margin-inline-end", &tokens("20px"))
             .unwrap();
     style_ltr =
-        logical_values::apply_with_context(style_ltr, ltr, "margin-block-start", &tokens("30px"))
+        logical_values::apply_with_context(&style_ltr, ltr, "margin-block-start", &tokens("30px"))
             .unwrap();
     style_ltr =
-        logical_values::apply_with_context(style_ltr, ltr, "margin-block-end", &tokens("40px"))
+        logical_values::apply_with_context(&style_ltr, ltr, "margin-block-end", &tokens("40px"))
             .unwrap();
 
     assert_eq!(style_ltr.margin().left(), px(10.0));
@@ -267,16 +269,16 @@ fn test_logical_margins_ltr_and_rtl() {
 
     let mut style_rtl = ComputedStyle::initial();
     style_rtl =
-        logical_values::apply_with_context(style_rtl, rtl, "margin-inline-start", &tokens("10px"))
+        logical_values::apply_with_context(&style_rtl, rtl, "margin-inline-start", &tokens("10px"))
             .unwrap();
     style_rtl =
-        logical_values::apply_with_context(style_rtl, rtl, "margin-inline-end", &tokens("20px"))
+        logical_values::apply_with_context(&style_rtl, rtl, "margin-inline-end", &tokens("20px"))
             .unwrap();
     style_rtl =
-        logical_values::apply_with_context(style_rtl, rtl, "margin-block-start", &tokens("30px"))
+        logical_values::apply_with_context(&style_rtl, rtl, "margin-block-start", &tokens("30px"))
             .unwrap();
     style_rtl =
-        logical_values::apply_with_context(style_rtl, rtl, "margin-block-end", &tokens("40px"))
+        logical_values::apply_with_context(&style_rtl, rtl, "margin-block-end", &tokens("40px"))
             .unwrap();
 
     // In RTL: inline-start -> right, inline-end -> left
@@ -293,12 +295,12 @@ fn test_logical_margin_shorthands() {
 
     // 1 value shorthand
     style =
-        logical_values::apply_with_context(style, ctx, "margin-inline", &tokens("15px")).unwrap();
+        logical_values::apply_with_context(&style, ctx, "margin-inline", &tokens("15px")).unwrap();
     assert_eq!(style.margin().left(), px(15.0));
     assert_eq!(style.margin().right(), px(15.0));
 
     // 2 value shorthand: start end
-    style = logical_values::apply_with_context(style, ctx, "margin-block", &tokens("10px 20px"))
+    style = logical_values::apply_with_context(&style, ctx, "margin-block", &tokens("10px 20px"))
         .unwrap();
     assert_eq!(style.margin().top(), px(10.0));
     assert_eq!(style.margin().bottom(), px(20.0));
@@ -313,13 +315,14 @@ fn test_logical_padding_vertical_rl() {
     let ctx = WritingContext::new(WritingMode::VerticalRl, Direction::Ltr);
     let mut style = ComputedStyle::initial();
 
-    style = logical_values::apply_with_context(style, ctx, "padding-block-start", &tokens("5px"))
+    style = logical_values::apply_with_context(&style, ctx, "padding-block-start", &tokens("5px"))
         .unwrap();
-    style = logical_values::apply_with_context(style, ctx, "padding-block-end", &tokens("10px"))
+    style = logical_values::apply_with_context(&style, ctx, "padding-block-end", &tokens("10px"))
         .unwrap();
-    style = logical_values::apply_with_context(style, ctx, "padding-inline-start", &tokens("15px"))
-        .unwrap();
-    style = logical_values::apply_with_context(style, ctx, "padding-inline-end", &tokens("20px"))
+    style =
+        logical_values::apply_with_context(&style, ctx, "padding-inline-start", &tokens("15px"))
+            .unwrap();
+    style = logical_values::apply_with_context(&style, ctx, "padding-inline-end", &tokens("20px"))
         .unwrap();
 
     // In vertical-rl ltr: block-start -> right, block-end -> left, inline-start -> top, inline-end -> bottom
@@ -334,13 +337,13 @@ fn test_logical_padding_shorthands() {
     let ctx = WritingContext::new(WritingMode::HorizontalTb, Direction::Ltr);
     let mut style = ComputedStyle::initial();
 
-    style = logical_values::apply_with_context(style, ctx, "padding-inline", &tokens("8px 12px"))
+    style = logical_values::apply_with_context(&style, ctx, "padding-inline", &tokens("8px 12px"))
         .unwrap();
     assert_eq!(style.padding().left(), px(8.0));
     assert_eq!(style.padding().right(), px(12.0));
 
     style =
-        logical_values::apply_with_context(style, ctx, "padding-block", &tokens("16px")).unwrap();
+        logical_values::apply_with_context(&style, ctx, "padding-block", &tokens("16px")).unwrap();
     assert_eq!(style.padding().top(), px(16.0));
     assert_eq!(style.padding().bottom(), px(16.0));
 }
@@ -354,17 +357,21 @@ fn test_logical_border_widths() {
     let ctx = WritingContext::new(WritingMode::HorizontalTb, Direction::Ltr);
     let mut style = ComputedStyle::initial();
 
+    style = logical_values::apply_with_context(
+        &style,
+        ctx,
+        "border-inline-start-width",
+        &tokens("1px"),
+    )
+    .unwrap();
     style =
-        logical_values::apply_with_context(style, ctx, "border-inline-start-width", &tokens("1px"))
+        logical_values::apply_with_context(&style, ctx, "border-inline-end-width", &tokens("2px"))
             .unwrap();
     style =
-        logical_values::apply_with_context(style, ctx, "border-inline-end-width", &tokens("2px"))
+        logical_values::apply_with_context(&style, ctx, "border-block-start-width", &tokens("3px"))
             .unwrap();
     style =
-        logical_values::apply_with_context(style, ctx, "border-block-start-width", &tokens("3px"))
-            .unwrap();
-    style =
-        logical_values::apply_with_context(style, ctx, "border-block-end-width", &tokens("4px"))
+        logical_values::apply_with_context(&style, ctx, "border-block-end-width", &tokens("4px"))
             .unwrap();
 
     assert_eq!(style.border().left(), px(1.0));
@@ -380,21 +387,21 @@ fn test_logical_border_shorthands() {
 
     // border-block: in vertical-lr, block-start is left, block-end is right
     style =
-        logical_values::apply_with_context(style, ctx, "border-block", &tokens("3px solid black"))
+        logical_values::apply_with_context(&style, ctx, "border-block", &tokens("3px solid black"))
             .unwrap();
     assert_eq!(style.border().left(), px(3.0));
     assert_eq!(style.border().right(), px(3.0));
 
     // border-inline-width: in vertical-lr ltr, inline-start is top, inline-end is bottom
     style =
-        logical_values::apply_with_context(style, ctx, "border-inline-width", &tokens("1px 5px"))
+        logical_values::apply_with_context(&style, ctx, "border-inline-width", &tokens("1px 5px"))
             .unwrap();
     assert_eq!(style.border().top(), px(1.0));
     assert_eq!(style.border().bottom(), px(5.0));
 
     // border-inline: sets both inline sides
     style =
-        logical_values::apply_with_context(style, ctx, "border-inline", &tokens("2px dashed red"))
+        logical_values::apply_with_context(&style, ctx, "border-inline", &tokens("2px dashed red"))
             .unwrap();
     assert_eq!(style.border().top(), px(2.0));
     assert_eq!(style.border().bottom(), px(2.0));
@@ -409,14 +416,14 @@ fn test_logical_insets() {
     let ctx = WritingContext::new(WritingMode::HorizontalTb, Direction::Ltr);
     let mut style = ComputedStyle::initial();
 
-    style = logical_values::apply_with_context(style, ctx, "inset-inline-start", &tokens("10px"))
+    style = logical_values::apply_with_context(&style, ctx, "inset-inline-start", &tokens("10px"))
         .unwrap();
-    style = logical_values::apply_with_context(style, ctx, "inset-inline-end", &tokens("20px"))
+    style = logical_values::apply_with_context(&style, ctx, "inset-inline-end", &tokens("20px"))
         .unwrap();
-    style = logical_values::apply_with_context(style, ctx, "inset-block-start", &tokens("30px"))
+    style = logical_values::apply_with_context(&style, ctx, "inset-block-start", &tokens("30px"))
         .unwrap();
-    style =
-        logical_values::apply_with_context(style, ctx, "inset-block-end", &tokens("40px")).unwrap();
+    style = logical_values::apply_with_context(&style, ctx, "inset-block-end", &tokens("40px"))
+        .unwrap();
 
     let pos = style.position();
     assert_eq!(
@@ -445,9 +452,9 @@ fn test_logical_inset_shorthands() {
     // In vertical-rl rtl:
     // block-start -> right, block-end -> left
     // inline-start -> bottom, inline-end -> top
-    style = logical_values::apply_with_context(style, ctx, "inset-block", &tokens("10px 20px"))
+    style = logical_values::apply_with_context(&style, ctx, "inset-block", &tokens("10px 20px"))
         .unwrap();
-    style = logical_values::apply_with_context(style, ctx, "inset-inline", &tokens("30px 40px"))
+    style = logical_values::apply_with_context(&style, ctx, "inset-inline", &tokens("30px 40px"))
         .unwrap();
 
     let pos = style.position();

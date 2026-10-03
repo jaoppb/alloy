@@ -83,7 +83,11 @@ fn paragraph_style(sheet: &str, attribute: Option<&str>) -> ComputedStyle {
         .nodes_in_document_order()
         .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("the document has a paragraph");
-    *styled.node(id).expect("the paragraph is styled").style()
+    styled
+        .node(id)
+        .expect("the paragraph is styled")
+        .style()
+        .clone()
 }
 
 // ---- the deliverable -----------------------------------------------------

@@ -359,10 +359,11 @@ fn paragraph_style(source: &str) -> ComputedStyle {
     let styled = UaCascade::new()
         .resolve(&dom, &author_sheet(source))
         .expect("the cascade resolves");
-    *styled
+    styled
         .node(paragraph_of(&dom))
         .expect("the paragraph is styled")
         .style()
+        .clone()
 }
 
 // ---- 1. manifest ⇄ registry ----------------------------------------------

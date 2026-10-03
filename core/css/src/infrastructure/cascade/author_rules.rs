@@ -78,10 +78,10 @@ impl MatchedDeclaration<'_> {
 }
 
 /// What an element hands down to its children beyond its [`ComputedStyle`]:
-/// its computed custom properties and its computed font size. Neither fits in
-/// the `Copy` style aggregate — the map is open-ended, and the font size is
-/// stored there as authored (layout resolves it) — so the cascade keeps them
-/// in a side table, one per node.
+/// its computed custom properties and its computed font size. Neither belongs
+/// in the style aggregate — the map is open-ended and only the cascade reads
+/// it, and the font size is stored there as authored (layout resolves it) — so
+/// the cascade keeps them in a side table, one per node.
 #[derive(Clone, Debug)]
 pub(crate) struct InheritedContext {
     variables: Rc<CustomPropertiesMap>,
@@ -150,7 +150,7 @@ impl DeclarationScope<'_> {
         if references_variables(declaration.value()) {
             return self.apply_substituted(style, declaration);
         }
-        apply_declaration(style, declaration, self.parent).unwrap_or(style)
+        apply_declaration(&style, declaration, self.parent).unwrap_or(style)
     }
 
     /// A `var()`-bearing declaration: substituted, then applied, or `unset`
@@ -164,7 +164,7 @@ impl DeclarationScope<'_> {
             })
             .ok();
         substituted
-            .and_then(|value| apply_declaration_value(style, self.parent, property, &value))
+            .and_then(|value| apply_declaration_value(&style, self.parent, property, &value))
             .unwrap_or_else(|| unset_property(style, self.parent, property))
     }
 
@@ -201,8 +201,9 @@ pub(crate) fn apply_author_rules(
     let oriented = scope.fold_pass(base, &declarations, CascadePass::WritingContext);
     let cascaded = scope.fold_pass(oriented, &declarations, CascadePass::Remaining);
     let font_size = cascaded.computed_font_size(inherited.font_size);
+    let text_advance = cascaded.text_advance().absolutized(font_size);
     CascadedStyle {
-        style: cascaded.with_text_advance(cascaded.text_advance().absolutized(font_size)),
+        style: cascaded.with_text_advance(text_advance),
         context: InheritedContext {
             variables,
             font_size,
