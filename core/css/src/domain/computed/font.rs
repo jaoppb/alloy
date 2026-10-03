@@ -2,10 +2,10 @@
 //!
 //! `font-family` is a **list** — an author writes `"Helvetica Neue", Arial,
 //! sans-serif` and the first family that resolves to an installed or fetched
-//! face wins. [`crate::ComputedStyle`] is `Copy` (and its `with_*` builders are
-//! `const fn`), so the list here cannot be a `Vec`: [`FontFamilyList`] is a
-//! fixed-capacity `Copy` collection and [`FamilyName`] is a fixed-capacity
-//! `Copy` string. Two cuts, both documented in `tests/data/MANIFEST.md` beside
+//! face wins. [`crate::ComputedStyle`] is cloned at every cascade step and
+//! stored per styled node, so the list here is not a `Vec` that would allocate
+//! on each clone: [`FontFamilyList`] is a fixed-capacity `Copy` collection and
+//! [`FamilyName`] is a fixed-capacity `Copy` string. Two cuts, both documented in `tests/data/MANIFEST.md` beside
 //! the Flexbox cuts:
 //!
 //! - at most [`FontFamilyList::CAPACITY`] families are kept (a longer fallback
@@ -66,8 +66,8 @@ pub struct FamilyName {
 
 impl FamilyName {
     /// The longest family name this cut stores, in bytes. Kept small on purpose:
-    /// [`crate::ComputedStyle`] is a `Copy` aggregate copied per node during
-    /// layout, and clippy's `large_types_passed_by_value` caps it at 256 bytes.
+    /// the list is inline in [`crate::ComputedStyle`], cloned per node through
+    /// the cascade, whose size `tests/computed_style_footprint.rs` budgets.
     pub const CAPACITY: usize = 23;
 
     /// The name, truncated to [`Self::CAPACITY`] bytes at a UTF-8 boundary.
@@ -148,7 +148,7 @@ impl FontFamilyList {
     /// The longest fallback chain this cut keeps. A real chain ends in a
     /// generic, and the provider's own default is a generic, so dropping the
     /// tail past three entries and falling back to that default is equivalent
-    /// for the common case. Kept small for the same `Copy`-size reason as
+    /// for the common case. Kept small for the same per-node-size reason as
     /// [`FamilyName::CAPACITY`].
     pub const CAPACITY: usize = 3;
 

@@ -27,6 +27,9 @@ dom = { path = "../dom" }
 # rasterizer type crosses into `css`.
 graphics = { path = "../graphics" }
 thiserror = { workspace = true }
+# Structured logging (`ADR-0014`) for value-parser refusals that would
+# otherwise drop a declaration silently (grid / box-shadow storage caps).
+tracing = { workspace = true }
 
 [lints]
 workspace = true

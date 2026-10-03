@@ -83,7 +83,11 @@ fn paragraph_style(sheet: &str, attribute: Option<&str>) -> ComputedStyle {
         .nodes_in_document_order()
         .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("the document has a paragraph");
-    *styled.node(id).expect("the paragraph is styled").style()
+    styled
+        .node(id)
+        .expect("the paragraph is styled")
+        .style()
+        .clone()
 }
 
 // ---- the deliverable -----------------------------------------------------
@@ -333,6 +337,37 @@ fn the_ua_sheet_gives_an_anchor_tag_the_standard_link_blue_colour() {
         css::CssColor::rgb(0x00, 0x00, 0xEE),
         "standard UA default link color is #0000ee"
     );
+}
+
+/// `assets/ua.css` declares `input, button, select, textarea { display:
+/// inline-block }` and `li { display: list-item }`; an unparsed keyword used to
+/// drop both rules, leaving every control on its own line (issues #2/#3).
+#[test]
+fn the_ua_sheet_gives_form_controls_inline_block_and_list_items_list_item() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let html = child(&mut tree, root, "html");
+    let body = child(&mut tree, html, "body");
+    let input = child(&mut tree, body, "input");
+    attribute_of(&mut tree, input, "type", "submit");
+    let button = child(&mut tree, body, "button");
+    text(&mut tree, button, "Go");
+    let list = child(&mut tree, body, "ul");
+    let item = child(&mut tree, list, "li");
+    text(&mut tree, item, "one");
+
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let display_of = |tag: &str| {
+        let style = styled.node(styled_id(&dom, tag)).expect("styled").style();
+        style.display()
+    };
+
+    assert_eq!(display_of("input"), css::Display::InlineBlock);
+    assert_eq!(display_of("button"), css::Display::InlineBlock);
+    assert_eq!(display_of("li"), css::Display::ListItem);
+    assert_eq!(display_of("ul"), css::Display::Block);
 }
 
 fn styled_id(dom: &DomSnapshot, tag: &str) -> css::SnapshotId {
