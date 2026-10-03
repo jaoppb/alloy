@@ -29,6 +29,13 @@ use crate::domain::length::Length;
 /// The CSS `initial` computed `font-size`: `16px`.
 const INITIAL_FONT_SIZE_PX: f32 = 16.0;
 
+/// [`INITIAL_FONT_SIZE_PX`] as an [`Au`] — the size the root element's `em`
+/// resolves against, since it has no parent.
+pub const INITIAL_FONT_SIZE: Au = match Au::from_whole_px(16) {
+    Some(size) => size,
+    None => Au::ZERO,
+};
+
 /// A node's fully-resolved style, ready for layout.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
@@ -90,9 +97,11 @@ impl ComputedStyle {
     ///
     /// The inherited set is exactly CSS's: `color` and `font-size` /
     /// `font-family` (CSS Color L4 / CSS Fonts L4) plus `text-align` and
-    /// `white-space` (CSS Text L3 §7.3, §4.1.1). Every box property is **not**
-    /// inherited, which is why the box edges, the two axes and the Flexbox group
-    /// all reset here.
+    /// `white-space` (CSS Text L3 §7.3, §4.1.1), plus `writing-mode` and
+    /// `direction` (CSS Writing Modes L3 §3.1, §2.1) — the writing context.
+    /// Every box property is **not** inherited, which is why the box edges, the
+    /// two axes, the Flexbox group and the flow-relative margins, paddings,
+    /// borders, insets and sizes of [`LogicalStyle`] all reset here.
     #[must_use]
     pub const fn inheriting_from(parent: &Self) -> Self {
         Self {
@@ -102,7 +111,7 @@ impl ComputedStyle {
             text_align: parent.text_align,
             white_space: parent.white_space,
             text_advance: TextAdvanceStyle::inheriting_from(&parent.text_advance),
-            logical: parent.logical,
+            logical: LogicalStyle::initial().with_context(parent.logical.context()),
             ..Self::initial()
         }
     }
@@ -330,6 +339,17 @@ impl ComputedStyle {
     #[must_use]
     pub const fn logical(&self) -> LogicalStyle {
         self.logical
+    }
+
+    /// The computed `font-size` in [`Au`], resolved against the parent's
+    /// computed size, or [`INITIAL_FONT_SIZE`] when the author wrote a
+    /// magnitude with no correct reading — the same rule layout applies
+    /// (`layout::box_model::font_size_of`), so the cascade absolutizes
+    /// font-relative lengths against exactly the size layout will use.
+    #[must_use]
+    pub fn computed_font_size(&self, parent_font_size: Au) -> Au {
+        self.font_size_au(parent_font_size)
+            .unwrap_or(INITIAL_FONT_SIZE)
     }
 
     /// The computed `font-size` resolved to a computed length, for layout and

@@ -101,6 +101,35 @@ impl LogicalEdges {
         }
     }
 
+    /// This quartet with the length on `side` replaced.
+    #[must_use]
+    pub const fn with_side(self, side: LogicalSide, length: Length) -> Self {
+        match side {
+            LogicalSide::BlockStart => self.with_block_start(length),
+            LogicalSide::BlockEnd => self.with_block_end(length),
+            LogicalSide::InlineStart => self.with_inline_start(length),
+            LogicalSide::InlineEnd => self.with_inline_end(length),
+        }
+    }
+
+    /// The length on the physical side of `edges` that `side` maps to in
+    /// `context` — the read half of [`Self::apply_to_physical`]. A logical
+    /// property and its physical counterpart share one computed value (CSS
+    /// Logical L1 §4), so this is what `inherit` and `initial` read.
+    #[must_use]
+    pub const fn read_from_physical(
+        context: WritingContext,
+        edges: LengthEdges,
+        side: LogicalSide,
+    ) -> Length {
+        match context.map_side(side) {
+            PhysicalSide::Top => edges.top(),
+            PhysicalSide::Right => edges.right(),
+            PhysicalSide::Bottom => edges.bottom(),
+            PhysicalSide::Left => edges.left(),
+        }
+    }
+
     /// Updates the single physical side that corresponds to `side` in `context`.
     #[must_use]
     pub const fn apply_to_physical(

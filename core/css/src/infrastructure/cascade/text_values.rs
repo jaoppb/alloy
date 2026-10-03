@@ -33,18 +33,24 @@ fn integer_weight(value: f32) -> Option<u16> {
     format!("{value}").parse::<u16>().ok()
 }
 
-/// Parses `font-weight`, resolving relative keywords (`bolder`, `lighter`) against `current`.
+/// Parses `font-weight`, resolving `bolder` / `lighter` against `parent_weight`.
+///
+/// `parent_weight` is the **parent's** computed weight (CSS Fonts 4 §2.2),
+/// never the element's own in-progress one, which a lower-precedence rule such
+/// as the UA's `h1 { font-weight: bold }` may already have raised.
 #[must_use]
-pub fn parse_font_weight_with_parent(tokens: &[Token], current: FontWeight) -> Option<FontWeight> {
-    if let [Token::Ident(name)] = tokens {
-        let lower = name.to_ascii_lowercase();
-        match lower.as_str() {
-            "bolder" => return Some(current.bolder()),
-            "lighter" => return Some(current.lighter()),
-            _ => {}
-        }
+pub fn parse_font_weight_with_parent(
+    tokens: &[Token],
+    parent_weight: FontWeight,
+) -> Option<FontWeight> {
+    let [Token::Ident(name)] = tokens else {
+        return parse_font_weight(tokens);
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "bolder" => Some(parent_weight.bolder()),
+        "lighter" => Some(parent_weight.lighter()),
+        _ => parse_font_weight(tokens),
     }
-    parse_font_weight(tokens)
 }
 
 /// Parses `font-style`: `normal`, `italic`, `oblique`.
@@ -66,14 +72,14 @@ pub fn parse_font_style(tokens: &[Token]) -> Option<FontStyle> {
 pub fn parse_line_height(tokens: &[Token]) -> Option<LineHeight> {
     match tokens {
         [Token::Ident(name)] if name.eq_ignore_ascii_case("normal") => Some(LineHeight::Normal),
-        [Token::Number(val)] if *val >= 0.0 => {
-            if *val == 0.0 {
+        [Token::Number(value)] if *value >= 0.0 => {
+            if *value == 0.0 {
                 return Some(LineHeight::Length(Length::ZERO));
             }
-            Some(LineHeight::Number(LineHeightFactor::new(*val)))
+            Some(LineHeight::Number(LineHeightFactor::new(*value)))
         }
-        [Token::Percentage(val)] if *val >= 0.0 => {
-            Some(LineHeight::Percentage(LineHeightPercentage::new(*val)))
+        [Token::Percentage(value)] if *value >= 0.0 => {
+            Some(LineHeight::Percentage(LineHeightPercentage::new(*value)))
         }
         _ => parse_length(tokens).map(LineHeight::Length),
     }
@@ -304,35 +310,42 @@ pub fn parse_word_break(tokens: &[Token]) -> Option<WordBreak> {
     }
 }
 
-/// Applies declaration to [`TextAdvanceStyle`].
+/// Applies declaration to [`TextAdvanceStyle`]. `parent_weight` is the
+/// parent's computed `font-weight` ([`FontWeight::NORMAL`] at the root), the
+/// one value `bolder` / `lighter` are relative to.
 #[must_use]
 pub fn apply(
     style: TextAdvanceStyle,
+    parent_weight: FontWeight,
     property: &str,
     tokens: &[Token],
 ) -> Option<TextAdvanceStyle> {
     match property {
-        "font-weight" => parse_font_weight_with_parent(tokens, style.font_weight())
-            .map(|val| style.with_font_weight(val)),
-        "font-style" => parse_font_style(tokens).map(|val| style.with_font_style(val)),
-        "line-height" => parse_line_height(tokens).map(|val| style.with_line_height(val)),
-        "letter-spacing" => parse_letter_spacing(tokens).map(|val| style.with_letter_spacing(val)),
-        "word-spacing" => parse_word_spacing(tokens).map(|val| style.with_word_spacing(val)),
+        "font-weight" => parse_font_weight_with_parent(tokens, parent_weight)
+            .map(|value| style.with_font_weight(value)),
+        "font-style" => parse_font_style(tokens).map(|value| style.with_font_style(value)),
+        "line-height" => parse_line_height(tokens).map(|value| style.with_line_height(value)),
+        "letter-spacing" => {
+            parse_letter_spacing(tokens).map(|value| style.with_letter_spacing(value))
+        }
+        "word-spacing" => parse_word_spacing(tokens).map(|value| style.with_word_spacing(value)),
         "text-decoration-line" => parse_text_decoration_line(tokens)
-            .map(|val| style.with_text_decoration(style.text_decoration().with_line(val))),
+            .map(|value| style.with_text_decoration(style.text_decoration().with_line(value))),
         "text-decoration-color" => parse_text_decoration_color(tokens)
-            .map(|val| style.with_text_decoration(style.text_decoration().with_color(val))),
+            .map(|value| style.with_text_decoration(style.text_decoration().with_color(value))),
         "text-decoration-style" => parse_text_decoration_style(tokens)
-            .map(|val| style.with_text_decoration(style.text_decoration().with_style(val))),
+            .map(|value| style.with_text_decoration(style.text_decoration().with_style(value))),
         "text-decoration" => {
-            parse_text_decoration(tokens).map(|val| style.with_text_decoration(val))
+            parse_text_decoration(tokens).map(|value| style.with_text_decoration(value))
         }
-        "text-transform" => parse_text_transform(tokens).map(|val| style.with_text_transform(val)),
-        "text-overflow" => parse_text_overflow(tokens).map(|val| style.with_text_overflow(val)),
+        "text-transform" => {
+            parse_text_transform(tokens).map(|value| style.with_text_transform(value))
+        }
+        "text-overflow" => parse_text_overflow(tokens).map(|value| style.with_text_overflow(value)),
         "overflow-wrap" | "word-wrap" => {
-            parse_overflow_wrap(tokens).map(|val| style.with_overflow_wrap(val))
+            parse_overflow_wrap(tokens).map(|value| style.with_overflow_wrap(value))
         }
-        "word-break" => parse_word_break(tokens).map(|val| style.with_word_break(val)),
+        "word-break" => parse_word_break(tokens).map(|value| style.with_word_break(value)),
         _ => None,
     }
 }

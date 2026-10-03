@@ -12,6 +12,7 @@
 //! stylesheet, it is the hostile input the fuzz budget of §2.11 exists for, and
 //! refusing it whole is the correct answer.
 
+use crate::domain::computed::variables::VariableName;
 use crate::domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 use crate::domain::error::{CssError, CssStage, SourceSpan};
 use crate::domain::identifier::Identifier;
@@ -349,7 +350,7 @@ fn push_declaration(
     block: &mut DeclarationBlock,
     sheets: &mut StyleSheetSet,
 ) {
-    let Some(property) = supported_property(name) else {
+    let Some(property) = declared_property(name) else {
         sheets.push_note(ParseNote::new(
             format!("`{name}` is outside the v0.5 property cut (see tests/data/MANIFEST.md)"),
             span,
@@ -362,6 +363,25 @@ fn push_declaration(
         DeclarationValue::new(text),
         importance,
     ));
+}
+
+/// The property a declaration names: a custom property (`--*`), kept with its
+/// case because custom property names are case-sensitive (CSS Variables L1
+/// §2), or else a registered one.
+fn declared_property(name: &str) -> Option<Identifier> {
+    if VariableName::names_custom_property(name) {
+        return custom_property(name);
+    }
+    supported_property(name)
+}
+
+/// A custom property name, exactly as written. Custom properties form an open
+/// set, so they bypass `crate::SUPPORTED_PROPERTIES` (`tests/data/MANIFEST.md`,
+/// "Custom properties"); a name [`VariableName`] rejects is dropped like any
+/// other unknown property.
+fn custom_property(name: &str) -> Option<Identifier> {
+    let variable = VariableName::new(name)?;
+    Identifier::new(variable.as_str())
 }
 
 /// The property, if `crate::SUPPORTED_PROPERTIES` declares it. That list is the

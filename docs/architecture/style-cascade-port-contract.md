@@ -45,10 +45,42 @@ workspace needed to change:
 | `4`     | `ComputedStyle` | `font_family: FontFamilyList` — inherited (CSS Fonts L4), a fixed-capacity `Copy` list (`core/css/src/domain/computed/font.rs`); the two size cuts are declared in `tests/data/MANIFEST.md`                                                                                                                                                                                                                                                                                                                                                           |
 | `5`     | _(none)_        | No aggregate field. `SUPPORTED_PROPERTIES` gains the `background` and `border` **shorthands** (34 → 36), each narrowed to the one component this cut resolves — `background` → its colour (`background_color`), `border` → its width (`border` edges). A producer feeding the same CSS now gets those fields populated from shorthand inputs it previously dropped. Brought forward from the v0.7 CSS widening for the "unstyled real sites" follow-up (`docs/reports/DIAGNOSTICO-JANELA-BRANCA-WAYLAND.md` §3, `DIAGNOSTICO-CSS-EM-SITES-REAIS.md`). |
 | `6`     | `ComputedStyle` | `position: PositionStyle`, `constraints: SizingConstraints`, `overflow: OverflowStyle`. `SUPPORTED_PROPERTIES` gains 13 properties (36 → 49): `position`, `top`, `right`, `bottom`, `left`, `z-index`, `min-width`, `max-width`, `min-height`, `max-height`, `overflow`, `overflow-x`, `overflow-y`. Grouped into three sub-aggregates to preserve ADR-0010 rule 7.                                                                                                                                                                                   |
-| `7`     | `ComputedStyle` | `visual: VisualStyle`, `text_advance: TextAdvanceStyle`, `grid: GridStyle`, `logical: LogicalStyle`. `SUPPORTED_PROPERTIES` gains 84 properties (49 → 133): visual decorations and borders, advanced typography, CSS Grid Layout L1/L2, and CSS Logical Properties L1. Custom properties (`--*`, `var()`) supported with cycle detection and inheritance. Preserves `Copy` and `const fn initial()`.                                                                                                                                                  |
+| `7`     | `ComputedStyle` | `visual: VisualStyle`, `text_advance: TextAdvanceStyle`, `grid: GridStyle`, `logical: LogicalStyle`. `SUPPORTED_PROPERTIES` gains 84 properties (49 → 133): visual decorations and borders, advanced typography, CSS Grid Layout L1/L2, and CSS Logical Properties L1. Custom properties (`--*`) and `var()` are cascaded too, but outside `ComputedStyle` and outside `SUPPORTED_PROPERTIES` — see "Cascade semantics of schema 7" below. Preserves `Copy` and `const fn initial()`.                                                                 |
 
 The full normative inventory of all 490 W3C/MDN CSS properties and the multi-agent parallel implementation roadmap is
 recorded in [`css-properties-complete-inventory.md`](./css-properties-complete-inventory.md).
+
+### Cascade semantics of schema 7
+
+These are behaviours of `UaCascade::resolve` (`infrastructure/cascade/author_rules.rs`), not fields, so they did not
+need a version bump of their own; they are recorded here because a replacement `CascadeResolver` must reproduce them.
+Each element's cascade-ordered declarations (matched rules sorted, then the `style=` block) are folded in three passes:
+
+1. **Custom properties** (CSS Variables L1 §2). A `--*` name bypasses `SUPPORTED_PROPERTIES` (the set is open) and keeps
+   its case (`--C` and `--c` are two properties). Each element's map starts as its parent's — custom properties always
+   inherit — overlaid in cascade order (`!important` and `style=` precedence apply as for any declaration); `initial`
+   removes the property (the guaranteed-invalid value), `inherit` / `unset` take the parent's value. A locally declared
+   value's own `var()` references are substituted **where it is declared**, so descendants inherit the substituted text.
+   A value whose substitution fails is removed. The map lives in a per-node side table (`Rc`-shared with the parent when
+   an element declares none), never in the `Copy` `ComputedStyle`.
+2. **Writing context** — `writing-mode` and `direction`, including `initial` / `inherit` and `var()`. Every logical
+   property then maps to its physical counterpart through the element's **final** context, whatever the declaration
+   order (CSS Logical L1 §4); between a logical and a physical longhand of the same side, the later one in cascade order
+   wins. `initial` / `inherit` reach every logical property; `inherit` reads the parent's value through the **parent's**
+   context. Only the writing context inherits — flow-relative margins, paddings, borders, insets and sizes do not.
+3. **Everything else.** A value containing `var()` is substituted from the element's map (fallbacks, cycle detection,
+   memoization per substitution). Substitution fails on an undefined variable without a fallback, a cycle, a malformed
+   `var()`, or output past `MAX_SUBSTITUTED_BYTES` (64 KiB) — the cap that makes a chain of doubling references
+   (`--a: var(--b) var(--b)`, thirty deep) fail in microseconds instead of growing to `2^30` copies. A declaration whose
+   substitution fails, or whose substituted value does not parse, is **invalid at computed-value time** (CSS Variables
+   L1 §3) and computes to `unset`: the parent's value for an inherited property, `initial` otherwise — never the value a
+   lower-precedence declaration left behind. A value without `var()` that does not parse is still dropped at parse time,
+   leaving the previous value standing.
+
+Finally `font-weight: bolder` / `lighter` are resolved against the **parent's** computed weight (CSS Fonts 4 §2.2), and
+`em` / `%` `line-height` and `em` / `%` `letter-spacing` / `word-spacing` are made absolute against the element's own
+computed font size (CSS 2.1 §10.8.1, CSS Text L3 §8), so a descendant inherits the length; a unitless `line-height`
+still inherits as a factor.
 
 ### The B4 bump (`2 → 3`)
 

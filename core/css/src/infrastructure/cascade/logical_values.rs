@@ -1,21 +1,40 @@
 //! Cascade adapter for CSS Logical Properties and Values L1.
+//!
+//! A flow-relative property and its physical counterpart share one computed
+//! value (CSS Logical L1 §4), so every logical declaration is written straight
+//! into the physical field its writing context maps it to. That mapping needs
+//! the element's **final** `writing-mode` and `direction`, which is why the
+//! cascade (`author_rules.rs`) settles those two properties in a pass of their
+//! own — see [`sets_writing_context`] — before any other declaration applies.
+//!
+//! [`reset`] and [`inherit`] are the `initial` / `inherit` arms for every
+//! logical property: they read the source value through the source's own
+//! writing context and write it through the element's.
 
 use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::logical::{
-    Direction, LogicalAxis, LogicalEdges, LogicalInsets, LogicalSide, LogicalStyle, PhysicalAxis,
-    WritingContext, WritingMode,
+    Direction, LogicalAxis, LogicalEdges, LogicalInsets, LogicalSide, LogicalSizing, LogicalStyle,
+    PhysicalAxis, WritingContext, WritingMode,
 };
 use crate::domain::computed::sizing::Sizing;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
-// `parse_single_sizing` is the name the `inset-*` arms below were written
-// against; it is the canonical `parse_sizing` (one `auto` or one length), not a
-// second implementation.
 use crate::infrastructure::parser::values::{
     length_from_token, parse_border_shorthand, parse_length, parse_sizing,
-    parse_sizing as parse_single_sizing,
 };
+
+/// The two properties that make up an element's [`WritingContext`].
+const WRITING_MODE: &str = "writing-mode";
+const DIRECTION: &str = "direction";
+
+/// Whether `property` is one of the two inherited properties that decide how
+/// every other logical property maps to a physical one (CSS Writing Modes L3
+/// §2.1, §3.1).
+#[must_use]
+pub(crate) fn sets_writing_context(property: &str) -> bool {
+    matches!(property, WRITING_MODE | DIRECTION)
+}
 
 /// Applies a logical property declaration using default writing context (horizontal-tb, ltr).
 #[must_use]
@@ -62,23 +81,23 @@ fn apply_sizing_constraint(
     property: &str,
     size: Sizing,
 ) -> Option<ComputedStyle> {
-    let c = style.constraints();
+    let constraints = style.constraints();
     match (property, context.map_axis(LogicalAxis::Inline)) {
         ("min-inline-size", PhysicalAxis::Horizontal)
         | ("min-block-size", PhysicalAxis::Vertical) => {
-            Some(style.with_constraints(c.with_min_width(size)))
+            Some(style.with_constraints(constraints.with_min_width(size)))
         }
         ("min-inline-size", PhysicalAxis::Vertical)
         | ("min-block-size", PhysicalAxis::Horizontal) => {
-            Some(style.with_constraints(c.with_min_height(size)))
+            Some(style.with_constraints(constraints.with_min_height(size)))
         }
         ("max-inline-size", PhysicalAxis::Horizontal)
         | ("max-block-size", PhysicalAxis::Vertical) => {
-            Some(style.with_constraints(c.with_max_width(size)))
+            Some(style.with_constraints(constraints.with_max_width(size)))
         }
         ("max-inline-size", PhysicalAxis::Vertical)
         | ("max-block-size", PhysicalAxis::Horizontal) => {
-            Some(style.with_constraints(c.with_max_height(size)))
+            Some(style.with_constraints(constraints.with_max_height(size)))
         }
         _ => None,
     }
@@ -178,34 +197,17 @@ fn apply_border_longhand(
     property: &str,
     tokens: &[Token],
 ) -> Option<LengthEdges> {
-    let len = parse_length(tokens)?;
-    match property {
-        "border-block-start-width" => Some(LogicalEdges::apply_to_physical(
-            context,
-            border,
-            LogicalSide::BlockStart,
-            len,
-        )),
-        "border-block-end-width" => Some(LogicalEdges::apply_to_physical(
-            context,
-            border,
-            LogicalSide::BlockEnd,
-            len,
-        )),
-        "border-inline-start-width" => Some(LogicalEdges::apply_to_physical(
-            context,
-            border,
-            LogicalSide::InlineStart,
-            len,
-        )),
-        "border-inline-end-width" => Some(LogicalEdges::apply_to_physical(
-            context,
-            border,
-            LogicalSide::InlineEnd,
-            len,
-        )),
-        _ => None,
-    }
+    let length = parse_length(tokens)?;
+    let side = match property {
+        "border-block-start-width" => LogicalSide::BlockStart,
+        "border-block-end-width" => LogicalSide::BlockEnd,
+        "border-inline-start-width" => LogicalSide::InlineStart,
+        "border-inline-end-width" => LogicalSide::InlineEnd,
+        _ => return None,
+    };
+    Some(LogicalEdges::apply_to_physical(
+        context, border, side, length,
+    ))
 }
 
 fn apply_box_edge(
@@ -217,37 +219,50 @@ fn apply_box_edge(
 ) -> Option<LengthEdges> {
     let suffix = property.strip_prefix(prefix)?;
     match suffix {
-        "block-start" => parse_length(tokens).map(|len| {
-            LogicalEdges::apply_to_physical(context, edges, LogicalSide::BlockStart, len)
-        }),
-        "block-end" => parse_length(tokens)
-            .map(|len| LogicalEdges::apply_to_physical(context, edges, LogicalSide::BlockEnd, len)),
-        "inline-start" => parse_length(tokens).map(|len| {
-            LogicalEdges::apply_to_physical(context, edges, LogicalSide::InlineStart, len)
-        }),
-        "inline-end" => parse_length(tokens).map(|len| {
-            LogicalEdges::apply_to_physical(context, edges, LogicalSide::InlineEnd, len)
-        }),
-        "block" => parse_one_or_two_lengths(tokens).map(|(s, e)| {
+        "block" => parse_one_or_two_lengths(tokens).map(|(start, end)| {
             apply_pair(
                 edges,
                 context,
                 LogicalSide::BlockStart,
                 LogicalSide::BlockEnd,
-                s,
-                e,
+                start,
+                end,
             )
         }),
-        "inline" => parse_one_or_two_lengths(tokens).map(|(s, e)| {
+        "inline" => parse_one_or_two_lengths(tokens).map(|(start, end)| {
             apply_pair(
                 edges,
                 context,
                 LogicalSide::InlineStart,
                 LogicalSide::InlineEnd,
-                s,
-                e,
+                start,
+                end,
             )
         }),
+        _ => apply_box_edge_side(edges, context, suffix, tokens),
+    }
+}
+
+fn apply_box_edge_side(
+    edges: LengthEdges,
+    context: WritingContext,
+    suffix: &str,
+    tokens: &[Token],
+) -> Option<LengthEdges> {
+    let side = logical_side_named(suffix)?;
+    let length = parse_length(tokens)?;
+    Some(LogicalEdges::apply_to_physical(
+        context, edges, side, length,
+    ))
+}
+
+/// `block-start` / `block-end` / `inline-start` / `inline-end` → the side.
+fn logical_side_named(name: &str) -> Option<LogicalSide> {
+    match name {
+        "block-start" => Some(LogicalSide::BlockStart),
+        "block-end" => Some(LogicalSide::BlockEnd),
+        "inline-start" => Some(LogicalSide::InlineStart),
+        "inline-end" => Some(LogicalSide::InlineEnd),
         _ => None,
     }
 }
@@ -257,11 +272,11 @@ const fn apply_pair(
     context: WritingContext,
     start_side: LogicalSide,
     end_side: LogicalSide,
-    start_val: Length,
-    end_val: Length,
+    start_length: Length,
+    end_length: Length,
 ) -> LengthEdges {
-    let updated = LogicalEdges::apply_to_physical(context, edges, start_side, start_val);
-    LogicalEdges::apply_to_physical(context, updated, end_side, end_val)
+    let updated = LogicalEdges::apply_to_physical(context, edges, start_side, start_length);
+    LogicalEdges::apply_to_physical(context, updated, end_side, end_length)
 }
 
 fn apply_insets(
@@ -270,52 +285,32 @@ fn apply_insets(
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
-    let pos = style.position();
-    match property {
-        "inset-block-start" => parse_single_sizing(tokens).map(|sz| {
-            style.with_position(LogicalInsets::apply_to_position(
-                context,
-                pos,
-                LogicalSide::BlockStart,
-                sz,
-            ))
-        }),
-        "inset-block-end" => parse_single_sizing(tokens).map(|sz| {
-            style.with_position(LogicalInsets::apply_to_position(
-                context,
-                pos,
-                LogicalSide::BlockEnd,
-                sz,
-            ))
-        }),
-        "inset-inline-start" => parse_single_sizing(tokens).map(|sz| {
-            style.with_position(LogicalInsets::apply_to_position(
-                context,
-                pos,
-                LogicalSide::InlineStart,
-                sz,
-            ))
-        }),
-        "inset-inline-end" => parse_single_sizing(tokens).map(|sz| {
-            style.with_position(LogicalInsets::apply_to_position(
-                context,
-                pos,
-                LogicalSide::InlineEnd,
-                sz,
-            ))
-        }),
-        "inset-block" => parse_one_or_two_sizings(tokens).map(|(s, e)| {
-            let p1 = LogicalInsets::apply_to_position(context, pos, LogicalSide::BlockStart, s);
-            let p2 = LogicalInsets::apply_to_position(context, p1, LogicalSide::BlockEnd, e);
-            style.with_position(p2)
-        }),
-        "inset-inline" => parse_one_or_two_sizings(tokens).map(|(s, e)| {
-            let p1 = LogicalInsets::apply_to_position(context, pos, LogicalSide::InlineStart, s);
-            let p2 = LogicalInsets::apply_to_position(context, p1, LogicalSide::InlineEnd, e);
-            style.with_position(p2)
-        }),
-        _ => None,
-    }
+    let position = style.position();
+    let (start_side, end_side) = match property {
+        "inset-block" => (LogicalSide::BlockStart, LogicalSide::BlockEnd),
+        "inset-inline" => (LogicalSide::InlineStart, LogicalSide::InlineEnd),
+        _ => return apply_inset_longhand(style, context, property, tokens),
+    };
+    let (start, end) = parse_one_or_two_sizings(tokens)?;
+    let with_start = LogicalInsets::apply_to_position(context, position, start_side, start);
+    let with_both = LogicalInsets::apply_to_position(context, with_start, end_side, end);
+    Some(style.with_position(with_both))
+}
+
+fn apply_inset_longhand(
+    style: ComputedStyle,
+    context: WritingContext,
+    property: &str,
+    tokens: &[Token],
+) -> Option<ComputedStyle> {
+    let side = logical_side_named(property.strip_prefix("inset-")?)?;
+    let offset = parse_sizing(tokens)?;
+    Some(style.with_position(LogicalInsets::apply_to_position(
+        context,
+        style.position(),
+        side,
+        offset,
+    )))
 }
 
 fn parse_one_or_two_lengths(tokens: &[Token]) -> Option<(Length, Length)> {
@@ -392,35 +387,33 @@ fn apply_mode_or_direction_to_logical(
     property: &str,
     tokens: &[Token],
 ) -> bool {
-    match property {
-        "writing-mode" => parse_writing_mode(tokens)
-            .map(|m| {
-                *logical =
-                    logical.with_context(WritingContext::new(m, logical.context().direction()));
-            })
-            .is_some(),
-        "direction" => parse_direction(tokens)
-            .map(|d| {
-                *logical =
-                    logical.with_context(WritingContext::new(logical.context().writing_mode(), d));
-            })
-            .is_some(),
-        _ => false,
-    }
+    let context = logical.context();
+    let updated = match property {
+        WRITING_MODE => parse_writing_mode(tokens)
+            .map(|writing_mode| WritingContext::new(writing_mode, context.direction())),
+        DIRECTION => parse_direction(tokens)
+            .map(|direction| WritingContext::new(context.writing_mode(), direction)),
+        _ => None,
+    };
+    let Some(updated_context) = updated else {
+        return false;
+    };
+    *logical = logical.with_context(updated_context);
+    true
 }
 
 fn apply_sizing_to_logical(logical: &mut LogicalStyle, property: &str, tokens: &[Token]) -> bool {
     let Some(size) = parse_sizing(tokens) else {
         return false;
     };
-    let s = logical.sizing();
+    let sizing = logical.sizing();
     let updated = match property {
-        "inline-size" => s.with_inline_size(size),
-        "block-size" => s.with_block_size(size),
-        "min-inline-size" => s.with_min_inline_size(size),
-        "min-block-size" => s.with_min_block_size(size),
-        "max-inline-size" => s.with_max_inline_size(size),
-        "max-block-size" => s.with_max_block_size(size),
+        "inline-size" => sizing.with_inline_size(size),
+        "block-size" => sizing.with_block_size(size),
+        "min-inline-size" => sizing.with_min_inline_size(size),
+        "min-block-size" => sizing.with_min_block_size(size),
+        "max-inline-size" => sizing.with_max_inline_size(size),
+        "max-block-size" => sizing.with_max_block_size(size),
         _ => return false,
     };
     *logical = logical.with_sizing(updated);
@@ -434,91 +427,382 @@ fn apply_edges_to_logical(logical: &mut LogicalStyle, property: &str, tokens: &[
 }
 
 fn apply_margin_to_logical(logical: &mut LogicalStyle, property: &str, tokens: &[Token]) -> bool {
-    let m = logical.margin();
-    let updated =
-        match property {
-            "margin-block-start" => parse_length(tokens).map(|l| m.with_block_start(l)),
-            "margin-block-end" => parse_length(tokens).map(|l| m.with_block_end(l)),
-            "margin-inline-start" => parse_length(tokens).map(|l| m.with_inline_start(l)),
-            "margin-inline-end" => parse_length(tokens).map(|l| m.with_inline_end(l)),
-            "margin-block" => parse_one_or_two_lengths(tokens)
-                .map(|(s, e)| m.with_block_start(s).with_block_end(e)),
-            "margin-inline" => parse_one_or_two_lengths(tokens)
-                .map(|(s, e)| m.with_inline_start(s).with_inline_end(e)),
-            _ => return false,
-        };
-    if let Some(val) = updated {
-        *logical = logical.with_margin(val);
-        return true;
-    }
-    false
+    let Some(suffix) = property.strip_prefix("margin-") else {
+        return false;
+    };
+    let Some(margin) = logical_edges_with(logical.margin(), suffix, tokens) else {
+        return false;
+    };
+    *logical = logical.with_margin(margin);
+    true
 }
 
 fn apply_padding_to_logical(logical: &mut LogicalStyle, property: &str, tokens: &[Token]) -> bool {
-    let p = logical.padding();
-    let updated =
-        match property {
-            "padding-block-start" => parse_length(tokens).map(|l| p.with_block_start(l)),
-            "padding-block-end" => parse_length(tokens).map(|l| p.with_block_end(l)),
-            "padding-inline-start" => parse_length(tokens).map(|l| p.with_inline_start(l)),
-            "padding-inline-end" => parse_length(tokens).map(|l| p.with_inline_end(l)),
-            "padding-block" => parse_one_or_two_lengths(tokens)
-                .map(|(s, e)| p.with_block_start(s).with_block_end(e)),
-            "padding-inline" => parse_one_or_two_lengths(tokens)
-                .map(|(s, e)| p.with_inline_start(s).with_inline_end(e)),
-            _ => return false,
-        };
-    if let Some(val) = updated {
-        *logical = logical.with_padding(val);
-        return true;
+    let Some(suffix) = property.strip_prefix("padding-") else {
+        return false;
+    };
+    let Some(padding) = logical_edges_with(logical.padding(), suffix, tokens) else {
+        return false;
+    };
+    *logical = logical.with_padding(padding);
+    true
+}
+
+/// `edges` with the `-block` / `-inline` shorthand or the `-<side>` longhand
+/// named by `suffix` applied, or `None` when `suffix` names neither or the
+/// value does not parse.
+fn logical_edges_with(edges: LogicalEdges, suffix: &str, tokens: &[Token]) -> Option<LogicalEdges> {
+    match suffix {
+        "block" => parse_one_or_two_lengths(tokens)
+            .map(|(start, end)| edges.with_block_start(start).with_block_end(end)),
+        "inline" => parse_one_or_two_lengths(tokens)
+            .map(|(start, end)| edges.with_inline_start(start).with_inline_end(end)),
+        _ => {
+            let side = logical_side_named(suffix)?;
+            parse_length(tokens).map(|length| edges.with_side(side, length))
+        }
     }
-    false
 }
 
 fn apply_border_to_logical(logical: &mut LogicalStyle, property: &str, tokens: &[Token]) -> bool {
-    let b = logical.border();
-    let updated =
-        match property {
-            "border-block-start-width" => parse_length(tokens).map(|l| b.with_block_start(l)),
-            "border-block-end-width" => parse_length(tokens).map(|l| b.with_block_end(l)),
-            "border-inline-start-width" => parse_length(tokens).map(|l| b.with_inline_start(l)),
-            "border-inline-end-width" => parse_length(tokens).map(|l| b.with_inline_end(l)),
-            "border-block-width" => parse_one_or_two_lengths(tokens)
-                .map(|(s, e)| b.with_block_start(s).with_block_end(e)),
-            "border-inline-width" => parse_one_or_two_lengths(tokens)
-                .map(|(s, e)| b.with_inline_start(s).with_inline_end(e)),
-            "border-block" => {
-                parse_border_shorthand(tokens).map(|w| b.with_block_start(w).with_block_end(w))
-            }
-            "border-inline" => {
-                parse_border_shorthand(tokens).map(|w| b.with_inline_start(w).with_inline_end(w))
-            }
-            _ => return false,
-        };
-    if let Some(val) = updated {
-        *logical = logical.with_border(val);
-        return true;
-    }
-    false
+    let border = logical.border();
+    let updated = match property {
+        "border-block" => parse_border_shorthand(tokens)
+            .map(|width| border.with_block_start(width).with_block_end(width)),
+        "border-inline" => parse_border_shorthand(tokens)
+            .map(|width| border.with_inline_start(width).with_inline_end(width)),
+        _ => border_width_suffix(property)
+            .and_then(|suffix| logical_edges_with(border, suffix, tokens)),
+    };
+    let Some(border) = updated else {
+        return false;
+    };
+    *logical = logical.with_border(border);
+    true
+}
+
+/// `border-block-start-width` → `block-start`, `border-inline-width` →
+/// `inline`: the part [`logical_edges_with`] reads.
+fn border_width_suffix(property: &str) -> Option<&str> {
+    property
+        .strip_prefix("border-")
+        .and_then(|rest| rest.strip_suffix("-width"))
 }
 
 fn apply_insets_to_logical(logical: &mut LogicalStyle, property: &str, tokens: &[Token]) -> bool {
-    let ins = logical.insets();
-    let updated = match property {
-        "inset-block-start" => parse_single_sizing(tokens).map(|s| ins.with_block_start(s)),
-        "inset-block-end" => parse_single_sizing(tokens).map(|s| ins.with_block_end(s)),
-        "inset-inline-start" => parse_single_sizing(tokens).map(|s| ins.with_inline_start(s)),
-        "inset-inline-end" => parse_single_sizing(tokens).map(|s| ins.with_inline_end(s)),
-        "inset-block" => {
-            parse_one_or_two_sizings(tokens).map(|(s, e)| ins.with_block_start(s).with_block_end(e))
-        }
-        "inset-inline" => parse_one_or_two_sizings(tokens)
-            .map(|(s, e)| ins.with_inline_start(s).with_inline_end(e)),
-        _ => return false,
+    let Some(suffix) = property.strip_prefix("inset-") else {
+        return false;
     };
-    if let Some(val) = updated {
-        *logical = logical.with_insets(val);
-        return true;
+    let insets = logical.insets();
+    let updated = match suffix {
+        "block" => parse_one_or_two_sizings(tokens)
+            .map(|(start, end)| insets.with_block_start(start).with_block_end(end)),
+        "inline" => parse_one_or_two_sizings(tokens)
+            .map(|(start, end)| insets.with_inline_start(start).with_inline_end(end)),
+        _ => logical_side_named(suffix)
+            .and_then(|side| parse_sizing(tokens).map(|offset| insets.with_side(side, offset))),
+    };
+    let Some(insets) = updated else {
+        return false;
+    };
+    *logical = logical.with_insets(insets);
+    true
+}
+
+// ---- CSS-wide keywords (CSS Cascade L4 §7.1) ------------------------------
+
+/// Which box an edge longhand edits.
+#[derive(Clone, Copy)]
+enum EdgeBox {
+    Margin,
+    Padding,
+    BorderWidth,
+}
+
+/// Which of the three sizing properties of one axis a longhand edits.
+#[derive(Clone, Copy)]
+enum SizeBound {
+    Preferred,
+    Minimum,
+    Maximum,
+}
+
+/// One flow-relative longhand — the unit `initial` and `inherit` act on. A
+/// shorthand such as `margin-inline` is the pair of its longhands.
+#[derive(Clone, Copy)]
+enum LogicalLonghand {
+    Edge(EdgeBox, LogicalSide),
+    Inset(LogicalSide),
+    Size(SizeBound, LogicalAxis),
+}
+
+/// `style` with `property` at its CSS `initial` value, or `None` when
+/// `property` is not a logical property this module owns.
+#[must_use]
+pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+    copy_from(style, &ComputedStyle::initial(), property)
+}
+
+/// `style` with `property` copied from `parent` — the `inherit` keyword — or
+/// `None` when `property` is not a logical property this module owns. A
+/// logical longhand reads the parent's value through the **parent's** writing
+/// context: `inherit` hands down the parent's `margin-inline-start`, wherever
+/// that side lies physically for the child.
+#[must_use]
+pub(crate) fn inherit(
+    style: ComputedStyle,
+    parent: &ComputedStyle,
+    property: &str,
+) -> Option<ComputedStyle> {
+    copy_from(style, parent, property)
+}
+
+fn copy_from(
+    style: ComputedStyle,
+    source: &ComputedStyle,
+    property: &str,
+) -> Option<ComputedStyle> {
+    copy_writing_context(style, source, property).or_else(|| {
+        let longhands = logical_longhands(property)?;
+        Some(longhands.iter().fold(style, |copied, longhand| {
+            copy_longhand(copied, source, *longhand)
+        }))
+    })
+}
+
+fn copy_writing_context(
+    style: ComputedStyle,
+    source: &ComputedStyle,
+    property: &str,
+) -> Option<ComputedStyle> {
+    let context = style.logical().context();
+    let source_context = source.logical().context();
+    let copied = match property {
+        WRITING_MODE => WritingContext::new(source_context.writing_mode(), context.direction()),
+        DIRECTION => WritingContext::new(context.writing_mode(), source_context.direction()),
+        _ => return None,
+    };
+    Some(style.with_logical(style.logical().with_context(copied)))
+}
+
+/// The longhands `property` stands for, or `None` when it is not a logical
+/// box, inset or sizing property.
+fn logical_longhands(property: &str) -> Option<Vec<LogicalLonghand>> {
+    edge_longhands(property, "margin-", EdgeBox::Margin)
+        .or_else(|| edge_longhands(property, "padding-", EdgeBox::Padding))
+        .or_else(|| border_longhands(property))
+        .or_else(|| inset_longhands(property))
+        .or_else(|| size_longhand(property))
+}
+
+fn edge_longhands(property: &str, prefix: &str, edge_box: EdgeBox) -> Option<Vec<LogicalLonghand>> {
+    let sides = logical_sides(property.strip_prefix(prefix)?)?;
+    Some(
+        sides
+            .into_iter()
+            .map(|side| LogicalLonghand::Edge(edge_box, side))
+            .collect(),
+    )
+}
+
+fn border_longhands(property: &str) -> Option<Vec<LogicalLonghand>> {
+    let suffix = match property {
+        "border-block" => "block",
+        "border-inline" => "inline",
+        _ => border_width_suffix(property)?,
+    };
+    let sides = logical_sides(suffix)?;
+    Some(
+        sides
+            .into_iter()
+            .map(|side| LogicalLonghand::Edge(EdgeBox::BorderWidth, side))
+            .collect(),
+    )
+}
+
+fn inset_longhands(property: &str) -> Option<Vec<LogicalLonghand>> {
+    let sides = logical_sides(property.strip_prefix("inset-")?)?;
+    Some(sides.into_iter().map(LogicalLonghand::Inset).collect())
+}
+
+/// `block` / `inline` (a two-sided shorthand) → both sides of that axis; a
+/// side name → that one side.
+fn logical_sides(suffix: &str) -> Option<Vec<LogicalSide>> {
+    match suffix {
+        "block" => Some(vec![LogicalSide::BlockStart, LogicalSide::BlockEnd]),
+        "inline" => Some(vec![LogicalSide::InlineStart, LogicalSide::InlineEnd]),
+        _ => logical_side_named(suffix).map(|side| vec![side]),
     }
-    false
+}
+
+fn size_longhand(property: &str) -> Option<Vec<LogicalLonghand>> {
+    let (bound, dimension) = size_bound_of(property);
+    let axis = match dimension {
+        "inline-size" => LogicalAxis::Inline,
+        "block-size" => LogicalAxis::Block,
+        _ => return None,
+    };
+    Some(vec![LogicalLonghand::Size(bound, axis)])
+}
+
+/// `min-inline-size` → (`Minimum`, `inline-size`), `block-size` →
+/// (`Preferred`, `block-size`).
+fn size_bound_of(property: &str) -> (SizeBound, &str) {
+    if let Some(dimension) = property.strip_prefix("min-") {
+        return (SizeBound::Minimum, dimension);
+    }
+    if let Some(dimension) = property.strip_prefix("max-") {
+        return (SizeBound::Maximum, dimension);
+    }
+    (SizeBound::Preferred, property)
+}
+
+const fn copy_longhand(
+    style: ComputedStyle,
+    source: &ComputedStyle,
+    longhand: LogicalLonghand,
+) -> ComputedStyle {
+    match longhand {
+        LogicalLonghand::Edge(edge_box, side) => copy_edge(style, source, edge_box, side),
+        LogicalLonghand::Inset(side) => copy_inset(style, source, side),
+        LogicalLonghand::Size(bound, axis) => copy_size(style, source, bound, axis),
+    }
+}
+
+/// One logical edge: read on `source` through its context, written on
+/// `style` through the element's, and recorded in the element's
+/// [`LogicalStyle`].
+const fn copy_edge(
+    style: ComputedStyle,
+    source: &ComputedStyle,
+    edge_box: EdgeBox,
+    side: LogicalSide,
+) -> ComputedStyle {
+    let length = LogicalEdges::read_from_physical(
+        source.logical().context(),
+        physical_edges(source, edge_box),
+        side,
+    );
+    let edges = LogicalEdges::apply_to_physical(
+        style.logical().context(),
+        physical_edges(&style, edge_box),
+        side,
+        length,
+    );
+    let recorded = recorded_edge(style.logical(), edge_box, side, length);
+    with_physical_edges(style, edge_box, edges).with_logical(recorded)
+}
+
+const fn physical_edges(style: &ComputedStyle, edge_box: EdgeBox) -> LengthEdges {
+    match edge_box {
+        EdgeBox::Margin => style.margin(),
+        EdgeBox::Padding => style.padding(),
+        EdgeBox::BorderWidth => style.border(),
+    }
+}
+
+const fn with_physical_edges(
+    style: ComputedStyle,
+    edge_box: EdgeBox,
+    edges: LengthEdges,
+) -> ComputedStyle {
+    match edge_box {
+        EdgeBox::Margin => style.with_margin(edges),
+        EdgeBox::Padding => style.with_padding(edges),
+        EdgeBox::BorderWidth => style.with_border(edges),
+    }
+}
+
+const fn recorded_edge(
+    logical: LogicalStyle,
+    edge_box: EdgeBox,
+    side: LogicalSide,
+    length: Length,
+) -> LogicalStyle {
+    match edge_box {
+        EdgeBox::Margin => logical.with_margin(logical.margin().with_side(side, length)),
+        EdgeBox::Padding => logical.with_padding(logical.padding().with_side(side, length)),
+        EdgeBox::BorderWidth => logical.with_border(logical.border().with_side(side, length)),
+    }
+}
+
+const fn copy_inset(
+    style: ComputedStyle,
+    source: &ComputedStyle,
+    side: LogicalSide,
+) -> ComputedStyle {
+    let offset =
+        LogicalInsets::read_from_position(source.logical().context(), source.position(), side);
+    let position =
+        LogicalInsets::apply_to_position(style.logical().context(), style.position(), side, offset);
+    let logical = style.logical();
+    let recorded = logical.with_insets(logical.insets().with_side(side, offset));
+    style.with_position(position).with_logical(recorded)
+}
+
+const fn copy_size(
+    style: ComputedStyle,
+    source: &ComputedStyle,
+    bound: SizeBound,
+    axis: LogicalAxis,
+) -> ComputedStyle {
+    let source_axis = source.logical().context().map_axis(axis);
+    let size = physical_size(source, bound, source_axis);
+    let target_axis = style.logical().context().map_axis(axis);
+    let logical = style.logical();
+    let recorded = logical.with_sizing(recorded_size(logical.sizing(), bound, axis, size));
+    with_physical_size(style, bound, target_axis, size).with_logical(recorded)
+}
+
+const fn physical_size(style: &ComputedStyle, bound: SizeBound, axis: PhysicalAxis) -> Sizing {
+    let constraints = style.constraints();
+    match (bound, axis) {
+        (SizeBound::Preferred, PhysicalAxis::Horizontal) => style.width(),
+        (SizeBound::Preferred, PhysicalAxis::Vertical) => style.height(),
+        (SizeBound::Minimum, PhysicalAxis::Horizontal) => constraints.min_width(),
+        (SizeBound::Minimum, PhysicalAxis::Vertical) => constraints.min_height(),
+        (SizeBound::Maximum, PhysicalAxis::Horizontal) => constraints.max_width(),
+        (SizeBound::Maximum, PhysicalAxis::Vertical) => constraints.max_height(),
+    }
+}
+
+const fn with_physical_size(
+    style: ComputedStyle,
+    bound: SizeBound,
+    axis: PhysicalAxis,
+    size: Sizing,
+) -> ComputedStyle {
+    let constraints = style.constraints();
+    match (bound, axis) {
+        (SizeBound::Preferred, PhysicalAxis::Horizontal) => style.with_width(size),
+        (SizeBound::Preferred, PhysicalAxis::Vertical) => style.with_height(size),
+        (SizeBound::Minimum, PhysicalAxis::Horizontal) => {
+            style.with_constraints(constraints.with_min_width(size))
+        }
+        (SizeBound::Minimum, PhysicalAxis::Vertical) => {
+            style.with_constraints(constraints.with_min_height(size))
+        }
+        (SizeBound::Maximum, PhysicalAxis::Horizontal) => {
+            style.with_constraints(constraints.with_max_width(size))
+        }
+        (SizeBound::Maximum, PhysicalAxis::Vertical) => {
+            style.with_constraints(constraints.with_max_height(size))
+        }
+    }
+}
+
+const fn recorded_size(
+    sizing: LogicalSizing,
+    bound: SizeBound,
+    axis: LogicalAxis,
+    size: Sizing,
+) -> LogicalSizing {
+    match (bound, axis) {
+        (SizeBound::Preferred, LogicalAxis::Inline) => sizing.with_inline_size(size),
+        (SizeBound::Preferred, LogicalAxis::Block) => sizing.with_block_size(size),
+        (SizeBound::Minimum, LogicalAxis::Inline) => sizing.with_min_inline_size(size),
+        (SizeBound::Minimum, LogicalAxis::Block) => sizing.with_min_block_size(size),
+        (SizeBound::Maximum, LogicalAxis::Inline) => sizing.with_max_inline_size(size),
+        (SizeBound::Maximum, LogicalAxis::Block) => sizing.with_max_block_size(size),
+    }
 }

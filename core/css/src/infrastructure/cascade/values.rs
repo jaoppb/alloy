@@ -17,7 +17,8 @@
 
 use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::style::ComputedStyle;
-use crate::domain::declaration::Declaration;
+use crate::domain::computed::text_advance::FontWeight;
+use crate::domain::declaration::{Declaration, DeclarationValue};
 use crate::domain::length::Length;
 use crate::infrastructure::cascade::{
     flex_values, font_values, grid_values, logical_values, overflow_values, position_values,
@@ -48,9 +49,10 @@ enum BoxSide {
 }
 
 /// `initial` or `inherit` (CSS Cascade L4 §7.1) — the two CSS-wide keywords
-/// this cut recognises. `unset` and `revert` are not: neither has a reading
-/// that does not depend on a property's own inherited-ness table, which this
-/// crate does not carry yet.
+/// this cut recognises as authored values. `revert` is not (there is no user
+/// origin to revert to), and neither is an authored `unset`, although the
+/// cascade computes the `unset` value internally ([`unset_property`]) for a
+/// declaration that is invalid at computed-value time.
 #[derive(Clone, Copy)]
 enum CssWideKeyword {
     Initial,
@@ -65,8 +67,44 @@ pub(crate) fn apply_declaration(
     declaration: &Declaration,
     parent: Option<&ComputedStyle>,
 ) -> Option<ComputedStyle> {
-    let tokens = value_tokens(declaration.value());
-    apply_property(style, parent, declaration.property().as_str(), &tokens)
+    apply_declaration_value(
+        style,
+        parent,
+        declaration.property().as_str(),
+        declaration.value(),
+    )
+}
+
+/// `style` with `property` set from `value` — a declaration's value after
+/// `var()` substitution — or `None` when the value is outside the v0.5 cut.
+#[must_use]
+pub(crate) fn apply_declaration_value(
+    style: ComputedStyle,
+    parent: Option<&ComputedStyle>,
+    property: &str,
+    value: &DeclarationValue,
+) -> Option<ComputedStyle> {
+    let tokens = value_tokens(value);
+    apply_property(style, parent, property, &tokens)
+}
+
+/// `style` with `property` at its `unset` value (CSS Cascade L4 §7.3): the
+/// parent's value for an inherited property, the `initial` value otherwise.
+/// It is what a declaration that is invalid at computed-value time computes to
+/// (CSS Variables L1 §3).
+///
+/// Which properties inherit is exactly what [`ComputedStyle::inheriting_from`]
+/// already encodes, so `unset` copies `property` from the style a child of
+/// `parent` starts with — no second inherited-ness table to drift from it.
+#[must_use]
+pub(crate) fn unset_property(
+    style: ComputedStyle,
+    parent: Option<&ComputedStyle>,
+    property: &str,
+) -> ComputedStyle {
+    let inherited_or_initial =
+        parent.map_or_else(ComputedStyle::initial, ComputedStyle::inheriting_from);
+    copy_property(style, &inherited_or_initial, property).unwrap_or(style)
 }
 
 fn apply_property(
@@ -77,7 +115,7 @@ fn apply_property(
 ) -> Option<ComputedStyle> {
     css_wide_keyword(tokens)
         .and_then(|keyword| apply_css_wide_keyword(style, parent, property, keyword))
-        .or_else(|| apply_property_value(style, property, tokens))
+        .or_else(|| apply_property_value(style, parent, property, tokens))
 }
 
 /// The shorthand and singular properties; the twelve edge longhands fall
@@ -85,6 +123,7 @@ fn apply_property(
 /// [`flex_values::apply`].
 fn apply_property_value(
     style: ComputedStyle,
+    parent: Option<&ComputedStyle>,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
@@ -106,12 +145,13 @@ fn apply_property_value(
         "box-sizing" => parse_box_sizing(tokens).map(|value| style.with_box_sizing(value)),
         "text-align" => parse_text_align(tokens).map(|value| style.with_text_align(value)),
         "white-space" => parse_white_space(tokens).map(|value| style.with_white_space(value)),
-        _ => apply_edge_or_flex(style, property, tokens),
+        _ => apply_edge_or_flex(style, parent, property, tokens),
     }
 }
 
 fn apply_edge_or_flex(
     style: ComputedStyle,
+    parent: Option<&ComputedStyle>,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
@@ -123,18 +163,35 @@ fn apply_edge_or_flex(
         .or_else(|| overflow_values::apply(style, property, tokens))
         .or_else(|| {
             visual_values::apply_visual_property(style.visual(), property, tokens)
-                .map(|val| style.with_visual(val))
+                .map(|value| style.with_visual(value))
         })
         .or_else(|| {
-            text_values::apply(style.text_advance(), property, tokens)
-                .map(|val| style.with_text_advance(val))
+            text_values::apply(
+                style.text_advance(),
+                parent_font_weight(parent),
+                property,
+                tokens,
+            )
+            .map(|value| style.with_text_advance(value))
         })
         .or_else(|| {
-            grid_values::apply(style.grid(), property, tokens).map(|val| style.with_grid(val))
+            grid_values::apply(style.grid(), property, tokens).map(|value| style.with_grid(value))
         })
         .or_else(|| apply_logical(style, property, tokens))
 }
 
+/// The weight `bolder` / `lighter` are relative to: the parent's computed
+/// `font-weight`, or the initial `normal` at the root (CSS Fonts 4 §2.2).
+fn parent_font_weight(parent: Option<&ComputedStyle>) -> FontWeight {
+    parent.map_or(FontWeight::NORMAL, |parent| {
+        parent.text_advance().font_weight()
+    })
+}
+
+/// A logical declaration, mapped through the element's writing context. The
+/// cascade settles `writing-mode` and `direction` before any other
+/// declaration (`author_rules.rs`), so `style.logical().context()` is already
+/// the element's final context here, whatever the declaration order.
 fn apply_logical(style: ComputedStyle, property: &str, tokens: &[Token]) -> Option<ComputedStyle> {
     let mut logical = style.logical();
     if logical_values::apply_to_logical_style(&mut logical, property, tokens) {
@@ -277,13 +334,14 @@ fn reset_edge_or_flex(style: ComputedStyle, property: &str) -> Option<ComputedSt
         .or_else(|| overflow_values::reset(style, property))
         .or_else(|| {
             visual_values::reset_visual_property(style.visual(), property)
-                .map(|val| style.with_visual(val))
+                .map(|value| style.with_visual(value))
         })
         .or_else(|| {
             text_values::reset(style.text_advance(), property)
-                .map(|val| style.with_text_advance(val))
+                .map(|value| style.with_text_advance(value))
         })
-        .or_else(|| grid_values::reset(style.grid(), property).map(|val| style.with_grid(val)))
+        .or_else(|| grid_values::reset(style.grid(), property).map(|value| style.with_grid(value)))
+        .or_else(|| logical_values::reset(style, property))
 }
 
 fn reset_edge_longhand(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
@@ -344,16 +402,17 @@ fn copy_edge_or_flex(
         .or_else(|| overflow_values::inherit(style, parent, property))
         .or_else(|| {
             visual_values::inherit_visual_property(style.visual(), &parent.visual(), property)
-                .map(|val| style.with_visual(val))
+                .map(|value| style.with_visual(value))
         })
         .or_else(|| {
             text_values::inherit(style.text_advance(), parent.text_advance(), property)
-                .map(|val| style.with_text_advance(val))
+                .map(|value| style.with_text_advance(value))
         })
         .or_else(|| {
             grid_values::inherit(style.grid(), &parent.grid(), property)
-                .map(|val| style.with_grid(val))
+                .map(|value| style.with_grid(value))
         })
+        .or_else(|| logical_values::inherit(style, parent, property))
 }
 
 fn copy_edge_longhand(

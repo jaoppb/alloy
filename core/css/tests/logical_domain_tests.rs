@@ -639,3 +639,78 @@ fn test_logical_insets_entity() {
         css::domain::computed::sizing::Sizing::Fixed(px(35.0))
     );
 }
+
+// =========================================================================
+// Reading through a writing context, and what a child inherits
+// =========================================================================
+
+#[test]
+fn logical_edges_read_back_what_apply_to_physical_wrote() {
+    let rtl = WritingContext::new(WritingMode::HorizontalTb, Direction::Rtl);
+    let vertical = WritingContext::new(WritingMode::VerticalLr, Direction::Ltr);
+    for context in [WritingContext::default(), rtl, vertical] {
+        for side in [
+            LogicalSide::BlockStart,
+            LogicalSide::BlockEnd,
+            LogicalSide::InlineStart,
+            LogicalSide::InlineEnd,
+        ] {
+            let edges =
+                LogicalEdges::apply_to_physical(context, css::LengthEdges::ZERO, side, px(9.0));
+            assert_eq!(
+                LogicalEdges::read_from_physical(context, edges, side),
+                px(9.0)
+            );
+        }
+    }
+}
+
+#[test]
+fn logical_edges_with_side_replaces_exactly_that_side() {
+    let edges = LogicalEdges::ZERO
+        .with_side(LogicalSide::BlockStart, px(1.0))
+        .with_side(LogicalSide::BlockEnd, px(2.0))
+        .with_side(LogicalSide::InlineStart, px(3.0))
+        .with_side(LogicalSide::InlineEnd, px(4.0));
+    assert_eq!(edges, LogicalEdges::new(px(1.0), px(4.0), px(2.0), px(3.0)));
+}
+
+#[test]
+fn logical_insets_read_back_and_replace_one_side() {
+    use css::domain::computed::sizing::Sizing;
+    let rtl = WritingContext::new(WritingMode::HorizontalTb, Direction::Rtl);
+    for side in [
+        LogicalSide::BlockStart,
+        LogicalSide::BlockEnd,
+        LogicalSide::InlineStart,
+        LogicalSide::InlineEnd,
+    ] {
+        let position = LogicalInsets::apply_to_position(
+            rtl,
+            css::PositionStyle::initial(),
+            side,
+            Sizing::Fixed(px(6.0)),
+        );
+        assert_eq!(
+            LogicalInsets::read_from_position(rtl, position, side),
+            Sizing::Fixed(px(6.0))
+        );
+        let insets = LogicalInsets::AUTO.with_side(side, Sizing::Fixed(px(6.0)));
+        assert_ne!(insets, LogicalInsets::AUTO);
+    }
+}
+
+#[test]
+fn a_child_inherits_the_writing_context_but_not_the_flow_relative_box_values() {
+    let rtl = WritingContext::new(WritingMode::VerticalRl, Direction::Rtl);
+    let logical = LogicalStyle::initial()
+        .with_context(rtl)
+        .with_margin(LogicalEdges::uniform(px(5.0)))
+        .with_sizing(
+            LogicalSizing::initial()
+                .with_inline_size(css::domain::computed::sizing::Sizing::Fixed(px(50.0))),
+        );
+    let parent = ComputedStyle::initial().with_logical(logical);
+    let child = ComputedStyle::inheriting_from(&parent);
+    assert_eq!(child.logical(), LogicalStyle::initial().with_context(rtl));
+}

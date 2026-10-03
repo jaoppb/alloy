@@ -211,6 +211,16 @@ is worse than no grid. Names are case-sensitive `<custom-ident>`s (CSS Values 4 
 `box-shadow` follows the same rule: more than `BoxShadowList::CAPACITY` (4) shadows is refused with a warning, never
 truncated.
 
+### Custom properties
+
+Custom properties (`--*`, CSS Variables L1) are the one deliberate exception to "everything not listed is refused": the
+set of names is open by definition, so the parser accepts any valid `--name` (case preserved — `--C` and `--c` are two
+properties) **without** an entry in the table above or in `css::SUPPORTED_PROPERTIES`, and `manifest_runner.rs` has no
+probe for them. They are cascaded per element outside `ComputedStyle` and feed `var()` in any listed property; a `var()`
+that cannot be substituted (undefined without a fallback, a cycle, more than 64 KiB of output) makes its declaration
+invalid at computed-value time, i.e. `unset`. The full rules are in `docs/architecture/style-cascade-port-contract.md`
+("Cascade semantics of schema 7"); the regression tests are `core/css/tests/cascade_semantics.rs`.
+
 ## Selectors
 
 Written in the `E` / `F` element notation of the CSS specifications: one row is one grammatical form, not one example.

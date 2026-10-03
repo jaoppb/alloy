@@ -1,12 +1,29 @@
 //! CSS Custom Properties and `var()` cascade resolution (`PRD-007`).
 //!
 //! Implements custom property parsing (`--*`), `var()` substitution with cycle detection,
-//! fallback resolution, and inheritance.
+//! fallback resolution, memoization and an expansion cap, inheritance, and
+//! [`cascade_custom_properties`] — the per-element step the cascade
+//! (`author_rules.rs`) runs before any ordinary declaration is applied.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use crate::domain::computed::variables::{
     CustomPropertiesMap, VariableError, VariableName, VariableValue,
 };
 use crate::domain::declaration::{Declaration, DeclarationBlock, DeclarationValue};
+
+/// The most text one `var()` substitution may produce: 64 KiB.
+///
+/// Far beyond any real stylesheet value, yet small enough that a hostile chain of doubling
+/// references (`--a: var(--b) var(--b)`, thirty deep) fails in microseconds
+/// instead of allocating `2^30` copies. CSS Variables L1 §3 lets a user agent
+/// treat such a value as invalid at computed-value time.
+pub const MAX_SUBSTITUTED_BYTES: usize = 65_536;
+
+/// The text that opens a `var()` reference in a declaration value, rebuilt
+/// from its tokens (`Token::Function("var")` prints as `var(`).
+const VAR_FUNCTION_OPENING: &str = "var(";
 
 /// Parses a single custom property name and value pair.
 ///
@@ -96,21 +113,21 @@ pub fn inherit_custom_properties(
 ///
 /// # Errors
 ///
-/// Returns [`VariableError::UndefinedVariable`] if `name` is not defined, or
-/// [`VariableError::CycleDetected`] if resolving `name` enters a reference cycle.
+/// Returns [`VariableError::UndefinedVariable`] if `name` is not defined,
+/// [`VariableError::CycleDetected`] if resolving `name` enters a reference cycle, or
+/// [`VariableError::ExpansionLimit`] if the substituted text outgrows
+/// [`MAX_SUBSTITUTED_BYTES`].
 pub fn resolve_variable(
     name: &VariableName,
     map: &CustomPropertiesMap,
 ) -> Result<String, VariableError> {
-    let mut stack = Vec::new();
-    resolve_variable_internal(name, map, &mut stack)
+    Substitution::new(map).resolve_variable(name)
 }
 
 /// Checks whether a variable participates in a reference cycle.
 #[must_use]
 pub fn detect_cycle(name: &VariableName, map: &CustomPropertiesMap) -> Option<Vec<String>> {
-    let mut stack = Vec::new();
-    match resolve_variable_internal(name, map, &mut stack) {
+    match resolve_variable(name, map) {
         Err(VariableError::CycleDetected(cycle)) => Some(cycle),
         _ => None,
     }
@@ -121,14 +138,14 @@ pub fn detect_cycle(name: &VariableName, map: &CustomPropertiesMap) -> Option<Ve
 /// # Errors
 ///
 /// Returns [`VariableError::UndefinedVariable`] if an unresolvable variable has no fallback,
-/// [`VariableError::CycleDetected`] if a cyclic reference is unhandled, or
-/// [`VariableError::MalformedVarFunction`] if a `var()` function call has invalid syntax.
+/// [`VariableError::CycleDetected`] if a cyclic reference is unhandled,
+/// [`VariableError::MalformedVarFunction`] if a `var()` function call has invalid syntax, or
+/// [`VariableError::ExpansionLimit`] if the result outgrows [`MAX_SUBSTITUTED_BYTES`].
 pub fn substitute_variables(
     declaration_value: &str,
     map: &CustomPropertiesMap,
 ) -> Result<String, VariableError> {
-    let mut stack = Vec::new();
-    substitute_variables_internal(declaration_value, map, &mut stack)
+    Substitution::new(map).substitute(declaration_value)
 }
 
 /// Substitutes `var(...)` references in a [`DeclarationValue`].
@@ -144,19 +161,239 @@ pub fn resolve_declaration_value(
     Ok(DeclarationValue::new(&substituted))
 }
 
-fn resolve_variable_internal(
+/// Whether `value` carries a `var()` reference and so can only be read once
+/// the element's custom properties are known (CSS Variables L1 §3).
+#[must_use]
+pub(crate) fn references_variables(value: &DeclarationValue) -> bool {
+    value.as_str().contains(VAR_FUNCTION_OPENING)
+}
+
+/// A CSS-wide keyword as a custom property's whole value (CSS Cascade L4
+/// §7.3). A custom property inherits, so `unset` reads exactly as `inherit`.
+#[derive(Clone, Copy)]
+enum CustomPropertyKeyword {
+    /// The guaranteed-invalid value (CSS Variables L1 §2.2): the property is
+    /// treated as never declared on this element.
+    Initial,
+    /// The parent's computed value, or the guaranteed-invalid value when the
+    /// parent has none.
+    Inherit,
+}
+
+impl CustomPropertyKeyword {
+    fn of(value: &DeclarationValue) -> Option<Self> {
+        match value.as_str().trim().to_ascii_lowercase().as_str() {
+            "initial" => Some(Self::Initial),
+            "inherit" | "unset" => Some(Self::Inherit),
+            _ => None,
+        }
+    }
+}
+
+/// The computed custom properties of one element (CSS Variables L1 §2):
+/// `parent`'s map — custom properties always inherit — overlaid with every
+/// `--*` declaration of `declarations` in cascade order, then each locally
+/// declared value with its own `var()` references substituted, so a child
+/// inherits the substituted text rather than re-resolving it against its own
+/// variables.
+///
+/// A locally declared value whose substitution fails (undefined without a
+/// fallback, a cycle, the expansion cap) is invalid at computed-value time and
+/// computes to the guaranteed-invalid value — it is removed from the map
+/// (CSS Variables L1 §2.3, §3). An element that declares no custom property
+/// shares its parent's map rather than copying it.
+#[must_use]
+pub(crate) fn cascade_custom_properties(
+    parent: &Rc<CustomPropertiesMap>,
+    declarations: &[&Declaration],
+) -> Rc<CustomPropertiesMap> {
+    let declared: Vec<(VariableName, &DeclarationValue)> = declarations
+        .iter()
+        .filter_map(|declaration| custom_property_of(declaration))
+        .collect();
+    if declared.is_empty() {
+        return Rc::clone(parent);
+    }
+    let mut specified = CustomPropertiesMap::clone(parent);
+    let mut local_names = BTreeSet::new();
+    for (name, value) in declared {
+        specify_custom_property(&mut specified, parent, &name, value);
+        local_names.insert(name);
+    }
+    Rc::new(computed_custom_properties(specified, &local_names))
+}
+
+fn custom_property_of(declaration: &Declaration) -> Option<(VariableName, &DeclarationValue)> {
+    let name = VariableName::new(declaration.property().as_str())?;
+    Some((name, declaration.value()))
+}
+
+/// Folds one `--*` declaration into the element's specified map.
+fn specify_custom_property(
+    specified: &mut CustomPropertiesMap,
+    parent: &CustomPropertiesMap,
     name: &VariableName,
-    map: &CustomPropertiesMap,
-    stack: &mut Vec<VariableName>,
-) -> Result<String, VariableError> {
-    check_cycle(stack, name)?;
-    let Some(raw_value) = map.get(name) else {
-        return Err(VariableError::UndefinedVariable(name.as_str().to_owned()));
+    value: &DeclarationValue,
+) {
+    match CustomPropertyKeyword::of(value) {
+        Some(CustomPropertyKeyword::Initial) => {
+            specified.remove(name);
+        }
+        Some(CustomPropertyKeyword::Inherit) => inherit_custom_property(specified, parent, name),
+        None => specified.set(name.clone(), VariableValue::new(value.as_str())),
+    }
+}
+
+fn inherit_custom_property(
+    specified: &mut CustomPropertiesMap,
+    parent: &CustomPropertiesMap,
+    name: &VariableName,
+) {
+    let Some(inherited) = parent.get(name) else {
+        specified.remove(name);
+        return;
     };
-    stack.push(name.clone());
-    let resolution_result = substitute_variables_internal(raw_value.as_str(), map, stack);
-    stack.pop();
-    resolution_result
+    specified.set(name.clone(), inherited.clone());
+}
+
+/// `specified` with every locally declared `var()`-bearing value replaced by
+/// its substitution, or removed when that substitution fails.
+fn computed_custom_properties(
+    mut specified: CustomPropertiesMap,
+    local_names: &BTreeSet<VariableName>,
+) -> CustomPropertiesMap {
+    let mut substitution = Substitution::new(&specified);
+    let resolutions: Vec<(VariableName, Result<String, VariableError>)> = local_names
+        .iter()
+        .filter(|name| specified.get(name).is_some_and(VariableValue::contains_var))
+        .map(|name| (name.clone(), substitution.resolve_variable(name)))
+        .collect();
+    for (name, resolution) in resolutions {
+        record_resolution(&mut specified, name, resolution);
+    }
+    specified
+}
+
+fn record_resolution(
+    computed: &mut CustomPropertiesMap,
+    name: VariableName,
+    resolution: Result<String, VariableError>,
+) {
+    match resolution {
+        Ok(text) => computed.set(name, VariableValue::new(&text)),
+        Err(error) => {
+            tracing::debug!(variable = %name, %error, "custom property is invalid at computed-value time");
+            computed.remove(&name);
+        }
+    }
+}
+
+/// One substitution run over one [`CustomPropertiesMap`].
+///
+/// `resolved` memoizes every variable this run has already resolved, so a
+/// variable referenced many times is expanded once; `stack` is the chain of
+/// variables currently being expanded, which is what detects a cycle. Every
+/// append is checked against [`MAX_SUBSTITUTED_BYTES`], so even a chain whose
+/// every link doubles its predecessor fails after a bounded amount of work.
+struct Substitution<'map> {
+    map: &'map CustomPropertiesMap,
+    resolved: BTreeMap<VariableName, Result<String, VariableError>>,
+    stack: Vec<VariableName>,
+}
+
+impl<'map> Substitution<'map> {
+    const fn new(map: &'map CustomPropertiesMap) -> Self {
+        Self {
+            map,
+            resolved: BTreeMap::new(),
+            stack: Vec::new(),
+        }
+    }
+
+    fn resolve_variable(&mut self, name: &VariableName) -> Result<String, VariableError> {
+        if let Some(memoized) = self.resolved.get(name) {
+            return memoized.clone();
+        }
+        check_cycle(&self.stack, name)?;
+        let Some(raw_value) = self.map.get(name) else {
+            return Err(VariableError::UndefinedVariable(name.as_str().to_owned()));
+        };
+        self.stack.push(name.clone());
+        let resolution = self.substitute(raw_value.as_str());
+        self.stack.pop();
+        self.resolved.insert(name.clone(), resolution.clone());
+        resolution
+    }
+
+    fn substitute(&mut self, input: &str) -> Result<String, VariableError> {
+        let mut cursor: usize = 0;
+        let mut output = String::new();
+        let mut scanner = VarCallScanner::new(input);
+        while let Some(var_start) = scanner.find_next_from(cursor) {
+            append_bounded(
+                &mut output,
+                input.get(cursor..var_start).unwrap_or_default(),
+            )?;
+            let advance_by = self.substitute_call_at(input, var_start, &mut output)?;
+            cursor = var_start.saturating_add(advance_by);
+        }
+        append_bounded(&mut output, input.get(cursor..).unwrap_or_default())?;
+        Ok(output)
+    }
+
+    /// Expands the `var(...)` starting at `var_start` into `output`, answering
+    /// how many bytes of `input` it spanned.
+    fn substitute_call_at(
+        &mut self,
+        input: &str,
+        var_start: usize,
+        output: &mut String,
+    ) -> Result<usize, VariableError> {
+        let arguments_start = var_start.saturating_add(VAR_FUNCTION_OPENING.len());
+        let Some(after_var) = input.get(arguments_start..) else {
+            return Err(VariableError::MalformedVarFunction(
+                "truncated `var(`".to_owned(),
+            ));
+        };
+        let Some(relative_close) = find_matching_close_paren(after_var) else {
+            return Err(VariableError::MalformedVarFunction(
+                "unclosed `var()`".to_owned(),
+            ));
+        };
+        let arguments_slice = after_var.get(..relative_close).unwrap_or_default();
+        let (name_part, fallback_part) = split_var_arguments(arguments_slice);
+        let resolved = self.resolve_call(name_part, fallback_part)?;
+        append_bounded(output, &resolved)?;
+        Ok(relative_close.saturating_add(VAR_FUNCTION_OPENING.len().saturating_add(1)))
+    }
+
+    /// `var(name)` or `var(name, fallback)`: the variable's value, else the
+    /// fallback substituted in turn, else the variable's own error.
+    fn resolve_call(
+        &mut self,
+        name_text: &str,
+        fallback: Option<&str>,
+    ) -> Result<String, VariableError> {
+        let variable_name = VariableName::parse(name_text)?;
+        let resolution = self.resolve_variable(&variable_name);
+        match (resolution, fallback) {
+            (Ok(value), _) => Ok(value),
+            (Err(error), None) => Err(error),
+            (Err(_), Some(fallback_text)) => self.substitute(fallback_text),
+        }
+    }
+}
+
+/// Appends `text` to `output` unless that would push it past
+/// [`MAX_SUBSTITUTED_BYTES`].
+fn append_bounded(output: &mut String, text: &str) -> Result<(), VariableError> {
+    if output.len().saturating_add(text.len()) > MAX_SUBSTITUTED_BYTES {
+        return Err(VariableError::ExpansionLimit {
+            limit_bytes: MAX_SUBSTITUTED_BYTES,
+        });
+    }
+    output.push_str(text);
+    Ok(())
 }
 
 fn check_cycle(stack: &[VariableName], target: &VariableName) -> Result<(), VariableError> {
@@ -168,101 +405,11 @@ fn check_cycle(stack: &[VariableName], target: &VariableName) -> Result<(), Vari
 }
 
 fn build_cycle_path(stack: &[VariableName], target: &VariableName) -> Vec<String> {
-    let position = stack.iter().position(|item| item == target);
-    let start_index = position.map_or(0, |index| index);
-    let slice = stack.get(start_index..).map_or(&[][..], |items| items);
+    let start_index = stack.iter().position(|item| item == target).unwrap_or(0);
+    let slice = stack.get(start_index..).unwrap_or_default();
     let mut path: Vec<String> = slice.iter().map(|item| item.as_str().to_owned()).collect();
     path.push(target.as_str().to_owned());
     path
-}
-
-fn substitute_variables_internal(
-    input: &str,
-    map: &CustomPropertiesMap,
-    stack: &mut Vec<VariableName>,
-) -> Result<String, VariableError> {
-    let mut cursor: usize = 0;
-    let mut output = String::new();
-    let mut scanner = VarCallScanner::new(input);
-    while let Some(var_start) = scanner.find_next_from(cursor) {
-        append_prefix(input, cursor, var_start, &mut output);
-        let advance_by = process_var_at(input, var_start, map, stack, &mut output)?;
-        cursor = var_start.saturating_add(advance_by);
-    }
-    append_remaining(input, cursor, &mut output);
-    Ok(output)
-}
-
-fn append_prefix(input: &str, cursor: usize, var_start: usize, output: &mut String) {
-    if let Some(prefix) = input.get(cursor..var_start) {
-        output.push_str(prefix);
-    }
-}
-
-fn append_remaining(input: &str, cursor: usize, output: &mut String) {
-    if let Some(remaining) = input.get(cursor..) {
-        output.push_str(remaining);
-    }
-}
-
-fn process_var_at(
-    input: &str,
-    var_start: usize,
-    map: &CustomPropertiesMap,
-    stack: &mut Vec<VariableName>,
-    output: &mut String,
-) -> Result<usize, VariableError> {
-    let arguments_start = var_start.saturating_add(4);
-    let Some(after_var) = input.get(arguments_start..) else {
-        return Err(VariableError::MalformedVarFunction(
-            "truncated `var(`".to_owned(),
-        ));
-    };
-    let Some(relative_close) = find_matching_close_paren(after_var) else {
-        return Err(VariableError::MalformedVarFunction(
-            "unclosed `var()`".to_owned(),
-        ));
-    };
-    let arguments_slice = after_var.get(..relative_close).map_or("", |text| text);
-    let (name_part, fallback_part) = split_var_arguments(arguments_slice);
-    let resolved = resolve_var_call(name_part, fallback_part, map, stack)?;
-    output.push_str(&resolved);
-    Ok(relative_close.saturating_add(5))
-}
-
-fn resolve_var_call(
-    name_str: &str,
-    fallback: Option<&str>,
-    map: &CustomPropertiesMap,
-    stack: &mut Vec<VariableName>,
-) -> Result<String, VariableError> {
-    let variable_name = VariableName::parse(name_str)?;
-    let result = resolve_variable_internal(&variable_name, map, stack);
-    handle_resolution_fallback(result, fallback, map, stack)
-}
-
-fn handle_resolution_fallback(
-    result: Result<String, VariableError>,
-    fallback: Option<&str>,
-    map: &CustomPropertiesMap,
-    stack: &mut Vec<VariableName>,
-) -> Result<String, VariableError> {
-    match result {
-        Ok(value) => Ok(value),
-        Err(err) => resolve_fallback_or_error(err, fallback, map, stack),
-    }
-}
-
-fn resolve_fallback_or_error(
-    error: VariableError,
-    fallback: Option<&str>,
-    map: &CustomPropertiesMap,
-    stack: &mut Vec<VariableName>,
-) -> Result<String, VariableError> {
-    let Some(fallback_text) = fallback else {
-        return Err(error);
-    };
-    substitute_variables_internal(fallback_text, map, stack)
 }
 
 fn split_var_arguments(arguments_text: &str) -> (&str, Option<&str>) {
@@ -453,14 +600,14 @@ impl<'a> DeclarationScanner<'a> {
         while self.cursor < self.slice.len() {
             let remaining = self.slice.get(self.cursor..)?;
             let character = remaining.chars().next()?;
-            let char_len = character.len_utf8();
+            let character_length = character.len_utf8();
             if self.is_delimiter(character) {
-                let decl = self.slice.get(self.start..self.cursor);
-                self.cursor = self.cursor.saturating_add(char_len);
+                let declaration = self.slice.get(self.start..self.cursor);
+                self.cursor = self.cursor.saturating_add(character_length);
                 self.start = self.cursor;
-                return decl;
+                return declaration;
             }
-            self.advance_state(character, char_len);
+            self.advance_state(character, character_length);
         }
         self.finish_remaining()
     }
@@ -469,7 +616,7 @@ impl<'a> DeclarationScanner<'a> {
         character == ';' && self.depth == 0 && self.outside_quotes()
     }
 
-    const fn advance_state(&mut self, character: char, len: usize) {
+    const fn advance_state(&mut self, character: char, character_length: usize) {
         match character {
             '\'' if !self.in_double_quote => self.in_single_quote = !self.in_single_quote,
             '"' if !self.in_single_quote => self.in_double_quote = !self.in_double_quote,
@@ -477,7 +624,7 @@ impl<'a> DeclarationScanner<'a> {
             ')' if self.outside_quotes() => self.depth = self.depth.saturating_sub(1),
             _ => {}
         }
-        self.cursor = self.cursor.saturating_add(len);
+        self.cursor = self.cursor.saturating_add(character_length);
     }
 
     fn finish_remaining(&mut self) -> Option<&'a str> {
