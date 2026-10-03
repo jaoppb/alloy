@@ -10,6 +10,8 @@
 //!
 //! [`SystemFontProvider`]: crate::infrastructure::font::SystemFontProvider
 
+use std::path::PathBuf;
+
 /// The CSS generic font families `font-family` can resolve to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -23,6 +25,30 @@ pub enum GenericFamily {
 pub struct FontCatalog;
 
 impl FontCatalog {
+    /// The directories to scan for installed fonts, most preferred first, for
+    /// the operating system this binary was built for. A missing directory is
+    /// skipped by the scanner, never an error — the same best-effort discipline
+    /// as [`Self::candidate_paths`].
+    #[must_use]
+    pub fn system_font_dirs() -> Vec<PathBuf> {
+        #[cfg(target_os = "linux")]
+        {
+            linux_font_dirs()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            macos_font_dirs()
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_font_dirs()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            Vec::new()
+        }
+    }
+
     /// Candidate absolute file paths for `family`, most preferred first, for
     /// the operating system this binary was built for.
     #[must_use]
@@ -92,4 +118,50 @@ const fn windows_paths(family: GenericFamily) -> &'static [&'static str] {
         GenericFamily::Serif => &["C:\\Windows\\Fonts\\times.ttf"],
         GenericFamily::Monospace => &["C:\\Windows\\Fonts\\consola.ttf"],
     }
+}
+
+/// The user's home directory, if the environment names one. Only the two Unix
+/// targets consult it; Windows uses `%WINDIR%` / `%LOCALAPPDATA%` instead.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_font_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![
+        PathBuf::from("/usr/share/fonts"),
+        PathBuf::from("/usr/local/share/fonts"),
+    ];
+    if let Some(home) = home_dir() {
+        dirs.push(home.join(".local/share/fonts"));
+        dirs.push(home.join(".fonts"));
+    }
+    dirs
+}
+
+#[cfg(target_os = "macos")]
+fn macos_font_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![
+        PathBuf::from("/System/Library/Fonts"),
+        PathBuf::from("/Library/Fonts"),
+    ];
+    if let Some(home) = home_dir() {
+        dirs.push(home.join("Library/Fonts"));
+    }
+    dirs
+}
+
+#[cfg(target_os = "windows")]
+fn windows_font_dirs() -> Vec<PathBuf> {
+    let windir = std::env::var_os("WINDIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("C:\\Windows"));
+    let mut dirs = vec![windir.join("Fonts")];
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        dirs.push(PathBuf::from(local).join("Microsoft\\Windows\\Fonts"));
+    }
+    dirs
 }

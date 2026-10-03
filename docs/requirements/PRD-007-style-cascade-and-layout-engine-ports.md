@@ -98,3 +98,36 @@ ports — the contract is dogfooded, not bypassed for the default path.
 - [ ] A script adapter that panics falls back to the built-in resolver and the page still renders.
 - [ ] `core/css` builds and tests with `--no-default-features` (feature `no-script`), using only Rust adapters.
 - [ ] Determinism test: 100 repeated runs of the same input produce the identical `LayoutBoxTree`.
+
+---
+
+## 6. Post-freeze migration notes
+
+The boundary aggregates and `css::PORT_SCHEMA_VERSION` froze at `I3` (end of B4, version `3`). Every later change is
+recorded here, and is **additive** — a new `#[non_exhaustive]` field or grouping, never a removed or renarrowed one, so
+no in-tree consumer's `match` needs updating.
+
+### `3 → 4` — fonts increment: `ComputedStyle::font_family`
+
+`ComputedStyle` gains `font_family: FontFamilyList` (`core/css/src/domain/computed/font.rs`), an inherited property (CSS
+Fonts L4 §5.1) added alongside `color` / `font_size` in `ComputedStyle::inheriting_from`. It is a fixed-capacity `Copy`
+list rather than a `Vec` because `ComputedStyle` is `Copy` and copied per node during layout; the two size cuts
+(`FontFamilyList::CAPACITY` families, `FamilyName::CAPACITY` bytes per name) are declared in
+`core/css/tests/data/MANIFEST.md` beside the Flexbox cuts. Consumers read it through `ComputedStyle::font_family()`; a
+consumer that does not care about fonts is unaffected.
+
+### `4 → 5` — "unstyled real sites" follow-up: the `background` / `border` shorthands
+
+`SUPPORTED_PROPERTIES` grows from 34 to 36: the CSS Backgrounds & Borders L3 `background` and `border` shorthands are
+now accepted by the parser and resolved by the cascade, each **narrowed to the single component this cut already has a
+computed value for** — `background` → its colour (folded into `ComputedStyle::background_color`), `border` → its width
+(folded into the `border` edges, like `border-width`). `url()` layers, gradients, position/repeat/size keywords, and a
+border's `<line-style>` and colour are scanned past; `none` / `0` clear. The narrowings are declared in
+`core/css/tests/data/MANIFEST.md` beside the Flexbox and font cuts.
+
+**No boundary-aggregate field changed** — this is a wider set of _inputs_ for fields that already exist, so a consumer
+that pattern-matches `ComputedStyle` is unaffected; a producer feeding real-world stylesheets simply gets
+`background_color` / `border` populated from declarations it previously dropped. Brought forward from the planned v0.7
+CSS widening because the blank-window fix (`docs/reports/DIAGNOSTICO-JANELA-BRANCA-WAYLAND.md`) left real pages visibly
+unstyled and the page background was the highest-leverage single gap. `margin: auto` centring and `background-image`
+fetch/paint are the next items and are **not** in this bump.
