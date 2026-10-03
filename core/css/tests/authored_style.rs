@@ -441,6 +441,37 @@ fn a_comma_group_applies_the_members_inside_the_cut_and_notes_the_rest() {
 }
 
 #[test]
+fn a_comma_inside_an_unsupported_functional_pseudo_class_is_not_a_group_separator() {
+    // `:not(` / `:is(` / `:where(` tokenize as a function, not a bare `(`; the
+    // `,` between their arguments must not be read as the start of the next
+    // comma member, or the `)` lands where `{` belongs and the `p` member is
+    // lost with the rest of the rule.
+    for selector in [".x:not(.a, .b)", ":is(h1, h2) span", ":where(.a, .b)"] {
+        let (tree, root) = document(&format!("p, {selector} {{ color: #0000ff }}"), None);
+        let dom = snapshot(&tree, root);
+        let sheets = collect_style_sheets(&dom).expect("readable");
+
+        assert_eq!(sheets.len(), 1, "`p, {selector}` keeps its rule");
+        assert_eq!(
+            sheets.notes().len(),
+            1,
+            "`{selector}` is dropped as one member, with one note"
+        );
+
+        let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+        let paragraph = dom
+            .nodes_in_document_order()
+            .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+            .expect("a paragraph");
+        assert_eq!(
+            styled.node(paragraph).expect("styled").style().color(),
+            BLUE,
+            "the `p` member next to `{selector}` still applied"
+        );
+    }
+}
+
+#[test]
 fn a_comma_group_with_no_readable_member_still_drops_its_rule_whole() {
     let (tree, root) = document(
         "::before, ::after { color: #ff0000 } p { color: #0000ff }",
