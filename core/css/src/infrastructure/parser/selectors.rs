@@ -125,8 +125,9 @@ fn complete_list(
 
 /// After a rejected selector, advance to the `,` or `{` that bounds the next
 /// one, so the rest of a comma group can still be read. `(` / `[` nesting is
-/// balanced, so a `,` inside `:nth-child(2, 3)` or `[a=","]` is not mistaken
-/// for a group separator.
+/// balanced — including the `name(` function token every functional
+/// pseudo-class opens with — so a `,` inside `:not(.a, .b)`, `:is(h1, h2)` or
+/// `[a=","]` is not mistaken for a group separator.
 fn skip_to_selector_boundary(tokens: &mut TokenStream) {
     let mut depth: usize = 0;
     while let Some(token) = tokens.peek() {
@@ -138,8 +139,11 @@ fn skip_to_selector_boundary(tokens: &mut TokenStream) {
     }
 }
 
+/// Nesting depth after `token`. A `Token::Function` opens a `(` block that
+/// `Token::opens` does not list (it pairs bare openers only), the same
+/// pairing `paren_depth` in `values.rs` balances on.
 fn depth_after(depth: usize, token: &Token) -> usize {
-    if token.opens().is_some() {
+    if token.opens().is_some() || matches!(token, Token::Function(_)) {
         return depth.saturating_add(1);
     }
     if token.closes().is_some() {

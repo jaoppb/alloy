@@ -25,6 +25,7 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0015](0015-typed-errors-with-thiserror.md)                            | Typed Errors with `thiserror`                            | Accepted | 2026-08-30 |
 | [ADR-0018](0018-unsafe-by-threat-surface.md)                               | `unsafe` Governed by Threat Surface (rewrite of N-02)    | Accepted | 2026-09-05 |
 | [ADR-0019](0019-single-event-loop-owns-the-main-thread.md)                 | A Single Event Loop Owns the Main Thread                 | Accepted | 2026-09-05 |
+| [ADR-0022](0022-platform-crate-isolates-os-specifics.md)                   | A `platform` Crate Isolates Host-OS Specifics            | Accepted | 2026-10-03 |
 
 ---
 

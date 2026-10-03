@@ -763,6 +763,7 @@ name = "graphics"
 version = "0.1.0"
 dependencies = [
  "network",
+ "platform",
  "thiserror 2.0.17",
  "ttf-parser",
 ]
@@ -1453,6 +1454,10 @@ name = "plain"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
+
+[[package]]
+name = "platform"
+version = "0.1.0"
 
 [[package]]
 name = "plotters"

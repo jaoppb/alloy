@@ -57,7 +57,7 @@ while IFS= read -r dep; do
 	# in the geiger report under this name if they are not on crates.io, and
 	# they are `#![forbid(unsafe_code)]` by construction (arch-lint / CI).
 	is_workspace_member=false
-	for member in engine dom css html graphics network window rhai-runtime rhai-bindings devtools extension js alloy; do
+	for member in engine dom css html graphics network platform window rhai-runtime rhai-bindings devtools extension js alloy; do
 		[ "$dep" = "$member" ] && is_workspace_member=true && break
 	done
 	$is_workspace_member && continue

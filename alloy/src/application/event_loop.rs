@@ -28,7 +28,9 @@ use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
 use crate::application::navigation;
 use crate::application::pipeline::{LinkTarget, RenderOptions, render_dom_with_links};
-use crate::application::subresource::{SubresourceDiscoverer, SubresourceRequest};
+use crate::application::subresource::{
+    SubresourceDiscoverer, SubresourceRequest, document_base_url,
+};
 use crate::error::AlloyError;
 
 /// What a background fetch produced, drained by the loop's own thread.
@@ -71,6 +73,8 @@ pub struct LoopStats {
 struct Session<F, T, P, D> {
     services: BrowserServices<F, T, P, D>,
     dom_tree: Option<DomTree>,
+    /// The document's effective base URL — `<base href>` already applied —
+    /// that both subresource discovery and link clicks resolve against.
     base_url: Option<Url>,
     extra_sheets: StyleSheetSet,
     images: ImageStore,
@@ -120,11 +124,13 @@ where
     /// follow-up fetches it reveals (a fresh document's subresources).
     fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
         match message {
-            LoopMessage::Navigation(Ok((dom_tree, base_url))) => {
-                tracing::info!(url = %base_url, "navigation complete");
+            LoopMessage::Navigation(Ok((dom_tree, navigation_url))) => {
+                let snapshot = css::snapshot(&dom_tree, dom_tree.document());
+                let base_url = document_base_url(&snapshot, &navigation_url);
+                tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
                 self.reset_document_state();
-                self.base_url = Some(base_url.clone());
-                self.spawn_subresources(&dom_tree, &base_url, sender);
+                self.spawn_subresources(&snapshot, &base_url, sender);
+                self.base_url = Some(base_url);
                 self.dom_tree = Some(dom_tree);
                 self.dirty = true;
                 self.stats.navigations = self.stats.navigations.saturating_add(1);
@@ -190,18 +196,18 @@ where
         self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
     }
 
-    /// Asks the discoverer what `dom_tree` references, registers a
-    /// placeholder for every image found (see
+    /// Asks the discoverer what `snapshot` references, resolved against the
+    /// document's effective `base_url` (the same one link clicks use),
+    /// registers a placeholder for every image found (see
     /// `subresource::placeholder_framebuffer`), and spawns one worker thread
     /// per subresource.
     fn spawn_subresources(
         &mut self,
-        dom_tree: &DomTree,
+        snapshot: &css::DomSnapshot,
         base_url: &Url,
         sender: &Sender<LoopMessage>,
     ) {
-        let snapshot = css::snapshot(dom_tree, dom_tree.document());
-        let found = self.services.discoverer().discover(&snapshot, base_url);
+        let found = self.services.discoverer().discover(snapshot, base_url);
         for request in found {
             tracing::debug!(?request, "subresource discovered");
             if let SubresourceRequest::Image(image) = &request {
@@ -976,5 +982,78 @@ mod tests {
             }
             _ => panic!("expected successful navigation to target.html"),
         }
+    }
+
+    #[test]
+    fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let expected = network::Url::parse("https://cdn.example/app/docs.html").unwrap();
+        let response = network::HttpResponse::new(
+            network::StatusCode::OK,
+            network::HeaderMap::new(),
+            network::Body::from_text("<html><body>docs</body></html>"),
+        );
+        let mut session = session_over(
+            MockTransport::new().with_response(expected.clone(), response),
+            attributes.initial_size(),
+        );
+        let document = html::parse(
+            "<html><head><base href=\"https://cdn.example/app/\"></head><body>\
+             <a href=\"docs.html\" style=\"display: block; width: 100px; height: 50px;\">Docs</a>\
+             </body></html>",
+        )
+        .unwrap();
+        let navigation_url = network::Url::parse("https://example.com/index.html").unwrap();
+        session.apply(
+            LoopMessage::Navigation(Ok((document, navigation_url))),
+            &sender,
+        );
+
+        assert_eq!(
+            session
+                .base_url
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("https://cdn.example/app/"),
+            "the session keeps the `<base href>`, not the navigation URL"
+        );
+
+        pump_once(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        )
+        .unwrap();
+        system.schedule(WindowEvent::PointerMoved {
+            position: window::PhysicalPosition::new(20.0, 20.0),
+        });
+        system.schedule(WindowEvent::PointerButton {
+            button: window::PointerButton::Left,
+            pressed: true,
+        });
+        pump_once(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        )
+        .unwrap();
+
+        let message = receiver
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .expect("navigation message received");
+        let LoopMessage::Navigation(Ok((_, target_url))) = message else {
+            panic!("expected a successful navigation to the `<base href>`-resolved link");
+        };
+        assert_eq!(target_url, expected);
     }
 }
