@@ -58,7 +58,9 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   RustCrypto alternative NO-GO — `docs/reports/SPIKE-C0-TLS-PROVIDER.md`), `HttpTransport`/`RequestPolicy` ports
   (`PRD-009`). `network::PORT_SCHEMA_VERSION = 1`, **not yet frozen** — freezes at `I4`.
 - **C2 — `core/window`**: `winit`+`softbuffer` adapter, `WindowSystem`/`Presenter` ports (`PRD-010`), headless reference
-  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 1`, **not yet frozen**.
+  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 2` (`1→2`:
+  `WindowSystem::request_redraw` added during I4 for the blank-window / Wayland-lost-first-present fix —
+  `docs/reports/DIAGNOSTICO-JANELA-BRANCA-WAYLAND.md`), **not yet frozen**.
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
 - **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;
@@ -139,6 +141,7 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/graphics`              | `graphics`      | `DisplayList`, `RenderBackend` port, `SoftwareCpuBackend`, PNG codec, text rasterization (v0.3–v0.5)                      |
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |
 | `core/network`               | `network`       | `HttpTransport` / `RequestPolicy` ports, hand-written HTTP/1.1 + `rustls`/`ring` TLS (v0.5 C0/C1)                         |
+| `core/platform`              | `platform`      | Host-OS facts (font install paths, env lookups) behind the `FontLocator` port — the only `target_os` branch (ADR-0022)    |
 | `devtools`                   | `devtools`      | Debug protocol, inspector, hot-reload orchestration. **Stub (v0.9+)**                                                     |
 | `extension`                  | `extension`     | WebExtensions bridge. **Stub**                                                                                            |
 

@@ -19,7 +19,7 @@ use crate::domain::media::MediaQuery;
 use crate::domain::parse_notes::ParseNote;
 use crate::domain::stylesheet_set::{Origin, StyleRule, StyleSheetSet};
 use crate::infrastructure::parser::media::parse_media_prelude;
-use crate::infrastructure::parser::selectors::parse_selector_list;
+use crate::infrastructure::parser::selectors::{ParsedSelectorList, parse_selector_list};
 use crate::infrastructure::parser::token::{Token, TokenStream};
 
 /// How deeply `{`, `(` and `[` may nest before the source is refused whole.
@@ -250,19 +250,34 @@ fn qualified_rule(
     sheets: &mut StyleSheetSet,
 ) -> Result<(), CssError> {
     let span = tokens.peek_span();
-    let selectors = match parse_selector_list(tokens) {
-        Ok(selectors) => selectors,
+    let parsed = match parse_selector_list(tokens) {
+        Ok(parsed) => parsed,
         Err(error) => return skip_unreadable(tokens, &error, span, sheets),
     };
+    note_skipped_selectors(&parsed, span, sheets);
     if tokens.peek() != Some(&Token::OpenBrace) {
         sheets.push_note(ParseNote::new("a rule needs a `{` block", span));
         return skip_at_rule(tokens, sheets);
     }
     tokens.advance();
     let declarations = read_declaration_block(tokens, sheets)?;
-    let rule = StyleRule::new(selectors, declarations).with_media(media.clone());
+    let rule = StyleRule::new(parsed.into_list(), declarations).with_media(media.clone());
     sheets.push_rule(origin, rule);
     Ok(())
+}
+
+/// A comma group that kept some selectors and dropped others records one note
+/// per drop — the same "recover, but say so" discipline as an unsupported
+/// property, so a shrinking match set is visible in diagnostics rather than
+/// silent (`relatório §2.8:350-354`).
+fn note_skipped_selectors(
+    parsed: &ParsedSelectorList,
+    span: SourceSpan,
+    sheets: &mut StyleSheetSet,
+) {
+    for error in parsed.skipped() {
+        sheets.push_note(ParseNote::new(error.to_string(), span));
+    }
 }
 
 /// The declarations between `{` and `}`, with the `}` consumed. Also the body

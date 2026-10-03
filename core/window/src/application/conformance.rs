@@ -15,7 +15,8 @@
 //!   succeeded is a typed [`WindowError::NoWindowYet`], never a panic and
 //!   never a hang.
 //! - **Reusability**: both `system` and `presenter` survive more than one
-//!   call — a second `pump_events`, a second `present`.
+//!   call — a second `pump_events`, a second `present`, a second
+//!   `request_redraw`.
 //!
 //! What it does **not** pin is *pixels*: `Presenter::present`'s job is to
 //! move bytes onto a surface, and only a golden comparison (`I4`) can judge
@@ -47,8 +48,10 @@ use crate::domain::surface::SurfaceSize;
 /// `system`.
 pub fn run_window_suite(system: &mut dyn WindowSystem, presenter: &mut dyn Presenter) {
     check_pump_events_before_create_window_is_refused(system);
+    check_request_redraw_before_create_window_is_silent(system);
     let size = check_surface_size_round_trips(system);
     check_pump_events_is_reusable(system);
+    check_request_redraw_is_reusable(system);
     check_presenting_is_reusable(presenter, size);
 }
 
@@ -103,6 +106,17 @@ fn check_surface_size_round_trips(system: &mut dyn WindowSystem) -> SurfaceSize 
         "Resized must report the size create_window was given, or the real size"
     );
     reported
+}
+
+fn check_request_redraw_before_create_window_is_silent(system: &mut dyn WindowSystem) {
+    // `request_redraw` is a command with no failure channel — before any
+    // window exists it must be a silent no-op, never a panic (`PRD-010`).
+    system.request_redraw();
+}
+
+fn check_request_redraw_is_reusable(system: &mut dyn WindowSystem) {
+    system.request_redraw();
+    system.request_redraw();
 }
 
 fn check_pump_events_is_reusable(system: &mut dyn WindowSystem) {

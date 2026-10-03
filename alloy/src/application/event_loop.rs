@@ -28,7 +28,9 @@ use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
 use crate::application::navigation;
 use crate::application::pipeline::{LinkTarget, RenderOptions, render_dom_with_links};
-use crate::application::subresource::{SubresourceDiscoverer, SubresourceRequest};
+use crate::application::subresource::{
+    SubresourceDiscoverer, SubresourceRequest, document_base_url,
+};
 use crate::error::AlloyError;
 
 /// What a background fetch produced, drained by the loop's own thread.
@@ -45,10 +47,14 @@ enum LoopMessage {
 /// background work to land before looking at the presented frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LoopStats {
-    /// How many times this run actually re-laid-out and presented a frame.
+    /// How many times this run actually re-laid-out and presented a frame. A
+    /// bare `RedrawRequested` repaint re-blits the cached frame and does not
+    /// count here — the I4 coalescing proof is about relayouts only.
     pub relayouts: usize,
     /// How many navigations have successfully parsed into the document tree.
     pub navigations: usize,
+    /// How many navigations failed and fell back to the error card.
+    pub navigation_errors: usize,
     /// How many external `<link rel=stylesheet>` sheets were absorbed into the
     /// cascade.
     pub stylesheets_loaded: usize,
@@ -67,6 +73,8 @@ pub struct LoopStats {
 struct Session<F, T, P, D> {
     services: BrowserServices<F, T, P, D>,
     dom_tree: Option<DomTree>,
+    /// The document's effective base URL — `<base href>` already applied —
+    /// that both subresource discovery and link clicks resolve against.
     base_url: Option<Url>,
     extra_sheets: StyleSheetSet,
     images: ImageStore,
@@ -74,7 +82,19 @@ struct Session<F, T, P, D> {
     pointer_pos: Option<PhysicalPosition>,
     dirty: bool,
     viewport: window::SurfaceSize,
+    last_frame: Option<CachedFrame>,
     stats: LoopStats,
+}
+
+/// The pixels of the last frame `relayout_and_present` produced, kept so a
+/// `RedrawRequested` can re-blit them without re-running the whole
+/// `render_dom_with_links` pipeline (cascade → layout → paint → raster →
+/// readback). This is the "repaint is cheap, relayout is not" split the event
+/// loop rests on.
+struct CachedFrame {
+    width: u32,
+    height: u32,
+    pixels: Vec<u32>,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -95,6 +115,7 @@ where
             pointer_pos: None,
             dirty: false,
             viewport,
+            last_frame: None,
             stats: LoopStats::default(),
         }
     }
@@ -103,17 +124,20 @@ where
     /// follow-up fetches it reveals (a fresh document's subresources).
     fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
         match message {
-            LoopMessage::Navigation(Ok((dom_tree, base_url))) => {
-                tracing::info!(url = %base_url, "navigation complete");
+            LoopMessage::Navigation(Ok((dom_tree, navigation_url))) => {
+                let snapshot = css::snapshot(&dom_tree, dom_tree.document());
+                let base_url = document_base_url(&snapshot, &navigation_url);
+                tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
                 self.reset_document_state();
-                self.base_url = Some(base_url.clone());
-                self.spawn_subresources(&dom_tree, &base_url, sender);
+                self.spawn_subresources(&snapshot, &base_url, sender);
+                self.base_url = Some(base_url);
                 self.dom_tree = Some(dom_tree);
                 self.dirty = true;
                 self.stats.navigations = self.stats.navigations.saturating_add(1);
             }
             LoopMessage::Navigation(Err(error)) => {
                 tracing::error!(%error, "navigation failed");
+                self.stats.navigation_errors = self.stats.navigation_errors.saturating_add(1);
                 self.show_navigation_error(&error);
             }
             LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
@@ -154,26 +178,38 @@ where
     }
 
     fn absorb_stylesheet(&mut self, text: &str) {
-        if let Ok(sheet) = css::parse_stylesheet(text, Origin::Author) {
-            self.extra_sheets.absorb(sheet);
-            self.dirty = true;
-            self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
-        }
+        let sheet = match css::parse_stylesheet(text, Origin::Author) {
+            Ok(sheet) => sheet,
+            Err(error) => {
+                tracing::warn!(%error, bytes = text.len(), "stylesheet parse failed");
+                return;
+            }
+        };
+        tracing::debug!(
+            rules = sheet.rules().count(),
+            notes = sheet.notes().len(),
+            bytes = text.len(),
+            "stylesheet absorbed"
+        );
+        self.extra_sheets.absorb(sheet);
+        self.dirty = true;
+        self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
     }
 
-    /// Asks the discoverer what `dom_tree` references, registers a
-    /// placeholder for every image found (see
+    /// Asks the discoverer what `snapshot` references, resolved against the
+    /// document's effective `base_url` (the same one link clicks use),
+    /// registers a placeholder for every image found (see
     /// `subresource::placeholder_framebuffer`), and spawns one worker thread
     /// per subresource.
     fn spawn_subresources(
         &mut self,
-        dom_tree: &DomTree,
+        snapshot: &css::DomSnapshot,
         base_url: &Url,
         sender: &Sender<LoopMessage>,
     ) {
-        let snapshot = css::snapshot(dom_tree, dom_tree.document());
-        let found = self.services.discoverer().discover(&snapshot, base_url);
+        let found = self.services.discoverer().discover(snapshot, base_url);
         for request in found {
+            tracing::debug!(?request, "subresource discovered");
             if let SubresourceRequest::Image(image) = &request {
                 self.images.reserve_placeholder(image.id());
             }
@@ -223,11 +259,20 @@ fn fetch_subresource<T: HttpTransport>(request: SubresourceRequest, transport: &
 
 fn fetch_text<T: HttpTransport>(url: &Url, transport: &T) -> Result<String, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
-    Ok(response.body().as_str().unwrap_or_default().to_owned())
+    navigation::ensure_success(url, response.status())?;
+    let body = response.body().as_str().unwrap_or_default().to_owned();
+    tracing::debug!(
+        %url,
+        status = response.status().code(),
+        bytes = body.len(),
+        "stylesheet fetched"
+    );
+    Ok(body)
 }
 
 fn fetch_image<T: HttpTransport>(url: &Url, transport: &T) -> Result<Framebuffer, AlloyError> {
     let response = transport.execute(&HttpRequest::get(url.clone()))?;
+    navigation::ensure_success(url, response.status())?;
     Ok(graphics::png::decode(response.body().as_bytes())?)
 }
 
@@ -398,12 +443,14 @@ where
     let mut close_requested = false;
     let mut latest_resize = None;
     let mut saw_window_event = false;
+    let mut needs_repaint = false;
     let mut clicked_pos = None;
     let window_status = system.pump_events(&mut |event| {
         saw_window_event = true;
         match event {
             WindowEvent::CloseRequested => close_requested = true,
             WindowEvent::Resized(size) => latest_resize = Some(size),
+            WindowEvent::RedrawRequested => needs_repaint = true,
             WindowEvent::PointerMoved { position } => session.pointer_pos = Some(position),
             WindowEvent::PointerButton {
                 button: PointerButton::Left,
@@ -447,10 +494,18 @@ where
         session.apply(message, sender);
     }
 
+    let relaid_out = session.dirty;
     if session.dirty {
-        present_if_ready(presenter, session)?;
+        relayout_and_present(presenter, session)?;
         session.record_relayout();
         session.dirty = false;
+        // Re-arm the platform redraw: on Wayland the present just made can be
+        // dropped by a not-yet-configured surface, and the RedrawRequested
+        // this schedules re-blits the cached frame once it is live.
+        system.request_redraw();
+    }
+    if needs_repaint && !relaid_out {
+        repaint(presenter, session)?;
     }
 
     let did_work = saw_window_event || saw_message;
@@ -485,7 +540,11 @@ fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str> {
     None
 }
 
-fn present_if_ready<R, F, T, P, D>(
+/// Rebuilds the display list from the current document, viewport and
+/// subresources, presents it, and caches the pixels for a later cheap
+/// [`repaint`]. The only path that bumps `stats.relayouts` — the I4 coalescing
+/// proof rests on that staying true.
+fn relayout_and_present<R, F, T, P, D>(
     presenter: &mut R,
     session: &mut Session<F, T, P, D>,
 ) -> Result<(), AlloyError>
@@ -507,8 +566,34 @@ where
         Arc::clone(session.services.font_provider()),
     )?;
     session.links = links;
-    let pixels = frame_pixels(&framebuffer);
-    let view = FrameView::new(viewport.width(), viewport.height(), &pixels)
+    let cached = CachedFrame {
+        width: viewport.width(),
+        height: viewport.height(),
+        pixels: frame_pixels(&framebuffer),
+    };
+    let view = FrameView::new(cached.width, cached.height, &cached.pixels)
+        .ok_or(AlloyError::InvalidDimensions)?;
+    presenter.present(view)?;
+    session.last_frame = Some(cached);
+    Ok(())
+}
+
+/// Re-blits the frame [`relayout_and_present`] last produced, with no pipeline
+/// work and without touching `stats.relayouts`. A no-op before the first
+/// frame. Serves `RedrawRequested`: a compositor expose/occlusion, or the
+/// redraw winit re-arms once a Wayland surface that dropped the first present
+/// is finally configured.
+fn repaint<R, F, T, P, D>(
+    presenter: &mut R,
+    session: &Session<F, T, P, D>,
+) -> Result<(), AlloyError>
+where
+    R: Presenter,
+{
+    let Some(frame) = session.last_frame.as_ref() else {
+        return Ok(());
+    };
+    let view = FrameView::new(frame.width, frame.height, &frame.pixels)
         .ok_or(AlloyError::InvalidDimensions)?;
     presenter.present(view)?;
     Ok(())
@@ -566,11 +651,32 @@ mod tests {
     use network::{AllowAllPolicy, MockTransport};
     use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
-    use super::{Arc, BrowserServices, ImageId, LoopMessage, Session, WindowEvent, pump_once};
+    use super::{
+        Arc, BrowserServices, ImageId, LoopMessage, Session, WindowEvent, fetch_text, pump_once,
+    };
     use crate::application::event_loop::initial_window_attributes;
     use crate::application::paint::DEFAULT_FONT;
     use crate::application::pipeline::DEFAULT_FONT_SIZE;
     use crate::application::subresource::{MarkupDiscoverer, placeholder_framebuffer};
+    use crate::error::AlloyError;
+
+    #[test]
+    fn a_non_2xx_stylesheet_status_is_a_typed_error_not_an_empty_body() {
+        let sheet_url = network::Url::parse("http://example.com/missing.css").unwrap();
+        let not_found = network::HttpResponse::new(
+            network::StatusCode::NOT_FOUND,
+            network::HeaderMap::new(),
+            network::Body::from_text("<!doctype html><title>404</title>"),
+        );
+        let transport = MockTransport::new().with_response(sheet_url.clone(), not_found);
+
+        let result = fetch_text(&sheet_url, &transport);
+
+        assert!(
+            matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
+            "a 404 error page must not reach the CSS parser as a stylesheet"
+        );
+    }
 
     type TestSession =
         Session<SyntheticFontProvider, MockTransport, AllowAllPolicy, MarkupDiscoverer>;
@@ -658,6 +764,159 @@ mod tests {
         );
     }
 
+    fn pump(
+        system: &mut HeadlessWindowSystem,
+        presenter: &mut RecordingPresenter,
+        receiver: &mpsc::Receiver<LoopMessage>,
+        sender: &mpsc::Sender<LoopMessage>,
+        session: &mut TestSession,
+    ) {
+        pump_once(system, presenter, receiver, sender, session).unwrap();
+    }
+
+    #[test]
+    fn a_redraw_request_repaints_the_cached_frame_without_a_relayout() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let mut session = loaded_session(attributes.initial_size());
+
+        // First pump: the auto-seeded Resized lays out and presents once.
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+        assert_eq!(session.stats.relayouts, 1);
+        assert_eq!(presenter.present_count(), 1);
+
+        system.schedule(WindowEvent::RedrawRequested);
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(
+            session.stats.relayouts, 1,
+            "a RedrawRequested must not trigger another relayout"
+        );
+        assert_eq!(
+            presenter.present_count(),
+            2,
+            "a RedrawRequested must re-blit the cached frame"
+        );
+    }
+
+    #[test]
+    fn a_redraw_request_before_the_first_frame_is_a_silent_noop() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        // No document yet.
+        let mut session = session_over(MockTransport::new(), attributes.initial_size());
+
+        system.schedule(WindowEvent::RedrawRequested);
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(
+            presenter.present_count(),
+            0,
+            "a RedrawRequested with nothing rendered yet must present nothing"
+        );
+        assert!(session.last_frame.is_none());
+    }
+
+    #[test]
+    fn a_relayout_arms_a_following_repaint() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let mut session = loaded_session(attributes.initial_size());
+
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+        assert_eq!(presenter.present_count(), 1);
+
+        // Nothing new scheduled: the redraw the relayout re-armed is the only
+        // thing this pump sees, and it must repaint (not relayout).
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(
+            session.stats.relayouts, 1,
+            "no new relayout without new content"
+        );
+        assert_eq!(
+            presenter.present_count(),
+            2,
+            "the re-armed redraw repainted"
+        );
+    }
+
+    #[test]
+    fn many_redraw_requests_in_one_pump_coalesce_to_one_repaint() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let mut session = loaded_session(attributes.initial_size());
+
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+        let presents_after_load = presenter.present_count();
+
+        for _ in 0..50 {
+            system.schedule(WindowEvent::RedrawRequested);
+        }
+        pump(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        );
+
+        assert_eq!(session.stats.relayouts, 1);
+        assert_eq!(
+            presenter.present_count(),
+            presents_after_load + 1,
+            "fifty coalesced RedrawRequested events cost exactly one repaint"
+        );
+    }
+
     #[test]
     fn clicking_a_link_triggers_navigation_to_resolved_url() {
         let attributes = initial_window_attributes().unwrap();
@@ -723,5 +982,78 @@ mod tests {
             }
             _ => panic!("expected successful navigation to target.html"),
         }
+    }
+
+    #[test]
+    fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url() {
+        let attributes = initial_window_attributes().unwrap();
+        let mut system = HeadlessWindowSystem::new();
+        system.create_window(&attributes).unwrap();
+
+        let mut presenter = RecordingPresenter::new();
+        let (sender, receiver) = mpsc::channel();
+        let expected = network::Url::parse("https://cdn.example/app/docs.html").unwrap();
+        let response = network::HttpResponse::new(
+            network::StatusCode::OK,
+            network::HeaderMap::new(),
+            network::Body::from_text("<html><body>docs</body></html>"),
+        );
+        let mut session = session_over(
+            MockTransport::new().with_response(expected.clone(), response),
+            attributes.initial_size(),
+        );
+        let document = html::parse(
+            "<html><head><base href=\"https://cdn.example/app/\"></head><body>\
+             <a href=\"docs.html\" style=\"display: block; width: 100px; height: 50px;\">Docs</a>\
+             </body></html>",
+        )
+        .unwrap();
+        let navigation_url = network::Url::parse("https://example.com/index.html").unwrap();
+        session.apply(
+            LoopMessage::Navigation(Ok((document, navigation_url))),
+            &sender,
+        );
+
+        assert_eq!(
+            session
+                .base_url
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("https://cdn.example/app/"),
+            "the session keeps the `<base href>`, not the navigation URL"
+        );
+
+        pump_once(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        )
+        .unwrap();
+        system.schedule(WindowEvent::PointerMoved {
+            position: window::PhysicalPosition::new(20.0, 20.0),
+        });
+        system.schedule(WindowEvent::PointerButton {
+            button: window::PointerButton::Left,
+            pressed: true,
+        });
+        pump_once(
+            &mut system,
+            &mut presenter,
+            &receiver,
+            &sender,
+            &mut session,
+        )
+        .unwrap();
+
+        let message = receiver
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .expect("navigation message received");
+        let LoopMessage::Navigation(Ok((_, target_url))) = message else {
+            panic!("expected a successful navigation to the `<base href>`-resolved link");
+        };
+        assert_eq!(target_url, expected);
     }
 }

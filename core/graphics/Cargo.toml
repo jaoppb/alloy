@@ -26,6 +26,9 @@ ttf-parser = { workspace = true }
 # Phase X image support: reexport of network::inflate (RFC 1951 / zlib for PNG IDAT).
 # default-features = false links no socket and no crypto.
 network = { path = "../network", default-features = false }
+# Font install locations per host OS (`SystemFontProvider`, the named-family
+# index). Dependency-free; it is where every `target_os` branch lives (ADR-0022).
+platform = { path = "../platform" }
 
 [lints]
 workspace = true

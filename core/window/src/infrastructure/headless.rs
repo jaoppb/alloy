@@ -76,6 +76,13 @@ impl WindowSystem for HeadlessWindowSystem {
         }
         Ok(PumpStatus::Continue)
     }
+
+    fn request_redraw(&mut self) {
+        if self.window.is_none() {
+            return;
+        }
+        self.scripted_events.push_back(WindowEvent::RedrawRequested);
+    }
 }
 
 /// A [`Presenter`] that records the last [`FrameView`] it was given, owned
@@ -84,6 +91,7 @@ impl WindowSystem for HeadlessWindowSystem {
 #[derive(Debug, Default)]
 pub struct RecordingPresenter {
     last_frame: Option<RecordedFrame>,
+    present_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,6 +114,14 @@ impl RecordingPresenter {
         let recorded = self.last_frame.as_ref()?;
         FrameView::new(recorded.width, recorded.height, &recorded.pixels)
     }
+
+    /// How many times [`Presenter::present`] has been called on this
+    /// presenter. Lets a test tell a cheap repaint (re-blit of the cached
+    /// frame) from a full relayout, which the frame contents alone cannot.
+    #[must_use]
+    pub const fn present_count(&self) -> usize {
+        self.present_count
+    }
 }
 
 impl Presenter for RecordingPresenter {
@@ -115,6 +131,7 @@ impl Presenter for RecordingPresenter {
             height: frame.height(),
             pixels: frame.pixels().to_vec(),
         });
+        self.present_count = self.present_count.saturating_add(1);
         Ok(())
     }
 }

@@ -3,6 +3,12 @@
 //! Level comes from `ALLOY_LOG` (or `RUST_LOG`), default `info` — never a
 //! hardcoded level. Format is pretty by default, `json` when
 //! `ALLOY_LOG_FORMAT=json`. Output goes to stderr.
+//!
+//! `ALLOY_LOG=alloy=debug,network=debug` is the setting for diagnosing why a
+//! real page renders unstyled: it logs each stylesheet fetch (URL, status,
+//! bytes), each parse (rules kept vs. `ParseNote`s dropped), the subresource
+//! count per navigation, and the final `css cascade input` (surviving rules
+//! vs. total drops). Add `alloy=trace` for the reason behind every drop.
 
 use std::io;
 

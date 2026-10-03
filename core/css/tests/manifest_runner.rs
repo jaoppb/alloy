@@ -73,10 +73,12 @@ const SELECTOR_PROBES: [(&str, SelectorProbe); 19] = [
 /// One probe per `css::SUPPORTED_PROPERTIES` entry: a value inside the cut that
 /// is **different** from the value the UA sheet gives the fixture paragraph, so
 /// "the cascade honoured it" is observable rather than assumed.
-const PROPERTY_PROBES: [(&str, &str); 33] = [
+const PROPERTY_PROBES: [(&str, &str); 36] = [
     ("display", "inline"),
     ("color", "#ff0000"),
     ("background-color", "silver"),
+    ("background", "#123456 url(bg.png) no-repeat"),
+    ("border", "3px solid #abcdef"),
     ("margin", "1px 2px 3px 4px"),
     ("margin-top", "5px"),
     ("margin-right", "6px"),
@@ -88,6 +90,7 @@ const PROPERTY_PROBES: [(&str, &str); 33] = [
     ("padding-bottom", "11px"),
     ("padding-left", "12px"),
     ("font-size", "20px"),
+    ("font-family", "monospace"),
     ("border-width", "1px 2px 3px 4px"),
     ("border-top-width", "2px"),
     ("border-right-width", "3px"),
@@ -128,7 +131,7 @@ const REFUSED_SHEETS: [&str; 12] = [
 
 /// Properties the cut declares out. Each must be dropped on its own, with a
 /// note, leaving the rule and its other declarations standing.
-const REFUSED_PROPERTIES: [&str; 4] = ["float", "position", "border", "z-index"];
+const REFUSED_PROPERTIES: [&str; 3] = ["float", "position", "z-index"];
 
 fn manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
