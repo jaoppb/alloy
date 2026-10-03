@@ -25,5 +25,5 @@ pub use pipeline::{
 pub use runtime_font::RuntimeFontProvider;
 pub use subresource::{
     ImageRequest, MarkupDiscoverer, StylesheetRequest, SubresourceDiscoverer, SubresourceRequest,
-    Subresources,
+    Subresources, document_base_url,
 };
