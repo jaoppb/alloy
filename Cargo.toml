@@ -9,6 +9,7 @@ members = [
 	"core/html",
 	"core/js",
 	"core/network",
+	"core/platform",
 	"core/runtime/*",
 	"core/window",
 	"devtools",

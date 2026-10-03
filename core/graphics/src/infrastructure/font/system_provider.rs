@@ -30,7 +30,7 @@ impl SystemFontProvider {
     /// [`GraphicsError::FontUnavailable`] when none of [`FontCatalog`]'s
     /// candidates for `family` exist and parse on this machine.
     pub fn resolve(family: GenericFamily, id: FontId, size: Au) -> Result<Self, GraphicsError> {
-        for path in FontCatalog::candidate_paths(family) {
+        for path in FontCatalog::candidate_paths(family).iter() {
             let Ok(data) = std::fs::read(path) else {
                 continue;
             };
