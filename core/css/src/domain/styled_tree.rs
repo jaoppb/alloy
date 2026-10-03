@@ -8,9 +8,12 @@
 //! single parent-before-child pass so an inheriting resolver always sees its
 //! parent's finished style.
 
+use dom::TagName;
+
 use crate::domain::computed::intrinsic::{self, IntrinsicSize};
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
+use crate::domain::input_type::InputType;
 use crate::domain::text::TextRun;
 
 /// One node's computed style, plus its place in the tree, the character data it
@@ -133,13 +136,36 @@ impl StyledTree {
     }
 }
 
-/// The text a node contributes to an inline formatting context. Only a `Text`
-/// node has any: a comment's character data is markup, never rendered content.
+/// The text a node contributes to an inline formatting context.
+///
+/// For ordinary nodes only a `Text` node has any: a comment's character data
+/// is markup, never rendered content.
+///
+/// For `<input>` elements the inline text is synthesized from the element's
+/// attributes rather than from a child text node — the element is a replaced
+/// control with no actual DOM children, but the layout engine needs a label to
+/// paint (issues #2 / #3). [`InputType::label`] carries the rule (WHATWG HTML
+/// §4.10.5.1.18–20): the `value` attribute, else the state's default label;
+/// states that are not buttons get no synthesized text.
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
-    if node_ref.kind() != SnapshotNodeKind::Text {
+    if node_ref.kind() == SnapshotNodeKind::Text {
+        return node_ref.text().map(TextRun::new);
+    }
+    synthesized_input_text(node_ref)
+}
+
+/// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible
+/// label derived from their attributes, or `None` for every other element kind.
+fn synthesized_input_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    if node_ref.tag() != Some(&TagName::Input) {
         return None;
     }
-    node_ref.text().map(TextRun::new)
+    let input_type = InputType::from_attribute(node_ref.attribute("type"));
+    let label = input_type.label(node_ref.attribute("value"))?;
+    if label.is_empty() {
+        return None;
+    }
+    Some(TextRun::new(label))
 }
 
 /// The already-computed style of `node_ref`'s parent, looked up by index — safe

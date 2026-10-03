@@ -7,6 +7,7 @@ pub mod declaration;
 pub mod dom_snapshot;
 pub mod error;
 pub mod identifier;
+pub mod input_type;
 pub mod layout_box_tree;
 pub mod length;
 pub mod media;
