@@ -141,6 +141,7 @@ a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signa
 | **1**   | Surface frozen at `F1`.                                                                                                                                                                                                                                                                                                                                                                                                                                    | —                                                                                                                                                                                                                                        |
 | **2**   | Review response & v0.2 I1. Every name on the port is a validated newtype, not `&str`: `register_native_fn` / `call_function_value` / the `register_fn` / `call_function` sugar take `&FunctionName`; `set_value` / `get_value` / the `set_variable` sugar take `&VariableName`. `SourceLocation` is an `enum` (`LineColumn` / `LineOnly`) over `Line` / `Column`. `EngineError` gains additive `Dom { operation: String, reason: String }` variant.        | Implement the object-safe methods against `&FunctionName` / `&VariableName` (`name.as_str()` for a raw key); the caller builds the newtype. Read a location via `match` on the enum or `line()` / `column()`. Handle `EngineError::Dom`. |
 | **3**   | v0.5 Phase EE. `EngineError` gains additive `Subsystem { subsystem: SubsystemName, operation: String, reason: String }`, where `SubsystemName` is a new `#[non_exhaustive]` enum (`Dom` / `Css` / `Graphics` / `Network` / `Window`). `Dom { operation, reason }` is `#[deprecated]` but **not removed** — still constructible, still matchable. `EngineError::dom(op, reason)` now delegates to `EngineError::subsystem(SubsystemName::Dom, op, reason)`. | Match `EngineError::Subsystem { subsystem, .. }` instead of the deprecated `EngineError::Dom { .. }`; a consumer that still matches `Dom` keeps compiling (with a deprecation warning) until the v0.7 schema-4 removal.                  |
+| **4**   | Issue #23. The deprecated `EngineError::Dom { operation, reason }` is **removed**. `SubsystemName::Dom` and the `EngineError::dom(op, reason)` shorthand (which builds `Subsystem { subsystem: SubsystemName::Dom, .. }`) are unchanged.                                                                                                                                                                                                                   | Match `EngineError::Subsystem { subsystem: SubsystemName::Dom, .. }`; a match arm naming `EngineError::Dom` no longer compiles.                                                                                                          |
 
 ### 4.3 v0.2 F6/I1 amendment — `EngineError::Dom`
 
@@ -154,6 +155,8 @@ Dom { operation: String, reason: String }
 raised when a DOM operation invoked from a script fails for a reason other than a missing capability (an invariant
 violation, a stale node id, a busy tree). `core/dom`'s own `DomError` is mapped to it in the `core/runtime/rhai`
 adapter; `core/dom` never names `EngineError`.
+
+Superseded by `Subsystem` at schema 3 (§4.5) and removed at schema 4 (§4.6).
 
 ### 4.4 v0.2 F6 amendment — the object-safe `dyn` companion (`ADR-0013`)
 
@@ -196,6 +199,16 @@ v0.7 `PORT_SCHEMA_VERSION` 4 change, once `core/js` (the next consumer of this p
 window has been open a full release. Naming `Css` / `Graphics` / `Network` / `Window` in `SubsystemName` now, ahead of
 Phase M actually raising them, is the same anticipatory-naming precedent `Capability` already set in v0.1
 (`NETWORK_LISTEN` and `DEVTOOLS_INSPECT` had no producer for several releases either).
+
+### 4.6 Issue #23 amendment — `EngineError::Dom` removed
+
+The deprecated `Dom { operation, reason }` variant is dropped from `EngineError`, moving `PORT_SCHEMA_VERSION` 3 → 4.
+§4.5 planned this removal for v0.7, after `core/js` had landed. It was brought forward because nothing in the workspace
+constructs or matches `Dom` any more: the only producer, `EngineError::dom`, already built
+`Subsystem { subsystem: SubsystemName::Dom, .. }` from schema 3 on, and the variant survived only as an
+`#[allow(deprecated)]` arm in `Display`. Keeping it meant every new consumer still had to handle two ways of saying the
+same thing. The `Display` text of a DOM failure (``dom operation `<operation>` failed: <reason>``) is unchanged, because
+`Subsystem` renders `SubsystemName::Dom` as `dom`.
 
 ---
 

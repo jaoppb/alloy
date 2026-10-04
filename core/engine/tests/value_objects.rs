@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 
 use engine::{
     Capability, CapabilitySet, Column, EngineError, EngineValue, ExecutionLimit, ExecutionLimits,
-    FunctionName, SourceLocation, TypeRegistration, ValueKind, VariableName, profiles,
+    FunctionName, PORT_SCHEMA_VERSION, SourceLocation, SubsystemName, TypeRegistration, ValueKind,
+    VariableName, profiles,
 };
 
 // ---- EngineValue --------------------------------------------------------
@@ -131,6 +132,30 @@ fn error_display_is_human_readable() {
         EngineError::script_panic("kaboom").to_string(),
         "script panic (trapped): kaboom"
     );
+}
+
+#[test]
+fn dom_shorthand_builds_the_subsystem_variant() {
+    let error = EngineError::dom("append_child", "busy");
+    assert_eq!(
+        error,
+        EngineError::Subsystem {
+            subsystem: SubsystemName::Dom,
+            operation: "append_child".to_owned(),
+            reason: "busy".to_owned(),
+        }
+    );
+    assert_eq!(
+        error.to_string(),
+        "dom operation `append_child` failed: busy"
+    );
+}
+
+#[test]
+fn the_port_schema_version_is_recorded_in_exactly_one_place() {
+    // 4 since issue #23 removed the deprecated EngineError::Dom variant
+    // (PRD-002 §4.6); Subsystem { subsystem: SubsystemName::Dom, .. } replaces it.
+    assert_eq!(PORT_SCHEMA_VERSION, 4);
 }
 
 #[test]

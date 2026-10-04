@@ -64,9 +64,9 @@ pub mod domain;
 /// `EngineError::Dom { operation, reason }` (see PRD-002 §4.2). `3` is v0.5
 /// Phase EE — `EngineError::Subsystem { subsystem: SubsystemName, operation,
 /// reason }` generalizes `Dom` so `Css` / `Graphics` / `Network` / `Window`
-/// don't each need their own variant; `Dom` is `#[deprecated]`, not removed
-/// (full removal is a v0.7 schema-4 change, see PRD-002 §4.5).
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+/// don't each need their own variant (`Dom` kept `#[deprecated]`). `4` removes
+/// the deprecated `EngineError::Dom` (issue #23, see PRD-002 §4.6).
+pub const PORT_SCHEMA_VERSION: u32 = 4;
 
 pub use application::{
     DynCompiledScript, DynExecutionContext, DynRuntimeEngine, ExecutionContext, FromEngineValue,

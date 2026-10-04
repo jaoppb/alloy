@@ -49,9 +49,9 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   yet.
 - **M — `core/runtime/rhai-bindings`**: `NETWORK_BINDINGS`/`WINDOW_BINDINGS` (same self-guarding-per-method pattern as
   `dom_bindings.rs`) plus a scriptable `.rhai` cascade adapter, all mapping errors through the generalized
-  `EngineError::Subsystem` (Phase EE, `engine::PORT_SCHEMA_VERSION` 2→3, `Dom` kept `#[deprecated]` not removed —
-  `PRD-002` §4.2/§4.5). `rhai-bindings/tests/fault_injection.rs` covers the panic matrix for all three binding tables.
-  **Gap found this session, now fixed in Phase P**: the DoD's "committed benchmark baseline" for
+  `EngineError::Subsystem` (Phase EE, `engine::PORT_SCHEMA_VERSION` 2→3, `Dom` since removed at `PORT_SCHEMA_VERSION`
+  3→4 by issue #23 — `PRD-002` §4.2/§4.5/§4.6). `rhai-bindings/tests/fault_injection.rs` covers the panic matrix for all
+  three binding tables. **Gap found this session, now fixed in Phase P**: the DoD's "committed benchmark baseline" for
   `core/runtime/rhai/benches/hook_overhead.rs` was never actually committed — a new baseline file and the blocking
   `hook-benchmark` CI job close that.
 - **C0/C1 — `core/network`**: hand-written HTTP/1.1 client, `rustls`+`ring` TLS (the C0 spike found the pure-Rust

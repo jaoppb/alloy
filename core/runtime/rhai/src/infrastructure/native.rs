@@ -34,7 +34,7 @@ pub fn register(engine: &mut rhai::Engine, name: &str, arity: Arity, handler: Na
 ///
 /// `rhai::EvalAltResult::ErrorSystem` boxes the error, and
 /// [`crate::infrastructure::error_map::map_eval_error`] downcasts it back on the
-/// way out. This is what lets a `PermissionDenied` / `Dom` raised inside a
+/// way out. This is what lets a `PermissionDenied` / `Subsystem` raised inside a
 /// binding surface to the host as that exact variant (C-07, I1). `rhai-bindings`
 /// re-uses it for the domain bridges (v0.5 report §2.12).
 #[must_use]
