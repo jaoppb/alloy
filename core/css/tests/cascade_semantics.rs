@@ -231,6 +231,35 @@ fn a_reference_cycle_makes_the_property_unset() {
     assert_eq!(paragraph.color(), BLUE);
 }
 
+/// CSS Variables L1 §2.3: every custom property in a cycle is invalid, a
+/// reference inside a fallback counting as an edge — so the answer cannot
+/// depend on which name sorts first.
+#[test]
+fn a_cycle_through_a_fallback_invalidates_every_member_whatever_the_names() {
+    let first = style_of(
+        "p { --a: var(--b); --b: var(--a, 5px); width: var(--a, 1px) }",
+        "p",
+    );
+    let mirrored = style_of(
+        "p { --z: var(--y); --y: var(--z, 5px); width: var(--z, 1px) }",
+        "p",
+    );
+    assert_eq!(first.width(), Sizing::Fixed(Length::Pixels(1.0)));
+    assert_eq!(mirrored.width(), Sizing::Fixed(Length::Pixels(1.0)));
+}
+
+/// `--c` closes a cycle (`--c → --b → --a → --c`) that a resolution starting
+/// from `--a` never walks into: it is still invalid, while `--d`, which only
+/// points into the cycle, takes its fallback.
+#[test]
+fn every_member_of_a_cycle_is_invalid_even_one_reached_after_the_cycle_was_found() {
+    let sheet = "p { --a: var(--b) var(--c); --b: var(--a); --c: var(--b, 5px); \
+                 --d: var(--b, 7px); width: var(--c, 3px); height: var(--d) }";
+    let paragraph = style_of(sheet, "p");
+    assert_eq!(paragraph.width(), Sizing::Fixed(Length::Pixels(3.0)));
+    assert_eq!(paragraph.height(), Sizing::Fixed(Length::Pixels(7.0)));
+}
+
 #[test]
 fn the_initial_keyword_on_a_custom_property_removes_it() {
     let sheet = "div { --c: red } p { --c: initial; color: var(--c, blue) }";
@@ -429,5 +458,37 @@ fn an_em_line_height_resolves_against_the_element_own_computed_font_size() {
     assert_eq!(
         span.text_advance().line_height().resolve_to_au(au(40)),
         Some(au(20))
+    );
+}
+
+/// `font-size` inherits as its computed value (CSS Fonts 4 §2.5): the
+/// descendants of `font-size: 2em` inherit `32px`, not a `2em` they would
+/// resolve again against `32px`.
+#[test]
+fn an_em_font_size_is_inherited_as_an_absolute_size() {
+    let sheet = "div { font-size: 2em } span { letter-spacing: 0.25em }";
+    let span = style_of(sheet, "span");
+    assert_eq!(span.font_size(), Length::Pixels(32.0));
+    assert_eq!(
+        span.text_advance().letter_spacing().resolve_to_au(au(32)),
+        Some(au(8))
+    );
+}
+
+// ---- legacy aliases ---------------------------------------------------------
+
+#[test]
+fn the_legacy_gap_and_word_wrap_aliases_reach_the_cascade() {
+    let sheet = "p { grid-row-gap: 3px; grid-column-gap: 4px } \
+                 span { grid-gap: 10px; word-wrap: break-word }";
+    let paragraph = style_of(sheet, "p");
+    assert_eq!(paragraph.grid().row_gap(), Length::Pixels(3.0));
+    assert_eq!(paragraph.grid().column_gap(), Length::Pixels(4.0));
+    let span = style_of(sheet, "span");
+    assert_eq!(span.grid().row_gap(), Length::Pixels(10.0));
+    assert_eq!(span.grid().column_gap(), Length::Pixels(10.0));
+    assert_eq!(
+        span.text_advance().overflow_wrap(),
+        css::domain::computed::text_advance::OverflowWrap::BreakWord
     );
 }

@@ -254,7 +254,9 @@ fn the_port_schema_version_and_support_registries_are_pinned() {
         "version 8 settles the PR #19 review round: new Display / InputType values, \
          fallible TrackList, ComputedStyle no longer Copy (ADR-0011 item 3)"
     );
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 133);
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 137);
+    assert!(SUPPORTED_PROPERTIES.contains(&"grid-gap"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"word-wrap"));
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));
     assert!(SUPPORTED_PROPERTIES.contains(&"font-family"));
     assert!(SUPPORTED_PROPERTIES.contains(&"margin-left"));

@@ -12,6 +12,7 @@ use crate::domain::computed::variables::{
     CustomPropertiesMap, VariableError, VariableName, VariableValue,
 };
 use crate::domain::declaration::{Declaration, DeclarationBlock, DeclarationValue};
+use crate::infrastructure::cascade::variable_cycles::CyclicVariables;
 
 /// The most text one `var()` substitution may produce: 64 KiB.
 ///
@@ -121,7 +122,7 @@ pub fn resolve_variable(
     name: &VariableName,
     map: &CustomPropertiesMap,
 ) -> Result<String, VariableError> {
-    Substitution::new(map).resolve_variable(name)
+    Substitution::new(map, [name]).resolve_variable(name)
 }
 
 /// Checks whether a variable participates in a reference cycle.
@@ -145,7 +146,8 @@ pub fn substitute_variables(
     declaration_value: &str,
     map: &CustomPropertiesMap,
 ) -> Result<String, VariableError> {
-    Substitution::new(map).substitute(declaration_value)
+    let roots: Vec<VariableName> = referenced_variables(declaration_value).collect();
+    Substitution::new(map, &roots).substitute(declaration_value)
 }
 
 /// Substitutes `var(...)` references in a [`DeclarationValue`].
@@ -201,7 +203,8 @@ impl CustomPropertyKeyword {
 /// fallback, a cycle, the expansion cap) is invalid at computed-value time and
 /// computes to the guaranteed-invalid value — it is removed from the map
 /// (CSS Variables L1 §2.3, §3). An element that declares no custom property
-/// shares its parent's map rather than copying it.
+/// shares its parent's map rather than copying it; one that does copies only
+/// the map's entries, whose names and values are shared, never their text.
 #[must_use]
 pub(crate) fn cascade_custom_properties(
     parent: &Rc<CustomPropertiesMap>,
@@ -262,7 +265,7 @@ fn computed_custom_properties(
     mut specified: CustomPropertiesMap,
     local_names: &BTreeSet<VariableName>,
 ) -> CustomPropertiesMap {
-    let mut substitution = Substitution::new(&specified);
+    let mut substitution = Substitution::new(&specified, local_names);
     let resolutions: Vec<(VariableName, Result<String, VariableError>)> = local_names
         .iter()
         .filter(|name| specified.get(name).is_some_and(VariableValue::contains_var))
@@ -292,21 +295,30 @@ fn record_resolution(
 ///
 /// `resolved` memoizes every variable this run has already resolved, so a
 /// variable referenced many times is expanded once; `stack` is the chain of
-/// variables currently being expanded, which is what detects a cycle. Every
-/// append is checked against [`MAX_SUBSTITUTED_BYTES`], so even a chain whose
-/// every link doubles its predecessor fails after a bounded amount of work.
+/// variables currently being expanded, which is what detects a cycle as it is
+/// walked; `cyclic` names every variable on a cycle up front, so one whose
+/// cycle a fallback would hide is still invalid. Every append is checked
+/// against [`MAX_SUBSTITUTED_BYTES`], so even a chain whose every link
+/// doubles its predecessor fails after a bounded amount of work.
 struct Substitution<'map> {
     map: &'map CustomPropertiesMap,
     resolved: BTreeMap<VariableName, Result<String, VariableError>>,
     stack: Vec<VariableName>,
+    cyclic: CyclicVariables,
 }
 
 impl<'map> Substitution<'map> {
-    const fn new(map: &'map CustomPropertiesMap) -> Self {
+    /// A run over `map` that will start from `roots` — the variables whose
+    /// cycles it needs to know about.
+    fn new<'roots>(
+        map: &'map CustomPropertiesMap,
+        roots: impl IntoIterator<Item = &'roots VariableName>,
+    ) -> Self {
         Self {
             map,
             resolved: BTreeMap::new(),
             stack: Vec::new(),
+            cyclic: CyclicVariables::reachable_from(map, roots),
         }
     }
 
@@ -319,10 +331,27 @@ impl<'map> Substitution<'map> {
             return Err(VariableError::UndefinedVariable(name.as_str().to_owned()));
         };
         self.stack.push(name.clone());
-        let resolution = self.substitute(raw_value.as_str());
+        let substituted = self.substitute(raw_value.as_str());
         self.stack.pop();
+        let resolution = self.invalid_when_cyclic(name, substituted);
         self.resolved.insert(name.clone(), resolution.clone());
         resolution
+    }
+
+    /// `resolution`, unless `name` is on a cycle: then it is invalid (CSS
+    /// Variables L1 §2.3) even when a fallback on the way produced text.
+    fn invalid_when_cyclic(
+        &self,
+        name: &VariableName,
+        resolution: Result<String, VariableError>,
+    ) -> Result<String, VariableError> {
+        if let Err(VariableError::CycleDetected(path)) = resolution {
+            return Err(VariableError::CycleDetected(path));
+        }
+        let Some(cycle) = self.cyclic.cycle_through(name) else {
+            return resolution;
+        };
+        Err(VariableError::CycleDetected(cycle))
     }
 
     fn substitute(&mut self, input: &str) -> Result<String, VariableError> {
@@ -382,6 +411,30 @@ impl<'map> Substitution<'map> {
             (Err(_), Some(fallback_text)) => self.substitute(fallback_text),
         }
     }
+}
+
+/// Every variable `value` names in a `var()`, fallbacks included and in
+/// order — the edges of the reference graph (CSS Variables L1 §2.3). A
+/// malformed call contributes nothing; substitution reports it.
+pub(super) fn referenced_variables(value: &str) -> impl Iterator<Item = VariableName> + '_ {
+    let mut scanner = VarCallScanner::new(value);
+    let mut cursor = 0;
+    core::iter::from_fn(move || {
+        let var_start = scanner.find_next_from(cursor)?;
+        let arguments_start = var_start.saturating_add(VAR_FUNCTION_OPENING.len());
+        cursor = arguments_start;
+        Some(variable_named_at(value, arguments_start))
+    })
+    .flatten()
+}
+
+/// The variable a `var(` call whose arguments start at `arguments_start`
+/// names, if the call is well formed.
+fn variable_named_at(value: &str, arguments_start: usize) -> Option<VariableName> {
+    let after_var = value.get(arguments_start..)?;
+    let arguments = after_var.get(..find_matching_close_paren(after_var)?)?;
+    let (name_part, _) = split_var_arguments(arguments);
+    VariableName::new(name_part)
 }
 
 /// Appends `text` to `output` unless that would push it past

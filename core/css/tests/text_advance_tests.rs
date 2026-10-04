@@ -28,6 +28,7 @@ use css::infrastructure::cascade::text_values::{
     parse_text_overflow, parse_text_transform, parse_word_break, parse_word_spacing, reset,
 };
 use css::infrastructure::parser::token::Token;
+use css::infrastructure::parser::tokenize;
 use graphics::Au;
 
 /// [`apply`] on an element whose parent has the initial `normal` weight — the
@@ -71,28 +72,42 @@ fn font_weight_constants_and_constructors() {
 
 #[test]
 fn font_weight_bolder_and_lighter_rules() {
-    // CSS Fonts 4 §2.4 relative weights:
-    // < 400 -> 400
+    // CSS Fonts 4 §2.2 relative weights:
+    // < 350 -> 400
     assert_eq!(FontWeight::THIN.bolder(), FontWeight::NORMAL);
     assert_eq!(FontWeight::LIGHT.bolder(), FontWeight::NORMAL);
-    // 400..=500 -> 700
+    // 350..550 -> 700
     assert_eq!(FontWeight::NORMAL.bolder(), FontWeight::BOLD);
     assert_eq!(FontWeight::MEDIUM.bolder(), FontWeight::BOLD);
-    // > 500 -> 900
+    // 550..900 -> 900
     assert_eq!(FontWeight::SEMI_BOLD.bolder(), FontWeight::BLACK);
     assert_eq!(FontWeight::BOLD.bolder(), FontWeight::BLACK);
     assert_eq!(FontWeight::BLACK.bolder(), FontWeight::BLACK);
 
     // lighter:
-    // < 600 -> 100
+    // 100..550 -> 100
     assert_eq!(FontWeight::NORMAL.lighter(), FontWeight::THIN);
     assert_eq!(FontWeight::MEDIUM.lighter(), FontWeight::THIN);
-    // 600..=700 -> 400
+    // 550..750 -> 400
     assert_eq!(FontWeight::SEMI_BOLD.lighter(), FontWeight::NORMAL);
     assert_eq!(FontWeight::BOLD.lighter(), FontWeight::NORMAL);
-    // > 700 -> 700
+    // >= 750 -> 700
     assert_eq!(FontWeight::EXTRA_BOLD.lighter(), FontWeight::BOLD);
     assert_eq!(FontWeight::BLACK.lighter(), FontWeight::BOLD);
+}
+
+/// The edges of the CSS Fonts 4 §2.2 table: `bolder` never makes a weight
+/// lighter and `lighter` never makes one bolder.
+#[test]
+fn font_weight_relative_keywords_follow_the_table_edges() {
+    let weight = |value| FontWeight::new(value).expect("a weight in 1..=1000");
+    assert_eq!(weight(950).bolder(), weight(950));
+    assert_eq!(weight(349).bolder(), FontWeight::NORMAL);
+    assert_eq!(weight(380).bolder(), FontWeight::BOLD);
+    assert_eq!(weight(550).bolder(), FontWeight::BLACK);
+    assert_eq!(weight(50).lighter(), weight(50));
+    assert_eq!(weight(580).lighter(), FontWeight::NORMAL);
+    assert_eq!(weight(750).lighter(), FontWeight::BOLD);
 }
 
 #[test]
@@ -274,7 +289,7 @@ fn text_decoration_line_builders_and_parsing() {
     assert!(!underline.has_overline());
     assert_eq!(format!("{underline}"), "underline");
 
-    let both = underline.with_line_through(true);
+    let both = underline.adding(TextDecorationLine::LINE_THROUGH);
     assert!(both.has_underline());
     assert!(both.has_line_through());
     assert_eq!(format!("{both}"), "underline line-through");
@@ -293,7 +308,7 @@ fn text_decoration_line_builders_and_parsing() {
             Token::Ident("underline".into()),
             Token::Ident("line-through".into())
         ]),
-        Some(TextDecorationLine::UNDERLINE.with_line_through(true))
+        Some(TextDecorationLine::UNDERLINE.adding(TextDecorationLine::LINE_THROUGH))
     );
     assert_eq!(
         parse_text_decoration_line(&[Token::Ident("invalid".into())]),
@@ -369,6 +384,26 @@ fn text_decoration_shorthand_parsing() {
             TextDecoration::initial()
                 .with_line(TextDecorationLine::LINE_THROUGH)
                 .with_style(TextDecorationStyle::Dashed)
+        )
+    );
+}
+
+/// A functional colour is one component value: `rgb(255, 0, 0)` must not be
+/// split into tokens that each fail to parse as a colour.
+#[test]
+fn text_decoration_shorthand_accepts_a_functional_colour() {
+    let tokens: Vec<Token> = tokenize("underline rgb(255, 0, 0) dotted")
+        .iter()
+        .map(|spanned| spanned.token().clone())
+        .filter(|token| !token.is_whitespace())
+        .collect();
+    assert_eq!(
+        parse_text_decoration(&tokens),
+        Some(
+            TextDecoration::initial()
+                .with_line(TextDecorationLine::UNDERLINE)
+                .with_color(CssColor::rgb(255, 0, 0))
+                .with_style(TextDecorationStyle::Dotted)
         )
     );
 }

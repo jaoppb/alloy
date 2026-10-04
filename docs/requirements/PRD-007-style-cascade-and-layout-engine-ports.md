@@ -150,6 +150,16 @@ additive**:
   (`*style.grid()`) where a by-value `GridStyle` is needed.
 - **`TrackList::from_tracks` answers `Option<TrackList>`**, refusing more than `TrackList::CAPACITY` (16) tracks instead
   of truncating them. **Migration:** handle the `None`.
+- **`ComputedStyle::font_size()` is the computed size, not the authored one.** `font-size` inherits as its computed
+  value (CSS Fonts 4 §2.5); storing `2em` and resolving it again at every descendant compounded it (`2em` → 64px one
+  level down). The cascade now writes the absolute size back as `Length::Pixels`. **Migration:** a consumer comparing
+  against the authored length (`Length::Em(2.0)`) compares against the pixels (`Length::Pixels(32.0)`).
+- **`TextDecorationLine::with_underline` / `with_overline` / `with_line_through(bool)` are gone**, replaced by
+  `adding(TextDecorationLine)` — a flag parameter every caller passed as `true` (`CLAUDE.md`). **Migration:**
+  `line.with_underline(true)` becomes `line.adding(TextDecorationLine::UNDERLINE)`.
+- **`SUPPORTED_PROPERTIES` is `[&str; 137]`** (was 133): the legacy aliases `word-wrap`, `grid-gap`, `grid-row-gap` and
+  `grid-column-gap` already had cascade handlers but were dropped by the parser. **Migration:** a binding that names the
+  array's length updates it.
 
 The rest is additive or confined to the cascade helpers:
 
@@ -160,6 +170,13 @@ The rest is additive or confined to the cascade helpers:
 - The public cascade helpers changed shape: `text_values::apply` takes the parent's `font-weight` (what `bolder` /
   `lighter` are relative to), and `grid_values::{apply, reset, inherit}` and
   `logical_values::{apply, apply_with_context}` borrow the style they read instead of taking it by value.
+- `VariableValue::is_empty` is no longer `const fn`: custom property names and values hold shared `Arc<str>` text, so an
+  element declaring one custom property no longer re-allocates every inherited string.
+- Behaviour fixes a consumer can observe with no type change: `bolder` / `lighter` follow the CSS Fonts 4 §2.2 table;
+  two-keyword `background-position` reads by axis (`top right` is `right top`); `grid-area`'s omitted ends copy a
+  custom-ident start (CSS Grid L1 §8.4); `position: relative` lets `right` win over `left` in an `rtl` containing block
+  (CSS 2.1 §9.4.3); `text-decoration` accepts a functional colour; and every member of a `var()` cycle is invalid,
+  fallbacks notwithstanding (CSS Variables L1 §2.3).
 - Custom properties and `var()` are cascaded, in a per-node side table outside `ComputedStyle`; their semantics (and
   those of logical properties and relative font weights) are recorded in
   `docs/architecture/style-cascade-port-contract.md`, "Cascade semantics of schema 7".

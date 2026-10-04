@@ -5,14 +5,19 @@
 
 use core::fmt;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// A validated CSS custom property name (e.g. `--main-color`).
 ///
 /// Per CSS Custom Properties Level 1 §2, custom property names are case-sensitive
 /// and must begin with two dashes (`--`).
+///
+/// The text is shared, not owned: every element that declares a custom
+/// property starts from a copy of its parent's whole map, and sharing makes
+/// that copy a pointer per entry rather than a string allocation per entry.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VariableName {
-    text: String,
+    text: Arc<str>,
 }
 
 impl VariableName {
@@ -24,7 +29,7 @@ impl VariableName {
             return None;
         }
         Some(Self {
-            text: text.to_owned(),
+            text: Arc::from(text),
         })
     }
 
@@ -106,10 +111,13 @@ impl fmt::Display for VariableName {
 /// The value of a custom property.
 ///
 /// Custom property values preserve their token representation or raw text,
-/// with leading and trailing whitespace trimmed.
+/// with leading and trailing whitespace trimmed. Shared like
+/// [`VariableName`]'s text: a value may be as long as the substitution's
+/// 64 KiB expansion cap, and an inherited map must not copy it once per
+/// element.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct VariableValue {
-    text: String,
+    text: Arc<str>,
 }
 
 impl VariableValue {
@@ -117,7 +125,7 @@ impl VariableValue {
     #[must_use]
     pub fn new(text: &str) -> Self {
         Self {
-            text: text.trim().to_owned(),
+            text: Arc::from(text.trim()),
         }
     }
 
@@ -129,7 +137,7 @@ impl VariableValue {
 
     /// Whether this variable value contains no characters.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
 

@@ -523,6 +523,9 @@ const fn default_placement_end(start: &GridPlacement) -> GridPlacement {
 }
 
 /// Parses `grid-area` shorthand (`row-start / col-start / row-end / col-end`).
+///
+/// An omitted end copies its start when that start is a custom-ident, and is
+/// `auto` otherwise (CSS Grid L1 §8.4).
 #[must_use]
 pub fn parse_grid_area_shorthand(
     tokens: &[Token],
@@ -530,18 +533,23 @@ pub fn parse_grid_area_shorthand(
     let parts = split_at_slashes(tokens);
     match parts.as_slice() {
         [single] => expand_single_area(single),
-        [row_start, column_start] => Some((
-            parse_grid_line_placement(row_start)?,
-            parse_grid_line_placement(column_start)?,
-            GridPlacement::Auto,
-            GridPlacement::Auto,
-        )),
-        [row_start, column_start, row_end] => Some((
-            parse_grid_line_placement(row_start)?,
-            parse_grid_line_placement(column_start)?,
-            parse_grid_line_placement(row_end)?,
-            GridPlacement::Auto,
-        )),
+        [row_start, column_start] => {
+            let row_start = parse_grid_line_placement(row_start)?;
+            let column_start = parse_grid_line_placement(column_start)?;
+            let row_end = default_placement_end(&row_start);
+            let column_end = default_placement_end(&column_start);
+            Some((row_start, column_start, row_end, column_end))
+        }
+        [row_start, column_start, row_end] => {
+            let column_start = parse_grid_line_placement(column_start)?;
+            let column_end = default_placement_end(&column_start);
+            Some((
+                parse_grid_line_placement(row_start)?,
+                column_start,
+                parse_grid_line_placement(row_end)?,
+                column_end,
+            ))
+        }
         [row_start, column_start, row_end, column_end] => Some((
             parse_grid_line_placement(row_start)?,
             parse_grid_line_placement(column_start)?,

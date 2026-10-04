@@ -58,21 +58,14 @@ impl TextDecorationLine {
         self.line_through
     }
 
+    /// This set of lines plus every line `other` carries — how the lines of a
+    /// `text-decoration-line` list accumulate (CSS Text Decoration L3 §2.1).
     #[must_use]
-    pub const fn with_underline(self, underline: bool) -> Self {
-        Self { underline, ..self }
-    }
-
-    #[must_use]
-    pub const fn with_overline(self, overline: bool) -> Self {
-        Self { overline, ..self }
-    }
-
-    #[must_use]
-    pub const fn with_line_through(self, line_through: bool) -> Self {
+    pub const fn adding(self, other: Self) -> Self {
         Self {
-            line_through,
-            ..self
+            underline: self.underline || other.underline,
+            overline: self.overline || other.overline,
+            line_through: self.line_through || other.line_through,
         }
     }
 }

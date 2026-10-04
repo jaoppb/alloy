@@ -36,8 +36,11 @@
 //!    not parse, is invalid at computed-value time and computes to `unset`
 //!    (CSS Variables L1 §3) — never to the previous cascaded value.
 //!
-//! Finally the font-relative text lengths are made absolute against the
-//! element's own computed font size (CSS 2.1 §10.8.1, CSS Text L3 §8).
+//! Finally `font-size` itself is stored as its computed, absolute value —
+//! it inherits as computed (CSS Fonts 4 §2.5), so a child of `font-size: 2em`
+//! inherits `32px`, never a `2em` it would resolve again — and the
+//! font-relative text lengths are made absolute against it (CSS 2.1 §10.8.1,
+//! CSS Text L3 §8).
 
 use std::rc::Rc;
 
@@ -48,6 +51,7 @@ use crate::domain::computed::style::{ComputedStyle, INITIAL_FONT_SIZE};
 use crate::domain::computed::variables::{CustomPropertiesMap, VariableName};
 use crate::domain::declaration::{Declaration, DeclarationBlock};
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef};
+use crate::domain::length::Length;
 use crate::domain::specificity::Specificity;
 use crate::domain::stylesheet_set::{Origin, StyleRule, StyleSheetSet};
 use crate::infrastructure::cascade::logical_values::sets_writing_context;
@@ -78,10 +82,11 @@ impl MatchedDeclaration<'_> {
 }
 
 /// What an element hands down to its children beyond its [`ComputedStyle`]:
-/// its computed custom properties and its computed font size. Neither belongs
-/// in the style aggregate — the map is open-ended and only the cascade reads
-/// it, and the font size is stored there as authored (layout resolves it) — so
-/// the cascade keeps them in a side table, one per node.
+/// its computed custom properties and its computed font size. The map is
+/// open-ended and only the cascade reads it, so it lives in this side table,
+/// one per node, rather than in the style aggregate; the font size is the
+/// same absolute size [`apply_author_rules`] writes back into the style, kept
+/// here as an [`Au`] so a child's `em` resolves without a float round trip.
 #[derive(Clone, Debug)]
 pub(crate) struct InheritedContext {
     variables: Rc<CustomPropertiesMap>,
@@ -203,7 +208,9 @@ pub(crate) fn apply_author_rules(
     let font_size = cascaded.computed_font_size(inherited.font_size);
     let text_advance = cascaded.text_advance().absolutized(font_size);
     CascadedStyle {
-        style: cascaded.with_text_advance(text_advance),
+        style: cascaded
+            .with_font_size(Length::Pixels(font_size.to_px().get()))
+            .with_text_advance(text_advance),
         context: InheritedContext {
             variables,
             font_size,

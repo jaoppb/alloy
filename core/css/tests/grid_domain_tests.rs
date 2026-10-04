@@ -279,6 +279,32 @@ fn parse_grid_area_shorthand_forms() {
     assert_eq!(c2, GridPlacement::Line(GridLine::new(4).unwrap()));
 }
 
+/// CSS Grid L1 §8.4: an omitted `grid-area` end copies its start when that
+/// start is a custom-ident, and is `auto` otherwise.
+#[test]
+fn grid_area_omitted_ends_copy_a_named_start() {
+    let header = GridPlacement::named("hdr").unwrap();
+    let side = GridPlacement::named("side").unwrap();
+
+    let two_values = tokenize_value("hdr / side");
+    let (_, _, row_end, column_end) =
+        grid_values::parse_grid_area_shorthand(&two_values).expect("two values");
+    assert_eq!(row_end, header);
+    assert_eq!(column_end, side);
+
+    let three_values = tokenize_value("hdr / side / 3");
+    let (_, _, row_end, column_end) =
+        grid_values::parse_grid_area_shorthand(&three_values).expect("three values");
+    assert_eq!(row_end, GridPlacement::Line(GridLine::new(3).unwrap()));
+    assert_eq!(column_end, side);
+
+    let numeric = tokenize_value("1 / 2");
+    let (_, _, row_end, column_end) =
+        grid_values::parse_grid_area_shorthand(&numeric).expect("numeric starts");
+    assert_eq!(row_end, GridPlacement::Auto);
+    assert_eq!(column_end, GridPlacement::Auto);
+}
+
 #[test]
 fn parse_gap_properties() {
     let normal_tok = tokenize_value("normal");

@@ -21,6 +21,7 @@ use crate::application::ports::{LayoutEngine, TextMeasurer};
 use crate::domain::computed::display::Display;
 use crate::domain::computed::inline_style::TextAlign;
 use crate::domain::computed::intrinsic::IntrinsicSize;
+use crate::domain::computed::logical::Direction;
 use crate::domain::computed::position::PositionType;
 use crate::domain::computed::sizing::Sizing;
 use crate::domain::computed::style::ComputedStyle;
@@ -146,7 +147,12 @@ pub(crate) fn layout_box<M: TextMeasurer>(
         children,
         input,
     )?;
-    Ok(apply_relative_insets(style, font_size, input, result))
+    let direction = containing_direction(context, node);
+    Ok(apply_relative_insets(
+        style,
+        RelativeFrame::new(font_size, direction, input),
+        result,
+    ))
 }
 
 /// Lays an atomic inline-level box (`display: inline-block`) out for a line.
@@ -208,6 +214,48 @@ fn definite_content_height(metrics: BoxMetrics, input: BlockInput) -> Option<Au>
     input.forced_content_height().or_else(|| metrics.height())
 }
 
+/// The `direction` of `node`'s containing block — its parent's — which decides
+/// the horizontal inset of `position: relative` (CSS 2.1 §9.4.3). The root,
+/// with no styled parent, falls back to its own.
+fn containing_direction<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node: &StyledNode,
+) -> Direction {
+    let parent_style = node
+        .parent()
+        .and_then(|parent| context.node(parent).ok())
+        .map_or_else(|| node.style(), StyledNode::style);
+    parent_style.logical().context().direction()
+}
+
+/// What a relative offset is measured against: the box's font size (for
+/// `em`), its containing block's direction and its containing block's size.
+#[derive(Clone, Copy)]
+struct RelativeFrame {
+    font_size: Au,
+    direction: Direction,
+    input: BlockInput,
+}
+
+impl RelativeFrame {
+    const fn new(font_size: Au, direction: Direction, input: BlockInput) -> Self {
+        Self {
+            font_size,
+            direction,
+            input,
+        }
+    }
+
+    /// Which horizontal inset wins when both are set: `left` in `ltr`,
+    /// `right` in `rtl` (CSS 2.1 §9.4.3).
+    const fn horizontal_precedence(self) -> InsetPrecedence {
+        match self.direction {
+            Direction::Rtl => InsetPrecedence::EndWins,
+            Direction::Ltr => InsetPrecedence::StartWins,
+        }
+    }
+}
+
 /// Applies the visual offset of `position: relative` to a laid-out result.
 ///
 /// A relatively-positioned box keeps its normal-flow position for purposes of
@@ -216,24 +264,26 @@ fn definite_content_height(metrics: BoxMetrics, input: BlockInput) -> Option<Au>
 /// common case — this is a no-op.
 fn apply_relative_insets(
     style: &ComputedStyle,
-    font_size: Au,
-    input: BlockInput,
+    frame: RelativeFrame,
     result: BlockResult,
 ) -> BlockResult {
     let position = style.position();
     if position.position() != PositionType::Relative {
         return result;
     }
-    let horizontal = Some(input.containing_width());
+    let horizontal = Opposed::new(position.left(), position.right());
     let dx = relative_offset(
-        Opposed::new(position.left(), position.right()),
-        font_size,
         horizontal,
+        frame.horizontal_precedence(),
+        frame.font_size,
+        Some(frame.input.containing_width()),
     );
+    let vertical = Opposed::new(position.top(), position.bottom());
     let dy = relative_offset(
-        Opposed::new(position.top(), position.bottom()),
-        font_size,
-        input.containing_height(),
+        vertical,
+        InsetPrecedence::StartWins,
+        frame.font_size,
+        frame.input.containing_height(),
     );
     result.with_relative_offset(dx, dy)
 }
@@ -251,16 +301,33 @@ impl Opposed {
     }
 }
 
+/// Which of two non-`auto` opposing insets decides the offset.
+#[derive(Clone, Copy)]
+enum InsetPrecedence {
+    /// `left` / `top`: always so vertically, and horizontally in `ltr`.
+    StartWins,
+    /// `right`: horizontally in `rtl`.
+    EndWins,
+}
+
 /// CSS 2.1 §9.4.3: the start inset (`left` / `top`) moves the box by its own
-/// value; failing that, the end inset (`right` / `bottom`) moves it by minus
-/// its value; both `auto` leaves it in place. When both are set the start one
-/// wins (the `direction: ltr` rule — this engine has no `rtl`).
-fn relative_offset(insets: Opposed, font_size: Au, basis: Option<Au>) -> Au {
-    if let Some(offset) = resolve_inset(insets.start, font_size, basis) {
-        return offset;
-    }
-    resolve_inset(insets.end, font_size, basis)
-        .map_or(Au::ZERO, |offset| Au::ZERO.saturating_sub(offset))
+/// value and the end inset (`right` / `bottom`) by minus its value; when only
+/// one is set it decides, when both are set `precedence` does, and both
+/// `auto` leaves the box in place.
+fn relative_offset(
+    insets: Opposed,
+    precedence: InsetPrecedence,
+    font_size: Au,
+    basis: Option<Au>,
+) -> Au {
+    let start = resolve_inset(insets.start, font_size, basis);
+    let end =
+        resolve_inset(insets.end, font_size, basis).map(|offset| Au::ZERO.saturating_sub(offset));
+    let offset = match precedence {
+        InsetPrecedence::StartWins => start.or(end),
+        InsetPrecedence::EndWins => end.or(start),
+    };
+    offset.unwrap_or(Au::ZERO)
 }
 
 /// Resolves one inset to an [`Au`] offset, or `None` when it behaves as `auto`.

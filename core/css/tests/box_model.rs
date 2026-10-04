@@ -267,6 +267,28 @@ fn position_relative_left_wins_over_right() {
     assert_eq!(shifted.min_x(), au(10));
 }
 
+/// CSS 2.1 §9.4.3: when both are set and the containing block is `rtl`,
+/// `right` wins and moves the box by minus its value.
+#[test]
+fn position_relative_right_wins_over_left_in_an_rtl_containing_block() {
+    let shifted = relatively_positioned(
+        "#container { direction: rtl; } \
+         #a { height: 20px; position: relative; left: 10px; right: 20px; }",
+    );
+    assert_eq!(shifted.min_x(), Au::ZERO.saturating_sub(au(20)));
+}
+
+/// The containing block decides, not the box: an `ltr` box inside an `rtl`
+/// container still lets `right` win.
+#[test]
+fn position_relative_inset_precedence_follows_the_containing_block_direction() {
+    let shifted = relatively_positioned(
+        "#container { direction: rtl; } \
+         #a { direction: ltr; height: 20px; position: relative; left: 10px; right: 20px; }",
+    );
+    assert_eq!(shifted.min_x(), Au::ZERO.saturating_sub(au(20)));
+}
+
 /// CSS 2.1 §9.3.2: a `top` percentage is a share of the containing block's
 /// **height** — 10% of the parent's 100px is 10px, not 10% of the 800px
 /// viewport width.

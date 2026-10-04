@@ -47,25 +47,33 @@ impl FontWeight {
         self.0 >= 700
     }
 
-    /// Calculates relative `bolder` weight based on CSS Fonts 4 §2.4.
+    /// The relative `bolder` weight: the CSS Fonts 4 §2.2 table — a weight
+    /// already at or past `900` stays where it is, never lighter.
     #[must_use]
     pub const fn bolder(self) -> Self {
-        if self.0 < 400 {
+        if self.0 < 350 {
             return Self(400);
         }
-        if self.0 <= 500 {
+        if self.0 < 550 {
             return Self(700);
         }
-        Self(900)
+        if self.0 < 900 {
+            return Self(900);
+        }
+        self
     }
 
-    /// Calculates relative `lighter` weight based on CSS Fonts 4 §2.4.
+    /// The relative `lighter` weight: the CSS Fonts 4 §2.2 table — a weight
+    /// already below `100` stays where it is, never bolder.
     #[must_use]
     pub const fn lighter(self) -> Self {
-        if self.0 < 600 {
+        if self.0 < 100 {
+            return self;
+        }
+        if self.0 < 550 {
             return Self(100);
         }
-        if self.0 <= 700 {
+        if self.0 < 750 {
             return Self(400);
         }
         Self(700)

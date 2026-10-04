@@ -13,7 +13,7 @@ use crate::domain::computed::text_advance::{
 };
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
-use crate::infrastructure::parser::values::{parse_color, parse_length};
+use crate::infrastructure::parser::values::{component_values, parse_color, parse_length};
 
 /// Parses `font-weight` keywords and numeric weights.
 #[must_use]
@@ -119,46 +119,25 @@ pub fn parse_text_decoration_line(tokens: &[Token]) -> Option<TextDecorationLine
     if is_none_keyword(tokens) {
         return Some(TextDecorationLine::NONE);
     }
-    let mut line = TextDecorationLine::NONE;
-    let mut matched = false;
-    for token in tokens {
-        let Token::Ident(name) = token else {
-            return None;
-        };
-        match name.to_ascii_lowercase().as_str() {
-            "underline" => {
-                line = line.with_underline(true);
-                matched = true;
-            }
-            "overline" => {
-                line = line.with_overline(true);
-                matched = true;
-            }
-            "line-through" => {
-                line = line.with_line_through(true);
-                matched = true;
-            }
-            _ => return None,
-        }
-    }
-    if !matched {
-        return None;
-    }
-    Some(line)
+    tokens
+        .iter()
+        .try_fold(TextDecorationLine::NONE, |line, token| {
+            Some(line.adding(decoration_line_of(core::slice::from_ref(token))?))
+        })
 }
 
 /// Parses `text-decoration-style`: `solid`, `double`, `dotted`, `dashed`, `wavy`.
 #[must_use]
 pub fn parse_text_decoration_style(tokens: &[Token]) -> Option<TextDecorationStyle> {
-    match tokens {
-        [Token::Ident(name)] => match name.to_ascii_lowercase().as_str() {
-            "solid" => Some(TextDecorationStyle::Solid),
-            "double" => Some(TextDecorationStyle::Double),
-            "dotted" => Some(TextDecorationStyle::Dotted),
-            "dashed" => Some(TextDecorationStyle::Dashed),
-            "wavy" => Some(TextDecorationStyle::Wavy),
-            _ => None,
-        },
+    let [Token::Ident(name)] = tokens else {
+        return None;
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "solid" => Some(TextDecorationStyle::Solid),
+        "double" => Some(TextDecorationStyle::Double),
+        "dotted" => Some(TextDecorationStyle::Dotted),
+        "dashed" => Some(TextDecorationStyle::Dashed),
+        "wavy" => Some(TextDecorationStyle::Wavy),
         _ => None,
     }
 }
@@ -169,49 +148,59 @@ pub fn parse_text_decoration_color(tokens: &[Token]) -> Option<CssColor> {
     parse_color(tokens)
 }
 
-fn match_decoration_keyword(
-    keyword: &str,
-    line: &mut TextDecorationLine,
-    style: &mut Option<TextDecorationStyle>,
-) -> bool {
-    match keyword {
-        "underline" => {
-            *line = line.with_underline(true);
-            true
+/// The one line a component names, if it is a line keyword.
+fn decoration_line_of(component: &[Token]) -> Option<TextDecorationLine> {
+    let [Token::Ident(name)] = component else {
+        return None;
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "underline" => Some(TextDecorationLine::UNDERLINE),
+        "overline" => Some(TextDecorationLine::OVERLINE),
+        "line-through" => Some(TextDecorationLine::LINE_THROUGH),
+        _ => None,
+    }
+}
+
+/// What the components of a `text-decoration` shorthand have set so far:
+/// any number of lines, at most one style and at most one colour.
+#[derive(Default)]
+struct DecorationParts {
+    line: TextDecorationLine,
+    style: Option<TextDecorationStyle>,
+    color: Option<CssColor>,
+}
+
+impl DecorationParts {
+    /// Folds one component in, or `None` when it fits nowhere — not a line,
+    /// not a style or colour still unset.
+    fn absorb(mut self, component: &[Token]) -> Option<Self> {
+        if let Some(line) = decoration_line_of(component) {
+            self.line = self.line.adding(line);
+            return Some(self);
         }
-        "overline" => {
-            *line = line.with_overline(true);
-            true
+        if let (None, Some(style)) = (self.style, parse_text_decoration_style(component)) {
+            self.style = Some(style);
+            return Some(self);
         }
-        "line-through" => {
-            *line = line.with_line_through(true);
-            true
+        if self.color.is_some() {
+            return None;
         }
-        "solid" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Solid);
-            true
-        }
-        "double" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Double);
-            true
-        }
-        "dotted" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Dotted);
-            true
-        }
-        "dashed" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Dashed);
-            true
-        }
-        "wavy" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Wavy);
-            true
-        }
-        _ => false,
+        self.color = Some(parse_color(component)?);
+        Some(self)
+    }
+
+    fn into_decoration(self) -> TextDecoration {
+        TextDecoration::initial()
+            .with_line(self.line)
+            .with_style(self.style.unwrap_or(TextDecorationStyle::Solid))
+            .with_color(self.color.unwrap_or(CssColor::BLACK))
     }
 }
 
 /// Parses `text-decoration` shorthand: line, style, and color in any order.
+///
+/// Walks whole component values, so a functional colour (`rgb(255, 0, 0)`)
+/// is read as the one colour it is rather than token by token.
 #[must_use]
 pub fn parse_text_decoration(tokens: &[Token]) -> Option<TextDecoration> {
     if tokens.is_empty() {
@@ -220,38 +209,9 @@ pub fn parse_text_decoration(tokens: &[Token]) -> Option<TextDecoration> {
     if is_none_keyword(tokens) {
         return Some(TextDecoration::initial());
     }
-    let mut line = TextDecorationLine::NONE;
-    let mut style = None;
-    let mut color = None;
-    let mut matched = false;
-
-    for token in tokens {
-        if let Token::Ident(name) = token {
-            let lower = name.to_ascii_lowercase();
-            if match_decoration_keyword(&lower, &mut line, &mut style) {
-                matched = true;
-                continue;
-            }
-        }
-        let parsed_color = parse_color(core::slice::from_ref(token));
-        if color.is_none() && parsed_color.is_some() {
-            color = parsed_color;
-            matched = true;
-            continue;
-        }
-        return None;
-    }
-
-    if !matched {
-        return None;
-    }
-
-    Some(
-        TextDecoration::initial()
-            .with_line(line)
-            .with_style(style.unwrap_or(TextDecorationStyle::Solid))
-            .with_color(color.unwrap_or(CssColor::BLACK)),
-    )
+    component_values(tokens)
+        .try_fold(DecorationParts::default(), DecorationParts::absorb)
+        .map(DecorationParts::into_decoration)
 }
 
 /// Parses `text-transform`: `none`, `capitalize`, `uppercase`, `lowercase`.

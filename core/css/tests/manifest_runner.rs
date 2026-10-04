@@ -73,7 +73,7 @@ const SELECTOR_PROBES: [(&str, SelectorProbe); 19] = [
 /// One probe per `css::SUPPORTED_PROPERTIES` entry: a value inside the cut that
 /// is **different** from the value the UA sheet gives the fixture paragraph, so
 /// "the cascade honoured it" is observable rather than assumed.
-const PROPERTY_PROBES: [(&str, &str); 133] = [
+const PROPERTY_PROBES: [(&str, &str); 137] = [
     ("display", "inline"),
     ("color", "#ff0000"),
     ("background-color", "silver"),
@@ -156,6 +156,7 @@ const PROPERTY_PROBES: [(&str, &str); 133] = [
     ("text-transform", "uppercase"),
     ("text-overflow", "ellipsis"),
     ("overflow-wrap", "break-word"),
+    ("word-wrap", "anywhere"),
     ("word-break", "break-all"),
     ("grid-template-columns", "100px 1fr"),
     ("grid-template-rows", "50px auto"),
@@ -173,6 +174,9 @@ const PROPERTY_PROBES: [(&str, &str); 133] = [
     ("gap", "10px"),
     ("row-gap", "15px"),
     ("column-gap", "20px"),
+    ("grid-gap", "12px"),
+    ("grid-row-gap", "14px"),
+    ("grid-column-gap", "16px"),
     ("writing-mode", "vertical-rl"),
     ("direction", "rtl"),
     ("inline-size", "200px"),

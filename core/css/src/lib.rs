@@ -96,7 +96,11 @@ pub mod infrastructure;
 /// and the `with_*` builders and `inheriting_from` are no longer `const fn`;
 /// the public cascade helpers `grid_values::{apply, reset, inherit}` and
 /// `logical_values::{apply, apply_with_context}` borrow the style they read
-/// instead of taking it by value. `PRD-007` carries the migration note.
+/// instead of taking it by value. The review's second pass, still inside `8`
+/// (the PR is unmerged): `ComputedStyle::font_size` is the computed absolute
+/// size, `TextDecorationLine::adding` replaces the `with_*(bool)` builders,
+/// and [`SUPPORTED_PROPERTIES`] gains four legacy aliases (137). `PRD-007`
+/// carries the migration note.
 pub const PORT_SCHEMA_VERSION: u32 = 8;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
@@ -109,9 +113,11 @@ pub const PORT_SCHEMA_VERSION: u32 = 8;
 /// actually accepts all agree — in every direction.
 ///
 /// Jumped from 14 to 33 in v0.5 B4, 34 in the fonts increment, 36 in the
-/// "unstyled real sites" follow-up, 49 in v0.5 P1, and 133 in v0.5 P2
-/// (visual, typography, grid, logical properties).
-pub const SUPPORTED_PROPERTIES: [&str; 133] = [
+/// "unstyled real sites" follow-up, 49 in v0.5 P1, 133 in v0.5 P2
+/// (visual, typography, grid, logical properties), and 137 in the PR #19
+/// review round (the legacy aliases `word-wrap`, `grid-gap`, `grid-row-gap`
+/// and `grid-column-gap`, which real sites still write).
+pub const SUPPORTED_PROPERTIES: [&str; 137] = [
     "display",
     "color",
     "background-color",
@@ -194,6 +200,7 @@ pub const SUPPORTED_PROPERTIES: [&str; 133] = [
     "text-transform",
     "text-overflow",
     "overflow-wrap",
+    "word-wrap",
     "word-break",
     "grid-template-columns",
     "grid-template-rows",
@@ -211,6 +218,9 @@ pub const SUPPORTED_PROPERTIES: [&str; 133] = [
     "gap",
     "row-gap",
     "column-gap",
+    "grid-gap",
+    "grid-row-gap",
+    "grid-column-gap",
     "writing-mode",
     "direction",
     "inline-size",

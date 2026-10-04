@@ -303,7 +303,8 @@ fn the_ua_sheet_still_gives_a_heading_and_a_paragraph_their_classic_shape() {
 
     let heading_style = styled.node(styled_id(&dom, "h1")).expect("styled").style();
     assert_eq!(heading_style.display(), css::Display::Block);
-    assert_eq!(heading_style.font_size(), Length::Em(2.0));
+    // `2em` of the root's initial 16px, stored computed (CSS Fonts 4 §2.5).
+    assert_eq!(heading_style.font_size(), Length::Pixels(32.0));
     assert_eq!(
         heading_style.margin(),
         LengthEdges::vertical(Length::Em(0.67))
