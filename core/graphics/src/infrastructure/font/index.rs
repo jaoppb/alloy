@@ -45,8 +45,8 @@ impl FontIndex {
     fn build() -> Self {
         let mut by_family = BTreeMap::new();
         let mut scanned = 0_usize;
-        for dir in FontCatalog::system_font_dirs() {
-            scan_dir(&dir, MAX_DEPTH, &mut by_family, &mut scanned);
+        for directory in FontCatalog::system_font_dirs().iter() {
+            scan_dir(directory, MAX_DEPTH, &mut by_family, &mut scanned);
         }
         Self { by_family }
     }

@@ -2,7 +2,11 @@
 //!
 //! B0 recognises the outer display types the placeholder [`crate::BlockLayout`]
 //! needs: `none` (no box), `block`, `inline`, and `flex` (declared so the
-//! aggregate is born whole — B4 gives it a formatting context).
+//! aggregate is born whole — B4 gives it a formatting context). The UA sheet's
+//! form controls and list items add `inline-block` (an atomic inline-level
+//! block container, CSS Display L3 §2.4) and `list-item` (a block box that
+//! also generates a `::marker`, CSS Display L3 §2.5 — the marker is not
+//! painted yet, see `core/css/tests/data/MANIFEST.md`).
 
 use core::fmt;
 use core::str::FromStr;
@@ -29,6 +33,13 @@ pub enum Display {
     /// A block-level flex container. Declared for the frozen contract; B4
     /// implements the layout.
     Flex,
+    /// An inline-level block container laid out as one atomic box on a line
+    /// (CSS 2.1 §9.2.4) — the UA display of `<input>` / `<button>`.
+    InlineBlock,
+    /// A block-level box that also generates a marker (CSS 2.1 §12.5). Lays
+    /// out exactly like [`Display::Block`]; the marker itself is a declared
+    /// cut of this engine.
+    ListItem,
 }
 
 impl Display {
@@ -36,6 +47,20 @@ impl Display {
     #[must_use]
     pub const fn is_none(self) -> bool {
         matches!(self, Self::None)
+    }
+
+    /// Whether this box takes part in its parent's inline formatting context
+    /// (CSS 2.1 §9.2.2) — an `inline` box or an atomic `inline-block`.
+    #[must_use]
+    pub const fn is_inline_level(self) -> bool {
+        matches!(self, Self::Inline | Self::InlineBlock)
+    }
+
+    /// Whether this box sits on a line as one unbreakable unit whose inside is
+    /// its own block formatting context (CSS 2.1 §9.2.4, "atomic inline-level").
+    #[must_use]
+    pub const fn is_atomic_inline(self) -> bool {
+        matches!(self, Self::InlineBlock)
     }
 
     /// The keyword as it appears in a stylesheet.
@@ -46,6 +71,8 @@ impl Display {
             Self::Block => "block",
             Self::Inline => "inline",
             Self::Flex => "flex",
+            Self::InlineBlock => "inline-block",
+            Self::ListItem => "list-item",
         }
     }
 }
@@ -66,6 +93,8 @@ impl FromStr for Display {
             "block" => Ok(Self::Block),
             "inline" => Ok(Self::Inline),
             "flex" => Ok(Self::Flex),
+            "inline-block" => Ok(Self::InlineBlock),
+            "list-item" => Ok(Self::ListItem),
             other => Err(ParseDisplayError(other.to_owned())),
         }
     }
@@ -82,12 +111,18 @@ mod tests {
             Display::Block,
             Display::Inline,
             Display::Flex,
+            Display::InlineBlock,
+            Display::ListItem,
         ] {
             assert_eq!(display.keyword().parse(), Ok(display));
         }
         assert_eq!(
             "grid".parse::<Display>(),
             Err(ParseDisplayError("grid".to_owned()))
+        );
+        assert_eq!(
+            "inline-flex".parse::<Display>(),
+            Err(ParseDisplayError("inline-flex".to_owned()))
         );
     }
 }

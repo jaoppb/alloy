@@ -230,3 +230,91 @@ fn position_relative_shifts_paint_rect_without_disturbing_flow() {
         "#b must stay at normal-flow position"
     );
 }
+
+/// Lays out `#container > #a` with `source` and answers `#a`'s border box.
+fn relatively_positioned(source: &str) -> graphics::Rect {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let container = element(&mut tree, root, "container");
+    element(&mut tree, container, "a");
+    let dom = snapshot(&tree, root);
+    let boxes = layout_boxes(&tree, root, source);
+    box_of(&boxes, &dom, "a").border_box()
+}
+
+/// CSS 2.1 §9.4.3: with `left: auto`, `right` moves the box by minus its
+/// value — `right: 10px` shifts the paint rect 10px to the left.
+#[test]
+fn position_relative_right_shifts_the_box_left_when_left_is_auto() {
+    let shifted = relatively_positioned("#a { height: 20px; position: relative; right: 10px; }");
+    assert_eq!(shifted.min_x(), Au::ZERO.saturating_sub(au(10)));
+    assert_eq!(shifted.min_y(), Au::ZERO);
+}
+
+/// CSS 2.1 §9.4.3: with `top: auto`, `bottom` moves the box up by its value.
+#[test]
+fn position_relative_bottom_shifts_the_box_up_when_top_is_auto() {
+    let shifted = relatively_positioned("#a { height: 20px; position: relative; bottom: 5px; }");
+    assert_eq!(shifted.min_y(), Au::ZERO.saturating_sub(au(5)));
+    assert_eq!(shifted.min_x(), Au::ZERO);
+}
+
+/// CSS 2.1 §9.4.3: when both `left` and `right` are set, `left` wins (`ltr`).
+#[test]
+fn position_relative_left_wins_over_right() {
+    let shifted =
+        relatively_positioned("#a { height: 20px; position: relative; left: 10px; right: 30px; }");
+    assert_eq!(shifted.min_x(), au(10));
+}
+
+/// CSS 2.1 §9.4.3: when both are set and the containing block is `rtl`,
+/// `right` wins and moves the box by minus its value.
+#[test]
+fn position_relative_right_wins_over_left_in_an_rtl_containing_block() {
+    let shifted = relatively_positioned(
+        "#container { direction: rtl; } \
+         #a { height: 20px; position: relative; left: 10px; right: 20px; }",
+    );
+    assert_eq!(shifted.min_x(), Au::ZERO.saturating_sub(au(20)));
+}
+
+/// The containing block decides, not the box: an `ltr` box inside an `rtl`
+/// container still lets `right` win.
+#[test]
+fn position_relative_inset_precedence_follows_the_containing_block_direction() {
+    let shifted = relatively_positioned(
+        "#container { direction: rtl; } \
+         #a { direction: ltr; height: 20px; position: relative; left: 10px; right: 20px; }",
+    );
+    assert_eq!(shifted.min_x(), Au::ZERO.saturating_sub(au(20)));
+}
+
+/// CSS 2.1 §9.3.2: a `top` percentage is a share of the containing block's
+/// **height** — 10% of the parent's 100px is 10px, not 10% of the 800px
+/// viewport width.
+#[test]
+fn position_relative_top_percentage_resolves_against_the_containing_height() {
+    let shifted = relatively_positioned(
+        "#container { height: 100px; } #a { height: 20px; position: relative; top: 10%; }",
+    );
+    assert_eq!(shifted.min_y(), au(10));
+}
+
+/// A percentage against a containing block whose height depends on its
+/// content computes to `auto` — the box does not move.
+#[test]
+fn position_relative_top_percentage_against_an_auto_height_parent_is_auto() {
+    let shifted = relatively_positioned("#a { height: 20px; position: relative; top: 10%; }");
+    assert_eq!(shifted.min_y(), Au::ZERO);
+}
+
+/// A flex item's containing block is its flex container's content box, so a
+/// definite container height is what its `top` percentage resolves against.
+#[test]
+fn position_relative_top_percentage_in_a_flex_item_uses_the_container_height() {
+    let shifted = relatively_positioned(concat!(
+        "#container { display: flex; height: 200px; } ",
+        "#a { width: 20px; height: 20px; position: relative; top: 10%; }",
+    ));
+    assert_eq!(shifted.min_y(), au(20));
+}

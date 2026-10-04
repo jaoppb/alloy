@@ -565,3 +565,61 @@ fn resolve_declaration_value_substitutes_vars() {
 
     assert_eq!(resolved.as_str(), "8px");
 }
+
+// ============================================================================
+// Custom property names, error messages, memoization and the expansion cap
+// ============================================================================
+
+#[test]
+fn only_a_double_dash_name_names_a_custom_property() {
+    assert!(VariableName::names_custom_property("--accent"));
+    assert!(VariableName::names_custom_property("--Accent"));
+    assert!(!VariableName::names_custom_property("-webkit-box"));
+    assert!(!VariableName::names_custom_property("color"));
+}
+
+#[test]
+fn variable_errors_describe_themselves() {
+    assert_eq!(
+        VariableError::CycleDetected(vec!["--a".to_owned(), "--b".to_owned(), "--a".to_owned()])
+            .to_string(),
+        "cycle detected in variable references: --a -> --b -> --a"
+    );
+    assert_eq!(
+        VariableError::ExpansionLimit { limit_bytes: 16 }.to_string(),
+        "`var()` substitution exceeded the 16-byte expansion limit"
+    );
+    assert_eq!(
+        VariableError::UndefinedVariable("--x".to_owned()).to_string(),
+        "undefined variable `--x` without fallback"
+    );
+}
+
+#[test]
+fn a_variable_referenced_many_times_resolves_to_every_copy() {
+    let mut map = CustomPropertiesMap::new();
+    map.set(
+        VariableName::new("--unit").unwrap(),
+        VariableValue::new("var(--size)"),
+    );
+    map.set(
+        VariableName::new("--size").unwrap(),
+        VariableValue::new("4px"),
+    );
+    let input = vec!["var(--unit)"; 50].join(" ");
+    let substituted = substitute_variables(&input, &map).unwrap();
+    assert_eq!(substituted, vec!["4px"; 50].join(" "));
+}
+
+#[test]
+fn a_literal_value_past_the_cap_is_refused() {
+    let map = CustomPropertiesMap::new();
+    let oversized = format!(
+        "{} var(--missing, x)",
+        "a".repeat(css::infrastructure::cascade::variable_values::MAX_SUBSTITUTED_BYTES)
+    );
+    assert!(matches!(
+        substitute_variables(&oversized, &map),
+        Err(VariableError::ExpansionLimit { .. })
+    ));
+}

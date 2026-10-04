@@ -86,6 +86,22 @@ fn display_none_suppresses_the_box_and_keywords_round_trip() {
     assert_eq!(Display::default(), Display::Block);
 }
 
+/// The UA sheet's `inline-block` (form controls) and `list-item` (`<li>`) must
+/// parse — an unparsed keyword silently drops the whole UA rule (issues #2/#3).
+#[test]
+fn inline_block_and_list_item_parse_and_classify() {
+    assert_eq!("inline-block".parse(), Ok(Display::InlineBlock));
+    assert_eq!("list-item".parse(), Ok(Display::ListItem));
+    assert_eq!(Display::InlineBlock.keyword(), "inline-block");
+    assert_eq!(Display::ListItem.to_string(), "list-item");
+    assert!(Display::InlineBlock.is_inline_level());
+    assert!(Display::InlineBlock.is_atomic_inline());
+    assert!(Display::Inline.is_inline_level());
+    assert!(!Display::Inline.is_atomic_inline());
+    assert!(!Display::ListItem.is_inline_level());
+    assert!(!Display::Block.is_atomic_inline());
+}
+
 #[test]
 fn the_initial_computed_style_is_black_transparent_and_sixteen_pixels() {
     let initial = ComputedStyle::initial();
@@ -234,10 +250,13 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 7,
-        "version 7 adds visual decorations, advanced typography, grid, and logical properties (ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 8,
+        "version 8 settles the PR #19 review round: new Display / InputType values, \
+         fallible TrackList, ComputedStyle no longer Copy (ADR-0011 item 3)"
     );
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 133);
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 137);
+    assert!(SUPPORTED_PROPERTIES.contains(&"grid-gap"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"word-wrap"));
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));
     assert!(SUPPORTED_PROPERTIES.contains(&"font-family"));
     assert!(SUPPORTED_PROPERTIES.contains(&"margin-left"));

@@ -2,8 +2,8 @@
 //! Covers track sizing, template areas, auto-flow, line placement, and gap.
 
 use css::domain::computed::grid::{
-    GridAutoFlow, GridFr, GridGap, GridLine, GridPlacement, GridSpan, GridStyle, GridTemplateAreas,
-    MaxTrackBreadth, MinTrackBreadth, TrackList, TrackSize,
+    GridAreaName, GridAutoFlow, GridFr, GridGap, GridLine, GridLineName, GridPlacement, GridSpan,
+    GridStyle, GridTemplateAreas, MaxTrackBreadth, MinTrackBreadth, TrackList, TrackSize,
 };
 use css::domain::length::Length;
 use css::infrastructure::cascade::grid_values::{self, apply, inherit, reset, tokenize_value};
@@ -279,6 +279,32 @@ fn parse_grid_area_shorthand_forms() {
     assert_eq!(c2, GridPlacement::Line(GridLine::new(4).unwrap()));
 }
 
+/// CSS Grid L1 §8.4: an omitted `grid-area` end copies its start when that
+/// start is a custom-ident, and is `auto` otherwise.
+#[test]
+fn grid_area_omitted_ends_copy_a_named_start() {
+    let header = GridPlacement::named("hdr").unwrap();
+    let side = GridPlacement::named("side").unwrap();
+
+    let two_values = tokenize_value("hdr / side");
+    let (_, _, row_end, column_end) =
+        grid_values::parse_grid_area_shorthand(&two_values).expect("two values");
+    assert_eq!(row_end, header);
+    assert_eq!(column_end, side);
+
+    let three_values = tokenize_value("hdr / side / 3");
+    let (_, _, row_end, column_end) =
+        grid_values::parse_grid_area_shorthand(&three_values).expect("three values");
+    assert_eq!(row_end, GridPlacement::Line(GridLine::new(3).unwrap()));
+    assert_eq!(column_end, side);
+
+    let numeric = tokenize_value("1 / 2");
+    let (_, _, row_end, column_end) =
+        grid_values::parse_grid_area_shorthand(&numeric).expect("numeric starts");
+    assert_eq!(row_end, GridPlacement::Auto);
+    assert_eq!(column_end, GridPlacement::Auto);
+}
+
 #[test]
 fn parse_gap_properties() {
     let normal_tok = tokenize_value("normal");
@@ -309,31 +335,31 @@ fn cascade_apply_and_reset_properties() {
 
     // 1. grid-template-columns
     let cols_tok = tokenize_value("100px 1fr");
-    let s1 = apply(initial, "grid-template-columns", &cols_tok).expect("apply template-columns");
+    let s1 = apply(&initial, "grid-template-columns", &cols_tok).expect("apply template-columns");
     assert_eq!(s1.template_columns().len(), 2);
 
     // 2. grid-template-rows
     let rows_tok = tokenize_value("50px 2fr");
-    let s2 = apply(s1, "grid-template-rows", &rows_tok).expect("apply template-rows");
+    let s2 = apply(&s1, "grid-template-rows", &rows_tok).expect("apply template-rows");
     assert_eq!(s2.template_rows().len(), 2);
 
     // 3. grid-auto-columns & grid-auto-rows
     let auto_col = tokenize_value("120px");
-    let s3 = apply(s2, "grid-auto-columns", &auto_col).expect("apply auto-columns");
+    let s3 = apply(&s2, "grid-auto-columns", &auto_col).expect("apply auto-columns");
     assert_eq!(s3.auto_columns(), TrackSize::pixels(120.0));
 
     let auto_row = tokenize_value("min-content");
-    let s4 = apply(s3, "grid-auto-rows", &auto_row).expect("apply auto-rows");
+    let s4 = apply(&s3, "grid-auto-rows", &auto_row).expect("apply auto-rows");
     assert_eq!(s4.auto_rows(), TrackSize::MinContent);
 
     // 4. grid-auto-flow
     let flow_tok = tokenize_value("column dense");
-    let s5 = apply(s4, "grid-auto-flow", &flow_tok).expect("apply auto-flow");
+    let s5 = apply(&s4, "grid-auto-flow", &flow_tok).expect("apply auto-flow");
     assert_eq!(s5.auto_flow(), GridAutoFlow::ColumnDense);
 
     // 5. grid-column and grid-row
     let axis_placement_tok = tokenize_value("2 / span 3");
-    let s6 = apply(s5, "grid-column", &axis_placement_tok).expect("apply grid-column");
+    let s6 = apply(&s5, "grid-column", &axis_placement_tok).expect("apply grid-column");
     assert_eq!(
         s6.column_start(),
         &GridPlacement::Line(GridLine::new(2).unwrap())
@@ -345,16 +371,16 @@ fn cascade_apply_and_reset_properties() {
 
     // 6. gap
     let gap_tok = tokenize_value("8px 16px");
-    let s7 = apply(s6, "gap", &gap_tok).expect("apply gap");
+    let s7 = apply(&s6, "gap", &gap_tok).expect("apply gap");
     assert_eq!(s7.row_gap(), Length::pixels(8.0));
     assert_eq!(s7.column_gap(), Length::pixels(16.0));
 
     // Reset gap
-    let s8 = reset(s7, "gap").expect("reset gap");
+    let s8 = reset(&s7, "gap").expect("reset gap");
     assert_eq!(s8.gap(), GridGap::ZERO);
 
     // Inherit gap from parent
-    let s9 = inherit(s8, &s7, "gap").expect("inherit gap");
+    let s9 = inherit(&s8, &s7, "gap").expect("inherit gap");
     assert_eq!(s9.gap(), s7.gap());
 }
 
@@ -366,9 +392,55 @@ fn display_implementations_are_clean() {
     let track = TrackSize::minmax(MinTrackBreadth::pixels(100.0), MaxTrackBreadth::fr(fr));
     assert_eq!(format!("{track}"), "minmax(100px, 2.5fr)");
 
-    let track_list = TrackList::from_tracks(&[TrackSize::pixels(50.0), TrackSize::Auto]);
+    let track_list = TrackList::from_tracks(&[TrackSize::pixels(50.0), TrackSize::Auto])
+        .expect("two tracks fit the capacity");
     assert_eq!(format!("{track_list}"), "50px auto");
 
     let gap = GridGap::new(Length::pixels(10.0), Length::pixels(20.0));
     assert_eq!(format!("{gap}"), "10px 20px");
+}
+
+#[test]
+fn track_list_from_tracks_refuses_more_than_capacity() {
+    let full = [TrackSize::Auto; TrackList::CAPACITY];
+    let accepted = TrackList::from_tracks(&full).expect("exactly CAPACITY tracks fit");
+    assert_eq!(accepted.len(), TrackList::CAPACITY);
+
+    let overflowing = [TrackSize::Auto; TrackList::CAPACITY + 1];
+    assert!(TrackList::from_tracks(&overflowing).is_none());
+
+    let empty = TrackList::from_tracks(&[]).expect("an empty list is `none`");
+    assert!(empty.is_none());
+}
+
+#[test]
+fn grid_names_preserve_case() {
+    let upper = GridAreaName::new("Nav").expect("valid area name");
+    let lower = GridAreaName::new("nav").expect("valid area name");
+    assert_ne!(upper, lower);
+    assert_eq!(upper.as_str(), "Nav");
+    assert_eq!(format!("{upper}"), "Nav");
+    assert!(GridAreaName::new("NONE").is_none());
+    assert!(GridAreaName::new("a".repeat(GridAreaName::CAPACITY + 1)).is_none());
+
+    let line = GridLineName::new("Header").expect("valid line name");
+    assert_eq!(line.as_str(), "Header");
+    assert_ne!(Some(line), GridLineName::new("header"));
+    assert!(GridLineName::new("Auto").is_none());
+}
+
+#[test]
+fn template_areas_from_matrix_keeps_distinct_case_areas() {
+    let upper = GridAreaName::new("Nav");
+    let lower = GridAreaName::new("nav");
+    let areas = GridTemplateAreas::from_matrix(&[vec![upper, lower], vec![upper, lower]])
+        .expect("two rectangular areas");
+    let upper_rect = areas.find_area("Nav").expect("Nav exists");
+    assert_eq!((upper_rect.row_start(), upper_rect.row_end()), (1, 3));
+    assert_eq!((upper_rect.column_start(), upper_rect.column_end()), (1, 2));
+    let lower_rect = areas.find_area("nav").expect("nav exists");
+    assert_eq!((lower_rect.column_start(), lower_rect.column_end()), (2, 3));
+
+    let split = GridTemplateAreas::from_matrix(&[vec![upper, lower, upper]]);
+    assert!(split.is_none(), "a disjoint area is not a rectangle");
 }

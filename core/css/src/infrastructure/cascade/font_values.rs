@@ -15,34 +15,38 @@ const FONT_FAMILY: &str = "font-family";
 /// `style` with `font-family` set from `tokens`, or `None` when `property` is
 /// not `font-family` or the value has no readable entry.
 pub(crate) fn apply(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     if property != FONT_FAMILY {
         return None;
     }
-    parse_font_family(tokens).map(|list| style.with_font_family(list))
+    parse_font_family(tokens).map(|list| style.clone().with_font_family(list))
 }
 
 /// `style` with `font-family` reset to its CSS `initial` value (an empty list).
-pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+pub(crate) fn reset(style: &ComputedStyle, property: &str) -> Option<ComputedStyle> {
     if property != FONT_FAMILY {
         return None;
     }
-    Some(style.with_font_family(ComputedStyle::initial().font_family()))
+    Some(
+        style
+            .clone()
+            .with_font_family(ComputedStyle::initial().font_family()),
+    )
 }
 
 /// `style` with `font-family` copied from `parent` — the `inherit` keyword.
 /// `font-family` inherits on its own, so this only matters when an author
 /// writes the keyword explicitly on a node whose parent set a non-initial list.
 pub(crate) fn inherit(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     parent: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
     if property != FONT_FAMILY {
         return None;
     }
-    Some(style.with_font_family(parent.font_family()))
+    Some(style.clone().with_font_family(parent.font_family()))
 }

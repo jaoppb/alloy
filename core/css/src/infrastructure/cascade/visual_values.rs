@@ -16,10 +16,6 @@ pub mod border;
 pub mod border_shorthand;
 #[path = "visual_values/copy.rs"]
 pub mod copy;
-#[path = "visual_values/helpers.rs"]
-pub mod helpers;
-#[path = "visual_values/hex.rs"]
-pub mod hex;
 #[path = "visual_values/opacity.rs"]
 pub mod opacity;
 #[path = "visual_values/shadow.rs"]

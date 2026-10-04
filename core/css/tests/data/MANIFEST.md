@@ -26,7 +26,7 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 
 | token                        | since | notes                                                                                                                                                                                      |
 | ---------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `display`                    | B1    | keywords `none` / `block` / `inline` / `flex`; `flex` parses in B1 and lays out in B4                                                                                                      |
+| `display`                    | B1    | `none` / `block` / `inline` / `flex` (B4) / `inline-block` (atomic; shrink-to-fit by measuring layout; baseline = bottom margin edge) / `list-item` (as `block`, no marker)                |
 | `color`                      | B1    | inherited; `#rgb`, `#rrggbb`, the 17 basic colour names, and `rgb()` / `rgba()` (B2)                                                                                                       |
 | `background-color`           | B1    | not inherited; same value grammar as `color`                                                                                                                                               |
 | `background`                 | ddg   | shorthand narrowed to the background **colour**; `url()`, gradients, position/size/repeat scanned past, `none` clears; the image is not fetched (v0.7)                                     |
@@ -108,6 +108,7 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 | `text-transform`             | P2    | `none`, `capitalize`, `uppercase`, `lowercase`                                                                                                                                             |
 | `text-overflow`              | P2    | `clip`, `ellipsis`                                                                                                                                                                         |
 | `overflow-wrap`              | P2    | `normal`, `break-word`, `anywhere`                                                                                                                                                         |
+| `word-wrap`                  | P2    | legacy alias of `overflow-wrap`                                                                                                                                                            |
 | `word-break`                 | P2    | `normal`, `break-all`, `keep-all`                                                                                                                                                          |
 | `grid-template-columns`      | P2    | track sizing (`px`, `%`, `fr`, `auto`, `minmax()`, `repeat()`)                                                                                                                             |
 | `grid-template-rows`         | P2    | track sizing                                                                                                                                                                               |
@@ -125,6 +126,9 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 | `gap`                        | P2    | row and column gutters shorthand                                                                                                                                                           |
 | `row-gap`                    | P2    | row gutter                                                                                                                                                                                 |
 | `column-gap`                 | P2    | column gutter                                                                                                                                                                              |
+| `grid-gap`                   | P2    | legacy alias of `gap`                                                                                                                                                                      |
+| `grid-row-gap`               | P2    | legacy alias of `row-gap`                                                                                                                                                                  |
+| `grid-column-gap`            | P2    | legacy alias of `column-gap`                                                                                                                                                               |
 | `writing-mode`               | P2    | `horizontal-tb`, `vertical-rl`, `vertical-lr`                                                                                                                                              |
 | `direction`                  | P2    | `ltr`, `rtl`                                                                                                                                                                               |
 | `inline-size`                | P2    | logical sizing mapped to physical axis                                                                                                                                                     |
@@ -185,14 +189,45 @@ shrinkage:
 
 ### Font simplifications (fonts increment)
 
-`font-family` is a `Copy` field of `ComputedStyle` (`core/css/src/domain/computed/font.rs`), which is copied per node
-during layout, so the list is fixed-capacity rather than a `Vec`. Two cuts, silent (the value is parsed only at cascade
-time, which has no `ParseNote` channel) and declared here in the same spirit as the Flexbox cuts:
+`font-family` is an inline field of `ComputedStyle` (`core/css/src/domain/computed/font.rs`), which is cloned at every
+cascade step and stored per styled node, so the list is fixed-capacity rather than a `Vec` that would allocate on each
+clone. (`ComputedStyle` itself is `Clone`, not `Copy`, since `css::PORT_SCHEMA_VERSION` `8`.) Two cuts, silent (the
+value is parsed only at cascade time, which has no `ParseNote` channel) and declared here in the same spirit as the
+Flexbox cuts:
 
 | gap                                      | behaviour instead                                                                                                                                                 | tracked for |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | the list has no length limit in CSS      | at most `FontFamilyList::CAPACITY` (3) families are kept; a real chain ends in a generic and the provider default is a generic, so the dropped tail is equivalent | v0.7        |
 | a family name has no length limit in CSS | a name longer than `FamilyName::CAPACITY` (23) bytes is truncated at a UTF-8 boundary                                                                             | v0.7        |
+
+### Grid storage caps
+
+The grid computed values (`core/css/src/domain/computed/grid/`) are `Copy` and fixed-capacity, so a `GridStyle` is one
+flat value; `ComputedStyle` keeps it behind a shared `Arc` that stays empty while every grid property is `initial`, so
+the caps cost nothing on a node that sets no grid property. Unlike the font cuts, exceeding a cap **refuses the whole
+declaration** (the previous value stands) and the cascade parser emits a `tracing::warn!` — a truncated track list or
+area map would lay out a different grid, which is worse than no grid. Names are case-sensitive `<custom-ident>`s (CSS
+Values 4 §4.2): `Nav` and `nav` are two areas.
+
+| gap                                                       | behaviour instead                                                                              | tracked for |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------- |
+| a track list has no length limit in CSS                   | more than `TrackList::CAPACITY` (16) tracks, after `repeat()` expansion, is refused            | v0.7        |
+| `grid-template-areas` has no cell limit in CSS            | more than `GridTemplateAreas::CAPACITY` (64) cells is refused                                  | v0.7        |
+| area and line names have no length limit in CSS           | a name longer than `GridAreaName::CAPACITY` / `GridLineName::CAPACITY` (32) bytes is refused   | v0.7        |
+| `repeat()` takes `auto-fill` / `auto-fit` and named lines | only an integer count and plain track sizes; a nested `repeat()` is invalid CSS and is refused | v0.7        |
+
+`box-shadow` follows the same rule: more than `BoxShadowList::CAPACITY` (4) shadows is refused with a warning, never
+truncated.
+
+### Custom properties
+
+Custom properties (`--*`, CSS Variables L1) are the one deliberate exception to "everything not listed is refused": the
+set of names is open by definition, so the parser accepts any valid `--name` (case preserved — `--C` and `--c` are two
+properties) **without** an entry in the table above or in `css::SUPPORTED_PROPERTIES`, and `manifest_runner.rs` has no
+probe for them. They are cascaded per element outside `ComputedStyle` and feed `var()` in any listed property; a `var()`
+that cannot be substituted (undefined without a fallback, a cycle, more than 64 KiB of output) makes its declaration
+invalid at computed-value time, i.e. `unset`. The full rules are in `docs/architecture/style-cascade-port-contract.md`
+("Cascade semantics of schema 7"); the regression tests are `core/css/tests/cascade_semantics.rs`.
 
 ## Selectors
 

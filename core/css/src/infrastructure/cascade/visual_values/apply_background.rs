@@ -16,19 +16,18 @@ pub fn apply_background_and_effects(
 ) -> Option<VisualStyle> {
     match property {
         "background-image" => {
-            parse_background_image(tokens).map(|val| style.with_background_image(val))
+            parse_background_image(tokens).map(|image| style.with_background_image(image))
         }
-        "background-position" => {
-            parse_background_position(tokens).map(|val| style.with_background_position(val))
-        }
+        "background-position" => parse_background_position(tokens)
+            .map(|position| style.with_background_position(position)),
         "background-size" => {
-            parse_background_size(tokens).map(|val| style.with_background_size(val))
+            parse_background_size(tokens).map(|size| style.with_background_size(size))
         }
         "background-repeat" => {
-            parse_background_repeat(tokens).map(|val| style.with_background_repeat(val))
+            parse_background_repeat(tokens).map(|repeat| style.with_background_repeat(repeat))
         }
-        "box-shadow" => parse_box_shadow(tokens).map(|val| style.with_box_shadow(val)),
-        "opacity" => parse_opacity(tokens).map(|val| style.with_opacity(val)),
+        "box-shadow" => parse_box_shadow(tokens).map(|shadows| style.with_box_shadow(shadows)),
+        "opacity" => parse_opacity(tokens).map(|opacity| style.with_opacity(opacity)),
         _ => None,
     }
 }

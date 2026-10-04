@@ -367,6 +367,32 @@ fn test_background_position_and_keywords() {
     assert_eq!(lengths.y(), Length::Pixels(20.0));
 }
 
+/// CSS Backgrounds 3 §3.6: two keywords may come in either order, so a
+/// vertical-first pair is read by axis, not by position; a pair naming one
+/// axis twice, or a vertical keyword before a length, is invalid.
+#[test]
+fn background_position_keyword_pairs_are_order_independent() {
+    let top_right = parse_background_position(&tokens_of("top right")).unwrap();
+    assert_eq!(top_right.x(), Length::Percent(100.0));
+    assert_eq!(top_right.y(), Length::Percent(0.0));
+
+    let bottom_left = parse_background_position(&tokens_of("bottom left")).unwrap();
+    assert_eq!(bottom_left.x(), Length::Percent(0.0));
+    assert_eq!(bottom_left.y(), Length::Percent(100.0));
+
+    let center_left = parse_background_position(&tokens_of("center left")).unwrap();
+    assert_eq!(center_left.x(), Length::Percent(0.0));
+    assert_eq!(center_left.y(), Length::Percent(50.0));
+
+    let left_length = parse_background_position(&tokens_of("left 10px")).unwrap();
+    assert_eq!(left_length.x(), Length::Percent(0.0));
+    assert_eq!(left_length.y(), Length::Pixels(10.0));
+
+    assert!(parse_background_position(&tokens_of("left right")).is_none());
+    assert!(parse_background_position(&tokens_of("top bottom")).is_none());
+    assert!(parse_background_position(&tokens_of("top 10px")).is_none());
+}
+
 #[test]
 fn test_background_size_and_keywords() {
     let initial = BackgroundSize::default();

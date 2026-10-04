@@ -110,6 +110,7 @@ ul {
 	padding-left: 40px;
 }
 
+/* Lays out as a block; the `::marker` is not generated yet (MANIFEST `display`). */
 li {
 	display: list-item;
 }

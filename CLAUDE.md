@@ -141,6 +141,7 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/graphics`              | `graphics`      | `DisplayList`, `RenderBackend` port, `SoftwareCpuBackend`, PNG codec, text rasterization (v0.3–v0.5)                      |
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |
 | `core/network`               | `network`       | `HttpTransport` / `RequestPolicy` ports, hand-written HTTP/1.1 + `rustls`/`ring` TLS (v0.5 C0/C1)                         |
+| `core/platform`              | `platform`      | Host-OS facts (font install paths, env lookups) behind the `FontLocator` port — the only `target_os` branch (ADR-0022)    |
 | `devtools`                   | `devtools`      | Debug protocol, inspector, hot-reload orchestration. **Stub (v0.9+)**                                                     |
 | `extension`                  | `extension`     | WebExtensions bridge. **Stub**                                                                                            |
 

@@ -8,9 +8,12 @@
 //! single parent-before-child pass so an inheriting resolver always sees its
 //! parent's finished style.
 
+use dom::TagName;
+
 use crate::domain::computed::intrinsic::{self, IntrinsicSize};
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
+use crate::domain::input_type::InputType;
 use crate::domain::text::TextRun;
 
 /// One node's computed style, plus its place in the tree, the character data it
@@ -141,11 +144,9 @@ impl StyledTree {
 /// For `<input>` elements the inline text is synthesized from the element's
 /// attributes rather than from a child text node — the element is a replaced
 /// control with no actual DOM children, but the layout engine needs a label to
-/// paint (issues #2 / #3). The synthesis follows WHATWG HTML §4.10.18.5:
-///   - `type="submit"` → `value` attribute, default `"Submit Query"`
-///   - `type="reset"`  → `value` attribute, default `"Reset"`
-///   - `type="button"` → `value` attribute, default `""`
-///   - all other types → no synthesized text (the control is opaque)
+/// paint (issues #2 / #3). [`InputType::label`] carries the rule (WHATWG HTML
+/// §4.10.5.1.18–20): the `value` attribute, else the state's default label;
+/// states that are not buttons get no synthesized text.
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
     if node_ref.kind() == SnapshotNodeKind::Text {
         return node_ref.text().map(TextRun::new);
@@ -156,32 +157,15 @@ fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
 /// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible
 /// label derived from their attributes, or `None` for every other element kind.
 fn synthesized_input_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
-    if node_ref.tag_str() != Some("input") {
+    if node_ref.tag() != Some(&TagName::Input) {
         return None;
     }
-    let input_type = node_ref
-        .attribute("type")
-        .unwrap_or("text")
-        .to_ascii_lowercase();
-    let label = match input_type.as_str() {
-        "submit" => {
-            let value = node_ref.attribute("value").unwrap_or("Submit Query");
-            value.to_owned()
-        }
-        "reset" => {
-            let value = node_ref.attribute("value").unwrap_or("Reset");
-            value.to_owned()
-        }
-        "button" => {
-            let value = node_ref.attribute("value").unwrap_or("");
-            value.to_owned()
-        }
-        _ => return None,
-    };
+    let input_type = InputType::from_attribute(node_ref.attribute("type"));
+    let label = input_type.label(node_ref.attribute("value"))?;
     if label.is_empty() {
         return None;
     }
-    Some(TextRun::new(&label))
+    Some(TextRun::new(label))
 }
 
 /// The already-computed style of `node_ref`'s parent, looked up by index — safe

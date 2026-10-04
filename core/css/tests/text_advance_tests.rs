@@ -28,11 +28,22 @@ use css::infrastructure::cascade::text_values::{
     parse_text_overflow, parse_text_transform, parse_word_break, parse_word_spacing, reset,
 };
 use css::infrastructure::parser::token::Token;
+use css::infrastructure::parser::tokenize;
 use graphics::Au;
+
+/// [`apply`] on an element whose parent has the initial `normal` weight — the
+/// weight `bolder` / `lighter` are relative to at the root.
+fn apply_at_root(
+    style: TextAdvanceStyle,
+    property: &str,
+    tokens: &[Token],
+) -> Option<TextAdvanceStyle> {
+    apply(style, FontWeight::NORMAL, property, tokens)
+}
 
 const fn au(pixels: i32) -> Au {
     match Au::from_whole_px(pixels) {
-        Some(val) => val,
+        Some(size) => size,
         None => Au::ZERO,
     }
 }
@@ -61,28 +72,42 @@ fn font_weight_constants_and_constructors() {
 
 #[test]
 fn font_weight_bolder_and_lighter_rules() {
-    // CSS Fonts 4 §2.4 relative weights:
-    // < 400 -> 400
+    // CSS Fonts 4 §2.2 relative weights:
+    // < 350 -> 400
     assert_eq!(FontWeight::THIN.bolder(), FontWeight::NORMAL);
     assert_eq!(FontWeight::LIGHT.bolder(), FontWeight::NORMAL);
-    // 400..=500 -> 700
+    // 350..550 -> 700
     assert_eq!(FontWeight::NORMAL.bolder(), FontWeight::BOLD);
     assert_eq!(FontWeight::MEDIUM.bolder(), FontWeight::BOLD);
-    // > 500 -> 900
+    // 550..900 -> 900
     assert_eq!(FontWeight::SEMI_BOLD.bolder(), FontWeight::BLACK);
     assert_eq!(FontWeight::BOLD.bolder(), FontWeight::BLACK);
     assert_eq!(FontWeight::BLACK.bolder(), FontWeight::BLACK);
 
     // lighter:
-    // < 600 -> 100
+    // 100..550 -> 100
     assert_eq!(FontWeight::NORMAL.lighter(), FontWeight::THIN);
     assert_eq!(FontWeight::MEDIUM.lighter(), FontWeight::THIN);
-    // 600..=700 -> 400
+    // 550..750 -> 400
     assert_eq!(FontWeight::SEMI_BOLD.lighter(), FontWeight::NORMAL);
     assert_eq!(FontWeight::BOLD.lighter(), FontWeight::NORMAL);
-    // > 700 -> 700
+    // >= 750 -> 700
     assert_eq!(FontWeight::EXTRA_BOLD.lighter(), FontWeight::BOLD);
     assert_eq!(FontWeight::BLACK.lighter(), FontWeight::BOLD);
+}
+
+/// The edges of the CSS Fonts 4 §2.2 table: `bolder` never makes a weight
+/// lighter and `lighter` never makes one bolder.
+#[test]
+fn font_weight_relative_keywords_follow_the_table_edges() {
+    let weight = |value| FontWeight::new(value).expect("a weight in 1..=1000");
+    assert_eq!(weight(950).bolder(), weight(950));
+    assert_eq!(weight(349).bolder(), FontWeight::NORMAL);
+    assert_eq!(weight(380).bolder(), FontWeight::BOLD);
+    assert_eq!(weight(550).bolder(), FontWeight::BLACK);
+    assert_eq!(weight(50).lighter(), weight(50));
+    assert_eq!(weight(580).lighter(), FontWeight::NORMAL);
+    assert_eq!(weight(750).lighter(), FontWeight::BOLD);
 }
 
 #[test]
@@ -264,7 +289,7 @@ fn text_decoration_line_builders_and_parsing() {
     assert!(!underline.has_overline());
     assert_eq!(format!("{underline}"), "underline");
 
-    let both = underline.with_line_through(true);
+    let both = underline.adding(TextDecorationLine::LINE_THROUGH);
     assert!(both.has_underline());
     assert!(both.has_line_through());
     assert_eq!(format!("{both}"), "underline line-through");
@@ -283,7 +308,7 @@ fn text_decoration_line_builders_and_parsing() {
             Token::Ident("underline".into()),
             Token::Ident("line-through".into())
         ]),
-        Some(TextDecorationLine::UNDERLINE.with_line_through(true))
+        Some(TextDecorationLine::UNDERLINE.adding(TextDecorationLine::LINE_THROUGH))
     );
     assert_eq!(
         parse_text_decoration_line(&[Token::Ident("invalid".into())]),
@@ -359,6 +384,26 @@ fn text_decoration_shorthand_parsing() {
             TextDecoration::initial()
                 .with_line(TextDecorationLine::LINE_THROUGH)
                 .with_style(TextDecorationStyle::Dashed)
+        )
+    );
+}
+
+/// A functional colour is one component value: `rgb(255, 0, 0)` must not be
+/// split into tokens that each fail to parse as a colour.
+#[test]
+fn text_decoration_shorthand_accepts_a_functional_colour() {
+    let tokens: Vec<Token> = tokenize("underline rgb(255, 0, 0) dotted")
+        .iter()
+        .map(|spanned| spanned.token().clone())
+        .filter(|token| !token.is_whitespace())
+        .collect();
+    assert_eq!(
+        parse_text_decoration(&tokens),
+        Some(
+            TextDecoration::initial()
+                .with_line(TextDecorationLine::UNDERLINE)
+                .with_color(CssColor::rgb(255, 0, 0))
+                .with_style(TextDecorationStyle::Dotted)
         )
     );
 }
@@ -499,22 +544,22 @@ fn text_advance_style_cascade_apply_and_reset() {
     let mut style = TextAdvanceStyle::initial();
 
     // apply font-weight
-    style = apply(style, "font-weight", &[Token::Number(600.0)]).unwrap();
+    style = apply_at_root(style, "font-weight", &[Token::Number(600.0)]).unwrap();
     assert_eq!(style.font_weight(), FontWeight::SEMI_BOLD);
 
     // apply font-style
-    style = apply(style, "font-style", &[Token::Ident("italic".into())]).unwrap();
+    style = apply_at_root(style, "font-style", &[Token::Ident("italic".into())]).unwrap();
     assert_eq!(style.font_style(), FontStyle::Italic);
 
     // apply line-height
-    style = apply(style, "line-height", &[Token::Number(1.6)]).unwrap();
+    style = apply_at_root(style, "line-height", &[Token::Number(1.6)]).unwrap();
     assert_eq!(
         style.line_height(),
         LineHeight::Number(LineHeightFactor::new(1.6))
     );
 
     // apply letter-spacing
-    style = apply(
+    style = apply_at_root(
         style,
         "letter-spacing",
         &[Token::Dimension(1.0, "px".into())],
@@ -526,14 +571,14 @@ fn text_advance_style_cascade_apply_and_reset() {
     );
 
     // apply word-spacing
-    style = apply(style, "word-spacing", &[Token::Dimension(2.0, "px".into())]).unwrap();
+    style = apply_at_root(style, "word-spacing", &[Token::Dimension(2.0, "px".into())]).unwrap();
     assert_eq!(
         style.word_spacing(),
         WordSpacing::Length(Length::Pixels(2.0))
     );
 
     // apply text-decoration-line
-    style = apply(
+    style = apply_at_root(
         style,
         "text-decoration-line",
         &[Token::Ident("underline".into())],
@@ -542,7 +587,7 @@ fn text_advance_style_cascade_apply_and_reset() {
     assert!(style.text_decoration().line().has_underline());
 
     // apply text-decoration-color
-    style = apply(
+    style = apply_at_root(
         style,
         "text-decoration-color",
         &[Token::Ident("red".into())],
@@ -551,7 +596,7 @@ fn text_advance_style_cascade_apply_and_reset() {
     assert_eq!(style.text_decoration().color(), CssColor::rgb(255, 0, 0));
 
     // apply text-decoration-style
-    style = apply(
+    style = apply_at_root(
         style,
         "text-decoration-style",
         &[Token::Ident("wavy".into())],
@@ -560,22 +605,22 @@ fn text_advance_style_cascade_apply_and_reset() {
     assert_eq!(style.text_decoration().style(), TextDecorationStyle::Wavy);
 
     // apply text-transform
-    style = apply(style, "text-transform", &[Token::Ident("uppercase".into())]).unwrap();
+    style = apply_at_root(style, "text-transform", &[Token::Ident("uppercase".into())]).unwrap();
     assert_eq!(style.text_transform(), TextTransform::Uppercase);
 
     // apply text-overflow
-    style = apply(style, "text-overflow", &[Token::Ident("ellipsis".into())]).unwrap();
+    style = apply_at_root(style, "text-overflow", &[Token::Ident("ellipsis".into())]).unwrap();
     assert_eq!(style.text_overflow(), TextOverflow::Ellipsis);
 
     // apply overflow-wrap (and word-wrap alias)
-    style = apply(style, "overflow-wrap", &[Token::Ident("break-word".into())]).unwrap();
+    style = apply_at_root(style, "overflow-wrap", &[Token::Ident("break-word".into())]).unwrap();
     assert_eq!(style.overflow_wrap(), OverflowWrap::BreakWord);
 
-    style = apply(style, "word-wrap", &[Token::Ident("anywhere".into())]).unwrap();
+    style = apply_at_root(style, "word-wrap", &[Token::Ident("anywhere".into())]).unwrap();
     assert_eq!(style.overflow_wrap(), OverflowWrap::Anywhere);
 
     // apply word-break
-    style = apply(style, "word-break", &[Token::Ident("break-all".into())]).unwrap();
+    style = apply_at_root(style, "word-break", &[Token::Ident("break-all".into())]).unwrap();
     assert_eq!(style.word_break(), WordBreak::BreakAll);
 
     // reset font-weight
@@ -641,4 +686,111 @@ fn text_advance_typographic_inheritance() {
             .line()
             .has_underline()
     );
+}
+
+// -----------------------------------------------------------------------------
+// Computed values: font-relative lengths made absolute (CSS 2.1 §10.8.1,
+// CSS Text L3 §8)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn line_height_absolutizes_em_and_percentage_but_keeps_a_factor() {
+    assert_eq!(
+        LineHeight::Length(Length::Em(2.0)).absolutized(au(10)),
+        LineHeight::Length(Length::Pixels(20.0))
+    );
+    assert_eq!(
+        LineHeight::Percentage(LineHeightPercentage::new(150.0)).absolutized(au(10)),
+        LineHeight::Length(Length::Pixels(15.0))
+    );
+    let factor = LineHeight::Number(LineHeightFactor::new(2.0));
+    assert_eq!(factor.absolutized(au(10)), factor);
+    assert_eq!(LineHeight::Normal.absolutized(au(10)), LineHeight::Normal);
+    let absolute = LineHeight::Length(Length::Pixels(7.0));
+    assert_eq!(absolute.absolutized(au(10)), absolute);
+}
+
+#[test]
+fn a_non_finite_percentage_line_height_is_left_for_layout_to_reject() {
+    let unreadable = LineHeight::Percentage(LineHeightPercentage::new(f32::INFINITY));
+    assert_eq!(unreadable.absolutized(au(10)), unreadable);
+}
+
+#[test]
+fn spacings_absolutize_em_and_percent_but_keep_rem_and_points() {
+    assert_eq!(
+        LetterSpacing::Length(Length::Em(0.5)).absolutized(au(20)),
+        LetterSpacing::Length(Length::Pixels(10.0))
+    );
+    assert_eq!(
+        WordSpacing::Length(Length::Percent(50.0)).absolutized(au(20)),
+        WordSpacing::Length(Length::Pixels(10.0))
+    );
+    let rem = LetterSpacing::Length(Length::Rem(1.0));
+    assert_eq!(rem.absolutized(au(20)), rem);
+    let points = WordSpacing::Length(Length::Points(3.0));
+    assert_eq!(points.absolutized(au(20)), points);
+    assert_eq!(
+        LetterSpacing::Normal.absolutized(au(20)),
+        LetterSpacing::Normal
+    );
+    assert_eq!(WordSpacing::Normal.absolutized(au(20)), WordSpacing::Normal);
+}
+
+#[test]
+fn text_advance_style_absolutizes_its_three_font_relative_lengths() {
+    let style = TextAdvanceStyle::initial()
+        .with_font_weight(FontWeight::BOLD)
+        .with_line_height(LineHeight::Length(Length::Em(1.5)))
+        .with_letter_spacing(LetterSpacing::Length(Length::Em(0.1)))
+        .with_word_spacing(WordSpacing::Length(Length::Em(1.0)));
+    let absolute = style.absolutized(au(10));
+    assert_eq!(
+        absolute.line_height(),
+        LineHeight::Length(Length::Pixels(15.0))
+    );
+    assert_eq!(absolute.letter_spacing().resolve_to_au(au(99)), Some(au(1)));
+    assert_eq!(
+        absolute.word_spacing(),
+        WordSpacing::Length(Length::Pixels(10.0))
+    );
+    assert_eq!(absolute.font_weight(), FontWeight::BOLD);
+}
+
+#[test]
+fn bolder_and_lighter_resolve_against_the_weight_they_are_handed() {
+    let bolder = [Token::Ident("bolder".into())];
+    let lighter = [Token::Ident("LIGHTER".into())];
+    assert_eq!(
+        parse_font_weight_with_parent(&bolder, FontWeight::NORMAL),
+        Some(FontWeight::BOLD)
+    );
+    assert_eq!(
+        parse_font_weight_with_parent(&lighter, FontWeight::NORMAL),
+        FontWeight::new(100)
+    );
+    let style = apply(
+        TextAdvanceStyle::initial().with_font_weight(FontWeight::BOLD),
+        FontWeight::NORMAL,
+        "font-weight",
+        &bolder,
+    )
+    .unwrap();
+    assert_eq!(style.font_weight(), FontWeight::BOLD);
+    assert_eq!(
+        parse_font_weight_with_parent(&[Token::Number(300.0)], FontWeight::BOLD),
+        FontWeight::new(300)
+    );
+}
+
+#[test]
+fn computed_font_size_resolves_against_the_parent_and_falls_back_to_16px() {
+    let child = css::ComputedStyle::initial().with_font_size(Length::Em(2.0));
+    assert_eq!(child.computed_font_size(au(10)), au(20));
+    let unreadable = css::ComputedStyle::initial().with_font_size(Length::Pixels(f32::NAN));
+    assert_eq!(
+        unreadable.computed_font_size(au(10)),
+        css::domain::computed::style::INITIAL_FONT_SIZE
+    );
+    assert_eq!(css::domain::computed::style::INITIAL_FONT_SIZE, au(16));
 }

@@ -147,6 +147,20 @@ paths = ["core/html/src/domain/**"]
 name = "html-application"
 paths = ["core/html/src/application/**"]
 
+# Host-OS knowledge (ADR-0022): every `target_os` branch lives here, behind the
+# `FontLocator` port; any crate may depend on it, it depends on none.
+[[scopes]]
+name = "platform-domain"
+paths = ["core/platform/src/domain/**"]
+
+[[scopes]]
+name = "platform-application"
+paths = ["core/platform/src/application/**"]
+
+[[scopes]]
+name = "platform"
+paths = ["core/platform/**"]
+
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Domain layer must not depend on application, runtime adapters, or CLI
@@ -253,6 +267,16 @@ from = "html-domain"
 to = ["html-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
 message = "HTML domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
 
+[[deny-scope-dep]]
+from = "platform-domain"
+to = ["platform-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
+message = "Platform domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+
+[[deny-scope-dep]]
+from = "platform"
+to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom", "css", "graphics", "network", "window", "html"]
+message = "core/platform is a leaf: it must not depend on any other workspace crate (ADR-0022)."
+
 # --- import restrictions ---------------------------------------------------
 
 # Engine must not import any concrete script runtime crate (ADR-0002:49 / ADR-0011 item 2)
@@ -350,6 +374,12 @@ name = "window-isolated"
 scope = "window"
 deny = ["engine::*", "dom::*", "css::*", "graphics::*", "network::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
 message = "core/window must not import the engine, another subsystem, or a script runtime — FrameView keeps the graphics edge from existing (PRD-010, ADR-0019)."
+
+[[restrict-use]]
+name = "platform-isolated"
+scope = "platform"
+deny = ["engine::*", "dom::*", "css::*", "graphics::*", "html::*", "network::*", "window::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+message = "core/platform is a leaf every crate may depend on, so it imports none of them (ADR-0022)."
 
 [[restrict-use]]
 name = "runtime-rhai-domain-free"

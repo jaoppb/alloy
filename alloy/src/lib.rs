@@ -22,7 +22,7 @@ pub use application::pipeline::{
 pub use application::runtime_font::RuntimeFontProvider;
 pub use application::{
     ImageRequest, MarkupDiscoverer, StylesheetRequest, SubresourceDiscoverer, SubresourceRequest,
-    Subresources,
+    Subresources, document_base_url,
 };
 pub use application::{
     LoopStats, initial_window_attributes, navigate, run_browser, run_browser_until,

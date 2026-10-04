@@ -6,19 +6,19 @@ use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::parse_overflow;
 
 pub(crate) fn apply(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let overflow = style.overflow();
-    updated(overflow, property, tokens).map(|changed| style.with_overflow(changed))
+    updated(overflow, property, tokens).map(|changed| style.clone().with_overflow(changed))
 }
 
 fn updated(overflow: OverflowStyle, property: &str, tokens: &[Token]) -> Option<OverflowStyle> {
     match property {
         "overflow" => parse_overflow_shorthand(tokens),
-        "overflow-x" => parse_overflow(tokens).map(|val| overflow.with_x(val)),
-        "overflow-y" => parse_overflow(tokens).map(|val| overflow.with_y(val)),
+        "overflow-x" => parse_overflow(tokens).map(|value| overflow.with_x(value)),
+        "overflow-y" => parse_overflow(tokens).map(|value| overflow.with_y(value)),
         _ => None,
     }
 }
@@ -35,19 +35,23 @@ fn parse_overflow_shorthand(tokens: &[Token]) -> Option<OverflowStyle> {
     }
 }
 
-pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+pub(crate) fn reset(style: &ComputedStyle, property: &str) -> Option<ComputedStyle> {
     copy_from(style, OverflowStyle::initial(), property)
 }
 
 pub(crate) fn inherit(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     parent: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
     copy_from(style, parent.overflow(), property)
 }
 
-fn copy_from(style: ComputedStyle, source: OverflowStyle, property: &str) -> Option<ComputedStyle> {
+fn copy_from(
+    style: &ComputedStyle,
+    source: OverflowStyle,
+    property: &str,
+) -> Option<ComputedStyle> {
     let current = style.overflow();
     let updated = match property {
         "overflow" => source,
@@ -55,5 +59,5 @@ fn copy_from(style: ComputedStyle, source: OverflowStyle, property: &str) -> Opt
         "overflow-y" => current.with_y(source.y()),
         _ => return None,
     };
-    Some(style.with_overflow(updated))
+    Some(style.clone().with_overflow(updated))
 }

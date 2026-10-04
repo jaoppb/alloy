@@ -6,79 +6,90 @@ use crate::domain::computed::grid::{
 };
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
-use crate::infrastructure::parser::tokenizer::tokenize;
+use crate::infrastructure::parser::values::{
+    component_values, function_call, length_from_token, significant_tokens, split_top_level_commas,
+};
 
-/// Tokenizes a CSS value string and filters out whitespace.
+/// Tokenizes a CSS value string and filters out whitespace — the cascade's own
+/// tokenizer path, exposed for callers that hold raw value text.
 #[must_use]
-pub fn tokenize_value(value_str: &str) -> Vec<Token> {
-    tokenize(value_str)
-        .iter()
-        .map(|spanned| spanned.token().clone())
-        .filter(|token| !token.is_whitespace())
-        .collect()
+pub fn tokenize_value(value_text: &str) -> Vec<Token> {
+    significant_tokens(value_text)
 }
 
 /// Applies a CSS Grid property declaration to [`GridStyle`].
 #[must_use]
-pub fn apply(grid: GridStyle, property: &str, tokens: &[Token]) -> Option<GridStyle> {
+pub fn apply(grid: &GridStyle, property: &str, tokens: &[Token]) -> Option<GridStyle> {
     match property {
-        "grid-template-columns" => parse_track_list(tokens).map(|t| grid.with_template_columns(t)),
-        "grid-template-rows" => parse_track_list(tokens).map(|t| grid.with_template_rows(t)),
-        "grid-template-areas" => {
-            parse_grid_template_areas(tokens).map(|a| grid.with_template_areas(a))
+        "grid-template-columns" => {
+            parse_track_list(tokens).map(|tracks| grid.with_template_columns(tracks))
         }
-        "grid-auto-columns" => parse_track_size(tokens).map(|s| grid.with_auto_columns(s)),
-        "grid-auto-rows" => parse_track_size(tokens).map(|s| grid.with_auto_rows(s)),
-        "grid-auto-flow" => parse_grid_auto_flow(tokens).map(|f| grid.with_auto_flow(f)),
-        "grid-column-start" => parse_grid_line_placement(tokens).map(|p| grid.with_column_start(p)),
-        "grid-column-end" => parse_grid_line_placement(tokens).map(|p| grid.with_column_end(p)),
-        "grid-row-start" => parse_grid_line_placement(tokens).map(|p| grid.with_row_start(p)),
-        "grid-row-end" => parse_grid_line_placement(tokens).map(|p| grid.with_row_end(p)),
+        "grid-template-rows" => {
+            parse_track_list(tokens).map(|tracks| grid.with_template_rows(tracks))
+        }
+        "grid-template-areas" => {
+            parse_grid_template_areas(tokens).map(|areas| grid.with_template_areas(areas))
+        }
+        "grid-auto-columns" => parse_track_size(tokens).map(|size| grid.with_auto_columns(size)),
+        "grid-auto-rows" => parse_track_size(tokens).map(|size| grid.with_auto_rows(size)),
+        "grid-auto-flow" => parse_grid_auto_flow(tokens).map(|flow| grid.with_auto_flow(flow)),
+        "grid-column-start" => {
+            parse_grid_line_placement(tokens).map(|placement| grid.with_column_start(placement))
+        }
+        "grid-column-end" => {
+            parse_grid_line_placement(tokens).map(|placement| grid.with_column_end(placement))
+        }
+        "grid-row-start" => {
+            parse_grid_line_placement(tokens).map(|placement| grid.with_row_start(placement))
+        }
+        "grid-row-end" => {
+            parse_grid_line_placement(tokens).map(|placement| grid.with_row_end(placement))
+        }
         "grid-column" => apply_column_shorthand(grid, tokens),
         "grid-row" => apply_row_shorthand(grid, tokens),
         "grid-area" => apply_area_shorthand(grid, tokens),
-        "row-gap" | "grid-row-gap" => parse_gap_component(tokens).map(|g| grid.with_row_gap(g)),
+        "row-gap" | "grid-row-gap" => parse_gap_component(tokens).map(|gap| grid.with_row_gap(gap)),
         "column-gap" | "grid-column-gap" => {
-            parse_gap_component(tokens).map(|g| grid.with_column_gap(g))
+            parse_gap_component(tokens).map(|gap| grid.with_column_gap(gap))
         }
-        "gap" | "grid-gap" => parse_gap_shorthand(tokens).map(|g| grid.with_gap(g)),
+        "gap" | "grid-gap" => parse_gap_shorthand(tokens).map(|gap| grid.with_gap(gap)),
         _ => None,
     }
 }
 
-fn apply_column_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> {
+fn apply_column_shorthand(grid: &GridStyle, tokens: &[Token]) -> Option<GridStyle> {
     let (start, end) = parse_placement_shorthand(tokens)?;
     Some(grid.with_column_start(start).with_column_end(end))
 }
 
-fn apply_row_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> {
+fn apply_row_shorthand(grid: &GridStyle, tokens: &[Token]) -> Option<GridStyle> {
     let (start, end) = parse_placement_shorthand(tokens)?;
     Some(grid.with_row_start(start).with_row_end(end))
 }
 
-fn apply_area_shorthand(grid: GridStyle, tokens: &[Token]) -> Option<GridStyle> {
-    let (r_s, c_s, r_e, c_e) = parse_grid_area_shorthand(tokens)?;
+fn apply_area_shorthand(grid: &GridStyle, tokens: &[Token]) -> Option<GridStyle> {
+    let (row_start, column_start, row_end, column_end) = parse_grid_area_shorthand(tokens)?;
     Some(
-        grid.with_row_start(r_s)
-            .with_column_start(c_s)
-            .with_row_end(r_e)
-            .with_column_end(c_e),
+        grid.with_row_start(row_start)
+            .with_column_start(column_start)
+            .with_row_end(row_end)
+            .with_column_end(column_end),
     )
 }
 
 /// Resets a CSS Grid property to its initial value.
 #[must_use]
-pub fn reset(grid: GridStyle, property: &str) -> Option<GridStyle> {
+pub fn reset(grid: &GridStyle, property: &str) -> Option<GridStyle> {
     copy_property(grid, &GridStyle::initial(), property)
 }
 
 /// Inherits a CSS Grid property from a parent [`GridStyle`].
 #[must_use]
-pub fn inherit(grid: GridStyle, parent: &GridStyle, property: &str) -> Option<GridStyle> {
+pub fn inherit(grid: &GridStyle, parent: &GridStyle, property: &str) -> Option<GridStyle> {
     copy_property(grid, parent, property)
 }
 
-fn copy_property(grid: GridStyle, source: &GridStyle, property: &str) -> Option<GridStyle> {
+fn copy_property(grid: &GridStyle, source: &GridStyle, property: &str) -> Option<GridStyle> {
     match property {
         "grid-template-columns" => Some(grid.with_template_columns(*source.template_columns())),
         "grid-template-rows" => Some(grid.with_template_rows(*source.template_rows())),
@@ -100,49 +111,21 @@ fn copy_property(grid: GridStyle, source: &GridStyle, property: &str) -> Option<
     }
 }
 
-const fn copy_column(grid: GridStyle, source: &GridStyle) -> GridStyle {
+const fn copy_column(grid: &GridStyle, source: &GridStyle) -> GridStyle {
     grid.with_column_start(*source.column_start())
         .with_column_end(*source.column_end())
 }
 
-const fn copy_row(grid: GridStyle, source: &GridStyle) -> GridStyle {
+const fn copy_row(grid: &GridStyle, source: &GridStyle) -> GridStyle {
     grid.with_row_start(*source.row_start())
         .with_row_end(*source.row_end())
 }
 
-const fn copy_area(grid: GridStyle, source: &GridStyle) -> GridStyle {
+const fn copy_area(grid: &GridStyle, source: &GridStyle) -> GridStyle {
     grid.with_row_start(*source.row_start())
         .with_column_start(*source.column_start())
         .with_row_end(*source.row_end())
         .with_column_end(*source.column_end())
-}
-
-/// Parses a length token into [`Length`].
-#[must_use]
-pub fn length_from_token(token: &Token) -> Option<Length> {
-    match token {
-        Token::Dimension(magnitude, unit) => length_with_unit(*magnitude, unit),
-        Token::Percentage(magnitude) => Some(Length::Percent(*magnitude)),
-        Token::Number(magnitude) => zero_length_number(*magnitude),
-        _ => None,
-    }
-}
-
-fn zero_length_number(magnitude: f32) -> Option<Length> {
-    if magnitude == 0.0 {
-        return Some(Length::ZERO);
-    }
-    None
-}
-
-fn length_with_unit(magnitude: f32, unit: &str) -> Option<Length> {
-    match unit.to_ascii_lowercase().as_str() {
-        "px" => Some(Length::Pixels(magnitude)),
-        "em" => Some(Length::Em(magnitude)),
-        "rem" => Some(Length::Rem(magnitude)),
-        "pt" => Some(Length::Points(magnitude)),
-        _ => None,
-    }
 }
 
 /// Parses a track size (`Length`, percentage, `fr`, `auto`, `min-content`, `max-content`, or `minmax`).
@@ -172,7 +155,7 @@ fn parse_track_keyword(keyword: &str) -> Option<TrackSize> {
 #[must_use]
 pub fn parse_minmax(tokens: &[Token]) -> Option<TrackSize> {
     let arguments = extract_function_arguments(tokens, "minmax")?;
-    let parts: Vec<&[Token]> = arguments.split(|t| matches!(t, Token::Comma)).collect();
+    let parts = split_top_level_commas(arguments);
     let [min_tokens, max_tokens] = parts.as_slice() else {
         return None;
     };
@@ -181,19 +164,12 @@ pub fn parse_minmax(tokens: &[Token]) -> Option<TrackSize> {
     Some(TrackSize::MinMax(min, max))
 }
 
+/// The arguments of `tokens` when it is exactly one call to `expected_name`
+/// (function names are ASCII case-insensitive, CSS Syntax 3 §4.3.4).
 fn extract_function_arguments<'a>(tokens: &'a [Token], expected_name: &str) -> Option<&'a [Token]> {
-    let [
-        Token::Function(name),
-        arguments @ ..,
-        Token::CloseParenthesis,
-    ] = tokens
-    else {
-        return None;
-    };
-    if !name.eq_ignore_ascii_case(expected_name) {
-        return None;
-    }
-    Some(arguments)
+    let (name, arguments) = function_call(tokens)?;
+    name.eq_ignore_ascii_case(expected_name)
+        .then_some(arguments)
 }
 
 fn parse_min_breadth(tokens: &[Token]) -> Option<MinTrackBreadth> {
@@ -242,88 +218,102 @@ pub fn parse_track_list(tokens: &[Token]) -> Option<TrackList> {
     parse_track_sequence(tokens)
 }
 
+/// A whitespace-separated sequence of track sizes and `repeat()` calls,
+/// expanded. More than [`TrackList::CAPACITY`] tracks is a refusal (with a
+/// warning), never a silent truncation — see `tests/data/MANIFEST.md`'s
+/// "Grid storage caps".
 fn parse_track_sequence(tokens: &[Token]) -> Option<TrackList> {
-    let mut tracks = Vec::new();
-    let mut index: usize = 0;
-    while index < tokens.len() {
-        let chunk_slice = tokens.get(index..)?;
-        let span = token_run_span(chunk_slice);
-        let end = index.saturating_add(span);
-        let chunk = tokens.get(index..end)?;
-        consume_track_chunk(&mut tracks, chunk)?;
-        index = end;
-    }
+    let tracks = component_values(tokens).try_fold(Vec::new(), append_track_component)?;
     if tracks.is_empty() {
         return None;
     }
-    Some(TrackList::from_tracks(&tracks))
+    TrackList::from_tracks(&tracks)
 }
 
-fn consume_track_chunk(tracks: &mut Vec<TrackSize>, chunk: &[Token]) -> Option<()> {
-    match chunk {
-        [Token::Function(name), ..] if name.eq_ignore_ascii_case("repeat") => {
-            let repeated = parse_repeat(chunk)?;
-            tracks.extend(repeated);
-            Some(())
-        }
-        _ => {
-            let track = parse_track_size(chunk)?;
-            tracks.push(track);
-            Some(())
-        }
+/// `tracks` with the tracks `component` expands to appended, or `None` when the
+/// component is invalid or the total would exceed [`TrackList::CAPACITY`].
+fn append_track_component(
+    mut tracks: Vec<TrackSize>,
+    component: &[Token],
+) -> Option<Vec<TrackSize>> {
+    let expanded = expand_track_component(component)?;
+    let total = tracks.len().saturating_add(expanded.len());
+    if total > TrackList::CAPACITY {
+        warn_track_capacity(total);
+        return None;
     }
+    tracks.extend(expanded);
+    Some(tracks)
 }
 
+fn expand_track_component(component: &[Token]) -> Option<Vec<TrackSize>> {
+    if is_repeat_call(component) {
+        return parse_repeat(component);
+    }
+    parse_track_size(component).map(|track| vec![track])
+}
+
+fn is_repeat_call(component: &[Token]) -> bool {
+    matches!(component, [Token::Function(name), ..] if name.eq_ignore_ascii_case("repeat"))
+}
+
+/// `repeat(<count>, <track-size>+)` (CSS Grid L1 §7.2.3). The count is
+/// author-controlled, so the expanded length is checked against
+/// [`TrackList::CAPACITY`] **before** anything is allocated: `repeat(4000000000,
+/// 1fr 1fr)` must cost a multiplication, not eight billion pushes.
 fn parse_repeat(tokens: &[Token]) -> Option<Vec<TrackSize>> {
     let arguments = extract_function_arguments(tokens, "repeat")?;
-    let comma_pos = arguments.iter().position(|t| matches!(t, Token::Comma))?;
-    let count_tokens = arguments.get(..comma_pos)?;
-    let track_tokens = arguments.get(comma_pos.saturating_add(1)..)?;
-    let count = parse_positive_int(count_tokens)?;
-    let count_usize = usize::try_from(count).ok()?;
-    let sub_list = parse_track_sequence(track_tokens)?;
-    let total_len = sub_list.len().saturating_mul(count_usize);
-    let mut result = Vec::with_capacity(total_len);
-    for _ in 0..count_usize {
-        result.extend(sub_list.tracks().iter().copied());
-    }
-    Some(result)
+    let parts = split_top_level_commas(arguments);
+    let [count_tokens, pattern_tokens] = parts.as_slice() else {
+        return None;
+    };
+    let count = parse_repeat_count(count_tokens)?;
+    let pattern = parse_repeat_pattern(pattern_tokens)?;
+    let total = count
+        .checked_mul(pattern.len())
+        .filter(|total| *total <= TrackList::CAPACITY);
+    let Some(total) = total else {
+        warn_track_capacity(count.saturating_mul(pattern.len()));
+        return None;
+    };
+    Some(pattern.iter().copied().cycle().take(total).collect())
 }
 
-fn parse_positive_int(tokens: &[Token]) -> Option<u32> {
+/// The track sizes a `repeat()` repeats. A nested `repeat()` is refused — CSS
+/// Grid L1 §7.2.3's `<track-repeat>` takes `<track-size>`s only — which also
+/// keeps the expansion one multiplication deep.
+fn parse_repeat_pattern(tokens: &[Token]) -> Option<Vec<TrackSize>> {
+    let pattern: Option<Vec<TrackSize>> =
+        component_values(tokens).map(parse_repeated_track).collect();
+    pattern.filter(|tracks| !tracks.is_empty())
+}
+
+fn parse_repeated_track(component: &[Token]) -> Option<TrackSize> {
+    if is_repeat_call(component) {
+        tracing::warn!("nested repeat() in a grid track list is invalid (CSS Grid L1 §7.2.3)");
+        return None;
+    }
+    parse_track_size(component)
+}
+
+/// The repeat count: a positive integer. A fractional or non-positive number
+/// fails the integer parse or the filter.
+fn parse_repeat_count(tokens: &[Token]) -> Option<usize> {
     let [Token::Number(magnitude)] = tokens else {
         return None;
     };
     format!("{magnitude}")
-        .parse::<u32>()
+        .parse::<usize>()
         .ok()
-        .filter(|&v| v >= 1)
+        .filter(|count| *count >= 1)
 }
 
-fn token_run_span(tokens: &[Token]) -> usize {
-    match tokens.first() {
-        Some(Token::Function(_)) => function_span(tokens),
-        _ => 1,
-    }
-}
-
-fn function_span(tokens: &[Token]) -> usize {
-    let mut depth: usize = 0;
-    for (index, token) in tokens.iter().enumerate() {
-        depth = paren_depth(depth, token);
-        if depth == 0 {
-            return index.saturating_add(1);
-        }
-    }
-    tokens.len()
-}
-
-const fn paren_depth(depth: usize, token: &Token) -> usize {
-    match token {
-        Token::Function(_) | Token::OpenParenthesis => depth.saturating_add(1),
-        Token::CloseParenthesis => depth.saturating_sub(1),
-        _ => depth,
-    }
+fn warn_track_capacity(requested: usize) {
+    tracing::warn!(
+        requested,
+        capacity = TrackList::CAPACITY,
+        "grid track list exceeds the fixed track capacity; declaration rejected"
+    );
 }
 
 /// Parses `grid-template-areas`.
@@ -335,60 +325,99 @@ pub fn parse_grid_template_areas(tokens: &[Token]) -> Option<GridTemplateAreas> 
     parse_area_rows(tokens)
 }
 
+/// One row per string. More than [`GridTemplateAreas::CAPACITY`] cells is a
+/// refusal with a warning — the domain type would refuse it silently.
 fn parse_area_rows(tokens: &[Token]) -> Option<GridTemplateAreas> {
-    let mut matrix = Vec::new();
-    for token in tokens {
-        let row_matrix = parse_area_string_token(token)?;
-        matrix.push(row_matrix);
+    let matrix: Option<Vec<Vec<Option<GridAreaName>>>> =
+        tokens.iter().map(parse_area_string_token).collect();
+    let matrix = matrix?;
+    let cell_count = matrix
+        .iter()
+        .map(Vec::len)
+        .fold(0_usize, usize::saturating_add);
+    if cell_count > GridTemplateAreas::CAPACITY {
+        tracing::warn!(
+            cells = cell_count,
+            capacity = GridTemplateAreas::CAPACITY,
+            "grid-template-areas exceeds the fixed cell capacity; declaration rejected"
+        );
+        return None;
     }
     GridTemplateAreas::from_matrix(&matrix)
 }
 
-enum AreaCellToken {
+/// One cell of a `grid-template-areas` row (CSS Grid L1 §7.3).
+enum AreaCell {
+    /// A run of one or more `.` — the null cell token.
     Empty,
     Named(GridAreaName),
+}
+
+impl AreaCell {
+    const fn into_name(self) -> Option<GridAreaName> {
+        match self {
+            Self::Empty => None,
+            Self::Named(name) => Some(name),
+        }
+    }
 }
 
 fn parse_area_string_token(token: &Token) -> Option<Vec<Option<GridAreaName>>> {
     let Token::QuotedString(row_text) = token else {
         return None;
     };
-    let cells = row_text
+    let row: Option<Vec<Option<GridAreaName>>> = row_text
         .split_whitespace()
-        .map(parse_area_cell)
-        .collect::<Option<Vec<_>>>()?;
-    if cells.is_empty() {
-        return None;
-    }
-    let row = cells
-        .into_iter()
-        .map(|c| match c {
-            AreaCellToken::Empty => None,
-            AreaCellToken::Named(name) => Some(name),
-        })
+        .map(|cell| parse_area_cell(cell).map(AreaCell::into_name))
         .collect();
-    Some(row)
+    row.filter(|cells| !cells.is_empty())
 }
 
-fn parse_area_cell(cell: &str) -> Option<AreaCellToken> {
-    if cell == "." || cell.chars().all(|c| c == '.') {
-        return Some(AreaCellToken::Empty);
+fn parse_area_cell(cell: &str) -> Option<AreaCell> {
+    if cell.chars().all(|character| character == '.') {
+        return Some(AreaCell::Empty);
     }
-    GridAreaName::new(cell).map(AreaCellToken::Named)
+    area_name(cell).map(AreaCell::Named)
+}
+
+/// A named area, refused with a warning past [`GridAreaName::CAPACITY`] bytes.
+fn area_name(cell: &str) -> Option<GridAreaName> {
+    if cell.len() > GridAreaName::CAPACITY {
+        warn_name_capacity(cell.len(), GridAreaName::CAPACITY);
+        return None;
+    }
+    GridAreaName::new(cell)
+}
+
+/// A named line, refused with a warning past [`GridLineName::CAPACITY`] bytes.
+fn line_name(name: &str) -> Option<GridLineName> {
+    if name.len() > GridLineName::CAPACITY {
+        warn_name_capacity(name.len(), GridLineName::CAPACITY);
+        return None;
+    }
+    GridLineName::new(name)
+}
+
+fn warn_name_capacity(length: usize, capacity: usize) {
+    tracing::warn!(
+        length,
+        capacity,
+        "grid name exceeds the fixed name capacity; declaration rejected"
+    );
 }
 
 /// Parses `grid-auto-flow`.
 #[must_use]
 pub fn parse_grid_auto_flow(tokens: &[Token]) -> Option<GridAutoFlow> {
     match tokens {
-        [Token::Ident(a)] => parse_single_flow_ident(a),
-        [Token::Ident(a), Token::Ident(b)] => parse_pair_flow_ident(a, b),
+        [Token::Ident(keyword)] => parse_single_flow_keyword(keyword),
+        [Token::Ident(first), Token::Ident(second)] => parse_pair_flow_keywords(first, second),
         _ => None,
     }
 }
 
-fn parse_single_flow_ident(ident: &str) -> Option<GridAutoFlow> {
-    match ident.to_ascii_lowercase().as_str() {
+fn parse_single_flow_keyword(keyword: &str) -> Option<GridAutoFlow> {
+    match keyword.to_ascii_lowercase().as_str() {
         "row" => Some(GridAutoFlow::Row),
         "column" => Some(GridAutoFlow::Column),
         "dense" => Some(GridAutoFlow::RowDense),
@@ -396,10 +425,10 @@ fn parse_single_flow_ident(ident: &str) -> Option<GridAutoFlow> {
     }
 }
 
-fn parse_pair_flow_ident(first: &str, second: &str) -> Option<GridAutoFlow> {
-    let a = first.to_ascii_lowercase();
-    let b = second.to_ascii_lowercase();
-    match (a.as_str(), b.as_str()) {
+fn parse_pair_flow_keywords(first: &str, second: &str) -> Option<GridAutoFlow> {
+    let first_keyword = first.to_ascii_lowercase();
+    let second_keyword = second.to_ascii_lowercase();
+    match (first_keyword.as_str(), second_keyword.as_str()) {
         ("row", "dense") | ("dense", "row") => Some(GridAutoFlow::RowDense),
         ("column", "dense") | ("dense", "column") => Some(GridAutoFlow::ColumnDense),
         _ => None,
@@ -411,52 +440,66 @@ fn parse_pair_flow_ident(first: &str, second: &str) -> Option<GridAutoFlow> {
 pub fn parse_grid_line_placement(tokens: &[Token]) -> Option<GridPlacement> {
     match tokens {
         [Token::Ident(name)] => parse_placement_ident(name),
-        [Token::Number(num)] => parse_signed_line_number(*num).map(GridPlacement::Line),
-        [Token::Ident(span_kw), Token::Number(num)] if span_kw.eq_ignore_ascii_case("span") => {
-            parse_positive_span(*num).map(GridPlacement::Span)
+        [Token::Number(number)] => parse_signed_line_number(*number).map(GridPlacement::Line),
+        [Token::Ident(span_keyword), Token::Number(number)] if is_span(span_keyword) => {
+            parse_positive_span(*number).map(GridPlacement::Span)
         }
-        [Token::Ident(span_kw), Token::Ident(name)] if span_kw.eq_ignore_ascii_case("span") => {
-            GridLineName::new(name.as_str()).map(|n| GridPlacement::SpanNamed(GridSpan::ONE, n))
+        [Token::Ident(span_keyword), Token::Ident(name)] if is_span(span_keyword) => {
+            line_name(name).map(|target| GridPlacement::SpanNamed(GridSpan::ONE, target))
         }
         [
-            Token::Ident(span_kw),
-            Token::Number(num),
+            Token::Ident(span_keyword),
+            Token::Number(number),
             Token::Ident(name),
-        ] if span_kw.eq_ignore_ascii_case("span") => {
-            let span = parse_positive_span(*num)?;
-            let line_name = GridLineName::new(name.as_str())?;
-            Some(GridPlacement::SpanNamed(span, line_name))
+        ] if is_span(span_keyword) => {
+            let span = parse_positive_span(*number)?;
+            Some(GridPlacement::SpanNamed(span, line_name(name)?))
         }
-        [Token::Number(num), Token::Ident(name)] => {
-            let line = parse_signed_line_number(*num)?;
-            let line_name = GridLineName::new(name.as_str())?;
-            Some(GridPlacement::LineNamed(line, line_name))
+        [Token::Number(number), Token::Ident(name)] => {
+            let line = parse_signed_line_number(*number)?;
+            Some(GridPlacement::LineNamed(line, line_name(name)?))
         }
         _ => None,
     }
+}
+
+const fn is_span(keyword: &str) -> bool {
+    keyword.eq_ignore_ascii_case("span")
 }
 
 fn parse_placement_ident(ident: &str) -> Option<GridPlacement> {
     if ident.eq_ignore_ascii_case("auto") {
         return Some(GridPlacement::Auto);
     }
-    GridLineName::new(ident).map(GridPlacement::Named)
+    line_name(ident).map(GridPlacement::Named)
 }
 
-fn parse_signed_line_number(num: f32) -> Option<GridLine> {
-    format!("{num}").parse::<i32>().ok().and_then(GridLine::new)
+fn parse_signed_line_number(number: f32) -> Option<GridLine> {
+    format!("{number}")
+        .parse::<i32>()
+        .ok()
+        .and_then(GridLine::new)
 }
 
-fn parse_positive_span(num: f32) -> Option<GridSpan> {
-    format!("{num}").parse::<u32>().ok().and_then(GridSpan::new)
+fn parse_positive_span(number: f32) -> Option<GridSpan> {
+    format!("{number}")
+        .parse::<u32>()
+        .ok()
+        .and_then(GridSpan::new)
+}
+
+/// `tokens` split at every `/` — the separator of the placement shorthands
+/// (CSS Grid L1 §8.4).
+fn split_at_slashes(tokens: &[Token]) -> Vec<&[Token]> {
+    tokens
+        .split(|token| matches!(token, Token::Delimiter('/')))
+        .collect()
 }
 
 /// Parses placement shorthand for one axis (`grid-column: start / end`).
 #[must_use]
 pub fn parse_placement_shorthand(tokens: &[Token]) -> Option<(GridPlacement, GridPlacement)> {
-    let parts: Vec<&[Token]> = tokens
-        .split(|t| matches!(t, Token::Delimiter('/')))
-        .collect();
+    let parts = split_at_slashes(tokens);
     match parts.as_slice() {
         [single] => {
             let start = parse_grid_line_placement(single)?;
@@ -480,38 +523,39 @@ const fn default_placement_end(start: &GridPlacement) -> GridPlacement {
 }
 
 /// Parses `grid-area` shorthand (`row-start / col-start / row-end / col-end`).
+///
+/// An omitted end copies its start when that start is a custom-ident, and is
+/// `auto` otherwise (CSS Grid L1 §8.4).
 #[must_use]
 pub fn parse_grid_area_shorthand(
     tokens: &[Token],
 ) -> Option<(GridPlacement, GridPlacement, GridPlacement, GridPlacement)> {
-    let parts: Vec<&[Token]> = tokens
-        .split(|t| matches!(t, Token::Delimiter('/')))
-        .collect();
+    let parts = split_at_slashes(tokens);
     match parts.as_slice() {
         [single] => expand_single_area(single),
-        [r_s, c_s] => {
-            let row_start = parse_grid_line_placement(r_s)?;
-            let col_start = parse_grid_line_placement(c_s)?;
+        [row_start, column_start] => {
+            let row_start = parse_grid_line_placement(row_start)?;
+            let column_start = parse_grid_line_placement(column_start)?;
+            let row_end = default_placement_end(&row_start);
+            let column_end = default_placement_end(&column_start);
+            Some((row_start, column_start, row_end, column_end))
+        }
+        [row_start, column_start, row_end] => {
+            let column_start = parse_grid_line_placement(column_start)?;
+            let column_end = default_placement_end(&column_start);
             Some((
-                row_start,
-                col_start,
-                GridPlacement::Auto,
-                GridPlacement::Auto,
+                parse_grid_line_placement(row_start)?,
+                column_start,
+                parse_grid_line_placement(row_end)?,
+                column_end,
             ))
         }
-        [r_s, c_s, r_e] => {
-            let row_start = parse_grid_line_placement(r_s)?;
-            let col_start = parse_grid_line_placement(c_s)?;
-            let row_end = parse_grid_line_placement(r_e)?;
-            Some((row_start, col_start, row_end, GridPlacement::Auto))
-        }
-        [r_s, c_s, r_e, c_e] => {
-            let row_start = parse_grid_line_placement(r_s)?;
-            let col_start = parse_grid_line_placement(c_s)?;
-            let row_end = parse_grid_line_placement(r_e)?;
-            let col_end = parse_grid_line_placement(c_e)?;
-            Some((row_start, col_start, row_end, col_end))
-        }
+        [row_start, column_start, row_end, column_end] => Some((
+            parse_grid_line_placement(row_start)?,
+            parse_grid_line_placement(column_start)?,
+            parse_grid_line_placement(row_end)?,
+            parse_grid_line_placement(column_end)?,
+        )),
         _ => None,
     }
 }

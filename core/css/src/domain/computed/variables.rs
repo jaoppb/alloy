@@ -5,14 +5,19 @@
 
 use core::fmt;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// A validated CSS custom property name (e.g. `--main-color`).
 ///
 /// Per CSS Custom Properties Level 1 §2, custom property names are case-sensitive
 /// and must begin with two dashes (`--`).
+///
+/// The text is shared, not owned: every element that declares a custom
+/// property starts from a copy of its parent's whole map, and sharing makes
+/// that copy a pointer per entry rather than a string allocation per entry.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VariableName {
-    text: String,
+    text: Arc<str>,
 }
 
 impl VariableName {
@@ -24,7 +29,7 @@ impl VariableName {
             return None;
         }
         Some(Self {
-            text: text.to_owned(),
+            text: Arc::from(text),
         })
     }
 
@@ -39,6 +44,15 @@ impl VariableName {
             return Err(VariableError::EmptyVariableReference);
         }
         Self::new(text).ok_or_else(|| VariableError::InvalidName(text.to_owned()))
+    }
+
+    /// Whether a property name, as written, names a custom property (CSS
+    /// Variables L1 §2: any name starting with two dashes). Such a name
+    /// bypasses the `crate::SUPPORTED_PROPERTIES` registry — the set of custom
+    /// properties is open by definition.
+    #[must_use]
+    pub fn names_custom_property(text: &str) -> bool {
+        text.starts_with("--")
     }
 
     /// Returns the variable name as a string slice.
@@ -97,10 +111,13 @@ impl fmt::Display for VariableName {
 /// The value of a custom property.
 ///
 /// Custom property values preserve their token representation or raw text,
-/// with leading and trailing whitespace trimmed.
+/// with leading and trailing whitespace trimmed. Shared like
+/// [`VariableName`]'s text: a value may be as long as the substitution's
+/// 64 KiB expansion cap, and an inherited map must not copy it once per
+/// element.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct VariableValue {
-    text: String,
+    text: Arc<str>,
 }
 
 impl VariableValue {
@@ -108,7 +125,7 @@ impl VariableValue {
     #[must_use]
     pub fn new(text: &str) -> Self {
         Self {
-            text: text.trim().to_owned(),
+            text: Arc::from(text.trim()),
         }
     }
 
@@ -120,7 +137,7 @@ impl VariableValue {
 
     /// Whether this variable value contains no characters.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
 
@@ -215,42 +232,30 @@ impl CustomPropertiesMap {
 }
 
 /// Typed errors for custom property and variable processing.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(thiserror::Error, Clone, Debug, PartialEq, Eq)]
 pub enum VariableError {
     /// The variable name is invalid (e.g. missing `--` prefix or contains illegal characters).
+    #[error("invalid variable name `{0}`")]
     InvalidName(String),
     /// A referenced variable was not found and no fallback was provided.
+    #[error("undefined variable `{0}` without fallback")]
     UndefinedVariable(String),
     /// A cyclic reference was detected during variable resolution.
+    #[error("cycle detected in variable references: {}", .0.join(" -> "))]
     CycleDetected(Vec<String>),
     /// Syntax error in a `var(...)` function call.
+    #[error("malformed `var()` function: {0}")]
     MalformedVarFunction(String),
     /// An empty `var()` call or missing variable identifier.
+    #[error("empty variable reference in `var()`")]
     EmptyVariableReference,
+    /// Substitution produced more text than the expansion cap allows. CSS
+    /// Variables L1 §3 lets a user agent treat such a value as invalid at
+    /// computed-value time; without the cap `--a: var(--b) var(--b)` nested
+    /// thirty deep would grow to `2^30` copies (a "billion laughs").
+    #[error("`var()` substitution exceeded the {limit_bytes}-byte expansion limit")]
+    ExpansionLimit {
+        /// The cap that was crossed, in bytes of substituted text.
+        limit_bytes: usize,
+    },
 }
-
-impl fmt::Display for VariableError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidName(name) => write!(formatter, "invalid variable name `{name}`"),
-            Self::UndefinedVariable(name) => {
-                write!(formatter, "undefined variable `{name}` without fallback")
-            }
-            Self::CycleDetected(cycle) => {
-                write!(
-                    formatter,
-                    "cycle detected in variable references: {}",
-                    cycle.join(" -> ")
-                )
-            }
-            Self::MalformedVarFunction(reason) => {
-                write!(formatter, "malformed `var()` function: {reason}")
-            }
-            Self::EmptyVariableReference => {
-                formatter.write_str("empty variable reference in `var()`")
-            }
-        }
-    }
-}
-
-impl std::error::Error for VariableError {}

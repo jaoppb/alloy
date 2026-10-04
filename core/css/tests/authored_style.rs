@@ -83,7 +83,11 @@ fn paragraph_style(sheet: &str, attribute: Option<&str>) -> ComputedStyle {
         .nodes_in_document_order()
         .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
         .expect("the document has a paragraph");
-    *styled.node(id).expect("the paragraph is styled").style()
+    styled
+        .node(id)
+        .expect("the paragraph is styled")
+        .style()
+        .clone()
 }
 
 // ---- the deliverable -----------------------------------------------------
@@ -299,7 +303,8 @@ fn the_ua_sheet_still_gives_a_heading_and_a_paragraph_their_classic_shape() {
 
     let heading_style = styled.node(styled_id(&dom, "h1")).expect("styled").style();
     assert_eq!(heading_style.display(), css::Display::Block);
-    assert_eq!(heading_style.font_size(), Length::Em(2.0));
+    // `2em` of the root's initial 16px, stored computed (CSS Fonts 4 §2.5).
+    assert_eq!(heading_style.font_size(), Length::Pixels(32.0));
     assert_eq!(
         heading_style.margin(),
         LengthEdges::vertical(Length::Em(0.67))
@@ -333,6 +338,37 @@ fn the_ua_sheet_gives_an_anchor_tag_the_standard_link_blue_colour() {
         css::CssColor::rgb(0x00, 0x00, 0xEE),
         "standard UA default link color is #0000ee"
     );
+}
+
+/// `assets/ua.css` declares `input, button, select, textarea { display:
+/// inline-block }` and `li { display: list-item }`; an unparsed keyword used to
+/// drop both rules, leaving every control on its own line (issues #2/#3).
+#[test]
+fn the_ua_sheet_gives_form_controls_inline_block_and_list_items_list_item() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let html = child(&mut tree, root, "html");
+    let body = child(&mut tree, html, "body");
+    let input = child(&mut tree, body, "input");
+    attribute_of(&mut tree, input, "type", "submit");
+    let button = child(&mut tree, body, "button");
+    text(&mut tree, button, "Go");
+    let list = child(&mut tree, body, "ul");
+    let item = child(&mut tree, list, "li");
+    text(&mut tree, item, "one");
+
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let display_of = |tag: &str| {
+        let style = styled.node(styled_id(&dom, tag)).expect("styled").style();
+        style.display()
+    };
+
+    assert_eq!(display_of("input"), css::Display::InlineBlock);
+    assert_eq!(display_of("button"), css::Display::InlineBlock);
+    assert_eq!(display_of("li"), css::Display::ListItem);
+    assert_eq!(display_of("ul"), css::Display::Block);
 }
 
 fn styled_id(dom: &DomSnapshot, tag: &str) -> css::SnapshotId {
@@ -438,6 +474,37 @@ fn a_comma_group_applies_the_members_inside_the_cut_and_notes_the_rest() {
         BLUE,
         "the `p` member of the comma group still applied"
     );
+}
+
+#[test]
+fn a_comma_inside_an_unsupported_functional_pseudo_class_is_not_a_group_separator() {
+    // `:not(` / `:is(` / `:where(` tokenize as a function, not a bare `(`; the
+    // `,` between their arguments must not be read as the start of the next
+    // comma member, or the `)` lands where `{` belongs and the `p` member is
+    // lost with the rest of the rule.
+    for selector in [".x:not(.a, .b)", ":is(h1, h2) span", ":where(.a, .b)"] {
+        let (tree, root) = document(&format!("p, {selector} {{ color: #0000ff }}"), None);
+        let dom = snapshot(&tree, root);
+        let sheets = collect_style_sheets(&dom).expect("readable");
+
+        assert_eq!(sheets.len(), 1, "`p, {selector}` keeps its rule");
+        assert_eq!(
+            sheets.notes().len(),
+            1,
+            "`{selector}` is dropped as one member, with one note"
+        );
+
+        let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+        let paragraph = dom
+            .nodes_in_document_order()
+            .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+            .expect("a paragraph");
+        assert_eq!(
+            styled.node(paragraph).expect("styled").style().color(),
+            BLUE,
+            "the `p` member next to `{selector}` still applied"
+        );
+    }
 }
 
 #[test]

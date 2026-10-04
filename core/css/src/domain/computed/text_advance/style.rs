@@ -1,5 +1,7 @@
 //! [`TextAdvanceStyle`] — advanced typography and line formatting aggregate.
 
+use graphics::Au;
+
 use crate::domain::computed::text_advance::decoration::TextDecoration;
 use crate::domain::computed::text_advance::font_style::FontStyle;
 use crate::domain::computed::text_advance::font_weight::FontWeight;
@@ -57,6 +59,22 @@ impl TextAdvanceStyle {
             text_overflow: TextOverflow::Clip,
             overflow_wrap: parent.overflow_wrap,
             word_break: parent.word_break,
+        }
+    }
+
+    /// This style with every font-relative length made absolute against the
+    /// element's own computed `font_size` — the computed values of
+    /// `line-height`, `letter-spacing` and `word-spacing` (CSS 2.1 §10.8.1,
+    /// CSS Text L3 §8). The cascade calls it once an element's own properties
+    /// are final, which is what keeps [`Self::inheriting_from`] from handing a
+    /// child a raw `2em` it would resolve against the wrong font size.
+    #[must_use]
+    pub fn absolutized(self, font_size: Au) -> Self {
+        Self {
+            line_height: self.line_height.absolutized(font_size),
+            letter_spacing: self.letter_spacing.absolutized(font_size),
+            word_spacing: self.word_spacing.absolutized(font_size),
+            ..self
         }
     }
 

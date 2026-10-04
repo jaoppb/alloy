@@ -59,31 +59,59 @@ impl LogicalInsets {
     }
 
     #[must_use]
-    pub const fn with_block_start(self, val: Sizing) -> Self {
+    pub const fn with_block_start(self, offset: Sizing) -> Self {
         Self {
-            block_start: val,
+            block_start: offset,
             ..self
         }
     }
     #[must_use]
-    pub const fn with_block_end(self, val: Sizing) -> Self {
+    pub const fn with_block_end(self, offset: Sizing) -> Self {
         Self {
-            block_end: val,
+            block_end: offset,
             ..self
         }
     }
     #[must_use]
-    pub const fn with_inline_start(self, val: Sizing) -> Self {
+    pub const fn with_inline_start(self, offset: Sizing) -> Self {
         Self {
-            inline_start: val,
+            inline_start: offset,
             ..self
         }
     }
     #[must_use]
-    pub const fn with_inline_end(self, val: Sizing) -> Self {
+    pub const fn with_inline_end(self, offset: Sizing) -> Self {
         Self {
-            inline_end: val,
+            inline_end: offset,
             ..self
+        }
+    }
+
+    /// These offsets with the one on `side` replaced.
+    #[must_use]
+    pub const fn with_side(self, side: LogicalSide, value: Sizing) -> Self {
+        match side {
+            LogicalSide::BlockStart => self.with_block_start(value),
+            LogicalSide::BlockEnd => self.with_block_end(value),
+            LogicalSide::InlineStart => self.with_inline_start(value),
+            LogicalSide::InlineEnd => self.with_inline_end(value),
+        }
+    }
+
+    /// The physical offset of `position` that `side` maps to in `context` —
+    /// the read half of [`Self::apply_to_position`] (CSS Logical L1 §4: the
+    /// logical and physical properties share one computed value).
+    #[must_use]
+    pub const fn read_from_position(
+        context: WritingContext,
+        position: PositionStyle,
+        side: LogicalSide,
+    ) -> Sizing {
+        match context.map_side(side) {
+            PhysicalSide::Top => position.top(),
+            PhysicalSide::Right => position.right(),
+            PhysicalSide::Bottom => position.bottom(),
+            PhysicalSide::Left => position.left(),
         }
     }
 

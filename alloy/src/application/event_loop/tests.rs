@@ -58,6 +58,32 @@ fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession 
     Session::new(viewport, services)
 }
 
+/// The URL a link click navigated to. `pump_once` spawns the navigation
+/// and then drains the very channel the test reads, so a navigation thread
+/// that finishes before that `try_recv` is applied inside the pump rather
+/// than left for the test: read the result from whichever side got it, or
+/// the outcome depends on thread scheduling. The click's navigation is the
+/// first one past `navigations_before_click`.
+fn completed_navigation(
+    receiver: &mpsc::Receiver<LoopMessage>,
+    session: &TestSession,
+    navigations_before_click: usize,
+) -> network::Url {
+    if session.stats.navigations > navigations_before_click {
+        return session
+            .base_url
+            .clone()
+            .expect("an applied navigation sets the document base");
+    }
+    let message = receiver
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("navigation message received");
+    let LoopMessage::Navigation(Ok((_, target_url))) = message else {
+        panic!("expected a successful navigation");
+    };
+    target_url
+}
+
 fn loaded_session(viewport: SurfaceSize) -> TestSession {
     let mut session = session_over(MockTransport::new(), viewport);
     session.dom_tree = Some(html::parse("<html><body>hi</body></html>").unwrap());
@@ -320,6 +346,7 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
     assert!(!session.links.is_empty(), "link target must be collected");
 
     // Move pointer over the link and click
+    let navigations_before_click = session.stats.navigations;
     system.schedule(WindowEvent::PointerMoved {
         position: window::PhysicalPosition::new(20.0, 20.0),
     });
@@ -337,15 +364,80 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
     )
     .unwrap();
 
-    // The click should have spawned a navigation message to receiver
-    let message = receiver
-        .recv_timeout(std::time::Duration::from_millis(500))
-        .expect("navigation message received");
-    match message {
-        LoopMessage::Navigation(Ok((_, target_url))) => {
-            let expected = network::Url::parse("http://example.com/target.html").unwrap();
-            assert_eq!(target_url, expected);
-        }
-        _ => panic!("expected successful navigation to target.html"),
-    }
+    let expected = network::Url::parse("http://example.com/target.html").unwrap();
+    assert_eq!(
+        completed_navigation(&receiver, &session, navigations_before_click),
+        expected
+    );
+}
+
+#[test]
+fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+
+    let mut presenter = RecordingPresenter::new();
+    let (sender, receiver) = mpsc::channel();
+    let expected = network::Url::parse("https://cdn.example/app/docs.html").unwrap();
+    let response = network::HttpResponse::new(
+        network::StatusCode::OK,
+        network::HeaderMap::new(),
+        network::Body::from_text("<html><body>docs</body></html>"),
+    );
+    let mut session = session_over(
+        MockTransport::new().with_response(expected.clone(), response),
+        attributes.initial_size(),
+    );
+    let document = html::parse(
+        "<html><head><base href=\"https://cdn.example/app/\"></head><body>\
+         <a href=\"docs.html\" style=\"display: block; width: 100px; height: 50px;\">Docs</a>\
+         </body></html>",
+    )
+    .unwrap();
+    let navigation_url = network::Url::parse("https://example.com/index.html").unwrap();
+    session.apply(
+        LoopMessage::Navigation(Ok((document, navigation_url))),
+        &sender,
+    );
+
+    assert_eq!(
+        session
+            .base_url
+            .as_ref()
+            .map(ToString::to_string)
+            .as_deref(),
+        Some("https://cdn.example/app/"),
+        "the session keeps the `<base href>`, not the navigation URL"
+    );
+
+    pump_once(
+        &mut system,
+        &mut presenter,
+        &receiver,
+        &sender,
+        &mut session,
+    )
+    .unwrap();
+    let navigations_before_click = session.stats.navigations;
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(20.0, 20.0),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+    pump_once(
+        &mut system,
+        &mut presenter,
+        &receiver,
+        &sender,
+        &mut session,
+    )
+    .unwrap();
+
+    assert_eq!(
+        completed_navigation(&receiver, &session, navigations_before_click),
+        expected
+    );
 }

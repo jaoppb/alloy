@@ -30,16 +30,21 @@ impl TrackList {
         }
     }
 
-    /// Creates a track list from a slice of track sizes.
+    /// Creates a track list from a slice of track sizes, or `None` when there
+    /// are more than [`Self::CAPACITY`] of them — a list is refused whole,
+    /// never truncated into a different grid.
     #[must_use]
-    pub fn from_tracks(tracks: &[TrackSize]) -> Self {
-        let mut array = [TrackSize::Auto; Self::CAPACITY];
-        let count = tracks.len().min(Self::CAPACITY);
-        if let (Some(dest), Some(src)) = (array.get_mut(..count), tracks.get(..count)) {
-            dest.copy_from_slice(src);
+    pub fn from_tracks(tracks: &[TrackSize]) -> Option<Self> {
+        if tracks.len() > Self::CAPACITY {
+            return None;
         }
-        let len = u8::try_from(count).unwrap_or(0);
-        Self { tracks: array, len }
+        let mut storage = [TrackSize::Auto; Self::CAPACITY];
+        storage.get_mut(..tracks.len())?.copy_from_slice(tracks);
+        let len = u8::try_from(tracks.len()).ok()?;
+        Some(Self {
+            tracks: storage,
+            len,
+        })
     }
 
     /// How many explicit tracks this list contains.

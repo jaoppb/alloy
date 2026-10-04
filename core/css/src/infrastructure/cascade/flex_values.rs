@@ -16,12 +16,12 @@ use crate::infrastructure::parser::values::{
 /// `style` with one Flexbox property set from `tokens`, or `None` when the
 /// property is not a Flexbox one or its value is outside the cut.
 pub(crate) fn apply(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let flex = style.flex();
-    updated(flex, property, tokens).map(|changed| style.with_flex(changed))
+    updated(flex, property, tokens).map(|changed| style.clone().with_flex(changed))
 }
 
 fn updated(flex: FlexStyle, property: &str, tokens: &[Token]) -> Option<FlexStyle> {
@@ -42,23 +42,23 @@ fn updated(flex: FlexStyle, property: &str, tokens: &[Token]) -> Option<FlexStyl
 }
 
 /// `style` with one Flexbox property reset to its CSS `initial` value.
-pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+pub(crate) fn reset(style: &ComputedStyle, property: &str) -> Option<ComputedStyle> {
     copy_from(style, FlexStyle::initial(), property)
 }
 
 /// `style` with one Flexbox property copied from `parent` — the `inherit`
 /// keyword forcing inheritance of a property that never inherits on its own.
 pub(crate) fn inherit(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     parent: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
     copy_from(style, parent.flex(), property)
 }
 
-fn copy_from(style: ComputedStyle, source: FlexStyle, property: &str) -> Option<ComputedStyle> {
+fn copy_from(style: &ComputedStyle, source: FlexStyle, property: &str) -> Option<ComputedStyle> {
     let flex = style.flex();
-    taken(flex, source, property).map(|changed| style.with_flex(changed))
+    taken(flex, source, property).map(|changed| style.clone().with_flex(changed))
 }
 
 fn taken(flex: FlexStyle, source: FlexStyle, property: &str) -> Option<FlexStyle> {

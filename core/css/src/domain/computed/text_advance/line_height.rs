@@ -5,6 +5,8 @@ use graphics::{Au, Px};
 
 use crate::domain::length::Length;
 
+use super::spacing::absolute_length;
+
 /// Typical browser default ratio for normal line height.
 const NORMAL_LINE_HEIGHT_RATIO: f32 = 1.2;
 /// Percentage divisor to convert percentage to fraction.
@@ -73,6 +75,22 @@ impl LineHeight {
     #[must_use]
     pub const fn is_normal(self) -> bool {
         matches!(self, Self::Normal)
+    }
+
+    /// The computed value (CSS 2.1 §10.8.1): a `<length>` or `<percentage>`
+    /// becomes an absolute length against the element's own computed
+    /// `font_size`, so a descendant with a different font size inherits that
+    /// length. Only a unitless `<number>` (and `normal`) inherits as a factor
+    /// each descendant re-applies to its own font size.
+    #[must_use]
+    pub fn absolutized(self, font_size: Au) -> Self {
+        match self {
+            Self::Length(length) => Self::Length(absolute_length(length, font_size)),
+            Self::Percentage(_) => self.resolve_to_au(font_size).map_or(self, |resolved| {
+                Self::Length(Length::Pixels(resolved.to_px().get()))
+            }),
+            Self::Normal | Self::Number(_) => self,
+        }
     }
 
     /// Resolves this line height against the computed font size.

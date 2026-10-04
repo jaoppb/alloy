@@ -14,19 +14,23 @@
 //! origins (CSS Cascade L4 §4.2): a UA `!important` declaration and an author
 //! declaration now compete in the very same sort, never in two.
 //!
-//! Inheritance still covers exactly the two properties the placeholder
-//! [`crate::BlockLayout`] and the painter read (`color`, `font-size`); the
+//! Which properties inherit is [`ComputedStyle::inheriting_from`]'s; the
 //! CSS-wide keywords `initial` / `inherit` are
-//! `infrastructure/cascade/values.rs`'s (B2, same phase).
+//! `infrastructure/cascade/values.rs`'s (B2, same phase). What a node hands
+//! its children beyond its style — its custom properties and its computed
+//! font size — travels in an [`InheritedContexts`] side table built alongside
+//! the styled tree, because neither belongs in the style aggregate.
+
+use std::collections::BTreeMap;
 
 use crate::application::ports::CascadeResolver;
 use crate::domain::computed::display::Display;
 use crate::domain::computed::style::ComputedStyle;
-use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotNodeKind};
+use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
 use crate::domain::error::CssError;
 use crate::domain::styled_tree::StyledTree;
 use crate::domain::stylesheet_set::{Origin, StyleSheetSet};
-use crate::infrastructure::cascade::author_rules::apply_author_rules;
+use crate::infrastructure::cascade::author_rules::{InheritedContext, apply_author_rules};
 use crate::infrastructure::parser::parse_stylesheet;
 
 /// The embedded user-agent stylesheet's CSS text (`core/css/assets/ua.css`) —
@@ -85,24 +89,60 @@ impl Default for UaCascade {
 impl CascadeResolver for UaCascade {
     fn resolve(&self, dom: &DomSnapshot, sheets: &StyleSheetSet) -> Result<StyledTree, CssError> {
         let combined = self.combined_with(sheets);
+        let mut contexts = InheritedContexts::new();
         Ok(StyledTree::recompute_in_document_order(
             dom,
-            |node_ref, parent| cascade_style(node_ref, parent, dom, &combined),
+            |node_ref, parent| {
+                let inherited = contexts.of_parent(node_ref);
+                let (style, context) = cascade_style(node_ref, parent, inherited, dom, &combined);
+                contexts.record(node_ref, context);
+                style
+            },
         ))
+    }
+}
+
+/// Every cascaded node's [`InheritedContext`], keyed by node. Document order
+/// visits a parent before its children, so a child's lookup always finds its
+/// parent's entry; a node with no parent (or, defensively, one whose parent
+/// was never visited) inherits the root context.
+struct InheritedContexts {
+    root: InheritedContext,
+    by_node: BTreeMap<SnapshotId, InheritedContext>,
+}
+
+impl InheritedContexts {
+    fn new() -> Self {
+        Self {
+            root: InheritedContext::root(),
+            by_node: BTreeMap::new(),
+        }
+    }
+
+    fn of_parent(&self, node_ref: NodeRef<'_>) -> &InheritedContext {
+        node_ref
+            .parent()
+            .and_then(|parent| self.by_node.get(&parent))
+            .unwrap_or(&self.root)
+    }
+
+    fn record(&mut self, node_ref: NodeRef<'_>, context: InheritedContext) {
+        self.by_node.insert(node_ref.id(), context);
     }
 }
 
 /// One node's finished style: the inherited/initial base, then every
 /// matching rule — UA and author alike — in cascade order, then the node's
-/// `style=` block.
+/// `style=` block; with the context its own children inherit.
 fn cascade_style(
     node_ref: NodeRef<'_>,
     parent: Option<&ComputedStyle>,
+    inherited: &InheritedContext,
     dom: &DomSnapshot,
     sheets: &StyleSheetSet,
-) -> ComputedStyle {
+) -> (ComputedStyle, InheritedContext) {
     let base = base_style(node_ref, parent);
-    apply_author_rules(base, parent, node_ref, dom, sheets)
+    apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts()
 }
 
 /// The style before any rule applies: inherit from the parent (or take the
@@ -110,9 +150,10 @@ fn cascade_style(
 /// express — the fixed `display` a document, a text run or a comment gets.
 fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> ComputedStyle {
     let base = parent.map_or_else(ComputedStyle::initial, ComputedStyle::inheriting_from);
-    node_ref
-        .tag()
-        .map_or_else(|| style_for_non_element(base, node_ref.kind()), |_tag| base)
+    if node_ref.tag().is_some() {
+        return base;
+    }
+    style_for_non_element(base, node_ref.kind())
 }
 
 /// A non-element node: no selector ever chooses one (`application/matching.rs`
@@ -120,7 +161,7 @@ fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> Computed
 /// one. An element's default is already [`Display::Block`] from
 /// [`ComputedStyle::initial`], which is why this arm is the only one that
 /// still needs Rust after `assets/ua.css` took over every per-tag exception.
-const fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
+fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
     match kind {
         SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
         SnapshotNodeKind::Text => base.with_display(Display::Inline),

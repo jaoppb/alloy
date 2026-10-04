@@ -6,7 +6,7 @@
 //! (`p { color: red !important; margin: 4px }`), and CSS Cascade L4 §4.2
 //! ranks those two independently. Flattening to `(precedence, specificity,
 //! source order, position in block)` before sorting is what keeps that case
-//! correct without a second pass.
+//! correct without a second sort.
 //!
 //! The sort key is **total**: two distinct declarations can never tie,
 //! because no two occupy the same `(order, position)` pair. That is what
@@ -20,14 +20,47 @@
 //! still applied after every rule (CSS Cascade L4 §6.4.3): B2 leaves that
 //! architectural choice from B1 as is, because no test in this cut exercises
 //! an `!important` inline declaration against an `!important` rule.
+//!
+//! The one cascade-ordered list is then folded in three passes, each over the
+//! declarations it owns, every pass keeping cascade order:
+//!
+//! 1. **custom properties** (`--*`) — the element's [`CustomPropertiesMap`],
+//!    inherited from its parent's and with its own `var()` references
+//!    substituted (CSS Variables L1 §2);
+//! 2. **the writing context** — `writing-mode` and `direction`, so the element's
+//!    final context is known before any flow-relative property maps to a
+//!    physical one (CSS Logical L1 §4: a logical property and its physical
+//!    counterpart share one computed value, last in cascade order wins);
+//! 3. **everything else**, with `var()` substituted from pass 1's map. A
+//!    declaration whose substitution fails, or whose substituted value does
+//!    not parse, is invalid at computed-value time and computes to `unset`
+//!    (CSS Variables L1 §3) — never to the previous cascaded value.
+//!
+//! Finally `font-size` itself is stored as its computed, absolute value —
+//! it inherits as computed (CSS Fonts 4 §2.5), so a child of `font-size: 2em`
+//! inherits `32px`, never a `2em` it would resolve again — and the
+//! font-relative text lengths are made absolute against it (CSS 2.1 §10.8.1,
+//! CSS Text L3 §8).
+
+use std::rc::Rc;
+
+use graphics::Au;
 
 use crate::application::matching::strongest_match;
-use crate::domain::computed::style::ComputedStyle;
+use crate::domain::computed::style::{ComputedStyle, INITIAL_FONT_SIZE};
+use crate::domain::computed::variables::{CustomPropertiesMap, VariableName};
 use crate::domain::declaration::{Declaration, DeclarationBlock};
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef};
+use crate::domain::length::Length;
 use crate::domain::specificity::Specificity;
 use crate::domain::stylesheet_set::{Origin, StyleRule, StyleSheetSet};
-use crate::infrastructure::cascade::values::apply_declaration;
+use crate::infrastructure::cascade::logical_values::sets_writing_context;
+use crate::infrastructure::cascade::values::{
+    apply_declaration, apply_declaration_value, unset_property,
+};
+use crate::infrastructure::cascade::variable_values::{
+    cascade_custom_properties, references_variables, resolve_declaration_value,
+};
 
 /// One declaration that selected the node, with the key it is ordered by.
 struct MatchedDeclaration<'sheets> {
@@ -48,21 +81,160 @@ impl MatchedDeclaration<'_> {
     }
 }
 
+/// What an element hands down to its children beyond its [`ComputedStyle`]:
+/// its computed custom properties and its computed font size. The map is
+/// open-ended and only the cascade reads it, so it lives in this side table,
+/// one per node, rather than in the style aggregate; the font size is the
+/// same absolute size [`apply_author_rules`] writes back into the style, kept
+/// here as an [`Au`] so a child's `em` resolves without a float round trip.
+#[derive(Clone, Debug)]
+pub(crate) struct InheritedContext {
+    variables: Rc<CustomPropertiesMap>,
+    font_size: Au,
+}
+
+impl InheritedContext {
+    /// What the root inherits: no custom properties, and the initial `16px`
+    /// its `em` resolves against.
+    #[must_use]
+    pub(crate) fn root() -> Self {
+        Self {
+            variables: Rc::new(CustomPropertiesMap::new()),
+            font_size: INITIAL_FONT_SIZE,
+        }
+    }
+}
+
+/// One node's cascade result: its style, and the context its children inherit.
+pub(crate) struct CascadedStyle {
+    style: ComputedStyle,
+    context: InheritedContext,
+}
+
+impl CascadedStyle {
+    /// The style and the inherited context, apart.
+    #[must_use]
+    pub(crate) fn into_parts(self) -> (ComputedStyle, InheritedContext) {
+        (self.style, self.context)
+    }
+}
+
+/// Which of the three passes (module doc) folds a declaration.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CascadePass {
+    CustomProperties,
+    WritingContext,
+    Remaining,
+}
+
+impl CascadePass {
+    fn of(declaration: &Declaration) -> Self {
+        let property = declaration.property().as_str();
+        if VariableName::names_custom_property(property) {
+            return Self::CustomProperties;
+        }
+        if sets_writing_context(property) {
+            return Self::WritingContext;
+        }
+        Self::Remaining
+    }
+}
+
+/// What one declaration of pass 2 or 3 is applied with: the parent's style
+/// (for `inherit`, `unset` and `bolder`) and the element's custom properties.
+struct DeclarationScope<'element> {
+    parent: Option<&'element ComputedStyle>,
+    variables: &'element CustomPropertiesMap,
+}
+
+impl DeclarationScope<'_> {
+    /// `style` with `declaration` applied. A value with no `var()` that falls
+    /// outside the cut leaves the previous value standing (`values.rs`
+    /// doc-comment) — the parse-time drop of CSS Syntax L3.
+    fn apply(&self, style: ComputedStyle, declaration: &Declaration) -> ComputedStyle {
+        if references_variables(declaration.value()) {
+            return self.apply_substituted(style, declaration);
+        }
+        apply_declaration(&style, declaration, self.parent).unwrap_or(style)
+    }
+
+    /// A `var()`-bearing declaration: substituted, then applied, or `unset`
+    /// when either step fails (CSS Variables L1 §3, invalid at computed-value
+    /// time).
+    fn apply_substituted(&self, style: ComputedStyle, declaration: &Declaration) -> ComputedStyle {
+        let property = declaration.property().as_str();
+        let substituted = resolve_declaration_value(declaration.value(), self.variables)
+            .inspect_err(|error| {
+                tracing::debug!(property, %error, "declaration is invalid at computed-value time");
+            })
+            .ok();
+        substituted
+            .and_then(|value| apply_declaration_value(&style, self.parent, property, &value))
+            .unwrap_or_else(|| unset_property(style, self.parent, property))
+    }
+
+    fn fold_pass(
+        &self,
+        style: ComputedStyle,
+        declarations: &[&Declaration],
+        pass: CascadePass,
+    ) -> ComputedStyle {
+        declarations
+            .iter()
+            .filter(|declaration| CascadePass::of(declaration) == pass)
+            .fold(style, |folded, declaration| self.apply(folded, declaration))
+    }
+}
+
 /// `base` with every matching declaration applied weakest-first, then the
-/// node's `style=` block.
+/// node's `style=` block, in the three passes of the module doc.
 #[must_use]
 pub(crate) fn apply_author_rules(
     base: ComputedStyle,
     parent: Option<&ComputedStyle>,
+    inherited: &InheritedContext,
     node: NodeRef<'_>,
     snapshot: &DomSnapshot,
     sheets: &StyleSheetSet,
-) -> ComputedStyle {
+) -> CascadedStyle {
+    let declarations = cascade_ordered_declarations(node, snapshot, sheets);
+    let variables = cascade_custom_properties(&inherited.variables, &declarations);
+    let scope = DeclarationScope {
+        parent,
+        variables: &variables,
+    };
+    let oriented = scope.fold_pass(base, &declarations, CascadePass::WritingContext);
+    let cascaded = scope.fold_pass(oriented, &declarations, CascadePass::Remaining);
+    let font_size = cascaded.computed_font_size(inherited.font_size);
+    let text_advance = cascaded.text_advance().absolutized(font_size);
+    CascadedStyle {
+        style: cascaded
+            .with_font_size(Length::Pixels(font_size.to_px().get()))
+            .with_text_advance(text_advance),
+        context: InheritedContext {
+            variables,
+            font_size,
+        },
+    }
+}
+
+/// Every declaration that applies to `node`, weakest first: the matched rule
+/// declarations in cascade order, then the node's `style=` block.
+fn cascade_ordered_declarations<'sheets>(
+    node: NodeRef<'_>,
+    snapshot: &DomSnapshot,
+    sheets: &'sheets StyleSheetSet,
+) -> Vec<&'sheets Declaration> {
     let matched = matched_declarations(node, snapshot, sheets);
-    let cascaded = matched.iter().fold(base, |style, matched| {
-        apply_one(style, parent, matched.declaration)
-    });
-    apply_inline_block(cascaded, parent, node, sheets)
+    let inline = sheets
+        .inline_of(node.id())
+        .into_iter()
+        .flat_map(DeclarationBlock::iter);
+    matched
+        .into_iter()
+        .map(|matched| matched.declaration)
+        .chain(inline)
+        .collect()
 }
 
 /// Every declaration of `sheets` that selects `node`, in cascade order.
@@ -111,36 +283,4 @@ fn rule_declarations<'sheets>(
             declaration,
         })
         .collect()
-}
-
-fn apply_block(
-    style: ComputedStyle,
-    parent: Option<&ComputedStyle>,
-    block: &DeclarationBlock,
-) -> ComputedStyle {
-    block.iter().fold(style, |style, declaration| {
-        apply_one(style, parent, declaration)
-    })
-}
-
-/// A declaration whose value is outside the cut leaves the previous value
-/// standing (`values.rs` doc-comment).
-fn apply_one(
-    style: ComputedStyle,
-    parent: Option<&ComputedStyle>,
-    declaration: &Declaration,
-) -> ComputedStyle {
-    apply_declaration(style, declaration, parent).unwrap_or(style)
-}
-
-fn apply_inline_block(
-    style: ComputedStyle,
-    parent: Option<&ComputedStyle>,
-    node: NodeRef<'_>,
-    sheets: &StyleSheetSet,
-) -> ComputedStyle {
-    let Some(block) = sheets.inline_of(node.id()) else {
-        return style;
-    };
-    apply_block(style, parent, block)
 }

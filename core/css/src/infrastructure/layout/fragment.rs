@@ -51,6 +51,25 @@ impl Fragment {
         }
     }
 
+    /// The left and right edges of this fragment's margin box.
+    const fn horizontal_extent(&self) -> (Au, Au) {
+        let margin = self.edges.margin();
+        let border = self.edges.border();
+        let padding = self.edges.padding();
+        let leading = margin
+            .left()
+            .saturating_add(border.left())
+            .saturating_add(padding.left());
+        let trailing = margin
+            .right()
+            .saturating_add(border.right())
+            .saturating_add(padding.right());
+        (
+            self.content.min_x().saturating_sub(leading),
+            self.content.max_x().saturating_add(trailing),
+        )
+    }
+
     fn into_layout_box(self) -> LayoutBox {
         LayoutBox::new(
             self.node,
@@ -98,6 +117,20 @@ impl Fragments {
                 .map(|fragment| fragment.translated(horizontal, vertical))
                 .collect(),
         }
+    }
+
+    /// How wide a span the margin boxes of every fragment **after the first**
+    /// cover — the first of a block result is the box's own fragment, the rest
+    /// are what it contains. Zero for a box with nothing inside it.
+    pub fn descendant_span(&self) -> Au {
+        let mut extents = self.items.iter().skip(1).map(Fragment::horizontal_extent);
+        let Some(first) = extents.next() else {
+            return Au::ZERO;
+        };
+        let (left, right) = extents.fold(first, |(left, right), (next_left, next_right)| {
+            (left.smaller(next_left), right.larger(next_right))
+        });
+        right.saturating_sub(left)
     }
 
     pub fn into_boxes(self) -> impl Iterator<Item = LayoutBox> {

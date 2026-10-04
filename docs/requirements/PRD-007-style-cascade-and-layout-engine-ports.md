@@ -104,15 +104,16 @@ ports — the contract is dogfooded, not bypassed for the default path.
 ## 6. Post-freeze migration notes
 
 The boundary aggregates and `css::PORT_SCHEMA_VERSION` froze at `I3` (end of B4, version `3`). Every later change is
-recorded here, and is **additive** — a new `#[non_exhaustive]` field or grouping, never a removed or renarrowed one, so
-no in-tree consumer's `match` needs updating.
+recorded here. Up to version `7` each was **additive** — a new `#[non_exhaustive]` field or grouping, never a removed or
+renarrowed one, so no in-tree consumer's `match` needed updating; `7 → 8` is the first that is not, and its note says
+what a consumer has to change.
 
 ### `3 → 4` — fonts increment: `ComputedStyle::font_family`
 
 `ComputedStyle` gains `font_family: FontFamilyList` (`core/css/src/domain/computed/font.rs`), an inherited property (CSS
 Fonts L4 §5.1) added alongside `color` / `font_size` in `ComputedStyle::inheriting_from`. It is a fixed-capacity `Copy`
-list rather than a `Vec` because `ComputedStyle` is `Copy` and copied per node during layout; the two size cuts
-(`FontFamilyList::CAPACITY` families, `FamilyName::CAPACITY` bytes per name) are declared in
+list rather than a `Vec` because `ComputedStyle` was `Copy` (until `8`) and copied per node during layout; the two size
+cuts (`FontFamilyList::CAPACITY` families, `FamilyName::CAPACITY` bytes per name) are declared in
 `core/css/tests/data/MANIFEST.md` beside the Flexbox cuts. Consumers read it through `ComputedStyle::font_family()`; a
 consumer that does not care about fonts is unaffected.
 
@@ -131,3 +132,51 @@ that pattern-matches `ComputedStyle` is unaffected; a producer feeding real-worl
 CSS widening because the blank-window fix (`docs/reports/DIAGNOSTICO-JANELA-BRANCA-WAYLAND.md`) left real pages visibly
 unstyled and the page background was the highest-leverage single gap. `margin: auto` centring and `background-image`
 fetch/paint are the next items and are **not** in this bump.
+
+### `7 → 8` — PR #19 review round: `ComputedStyle` loses `Copy`, schema-7 boundary types settled
+
+The review of the schema-7 widening changed boundary types a consumer can observe. Two of the changes are **not
+additive**:
+
+- **`ComputedStyle` is `Clone`, no longer `Copy`.** Its CSS Grid group (`GridStyle`, ~2.9 KB of fixed-capacity track
+  lists, area names and line names) was inlined in schema 7 and made every style ~3.7 KB, copied through each cascade
+  step and stored per `StyledNode`, for data no layout reads yet (`display: grid` is rejected). It now sits behind a
+  shared `std::sync::Arc` that stays `None` while every grid property is `initial`, so a grid-less node allocates
+  nothing: `ComputedStyle` measures 856 bytes (was 3756) and `StyledNode` 920 (was 3824) on a 64-bit target, a budget
+  `core/css/tests/computed_style_footprint.rs` pins. `ComputedStyle::grid()` lends `&GridStyle` instead of returning it
+  by value; the `with_*` builders and `inheriting_from` are no longer `const fn` (`initial()` still is). The
+  `pass-by-value-size-limit = 4096` override that hid the cost from clippy is removed from `clippy.toml`. **Migration:**
+  replace `*node.style()` with `node.style().clone()` (or keep the borrow), and copy the grid group explicitly
+  (`*style.grid()`) where a by-value `GridStyle` is needed.
+- **`TrackList::from_tracks` answers `Option<TrackList>`**, refusing more than `TrackList::CAPACITY` (16) tracks instead
+  of truncating them. **Migration:** handle the `None`.
+- **`ComputedStyle::font_size()` is the computed size, not the authored one.** `font-size` inherits as its computed
+  value (CSS Fonts 4 §2.5); storing `2em` and resolving it again at every descendant compounded it (`2em` → 64px one
+  level down). The cascade now writes the absolute size back as `Length::Pixels`. **Migration:** a consumer comparing
+  against the authored length (`Length::Em(2.0)`) compares against the pixels (`Length::Pixels(32.0)`).
+- **`TextDecorationLine::with_underline` / `with_overline` / `with_line_through(bool)` are gone**, replaced by
+  `adding(TextDecorationLine)` — a flag parameter every caller passed as `true` (`CLAUDE.md`). **Migration:**
+  `line.with_underline(true)` becomes `line.adding(TextDecorationLine::UNDERLINE)`.
+- **`SUPPORTED_PROPERTIES` is `[&str; 137]`** (was 133): the legacy aliases `word-wrap`, `grid-gap`, `grid-row-gap` and
+  `grid-column-gap` already had cascade handlers but were dropped by the parser. **Migration:** a binding that names the
+  array's length updates it.
+
+The rest is additive or confined to the cascade helpers:
+
+- `Display` gains `InlineBlock` and `ListItem` (it is `#[non_exhaustive]`, so an outside `match` already has a wildcard
+  arm); the closed `InputType` vocabulary is new.
+- `VariableError` gains `ExpansionLimit`. `VariableError` is **not** `#[non_exhaustive]`, so an exhaustive `match` on it
+  outside `core/css` needs the new arm.
+- The public cascade helpers changed shape: `text_values::apply` takes the parent's `font-weight` (what `bolder` /
+  `lighter` are relative to), and `grid_values::{apply, reset, inherit}` and
+  `logical_values::{apply, apply_with_context}` borrow the style they read instead of taking it by value.
+- `VariableValue::is_empty` is no longer `const fn`: custom property names and values hold shared `Arc<str>` text, so an
+  element declaring one custom property no longer re-allocates every inherited string.
+- Behaviour fixes a consumer can observe with no type change: `bolder` / `lighter` follow the CSS Fonts 4 §2.2 table;
+  two-keyword `background-position` reads by axis (`top right` is `right top`); `grid-area`'s omitted ends copy a
+  custom-ident start (CSS Grid L1 §8.4); `position: relative` lets `right` win over `left` in an `rtl` containing block
+  (CSS 2.1 §9.4.3); `text-decoration` accepts a functional colour; and every member of a `var()` cycle is invalid,
+  fallbacks notwithstanding (CSS Variables L1 §2.3).
+- Custom properties and `var()` are cascaded, in a per-node side table outside `ComputedStyle`; their semantics (and
+  those of logical properties and relative font weights) are recorded in
+  `docs/architecture/style-cascade-port-contract.md`, "Cascade semantics of schema 7".

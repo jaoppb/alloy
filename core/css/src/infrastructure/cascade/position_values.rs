@@ -6,39 +6,43 @@ use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{parse_position, parse_sizing, parse_z_index};
 
 pub(crate) fn apply(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     property: &str,
     tokens: &[Token],
 ) -> Option<ComputedStyle> {
     let position = style.position();
-    updated(position, property, tokens).map(|changed| style.with_position(changed))
+    updated(position, property, tokens).map(|changed| style.clone().with_position(changed))
 }
 
 fn updated(position: PositionStyle, property: &str, tokens: &[Token]) -> Option<PositionStyle> {
     match property {
-        "position" => parse_position(tokens).map(|val| position.with_position(val)),
-        "top" => parse_sizing(tokens).map(|val| position.with_top(val)),
-        "right" => parse_sizing(tokens).map(|val| position.with_right(val)),
-        "bottom" => parse_sizing(tokens).map(|val| position.with_bottom(val)),
-        "left" => parse_sizing(tokens).map(|val| position.with_left(val)),
-        "z-index" => parse_z_index(tokens).map(|val| position.with_z_index(val)),
+        "position" => parse_position(tokens).map(|value| position.with_position(value)),
+        "top" => parse_sizing(tokens).map(|value| position.with_top(value)),
+        "right" => parse_sizing(tokens).map(|value| position.with_right(value)),
+        "bottom" => parse_sizing(tokens).map(|value| position.with_bottom(value)),
+        "left" => parse_sizing(tokens).map(|value| position.with_left(value)),
+        "z-index" => parse_z_index(tokens).map(|value| position.with_z_index(value)),
         _ => None,
     }
 }
 
-pub(crate) fn reset(style: ComputedStyle, property: &str) -> Option<ComputedStyle> {
+pub(crate) fn reset(style: &ComputedStyle, property: &str) -> Option<ComputedStyle> {
     copy_from(style, PositionStyle::initial(), property)
 }
 
 pub(crate) fn inherit(
-    style: ComputedStyle,
+    style: &ComputedStyle,
     parent: &ComputedStyle,
     property: &str,
 ) -> Option<ComputedStyle> {
     copy_from(style, parent.position(), property)
 }
 
-fn copy_from(style: ComputedStyle, source: PositionStyle, property: &str) -> Option<ComputedStyle> {
+fn copy_from(
+    style: &ComputedStyle,
+    source: PositionStyle,
+    property: &str,
+) -> Option<ComputedStyle> {
     let current = style.position();
     let updated = match property {
         "position" => current.with_position(source.position()),
@@ -49,5 +53,5 @@ fn copy_from(style: ComputedStyle, source: PositionStyle, property: &str) -> Opt
         "z-index" => current.with_z_index(source.z_index()),
         _ => return None,
     };
-    Some(style.with_position(updated))
+    Some(style.clone().with_position(updated))
 }

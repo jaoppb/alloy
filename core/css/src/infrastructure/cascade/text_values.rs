@@ -13,7 +13,7 @@ use crate::domain::computed::text_advance::{
 };
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
-use crate::infrastructure::parser::values::{parse_color, parse_length};
+use crate::infrastructure::parser::values::{component_values, parse_color, parse_length};
 
 /// Parses `font-weight` keywords and numeric weights.
 #[must_use]
@@ -33,18 +33,24 @@ fn integer_weight(value: f32) -> Option<u16> {
     format!("{value}").parse::<u16>().ok()
 }
 
-/// Parses `font-weight`, resolving relative keywords (`bolder`, `lighter`) against `current`.
+/// Parses `font-weight`, resolving `bolder` / `lighter` against `parent_weight`.
+///
+/// `parent_weight` is the **parent's** computed weight (CSS Fonts 4 §2.2),
+/// never the element's own in-progress one, which a lower-precedence rule such
+/// as the UA's `h1 { font-weight: bold }` may already have raised.
 #[must_use]
-pub fn parse_font_weight_with_parent(tokens: &[Token], current: FontWeight) -> Option<FontWeight> {
-    if let [Token::Ident(name)] = tokens {
-        let lower = name.to_ascii_lowercase();
-        match lower.as_str() {
-            "bolder" => return Some(current.bolder()),
-            "lighter" => return Some(current.lighter()),
-            _ => {}
-        }
+pub fn parse_font_weight_with_parent(
+    tokens: &[Token],
+    parent_weight: FontWeight,
+) -> Option<FontWeight> {
+    let [Token::Ident(name)] = tokens else {
+        return parse_font_weight(tokens);
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "bolder" => Some(parent_weight.bolder()),
+        "lighter" => Some(parent_weight.lighter()),
+        _ => parse_font_weight(tokens),
     }
-    parse_font_weight(tokens)
 }
 
 /// Parses `font-style`: `normal`, `italic`, `oblique`.
@@ -66,14 +72,14 @@ pub fn parse_font_style(tokens: &[Token]) -> Option<FontStyle> {
 pub fn parse_line_height(tokens: &[Token]) -> Option<LineHeight> {
     match tokens {
         [Token::Ident(name)] if name.eq_ignore_ascii_case("normal") => Some(LineHeight::Normal),
-        [Token::Number(val)] if *val >= 0.0 => {
-            if *val == 0.0 {
+        [Token::Number(value)] if *value >= 0.0 => {
+            if *value == 0.0 {
                 return Some(LineHeight::Length(Length::ZERO));
             }
-            Some(LineHeight::Number(LineHeightFactor::new(*val)))
+            Some(LineHeight::Number(LineHeightFactor::new(*value)))
         }
-        [Token::Percentage(val)] if *val >= 0.0 => {
-            Some(LineHeight::Percentage(LineHeightPercentage::new(*val)))
+        [Token::Percentage(value)] if *value >= 0.0 => {
+            Some(LineHeight::Percentage(LineHeightPercentage::new(*value)))
         }
         _ => parse_length(tokens).map(LineHeight::Length),
     }
@@ -113,46 +119,25 @@ pub fn parse_text_decoration_line(tokens: &[Token]) -> Option<TextDecorationLine
     if is_none_keyword(tokens) {
         return Some(TextDecorationLine::NONE);
     }
-    let mut line = TextDecorationLine::NONE;
-    let mut matched = false;
-    for token in tokens {
-        let Token::Ident(name) = token else {
-            return None;
-        };
-        match name.to_ascii_lowercase().as_str() {
-            "underline" => {
-                line = line.with_underline(true);
-                matched = true;
-            }
-            "overline" => {
-                line = line.with_overline(true);
-                matched = true;
-            }
-            "line-through" => {
-                line = line.with_line_through(true);
-                matched = true;
-            }
-            _ => return None,
-        }
-    }
-    if !matched {
-        return None;
-    }
-    Some(line)
+    tokens
+        .iter()
+        .try_fold(TextDecorationLine::NONE, |line, token| {
+            Some(line.adding(decoration_line_of(core::slice::from_ref(token))?))
+        })
 }
 
 /// Parses `text-decoration-style`: `solid`, `double`, `dotted`, `dashed`, `wavy`.
 #[must_use]
 pub fn parse_text_decoration_style(tokens: &[Token]) -> Option<TextDecorationStyle> {
-    match tokens {
-        [Token::Ident(name)] => match name.to_ascii_lowercase().as_str() {
-            "solid" => Some(TextDecorationStyle::Solid),
-            "double" => Some(TextDecorationStyle::Double),
-            "dotted" => Some(TextDecorationStyle::Dotted),
-            "dashed" => Some(TextDecorationStyle::Dashed),
-            "wavy" => Some(TextDecorationStyle::Wavy),
-            _ => None,
-        },
+    let [Token::Ident(name)] = tokens else {
+        return None;
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "solid" => Some(TextDecorationStyle::Solid),
+        "double" => Some(TextDecorationStyle::Double),
+        "dotted" => Some(TextDecorationStyle::Dotted),
+        "dashed" => Some(TextDecorationStyle::Dashed),
+        "wavy" => Some(TextDecorationStyle::Wavy),
         _ => None,
     }
 }
@@ -163,49 +148,59 @@ pub fn parse_text_decoration_color(tokens: &[Token]) -> Option<CssColor> {
     parse_color(tokens)
 }
 
-fn match_decoration_keyword(
-    keyword: &str,
-    line: &mut TextDecorationLine,
-    style: &mut Option<TextDecorationStyle>,
-) -> bool {
-    match keyword {
-        "underline" => {
-            *line = line.with_underline(true);
-            true
+/// The one line a component names, if it is a line keyword.
+fn decoration_line_of(component: &[Token]) -> Option<TextDecorationLine> {
+    let [Token::Ident(name)] = component else {
+        return None;
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "underline" => Some(TextDecorationLine::UNDERLINE),
+        "overline" => Some(TextDecorationLine::OVERLINE),
+        "line-through" => Some(TextDecorationLine::LINE_THROUGH),
+        _ => None,
+    }
+}
+
+/// What the components of a `text-decoration` shorthand have set so far:
+/// any number of lines, at most one style and at most one colour.
+#[derive(Default)]
+struct DecorationParts {
+    line: TextDecorationLine,
+    style: Option<TextDecorationStyle>,
+    color: Option<CssColor>,
+}
+
+impl DecorationParts {
+    /// Folds one component in, or `None` when it fits nowhere — not a line,
+    /// not a style or colour still unset.
+    fn absorb(mut self, component: &[Token]) -> Option<Self> {
+        if let Some(line) = decoration_line_of(component) {
+            self.line = self.line.adding(line);
+            return Some(self);
         }
-        "overline" => {
-            *line = line.with_overline(true);
-            true
+        if let (None, Some(style)) = (self.style, parse_text_decoration_style(component)) {
+            self.style = Some(style);
+            return Some(self);
         }
-        "line-through" => {
-            *line = line.with_line_through(true);
-            true
+        if self.color.is_some() {
+            return None;
         }
-        "solid" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Solid);
-            true
-        }
-        "double" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Double);
-            true
-        }
-        "dotted" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Dotted);
-            true
-        }
-        "dashed" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Dashed);
-            true
-        }
-        "wavy" if style.is_none() => {
-            *style = Some(TextDecorationStyle::Wavy);
-            true
-        }
-        _ => false,
+        self.color = Some(parse_color(component)?);
+        Some(self)
+    }
+
+    fn into_decoration(self) -> TextDecoration {
+        TextDecoration::initial()
+            .with_line(self.line)
+            .with_style(self.style.unwrap_or(TextDecorationStyle::Solid))
+            .with_color(self.color.unwrap_or(CssColor::BLACK))
     }
 }
 
 /// Parses `text-decoration` shorthand: line, style, and color in any order.
+///
+/// Walks whole component values, so a functional colour (`rgb(255, 0, 0)`)
+/// is read as the one colour it is rather than token by token.
 #[must_use]
 pub fn parse_text_decoration(tokens: &[Token]) -> Option<TextDecoration> {
     if tokens.is_empty() {
@@ -214,38 +209,9 @@ pub fn parse_text_decoration(tokens: &[Token]) -> Option<TextDecoration> {
     if is_none_keyword(tokens) {
         return Some(TextDecoration::initial());
     }
-    let mut line = TextDecorationLine::NONE;
-    let mut style = None;
-    let mut color = None;
-    let mut matched = false;
-
-    for token in tokens {
-        if let Token::Ident(name) = token {
-            let lower = name.to_ascii_lowercase();
-            if match_decoration_keyword(&lower, &mut line, &mut style) {
-                matched = true;
-                continue;
-            }
-        }
-        let parsed_color = parse_color(core::slice::from_ref(token));
-        if color.is_none() && parsed_color.is_some() {
-            color = parsed_color;
-            matched = true;
-            continue;
-        }
-        return None;
-    }
-
-    if !matched {
-        return None;
-    }
-
-    Some(
-        TextDecoration::initial()
-            .with_line(line)
-            .with_style(style.unwrap_or(TextDecorationStyle::Solid))
-            .with_color(color.unwrap_or(CssColor::BLACK)),
-    )
+    component_values(tokens)
+        .try_fold(DecorationParts::default(), DecorationParts::absorb)
+        .map(DecorationParts::into_decoration)
 }
 
 /// Parses `text-transform`: `none`, `capitalize`, `uppercase`, `lowercase`.
@@ -304,35 +270,42 @@ pub fn parse_word_break(tokens: &[Token]) -> Option<WordBreak> {
     }
 }
 
-/// Applies declaration to [`TextAdvanceStyle`].
+/// Applies declaration to [`TextAdvanceStyle`]. `parent_weight` is the
+/// parent's computed `font-weight` ([`FontWeight::NORMAL`] at the root), the
+/// one value `bolder` / `lighter` are relative to.
 #[must_use]
 pub fn apply(
     style: TextAdvanceStyle,
+    parent_weight: FontWeight,
     property: &str,
     tokens: &[Token],
 ) -> Option<TextAdvanceStyle> {
     match property {
-        "font-weight" => parse_font_weight_with_parent(tokens, style.font_weight())
-            .map(|val| style.with_font_weight(val)),
-        "font-style" => parse_font_style(tokens).map(|val| style.with_font_style(val)),
-        "line-height" => parse_line_height(tokens).map(|val| style.with_line_height(val)),
-        "letter-spacing" => parse_letter_spacing(tokens).map(|val| style.with_letter_spacing(val)),
-        "word-spacing" => parse_word_spacing(tokens).map(|val| style.with_word_spacing(val)),
+        "font-weight" => parse_font_weight_with_parent(tokens, parent_weight)
+            .map(|value| style.with_font_weight(value)),
+        "font-style" => parse_font_style(tokens).map(|value| style.with_font_style(value)),
+        "line-height" => parse_line_height(tokens).map(|value| style.with_line_height(value)),
+        "letter-spacing" => {
+            parse_letter_spacing(tokens).map(|value| style.with_letter_spacing(value))
+        }
+        "word-spacing" => parse_word_spacing(tokens).map(|value| style.with_word_spacing(value)),
         "text-decoration-line" => parse_text_decoration_line(tokens)
-            .map(|val| style.with_text_decoration(style.text_decoration().with_line(val))),
+            .map(|value| style.with_text_decoration(style.text_decoration().with_line(value))),
         "text-decoration-color" => parse_text_decoration_color(tokens)
-            .map(|val| style.with_text_decoration(style.text_decoration().with_color(val))),
+            .map(|value| style.with_text_decoration(style.text_decoration().with_color(value))),
         "text-decoration-style" => parse_text_decoration_style(tokens)
-            .map(|val| style.with_text_decoration(style.text_decoration().with_style(val))),
+            .map(|value| style.with_text_decoration(style.text_decoration().with_style(value))),
         "text-decoration" => {
-            parse_text_decoration(tokens).map(|val| style.with_text_decoration(val))
+            parse_text_decoration(tokens).map(|value| style.with_text_decoration(value))
         }
-        "text-transform" => parse_text_transform(tokens).map(|val| style.with_text_transform(val)),
-        "text-overflow" => parse_text_overflow(tokens).map(|val| style.with_text_overflow(val)),
+        "text-transform" => {
+            parse_text_transform(tokens).map(|value| style.with_text_transform(value))
+        }
+        "text-overflow" => parse_text_overflow(tokens).map(|value| style.with_text_overflow(value)),
         "overflow-wrap" | "word-wrap" => {
-            parse_overflow_wrap(tokens).map(|val| style.with_overflow_wrap(val))
+            parse_overflow_wrap(tokens).map(|value| style.with_overflow_wrap(value))
         }
-        "word-break" => parse_word_break(tokens).map(|val| style.with_word_break(val)),
+        "word-break" => parse_word_break(tokens).map(|value| style.with_word_break(value)),
         _ => None,
     }
 }

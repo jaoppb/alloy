@@ -1,0 +1,15 @@
+[package]
+name = "platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Host operating-system knowledge (install paths, environment lookups) behind a port, so no other crate branches on target_os (ADR-0022)."
+
+# Deliberately dependency-free: this crate only answers "what does the host OS
+# look like", and every answer is a path or a closed vocabulary.
+[dependencies]
+
+[lints]
+workspace = true

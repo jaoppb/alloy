@@ -7,6 +7,8 @@
     clippy::needless_raw_string_hashes
 )]
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
@@ -44,27 +46,31 @@ fn text_response(body: &str) -> HttpResponse {
     HttpResponse::new(StatusCode::OK, headers, network::Body::from_text(body))
 }
 
-/// A [`WindowSystem`] decorator that injects a simulated mouse click once the
-/// initial page has had enough pump cycles to navigate and layout.
-struct DelayedClickWindowSystem {
+/// A [`WindowSystem`] decorator that injects one simulated mouse click on the
+/// first pump after `page_ready` is set.
+///
+/// The page's navigation is fetched on a background thread, so a click on a
+/// fixed pump number can land before the page is laid out: it then hits no
+/// link target, is never repeated, and the loop waits forever for a
+/// navigation that cannot happen (it hung a Windows CI job for 30 minutes).
+/// Gating the click on the loop's own stats removes that race.
+struct ClickWhenReadyWindowSystem {
     inner: HeadlessWindowSystem,
-    click_pos: Option<PhysicalPosition>,
-    pump_count: usize,
-    trigger_pump: usize,
+    click_position: Option<PhysicalPosition>,
+    page_ready: Rc<Cell<bool>>,
 }
 
-impl DelayedClickWindowSystem {
-    fn new(click_pos: PhysicalPosition, trigger_pump: usize) -> Self {
+impl ClickWhenReadyWindowSystem {
+    fn new(click_position: PhysicalPosition, page_ready: Rc<Cell<bool>>) -> Self {
         Self {
             inner: HeadlessWindowSystem::new(),
-            click_pos: Some(click_pos),
-            pump_count: 0,
-            trigger_pump,
+            click_position: Some(click_position),
+            page_ready,
         }
     }
 }
 
-impl WindowSystem for DelayedClickWindowSystem {
+impl WindowSystem for ClickWhenReadyWindowSystem {
     fn create_window(&mut self, attrs: &WindowAttributes) -> Result<WindowId, WindowError> {
         self.inner.create_window(attrs)
     }
@@ -73,11 +79,10 @@ impl WindowSystem for DelayedClickWindowSystem {
         &mut self,
         sink: &mut dyn FnMut(WindowEvent),
     ) -> Result<PumpStatus, WindowError> {
-        self.pump_count = self.pump_count.saturating_add(1);
-        if self.pump_count >= self.trigger_pump
-            && let Some(pos) = self.click_pos.take()
+        if self.page_ready.get()
+            && let Some(position) = self.click_position.take()
         {
-            sink(WindowEvent::PointerMoved { position: pos });
+            sink(WindowEvent::PointerMoved { position });
             sink(WindowEvent::PointerButton {
                 button: PointerButton::Left,
                 pressed: true,
@@ -89,6 +94,17 @@ impl WindowSystem for DelayedClickWindowSystem {
     fn request_redraw(&mut self) {
         self.inner.request_redraw();
     }
+}
+
+/// How many loop cycles a test may run before it gives up. At the loop's
+/// 4 ms idle poll this is several seconds — far beyond a healthy run — so a
+/// regression fails its assertion instead of hanging CI.
+const MAX_LOOP_CYCLES: usize = 2_500;
+
+/// Whether the first document has been applied and laid out, so its link
+/// targets exist and a click can hit one.
+const fn first_page_laid_out(stats: &alloy::LoopStats) -> bool {
+    stats.navigations >= 1 && stats.relayouts >= 1
 }
 
 #[test]
@@ -116,19 +132,26 @@ fn clicking_a_link_navigates_to_destination_page() {
     let transport = MockTransport::new()
         .with_response(url_a.clone(), text_response(page_a))
         .with_response(url_b, text_response(page_b));
-    let mut system = DelayedClickWindowSystem::new(PhysicalPosition::new(20.0, 20.0), 5);
+    let page_ready = Rc::new(Cell::new(false));
+    let mut system =
+        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 20.0), Rc::clone(&page_ready));
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);
     system.create_window(&attributes).unwrap();
 
+    let mut cycles = 0_usize;
     let stats = run_browser_until(
         &url_a,
         services(transport),
         &mut system,
         &mut presenter,
         size,
-        |stats| stats.navigations >= 2,
+        |stats| {
+            cycles += 1;
+            page_ready.set(first_page_laid_out(stats));
+            stats.navigations >= 2 || cycles >= MAX_LOOP_CYCLES
+        },
     )
     .expect("browser loop runs and navigates");
 
@@ -153,14 +176,18 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
 
     let transport =
         MockTransport::new().with_response(start_url.clone(), text_response(page_with_anchor));
-    let mut system = DelayedClickWindowSystem::new(PhysicalPosition::new(20.0, 20.0), 5);
+    let page_ready = Rc::new(Cell::new(false));
+    let mut system =
+        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 20.0), Rc::clone(&page_ready));
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);
     system.create_window(&attributes).unwrap();
 
-    // Run until after the click has had a chance to be processed
-    let mut poll_cycles = 0;
+    // Run until the click has been delivered and a few more cycles have had
+    // the chance to start (wrongly) a network navigation.
+    let mut cycles = 0_usize;
+    let mut cycles_since_ready = 0_usize;
     let stats = run_browser_until(
         &start_url,
         services(transport),
@@ -168,8 +195,12 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
         &mut presenter,
         size,
         |stats| {
-            poll_cycles += 1;
-            stats.navigations >= 1 && poll_cycles >= 15
+            cycles += 1;
+            page_ready.set(first_page_laid_out(stats));
+            if page_ready.get() {
+                cycles_since_ready += 1;
+            }
+            cycles_since_ready >= 15 || cycles >= MAX_LOOP_CYCLES
         },
     )
     .expect("browser loop runs");

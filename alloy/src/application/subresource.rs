@@ -11,7 +11,7 @@ use graphics::{Color, Framebuffer, ImageId, SurfaceSize};
 use network::Url;
 
 /// A `<link rel="stylesheet" href>` target, already resolved against the
-/// page's base URL.
+/// document's base URL ([`document_base_url`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StylesheetRequest {
     url: Url,
@@ -102,8 +102,11 @@ impl IntoIterator for Subresources {
 /// fetch machinery, while [`SubresourceRequest`] keeps the fetchable kinds
 /// closed.
 pub trait SubresourceDiscoverer: Send + Sync {
-    /// Walks `snapshot` and resolves every reference against `base`, or
-    /// against the document's own `<base href>` when it declares one.
+    /// Walks `snapshot` and resolves every reference against `base` — the
+    /// document's effective base URL, which the caller computes once per
+    /// navigation with [`document_base_url`] so subresources and link clicks
+    /// agree on it. An implementation must not re-apply `<base href>`: a
+    /// relative one (`<base href="app/">`) would then be joined twice.
     fn discover(&self, snapshot: &DomSnapshot, base: &Url) -> Subresources;
 }
 
@@ -114,13 +117,12 @@ pub struct MarkupDiscoverer;
 
 impl SubresourceDiscoverer for MarkupDiscoverer {
     fn discover(&self, snapshot: &DomSnapshot, base: &Url) -> Subresources {
-        let base = effective_base(snapshot, base);
         let mut found = Subresources::default();
         for id in snapshot.nodes_in_document_order() {
             let Some(node) = snapshot.node(id) else {
                 continue;
             };
-            let Some(request) = request_for(id, node, &base) else {
+            let Some(request) = request_for(id, node, base) else {
                 continue;
             };
             found.push(request);
@@ -129,20 +131,23 @@ impl SubresourceDiscoverer for MarkupDiscoverer {
     }
 }
 
-/// The URL relative references resolve against: the first `<base href>` in
+/// The URL every relative reference of the document resolves against.
+///
+/// Subresources and link targets alike use it: the first `<base href>` in
 /// document order resolved against the navigation URL (WHATWG HTML §4.2.3),
 /// or the navigation URL itself when there is none. Performance-tuned sites
-/// point `<base>` at a CDN, so ignoring it fetches every subresource from the
-/// wrong origin.
-fn effective_base(snapshot: &DomSnapshot, nav_url: &Url) -> Url {
+/// point `<base>` at a CDN, so ignoring it fetches every subresource (and
+/// follows every relative link) from the wrong origin.
+#[must_use]
+pub fn document_base_url(snapshot: &DomSnapshot, navigation_url: &Url) -> Url {
     let declared_href = snapshot
         .nodes_in_document_order()
         .filter_map(|id| snapshot.node(id))
         .filter(|node| node.tag_str() == Some("base"))
         .find_map(|node| node.attribute("href"));
     declared_href
-        .and_then(|href| nav_url.join(href).ok())
-        .unwrap_or_else(|| nav_url.clone())
+        .and_then(|href| navigation_url.join(href).ok())
+        .unwrap_or_else(|| navigation_url.clone())
 }
 
 fn request_for(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<SubresourceRequest> {
@@ -204,13 +209,13 @@ pub(crate) fn placeholder_framebuffer() -> Framebuffer {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
+    use super::{MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest, document_base_url};
     use network::Url;
 
-    fn discover_from(markup: &str, nav_url: &str) -> Vec<SubresourceRequest> {
+    fn discover_from(markup: &str, navigation_url: &str) -> Vec<SubresourceRequest> {
         let tree = html::parse(markup).unwrap();
         let snapshot = css::snapshot(&tree, tree.document());
-        let base = Url::parse(nav_url).unwrap();
+        let base = document_base_url(&snapshot, &Url::parse(navigation_url).unwrap());
         MarkupDiscoverer
             .discover(&snapshot, &base)
             .into_iter()
@@ -286,6 +291,30 @@ mod tests {
             stylesheet_urls(&found),
             vec!["https://cdn.example/assets/site.css".to_owned()],
             "`<base href>` redirects the relative stylesheet to the CDN origin"
+        );
+    }
+
+    #[test]
+    fn a_relative_base_href_resolves_against_the_navigation_url_exactly_once() {
+        let found = discover_from(
+            "<base href=\"app/\"><link rel=\"stylesheet\" href=\"site.css\">",
+            "https://example.com/index.html",
+        );
+        assert_eq!(
+            stylesheet_urls(&found),
+            vec!["https://example.com/app/site.css".to_owned()],
+            "`app/` is joined to the navigation URL once, never to itself again"
+        );
+    }
+
+    #[test]
+    fn without_a_base_element_the_document_base_is_the_navigation_url() {
+        let tree = html::parse("<p>no base here</p>").unwrap();
+        let snapshot = css::snapshot(&tree, tree.document());
+        let navigation_url = Url::parse("https://example.com/dir/page.html").unwrap();
+        assert_eq!(
+            document_base_url(&snapshot, &navigation_url),
+            navigation_url
         );
     }
 }

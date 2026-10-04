@@ -13,7 +13,9 @@ use super::worker::spawn_subresource_fetch;
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
 use crate::application::pipeline::LinkTarget;
-use crate::application::subresource::{SubresourceDiscoverer, SubresourceRequest};
+use crate::application::subresource::{
+    SubresourceDiscoverer, SubresourceRequest, document_base_url,
+};
 use crate::error::AlloyError;
 
 /// What a background fetch produced, drained by the loop's own thread.
@@ -56,6 +58,8 @@ pub struct LoopStats {
 pub struct Session<F, T, P, D> {
     pub services: BrowserServices<F, T, P, D>,
     pub dom_tree: Option<DomTree>,
+    /// The document's effective base URL — `<base href>` already applied —
+    /// that both subresource discovery and link clicks resolve against.
     pub base_url: Option<Url>,
     pub extra_sheets: StyleSheetSet,
     pub images: ImageStore,
@@ -105,11 +109,13 @@ where
     /// follow-up fetches it reveals (a fresh document's subresources).
     pub fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
         match message {
-            LoopMessage::Navigation(Ok((dom_tree, base_url))) => {
-                tracing::info!(url = %base_url, "navigation complete");
+            LoopMessage::Navigation(Ok((dom_tree, navigation_url))) => {
+                let snapshot = css::snapshot(&dom_tree, dom_tree.document());
+                let base_url = document_base_url(&snapshot, &navigation_url);
+                tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
                 self.reset_document_state();
-                self.base_url = Some(base_url.clone());
-                self.spawn_subresources(&dom_tree, &base_url, sender);
+                self.spawn_subresources(&snapshot, &base_url, sender);
+                self.base_url = Some(base_url);
                 self.dom_tree = Some(dom_tree);
                 self.dirty = true;
                 self.stats.navigations = self.stats.navigations.saturating_add(1);
@@ -175,18 +181,18 @@ where
         self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
     }
 
-    /// Asks the discoverer what `dom_tree` references, registers a
-    /// placeholder for every image found (see
+    /// Asks the discoverer what `snapshot` references, resolved against the
+    /// document's effective `base_url` (the same one link clicks use),
+    /// registers a placeholder for every image found (see
     /// `subresource::placeholder_framebuffer`), and spawns one worker thread
     /// per subresource.
     fn spawn_subresources(
         &mut self,
-        dom_tree: &DomTree,
+        snapshot: &css::DomSnapshot,
         base_url: &Url,
         sender: &Sender<LoopMessage>,
     ) {
-        let snapshot = css::snapshot(dom_tree, dom_tree.document());
-        let found = self.services.discoverer().discover(&snapshot, base_url);
+        let found = self.services.discoverer().discover(snapshot, base_url);
         for request in found {
             tracing::debug!(?request, "subresource discovered");
             if let SubresourceRequest::Image(image) = &request {
