@@ -1,51 +1,27 @@
-//! Session state, stats tracking, and background message handling.
+//! Session state: the live document, its subresources, and the frame last
+//! presented from them. How background-fetch results change that state lives
+//! in [`messages`].
 
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
-use css::{Origin, StyleSheetSet};
+use css::StyleSheetSet;
 use dom::DomTree;
-use graphics::{FontProvider, Framebuffer, ImageId};
+use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
-use window::PhysicalPosition;
+use window::{PhysicalPosition, Presenter, SurfaceSize};
 
-use super::worker::spawn_subresource_fetch;
+mod messages;
+
+use super::frame::CachedFrame;
+use super::hit_test::hit_test;
+use super::stats::LoopStats;
+use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
-use crate::application::pipeline::LinkTarget;
-use crate::application::subresource::{
-    SubresourceDiscoverer, SubresourceRequest, document_base_url,
-};
+use crate::application::pipeline::{LinkTarget, render_dom_with_links};
+use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
-
-/// What a background fetch produced, drained by the loop's own thread.
-pub enum LoopMessage {
-    Navigation(Result<(DomTree, Url), AlloyError>),
-    Stylesheet(Result<String, AlloyError>),
-    Image(ImageId, Result<Framebuffer, AlloyError>),
-}
-
-/// What a run of the loop did so far.
-///
-/// Instrumented for I4's coalescing proofs (resize, subresource bursts) and
-/// for a caller (or a test) that needs to wait for a specific piece of
-/// background work to land before looking at the presented frame.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct LoopStats {
-    /// How many times this run actually re-laid-out and presented a frame. A
-    /// bare `RedrawRequested` repaint re-blits the cached frame and does not
-    /// count here — the I4 coalescing proof is about relayouts only.
-    pub relayouts: usize,
-    /// How many navigations have successfully parsed into the document tree.
-    pub navigations: usize,
-    /// How many navigations failed and fell back to the error card.
-    pub navigation_errors: usize,
-    /// How many external `<link rel=stylesheet>` sheets were absorbed into the
-    /// cascade.
-    pub stylesheets_loaded: usize,
-    /// How many `<img>` fetches have decoded and replaced their placeholder.
-    pub images_loaded: usize,
-}
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
 /// the arity limit: the accumulated document state, the current viewport, and
@@ -55,31 +31,25 @@ pub struct LoopStats {
 /// every relayout is the same "immutable snapshot in, immutable snapshot out"
 /// discipline the render pipeline itself uses (`ADR-0010:114-117`), applied
 /// to the state a live session must keep between frames.
+///
+/// Every field is private: `dirty` → [`Session::relayout`] → clean, and
+/// `links` always describing `last_frame`, are invariants only this type's
+/// methods may move.
 pub struct Session<F, T, P, D> {
-    pub services: BrowserServices<F, T, P, D>,
-    pub dom_tree: Option<DomTree>,
+    services: BrowserServices<F, T, P, D>,
+    dom_tree: Option<DomTree>,
     /// The document's effective base URL — `<base href>` already applied —
     /// that both subresource discovery and link clicks resolve against.
-    pub base_url: Option<Url>,
-    pub extra_sheets: StyleSheetSet,
-    pub images: ImageStore,
-    pub links: Vec<LinkTarget>,
-    pub pointer_pos: Option<PhysicalPosition>,
-    pub dirty: bool,
-    pub viewport: window::SurfaceSize,
-    pub last_frame: Option<CachedFrame>,
-    pub stats: LoopStats,
-}
-
-/// The pixels of the last frame `relayout_and_present` produced, kept so a
-/// `RedrawRequested` can re-blit them without re-running the whole
-/// `render_dom_with_links` pipeline (cascade → layout → paint → raster →
-/// readback). This is the "repaint is cheap, relayout is not" split the event
-/// loop rests on.
-pub struct CachedFrame {
-    pub width: u32,
-    pub height: u32,
-    pub pixels: Vec<u32>,
+    base_url: Option<Url>,
+    extra_sheets: StyleSheetSet,
+    images: ImageStore,
+    /// The link areas of `last_frame`, in paint order.
+    links: Vec<LinkTarget>,
+    pointer_position: Option<PhysicalPosition>,
+    dirty: bool,
+    viewport: SurfaceSize,
+    last_frame: Option<CachedFrame>,
+    stats: LoopStats,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -89,7 +59,7 @@ where
     P: RequestPolicy + 'static,
     D: SubresourceDiscoverer,
 {
-    pub fn new(viewport: window::SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
+    pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
         Self {
             services,
             dom_tree: None,
@@ -97,7 +67,7 @@ where
             extra_sheets: StyleSheetSet::new(),
             images: ImageStore::new(),
             links: Vec::new(),
-            pointer_pos: None,
+            pointer_position: None,
             dirty: false,
             viewport,
             last_frame: None,
@@ -105,104 +75,117 @@ where
         }
     }
 
-    /// Applies one drained background-fetch result, spawning whatever
-    /// follow-up fetches it reveals (a fresh document's subresources).
-    pub fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
-        match message {
-            LoopMessage::Navigation(Ok((dom_tree, navigation_url))) => {
-                let snapshot = css::snapshot(&dom_tree, dom_tree.document());
-                let base_url = document_base_url(&snapshot, &navigation_url);
-                tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
-                self.reset_document_state();
-                self.spawn_subresources(&snapshot, &base_url, sender);
-                self.base_url = Some(base_url);
-                self.dom_tree = Some(dom_tree);
-                self.dirty = true;
-                self.stats.navigations = self.stats.navigations.saturating_add(1);
-            }
-            LoopMessage::Navigation(Err(error)) => {
-                tracing::error!(%error, "navigation failed");
-                self.stats.navigation_errors = self.stats.navigation_errors.saturating_add(1);
-                self.show_navigation_error(&error);
-            }
-            LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
-            LoopMessage::Stylesheet(Err(error)) => {
-                tracing::warn!(%error, "stylesheet fetch failed");
-            }
-            LoopMessage::Image(id, Ok(framebuffer)) => {
-                self.images.insert(id, framebuffer);
-                self.dirty = true;
-                self.stats.images_loaded = self.stats.images_loaded.saturating_add(1);
-            }
-            LoopMessage::Image(id, Err(error)) => {
-                tracing::warn!(%error, %id, "image fetch failed");
-            }
-        }
+    pub const fn stats(&self) -> LoopStats {
+        self.stats
     }
 
-    /// A new document starts from no sheets, images or links.
-    fn reset_document_state(&mut self) {
-        self.extra_sheets = StyleSheetSet::new();
-        self.images.clear();
-        self.links.clear();
+    pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
+        self.pointer_position
     }
 
-    /// Replaces the page with a visible error document — a failed navigation
-    /// must be seen, not just logged.
-    fn show_navigation_error(&mut self, error: &AlloyError) {
-        let escaped_error = error.to_string().replace('&', "&amp;").replace('<', "&lt;");
-        let error_html = format!(
-            "<!DOCTYPE html><html><head><title>Navigation Error</title><style>body {{ margin: 32px; background-color: #fdf2e9; color: #78281f; }} h1 {{ color: #c0392b; }} .error-box {{ background-color: #ffffff; padding: 16px; border-width: 2px; }}</style></head><body><h1>Navigation Error</h1><div class=\"error-box\"><p><strong>Failed to load:</strong> {escaped_error}</p></div></body></html>"
-        );
-        let Ok(error_tree) = html::parse(&error_html) else {
+    /// Where the pointer was last seen — `None` until it first enters.
+    pub const fn track_pointer(&mut self, position: Option<PhysicalPosition>) {
+        self.pointer_position = position;
+    }
+
+    /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
+    pub const fn resize(&mut self, viewport: SurfaceSize) {
+        self.viewport = viewport;
+        self.dirty = true;
+    }
+
+    pub const fn needs_relayout(&self) -> bool {
+        self.dirty
+    }
+
+    /// Starts fetching `url` on a worker thread; the result arrives as a
+    /// [`LoopMessage::Navigation`].
+    pub fn navigate(&self, url: Url, sender: &Sender<LoopMessage>) {
+        let transport = Arc::clone(self.services.transport());
+        let policy = Arc::clone(self.services.policy());
+        spawn_navigation(url, transport, policy, sender.clone());
+    }
+
+    /// Navigates to the topmost link under `position`, resolved against the
+    /// document's base URL. An in-page `#anchor` is a no-op in v0.5.
+    pub fn follow_link_at(&self, position: PhysicalPosition, sender: &Sender<LoopMessage>) {
+        let Some(href) = hit_test(&self.links, position) else {
             return;
         };
-        self.reset_document_state();
-        self.dom_tree = Some(error_tree);
-        self.dirty = true;
-    }
-
-    fn absorb_stylesheet(&mut self, text: &str) {
-        let sheet = match css::parse_stylesheet(text, Origin::Author) {
-            Ok(sheet) => sheet,
-            Err(error) => {
-                tracing::warn!(%error, bytes = text.len(), "stylesheet parse failed");
-                return;
-            }
+        let Some(base_url) = self.base_url.as_ref() else {
+            return;
         };
-        tracing::debug!(
-            rules = sheet.rules().count(),
-            notes = sheet.notes().len(),
-            bytes = text.len(),
-            "stylesheet absorbed"
-        );
-        self.extra_sheets.absorb(sheet);
-        self.dirty = true;
-        self.stats.stylesheets_loaded = self.stats.stylesheets_loaded.saturating_add(1);
-    }
-
-    /// Asks the discoverer what `snapshot` references, resolved against the
-    /// document's effective `base_url` (the same one link clicks use),
-    /// registers a placeholder for every image found (see
-    /// `subresource::placeholder_framebuffer`), and spawns one worker thread
-    /// per subresource.
-    fn spawn_subresources(
-        &mut self,
-        snapshot: &css::DomSnapshot,
-        base_url: &Url,
-        sender: &Sender<LoopMessage>,
-    ) {
-        let found = self.services.discoverer().discover(snapshot, base_url);
-        for request in found {
-            tracing::debug!(?request, "subresource discovered");
-            if let SubresourceRequest::Image(image) = &request {
-                self.images.reserve_placeholder(image.id());
+        if href.starts_with('#') {
+            tracing::info!(anchor = href, "in-page anchor clicked (no-op in v0.5)");
+            return;
+        }
+        match base_url.join(href) {
+            Ok(target_url) => {
+                tracing::info!(url = %target_url, "link clicked, navigating");
+                self.navigate(target_url, sender);
             }
-            spawn_subresource_fetch(request, Arc::clone(self.services.transport()), sender);
+            Err(error) => tracing::warn!(href, %error, "failed to resolve link target"),
         }
     }
 
-    pub const fn record_relayout(&mut self) {
+    /// Rebuilds the display list from the current document, viewport and
+    /// subresources, presents it, and caches the pixels for a later cheap
+    /// [`Session::repaint`]. The only path that bumps `stats.relayouts`, and
+    /// only once a frame was actually presented — the I4 coalescing proof
+    /// and `run_browser_until_first_frame` both rest on that. With no
+    /// document yet there is nothing to lay out, and the request is dropped.
+    pub fn relayout<R: Presenter>(&mut self, presenter: &mut R) -> Result<(), AlloyError> {
+        self.dirty = false;
+        let Some(dom_tree) = self.dom_tree.as_ref() else {
+            return Ok(());
+        };
+        let graphics_size =
+            graphics::SurfaceSize::new(self.viewport.width(), self.viewport.height())
+                .ok_or(AlloyError::InvalidDimensions)?;
+        let (framebuffer, links) = render_dom_with_links(
+            dom_tree,
+            self.extra_sheets.clone(),
+            &self.images,
+            graphics_size,
+            Arc::clone(self.services.font_provider()),
+        )?;
+        let frame = CachedFrame::capture(&framebuffer, self.viewport);
+        frame.present(presenter)?;
+        self.links = links;
+        self.last_frame = Some(frame);
         self.stats.relayouts = self.stats.relayouts.saturating_add(1);
+        Ok(())
+    }
+
+    /// Re-blits the frame [`Session::relayout`] last produced, with no
+    /// pipeline work and without touching `stats.relayouts`. A no-op before
+    /// the first frame. Serves `RedrawRequested`: a compositor
+    /// expose/occlusion, or the redraw winit re-arms once a Wayland surface
+    /// that dropped the first present is finally configured.
+    pub fn repaint<R: Presenter>(&self, presenter: &mut R) -> Result<(), AlloyError> {
+        let Some(frame) = self.last_frame.as_ref() else {
+            return Ok(());
+        };
+        frame.present(presenter)
+    }
+}
+
+/// Read-only views the `pump_once` tests assert on.
+#[cfg(test)]
+impl<F, T, P, D> Session<F, T, P, D> {
+    pub const fn viewport(&self) -> SurfaceSize {
+        self.viewport
+    }
+
+    pub const fn base_url(&self) -> Option<&Url> {
+        self.base_url.as_ref()
+    }
+
+    pub const fn has_frame(&self) -> bool {
+        self.last_frame.is_some()
+    }
+
+    pub const fn has_links(&self) -> bool {
+        !self.links.is_empty()
     }
 }

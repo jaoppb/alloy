@@ -18,8 +18,8 @@ use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
 
-use super::session::{LoopMessage, Session};
-use super::worker::fetch_text;
+use super::session::Session;
+use super::worker::{LoopMessage, fetch_text};
 use super::{initial_window_attributes, pump_once};
 use crate::application::browser_services::BrowserServices;
 use crate::application::paint::DEFAULT_FONT;
@@ -69,10 +69,10 @@ fn completed_navigation(
     session: &TestSession,
     navigations_before_click: usize,
 ) -> network::Url {
-    if session.stats.navigations > navigations_before_click {
+    if session.stats().navigations > navigations_before_click {
         return session
-            .base_url
-            .clone()
+            .base_url()
+            .cloned()
             .expect("an applied navigation sets the document base");
     }
     let message = receiver
@@ -84,9 +84,22 @@ fn completed_navigation(
     target_url
 }
 
+/// Installs `markup` as a navigated document at `url`, the same way a
+/// finished navigation thread does.
+fn load(session: &mut TestSession, markup: &str, url: &str) {
+    let (sender, _receiver) = mpsc::channel();
+    let document = html::parse(markup).unwrap();
+    let url = network::Url::parse(url).unwrap();
+    session.apply(LoopMessage::Navigation(Ok((document, url))), &sender);
+}
+
 fn loaded_session(viewport: SurfaceSize) -> TestSession {
     let mut session = session_over(MockTransport::new(), viewport);
-    session.dom_tree = Some(html::parse("<html><body>hi</body></html>").unwrap());
+    load(
+        &mut session,
+        "<html><body>hi</body></html>",
+        "http://example.com/",
+    );
     session
 }
 
@@ -114,11 +127,13 @@ fn multiple_resizes_in_one_pump_coalesce_to_one_relayout() {
     .unwrap();
 
     assert_eq!(
-        session.stats.relayouts, 1,
+        session.stats().relayouts,
+        1,
         "three coalesced Resized events (the initial one plus two scheduled) must cost exactly one relayout"
     );
     assert_eq!(
-        session.viewport, smaller,
+        session.viewport(),
+        smaller,
         "the viewport must reflect the LAST resize in the coalesced batch"
     );
 }
@@ -151,7 +166,8 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     .unwrap();
 
     assert_eq!(
-        session.stats.relayouts, 1,
+        session.stats().relayouts,
+        1,
         "fifty coalesced image arrivals must cost exactly one relayout, not fifty"
     );
 }
@@ -183,7 +199,7 @@ fn a_redraw_request_repaints_the_cached_frame_without_a_relayout() {
         &sender,
         &mut session,
     );
-    assert_eq!(session.stats.relayouts, 1);
+    assert_eq!(session.stats().relayouts, 1);
     assert_eq!(presenter.present_count(), 1);
 
     system.schedule(WindowEvent::RedrawRequested);
@@ -196,7 +212,8 @@ fn a_redraw_request_repaints_the_cached_frame_without_a_relayout() {
     );
 
     assert_eq!(
-        session.stats.relayouts, 1,
+        session.stats().relayouts,
+        1,
         "a RedrawRequested must not trigger another relayout"
     );
     assert_eq!(
@@ -230,7 +247,7 @@ fn a_redraw_request_before_the_first_frame_is_a_silent_noop() {
         0,
         "a RedrawRequested with nothing rendered yet must present nothing"
     );
-    assert!(session.last_frame.is_none());
+    assert!(!session.has_frame());
 }
 
 #[test]
@@ -262,7 +279,8 @@ fn a_relayout_arms_a_following_repaint() {
     );
 
     assert_eq!(
-        session.stats.relayouts, 1,
+        session.stats().relayouts,
+        1,
         "no new relayout without new content"
     );
     assert_eq!(
@@ -301,7 +319,7 @@ fn many_redraw_requests_in_one_pump_coalesce_to_one_repaint() {
         &mut session,
     );
 
-    assert_eq!(session.stats.relayouts, 1);
+    assert_eq!(session.stats().relayouts, 1);
     assert_eq!(
         presenter.present_count(),
         presents_after_load + 1,
@@ -327,13 +345,13 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
         MockTransport::new().with_response(target_url, response),
         attributes.initial_size(),
     );
-    session.base_url = Some(network::Url::parse("http://example.com/index.html").unwrap());
-    session.dom_tree = Some(
-        html::parse("<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>").unwrap(),
+    load(
+        &mut session,
+        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
+        "http://example.com/index.html",
     );
-    session.dirty = true;
 
-    // First pump: renders document and populates session.links
+    // First pump: renders the document and collects its link areas
     pump_once(
         &mut system,
         &mut presenter,
@@ -343,10 +361,10 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
     )
     .unwrap();
 
-    assert!(!session.links.is_empty(), "link target must be collected");
+    assert!(session.has_links(), "link target must be collected");
 
     // Move pointer over the link and click
-    let navigations_before_click = session.stats.navigations;
+    let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
         position: window::PhysicalPosition::new(20.0, 20.0),
     });
@@ -402,11 +420,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     );
 
     assert_eq!(
-        session
-            .base_url
-            .as_ref()
-            .map(ToString::to_string)
-            .as_deref(),
+        session.base_url().map(ToString::to_string).as_deref(),
         Some("https://cdn.example/app/"),
         "the session keeps the `<base href>`, not the navigation URL"
     );
@@ -419,7 +433,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
         &mut session,
     )
     .unwrap();
-    let navigations_before_click = session.stats.navigations;
+    let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
         position: window::PhysicalPosition::new(20.0, 20.0),
     });
@@ -439,5 +453,35 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     assert_eq!(
         completed_navigation(&receiver, &session, navigations_before_click),
         expected
+    );
+}
+
+#[test]
+fn a_resize_before_any_document_counts_no_relayout() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let (sender, receiver) = mpsc::channel();
+    // The auto-seeded Resized arrives while the navigation is still in flight.
+    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+
+    pump(
+        &mut system,
+        &mut presenter,
+        &receiver,
+        &sender,
+        &mut session,
+    );
+
+    assert_eq!(
+        session.stats().relayouts,
+        0,
+        "nothing was presented, so `run_browser_until_first_frame` must keep waiting"
+    );
+    assert_eq!(presenter.present_count(), 0);
+    assert!(
+        !session.needs_relayout(),
+        "the dropped request is not retried"
     );
 }

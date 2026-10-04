@@ -4,13 +4,20 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::thread;
 
-use graphics::Framebuffer;
+use dom::DomTree;
+use graphics::{Framebuffer, ImageId};
 use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
 
-use super::session::LoopMessage;
 use crate::application::navigation;
 use crate::application::subresource::SubresourceRequest;
 use crate::error::AlloyError;
+
+/// What a background fetch produced, drained by the loop's own thread.
+pub enum LoopMessage {
+    Navigation(Result<(DomTree, Url), AlloyError>),
+    Stylesheet(Result<String, AlloyError>),
+    Image(ImageId, Result<Framebuffer, AlloyError>),
+}
 
 pub fn spawn_navigation<T, P>(
     url: Url,

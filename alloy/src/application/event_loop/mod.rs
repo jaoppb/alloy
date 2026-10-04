@@ -11,32 +11,31 @@
 //! once** per cycle. Ten resizes or fifty image arrivals queued between two
 //! pump cycles cost one relayout, not ten or fifty.
 
+mod frame;
 mod hit_test;
 mod pixel;
 mod session;
+mod stats;
 mod worker;
 
 #[cfg(test)]
 mod tests;
 
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
-    FrameView, PointerButton, Presenter, PumpStatus, WindowAttributes, WindowEvent, WindowSystem,
-    WindowTitle,
+    PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
+    WindowEvent, WindowSystem, WindowTitle,
 };
 
-use self::hit_test::hit_test;
-use self::pixel::frame_pixels;
-pub use self::session::LoopStats;
-use self::session::{CachedFrame, LoopMessage, Session};
-use self::worker::spawn_navigation;
+use self::session::Session;
+pub use self::stats::LoopStats;
+use self::worker::LoopMessage;
 use crate::application::browser_services::BrowserServices;
-use crate::application::pipeline::{RenderOptions, render_dom_with_links};
+use crate::application::pipeline::RenderOptions;
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
 
@@ -162,17 +161,12 @@ where
     D: SubresourceDiscoverer,
 {
     let (sender, receiver) = mpsc::channel();
-    spawn_navigation(
-        url.clone(),
-        Arc::clone(session.services.transport()),
-        Arc::clone(session.services.policy()),
-        sender.clone(),
-    );
+    session.navigate(url.clone(), &sender);
 
     loop {
         let (outcome, did_work) = pump_once(system, presenter, &receiver, &sender, session)?;
-        if outcome == PumpStatus::Exit || should_stop(&session.stats) {
-            return Ok(session.stats);
+        if outcome == PumpStatus::Exit || should_stop(&session.stats()) {
+            return Ok(session.stats());
         }
         if !did_work {
             thread::sleep(IDLE_POLL);
@@ -204,52 +198,15 @@ where
     P: RequestPolicy + 'static,
     D: SubresourceDiscoverer,
 {
-    let mut close_requested = false;
-    let mut latest_resize = None;
-    let mut saw_window_event = false;
-    let mut needs_repaint = false;
-    let mut clicked_pos = None;
-    let window_status = system.pump_events(&mut |event| {
-        saw_window_event = true;
-        match event {
-            WindowEvent::CloseRequested => close_requested = true,
-            WindowEvent::Resized(size) => latest_resize = Some(size),
-            WindowEvent::RedrawRequested => needs_repaint = true,
-            WindowEvent::PointerMoved { position } => session.pointer_pos = Some(position),
-            WindowEvent::PointerButton {
-                button: PointerButton::Left,
-                pressed: true,
-            } => {
-                if let Some(pos) = session.pointer_pos {
-                    clicked_pos = Some(pos);
-                }
-            }
-            _ => {}
-        }
-    })?;
+    let mut events = PumpEvents::starting_at(session.pointer_position());
+    let window_status = system.pump_events(&mut |event| events.observe(event))?;
+    session.track_pointer(events.pointer_position);
 
-    if let Some(size) = latest_resize {
-        session.viewport = size;
-        session.dirty = true;
+    if let Some(viewport) = events.latest_resize {
+        session.resize(viewport);
     }
-
-    if let Some(pos) = clicked_pos
-        && let Some(href) = hit_test(&session.links, pos)
-        && let Some(base) = session.base_url.as_ref()
-    {
-        if href.starts_with('#') {
-            tracing::info!(anchor = href, "in-page anchor clicked (no-op in v0.5)");
-        } else if let Ok(target_url) = base.join(href) {
-            tracing::info!(url = %target_url, "link clicked, navigating");
-            spawn_navigation(
-                target_url,
-                Arc::clone(session.services.transport()),
-                Arc::clone(session.services.policy()),
-                sender.clone(),
-            );
-        } else {
-            tracing::warn!(href, "failed to resolve link target against base URL");
-        }
+    if let Some(position) = events.clicked_at {
+        session.follow_link_at(position, sender);
     }
 
     let mut saw_message = false;
@@ -258,83 +215,63 @@ where
         session.apply(message, sender);
     }
 
-    let relaid_out = session.dirty;
-    if session.dirty {
-        relayout_and_present(presenter, session)?;
-        session.record_relayout();
-        session.dirty = false;
+    let relaid_out = session.needs_relayout();
+    if relaid_out {
+        session.relayout(presenter)?;
         // Re-arm the platform redraw: on Wayland the present just made can be
         // dropped by a not-yet-configured surface, and the RedrawRequested
         // this schedules re-blits the cached frame once it is live.
         system.request_redraw();
     }
-    if needs_repaint && !relaid_out {
-        repaint(presenter, session)?;
+    if events.needs_repaint && !relaid_out {
+        session.repaint(presenter)?;
     }
 
-    let did_work = saw_window_event || saw_message;
+    let did_work = events.saw_window_event || saw_message;
+    Ok((events.status(window_status), did_work))
+}
 
-    if close_requested || window_status == PumpStatus::Exit {
-        return Ok((PumpStatus::Exit, did_work));
+/// What one `pump_events` drain observed, folded so `pump_once` decides once
+/// per cycle: only the *last* resize counts, any number of redraw requests
+/// cost one repaint, and a click lands wherever the pointer was at that
+/// moment in the batch.
+#[derive(Default)]
+struct PumpEvents {
+    saw_window_event: bool,
+    close_requested: bool,
+    latest_resize: Option<SurfaceSize>,
+    needs_repaint: bool,
+    pointer_position: Option<PhysicalPosition>,
+    clicked_at: Option<PhysicalPosition>,
+}
+
+impl PumpEvents {
+    fn starting_at(pointer_position: Option<PhysicalPosition>) -> Self {
+        Self {
+            pointer_position,
+            ..Self::default()
+        }
     }
-    Ok((PumpStatus::Continue, did_work))
-}
 
-/// Rebuilds the display list from the current document, viewport and
-/// subresources, presents it, and caches the pixels for a later cheap
-/// [`repaint`]. The only path that bumps `stats.relayouts` — the I4 coalescing
-/// proof rests on that staying true.
-fn relayout_and_present<R, F, T, P, D>(
-    presenter: &mut R,
-    session: &mut Session<F, T, P, D>,
-) -> Result<(), AlloyError>
-where
-    R: Presenter,
-    F: FontProvider + 'static,
-{
-    let Some(dom_tree) = session.dom_tree.as_ref() else {
-        return Ok(());
-    };
-    let viewport = session.viewport;
-    let graphics_size = graphics::SurfaceSize::new(viewport.width(), viewport.height())
-        .ok_or(AlloyError::InvalidDimensions)?;
-    let (framebuffer, links) = render_dom_with_links(
-        dom_tree,
-        session.extra_sheets.clone(),
-        &session.images,
-        graphics_size,
-        Arc::clone(session.services.font_provider()),
-    )?;
-    session.links = links;
-    let cached = CachedFrame {
-        width: viewport.width(),
-        height: viewport.height(),
-        pixels: frame_pixels(&framebuffer),
-    };
-    let view = FrameView::new(cached.width, cached.height, &cached.pixels)
-        .ok_or(AlloyError::InvalidDimensions)?;
-    presenter.present(view)?;
-    session.last_frame = Some(cached);
-    Ok(())
-}
+    fn observe(&mut self, event: WindowEvent) {
+        self.saw_window_event = true;
+        match event {
+            WindowEvent::CloseRequested => self.close_requested = true,
+            WindowEvent::Resized(viewport) => self.latest_resize = Some(viewport),
+            WindowEvent::RedrawRequested => self.needs_repaint = true,
+            WindowEvent::PointerMoved { position } => self.pointer_position = Some(position),
+            WindowEvent::PointerButton {
+                button: PointerButton::Left,
+                pressed: true,
+            } => self.clicked_at = self.pointer_position.or(self.clicked_at),
+            _ => {}
+        }
+    }
 
-/// Re-blits the frame [`relayout_and_present`] last produced, with no pipeline
-/// work and without touching `stats.relayouts`. A no-op before the first
-/// frame. Serves `RedrawRequested`: a compositor expose/occlusion, or the
-/// redraw winit re-arms once a Wayland surface that dropped the first present
-/// is finally configured.
-fn repaint<R, F, T, P, D>(
-    presenter: &mut R,
-    session: &Session<F, T, P, D>,
-) -> Result<(), AlloyError>
-where
-    R: Presenter,
-{
-    let Some(frame) = session.last_frame.as_ref() else {
-        return Ok(());
-    };
-    let view = FrameView::new(frame.width, frame.height, &frame.pixels)
-        .ok_or(AlloyError::InvalidDimensions)?;
-    presenter.present(view)?;
-    Ok(())
+    fn status(&self, window_status: PumpStatus) -> PumpStatus {
+        if self.close_requested || window_status == PumpStatus::Exit {
+            return PumpStatus::Exit;
+        }
+        PumpStatus::Continue
+    }
 }
