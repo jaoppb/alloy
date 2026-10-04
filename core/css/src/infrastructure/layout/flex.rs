@@ -46,29 +46,30 @@ use crate::domain::layout_box_tree::EdgeSizes;
 use crate::domain::styled_tree::StyledNode;
 use crate::infrastructure::layout::block::layout_box;
 use crate::infrastructure::layout::box_model::{self, BoxMetrics};
-use crate::infrastructure::layout::context::{BlockInput, BlockResult, ContentFlow, LayoutContext};
+use crate::infrastructure::layout::context::{
+    BlockInput, BlockResult, ContainingBlock, ContentFlow, LayoutContext,
+};
 use crate::infrastructure::layout::fragment::Fragments;
 
-/// Lays a `display: flex` container's in-flow children out inside a content
-/// box `content_width` wide.
+/// Lays a `display: flex` container's in-flow children out inside its content
+/// box `inner` — also the containing block every item resolves percentages
+/// against.
 pub fn layout<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node: &StyledNode,
-    content_width: Au,
+    inner: ContainingBlock,
     font_size: Au,
     input: BlockInput,
 ) -> Result<ContentFlow, CssError> {
     let style = node.style();
     let flex = style.flex();
     let axis = Axis::new(flex.direction());
-    let container_metrics = box_model::resolve(style, font_size, input.containing_width())?;
-    let (main_available, cross_available) =
-        container_axes(axis, content_width, container_metrics, input);
+    let (main_available, cross_available) = container_axes(axis, inner);
 
     let flex_ctx = FlexContext {
         context,
         font_size,
-        content_width,
+        inner,
         input,
         axis,
         justify: flex.justify_content(),
@@ -126,22 +127,16 @@ pub fn layout<M: TextMeasurer>(
 
 /// The container's own main-axis and cross-axis available sizes: the main
 /// axis of a `row` container and the cross axis of a `column` one are always
-/// the definite `content_width` this engine already resolved; the other axis
+/// the definite content width this engine already resolved; the other axis
 /// is definite only when a height was declared or forced (a flex item being
-/// stretched by an ancestor flex container).
-fn container_axes(
-    axis: Axis,
-    content_width: Au,
-    container_metrics: BoxMetrics,
-    input: BlockInput,
-) -> (Option<Au>, Option<Au>) {
-    let height = input
-        .forced_content_height()
-        .or_else(|| container_metrics.height());
+/// stretched by an ancestor flex container) — exactly the containing-block
+/// height `block::layout_box` hands its content.
+const fn container_axes(axis: Axis, inner: ContainingBlock) -> (Option<Au>, Option<Au>) {
+    let width = Some(inner.width());
     if axis.is_row() {
-        (Some(content_width), height)
+        (width, inner.height())
     } else {
-        (height, Some(content_width))
+        (inner.height(), width)
     }
 }
 
@@ -239,7 +234,7 @@ impl Axis {
 struct FlexContext<'tree, M> {
     context: &'tree LayoutContext<'tree, M>,
     font_size: Au,
-    content_width: Au,
+    inner: ContainingBlock,
     input: BlockInput,
     axis: Axis,
     justify: JustifyContent,
@@ -285,7 +280,7 @@ fn resolve_item<M: TextMeasurer>(
     let styled = flex_ctx.context.node(id)?;
     let style = styled.style();
     let font_size = box_model::font_size_of(style, flex_ctx.font_size);
-    let metrics = box_model::resolve(style, font_size, flex_ctx.content_width)?;
+    let metrics = box_model::resolve(style, font_size, flex_ctx.inner.width())?;
     let basis = hypothetical_main_size(
         style,
         metrics,
@@ -436,9 +431,7 @@ fn layout_line_pass_a<M: TextMeasurer>(
     let mut main_extent = Au::ZERO;
     for (item, main_size, main_origin, border_main) in combined {
         let child_input = flex_ctx.axis.force_main(
-            flex_ctx
-                .input
-                .nested(flex_ctx.content_width, flex_ctx.font_size),
+            flex_ctx.input.nested(flex_ctx.inner, flex_ctx.font_size),
             main_size,
         );
         let result = layout_box(flex_ctx.context, item.id, child_input)?;
@@ -458,7 +451,7 @@ fn layout_line_pass_a<M: TextMeasurer>(
         cross_size: if flex_ctx.axis.is_row() {
             cross_size
         } else {
-            flex_ctx.content_width
+            flex_ctx.inner.width()
         },
         main_extent,
     })
@@ -703,7 +696,7 @@ fn place_line<M: TextMeasurer>(
                 .larger(Au::ZERO);
             let child_input = flex_ctx
                 .input
-                .nested(flex_ctx.content_width, flex_ctx.font_size)
+                .nested(flex_ctx.inner, flex_ctx.font_size)
                 .with_forced_content_width(entry.main_size)
                 .with_forced_content_height(target);
             (

@@ -244,7 +244,7 @@ impl StyledTreeHandle {
                 .overrides
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
-            guard.get(&node_id.index()).copied()
+            guard.get(&node_id.index()).cloned()
         };
         if let Some(existing) = from_overrides {
             return Ok(existing);
@@ -253,7 +253,7 @@ impl StyledTreeHandle {
             .base
             .node(node_id)
             .ok_or_else(|| css_error("current_style", "styled node not found"))?;
-        Ok(*styled.style())
+        Ok(styled.style().clone())
     }
 
     fn color(&self, node_index: i64) -> Result<String, Box<EvalAltResult>> {
@@ -442,10 +442,10 @@ impl ScriptCascadeResolver {
         let recomputed = StyledTree::recompute_in_document_order(dom, |node_ref, parent_style| {
             let index = node_ref.id().index();
             if let Some(override_style) = overrides_map.get(&index) {
-                return *override_style;
+                return override_style.clone();
             }
             if let Some(styled_node) = base_tree.node(node_ref.id()) {
-                return *styled_node.style();
+                return styled_node.style().clone();
             }
             if let Some(parent) = parent_style {
                 return ComputedStyle::inheriting_from(parent);

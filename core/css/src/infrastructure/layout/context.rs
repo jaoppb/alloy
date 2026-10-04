@@ -3,13 +3,17 @@
 //! decided for it) and [`BlockResult`] / [`ContentFlow`] (what it answers).
 //!
 //! Grouping the inputs is not decoration: `layout_box` needs a containing
-//! width, an inherited font size, a recursion depth and — for a flex item — a
+//! block, an inherited font size, a recursion depth and — for a flex item — a
 //! forced main size, and four positional arguments of the same type are four
 //! chances to swap two of them.
+
+use core::cell::RefCell;
+use std::collections::BTreeMap;
 
 use graphics::Au;
 
 use crate::application::ports::TextMeasurer;
+use crate::domain::dom_snapshot::SnapshotId;
 use crate::domain::error::{CssError, CssStage};
 use crate::domain::layout_box_tree::BoxEdges;
 use crate::domain::styled_tree::{StyledNode, StyledTree};
@@ -25,22 +29,65 @@ use crate::infrastructure::layout::margin_collapse::{CollapsedMargin, MarginFlow
 pub const MAX_LAYOUT_DEPTH: usize = 256;
 
 /// Everything a formatting context may read: the tree it is laying out and the
-/// text measurer behind the port.
+/// text measurer behind the port — plus the one memo layout keeps, the
+/// shrink-to-fit widths already measured (see `block::layout_inline_block`).
 pub struct LayoutContext<'tree, M> {
     styled: &'tree StyledTree,
     measurer: &'tree M,
+    fits: RefCell<BTreeMap<SnapshotId, FittedWidth>>,
+}
+
+/// A shrink-to-fit measurement: the content width a box was offered and the
+/// width its contents turned out to need.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FittedWidth {
+    available: Au,
+    fitted: Au,
+}
+
+impl FittedWidth {
+    pub const fn new(available: Au, fitted: Au) -> Self {
+        Self { available, fitted }
+    }
+
+    /// The fitted width still holds for an offer of `available`: anything from
+    /// the fitted width up to the width measured against. Greedy line breaking
+    /// at any limit in that range produces the very same lines, because none of
+    /// them was wider than the fitted width.
+    fn holds_for(self, available: Au) -> bool {
+        self.fitted <= available && available <= self.available
+    }
 }
 
 impl<'tree, M: TextMeasurer> LayoutContext<'tree, M> {
     pub const fn new(styled: &'tree StyledTree, measurer: &'tree M) -> Self {
-        Self { styled, measurer }
+        Self {
+            styled,
+            measurer,
+            fits: RefCell::new(BTreeMap::new()),
+        }
+    }
+
+    /// The shrink-to-fit width remembered for `node`, when it still holds for
+    /// an offer of `available`.
+    pub fn remembered_fit(&self, node: SnapshotId, available: Au) -> Option<Au> {
+        let fits = self.fits.try_borrow().ok()?;
+        let remembered = fits.get(&node)?;
+        remembered.holds_for(available).then_some(remembered.fitted)
+    }
+
+    /// Remembers the shrink-to-fit width just measured for `node`. A memo that
+    /// is momentarily borrowed is simply not updated — it is an optimisation,
+    /// never a source of truth.
+    pub fn remember_fit(&self, node: SnapshotId, fit: FittedWidth) {
+        let Ok(mut fits) = self.fits.try_borrow_mut() else {
+            return;
+        };
+        fits.insert(node, fit);
     }
 
     /// The styled node behind `id`, or the typed error for a dangling id.
-    pub fn node(
-        &self,
-        id: crate::domain::dom_snapshot::SnapshotId,
-    ) -> Result<&'tree StyledNode, CssError> {
+    pub fn node(&self, id: SnapshotId) -> Result<&'tree StyledNode, CssError> {
         self.styled
             .node(id)
             .ok_or_else(|| CssError::missing_computed_style(CssStage::Layout, id))
@@ -55,10 +102,34 @@ impl<'tree, M: TextMeasurer> LayoutContext<'tree, M> {
     }
 }
 
+/// The containing block a box is laid out against (CSS 2.1 §10.1): its width
+/// is always definite in this engine; its height only when the parent's own
+/// height does not depend on its content (a declared or forced height, or the
+/// viewport for the root).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContainingBlock {
+    width: Au,
+    height: Option<Au>,
+}
+
+impl ContainingBlock {
+    pub const fn new(width: Au, height: Option<Au>) -> Self {
+        Self { width, height }
+    }
+
+    pub const fn width(self) -> Au {
+        self.width
+    }
+
+    pub const fn height(self) -> Option<Au> {
+        self.height
+    }
+}
+
 /// What a caller decided before asking for a box.
 #[derive(Clone, Copy, Debug)]
 pub struct BlockInput {
-    containing_width: Au,
+    containing: ContainingBlock,
     parent_font_size: Au,
     depth: usize,
     forced_content_height: Option<Au>,
@@ -66,9 +137,9 @@ pub struct BlockInput {
 }
 
 impl BlockInput {
-    pub const fn new(containing_width: Au, parent_font_size: Au) -> Self {
+    pub const fn new(containing: ContainingBlock, parent_font_size: Au) -> Self {
         Self {
-            containing_width,
+            containing,
             parent_font_size,
             depth: 0,
             forced_content_height: None,
@@ -77,13 +148,23 @@ impl BlockInput {
     }
 
     /// The same input one level deeper, for a child of the box being laid out.
-    pub const fn nested(self, containing_width: Au, parent_font_size: Au) -> Self {
+    pub const fn nested(self, containing: ContainingBlock, parent_font_size: Au) -> Self {
         Self {
-            containing_width,
+            containing,
             parent_font_size,
             depth: self.depth.saturating_add(1),
             forced_content_height: None,
             forced_content_width: None,
+        }
+    }
+
+    /// The same input with a different inherited font size — what an inline
+    /// formatting context does as it descends through inline boxes that set
+    /// their own `font-size` before reaching an atomic inline (CSS 2.1 §9.2.4).
+    pub const fn with_parent_font_size(self, parent_font_size: Au) -> Self {
+        Self {
+            parent_font_size,
+            ..self
         }
     }
 
@@ -110,7 +191,14 @@ impl BlockInput {
     }
 
     pub const fn containing_width(self) -> Au {
-        self.containing_width
+        self.containing.width
+    }
+
+    /// The containing block's height, or `None` when it is not definite — in
+    /// which case a percentage measured against it behaves as `auto`
+    /// (CSS 2.1 §10.5, §9.3.2).
+    pub const fn containing_height(self) -> Option<Au> {
+        self.containing.height
     }
 
     pub const fn parent_font_size(self) -> Au {
@@ -224,6 +312,31 @@ impl BlockResult {
 
     pub fn into_fragments(self) -> Fragments {
         self.fragments
+    }
+
+    /// The content width this box needs to hold what was laid out inside it,
+    /// never more than the content width it was given — the "preferred width"
+    /// half of CSS 2.1 §10.3.9's shrink-to-fit, measured from a layout at the
+    /// available width instead of from a separate intrinsic-sizing pass.
+    pub fn fitted_content_width(&self) -> Au {
+        let border = self.edges.border();
+        let padding = self.edges.padding();
+        let inner = border.horizontal().saturating_add(padding.horizontal());
+        let given = self.size.width().saturating_sub(inner);
+        self.fragments.descendant_span().smaller(given)
+    }
+
+    /// Returns a new result with every fragment translated by `(dx, dy)`.
+    ///
+    /// Used by [`crate::infrastructure::layout::block`] to apply the visual
+    /// offset of `position: relative` after normal-flow placement. The box
+    /// still occupies its normal-flow space (size and margins are unchanged);
+    /// only the paint position shifts (CSS Positioned Layout L3 §4.3).
+    pub fn with_relative_offset(self, dx: Au, dy: Au) -> Self {
+        Self {
+            fragments: self.fragments.translated(dx, dy),
+            ..self
+        }
     }
 }
 
