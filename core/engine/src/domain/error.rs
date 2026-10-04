@@ -93,22 +93,12 @@ pub enum EngineError {
     /// the host process survives (PRD-003:79, mechanism of C-09).
     ScriptPanic { message: String },
 
-    /// A DOM operation invoked from a script failed for a reason other than a
-    /// missing capability — an invariant violation, a stale node id, a busy
-    /// tree. Carries the `operation` that was attempted and a `reason` string
-    /// mapped from the domain crate's own error (v0.2 F6/I1; keeps `Binding`
-    /// free to mean "bad native-binding name / arity").
-    #[deprecated(
-        since = "0.5.0",
-        note = "use EngineError::Subsystem { subsystem: SubsystemName::Dom, .. } instead (v0.5 Phase EE, PRD-002 §4.5)"
-    )]
-    Dom { operation: String, reason: String },
-
     /// A subsystem operation invoked from a script failed for a reason other
     /// than a missing capability — an invariant violation, a stale handle, a
-    /// busy resource. Generalizes [`Self::Dom`] to every subsystem a muscle
-    /// script binds into, so a new subsystem never needs its own variant (v0.5
-    /// Phase EE, PRD-002 §4.5). Carries the `subsystem` the failure came from,
+    /// busy resource. Covers every subsystem a muscle script binds into, so a
+    /// new subsystem never needs its own variant (v0.5 Phase EE, PRD-002 §4.5);
+    /// it replaced the v0.2 DOM-only `Dom` variant, removed at schema 4
+    /// (PRD-002 §4.6). Carries the `subsystem` the failure came from,
     /// the `operation` that was attempted, and a `reason` mapped from the
     /// domain crate's own error.
     Subsystem {
@@ -171,9 +161,8 @@ impl EngineError {
         }
     }
 
-    /// Delegates to [`Self::subsystem`] with [`SubsystemName::Dom`] — kept so
-    /// every existing caller (the DOM bindings) gets the generalized variant
-    /// with no source change (v0.5 Phase EE).
+    /// Shorthand for [`Self::subsystem`] with [`SubsystemName::Dom`] — the
+    /// subsystem the DOM bindings raise from most often.
     #[must_use]
     pub fn dom(operation: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::subsystem(SubsystemName::Dom, operation, reason)
@@ -224,11 +213,6 @@ impl fmt::Display for EngineError {
                 write!(formatter, ": {message}")
             }
             Self::ScriptPanic { message } => write!(formatter, "script panic (trapped): {message}"),
-            #[allow(deprecated)]
-            // the deprecated variant is still constructible; exhaustive match must still name it
-            Self::Dom { operation, reason } => {
-                write!(formatter, "dom operation `{operation}` failed: {reason}")
-            }
             Self::Subsystem {
                 subsystem,
                 operation,
