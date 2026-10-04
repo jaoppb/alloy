@@ -5,21 +5,17 @@ use graphics::Framebuffer;
 /// Straight-alpha `RGBA8` (`core/graphics`'s wire format) to premultiplied
 /// `0xAARRGGBB` (`window::FrameView`'s — see its own doc comment).
 pub fn frame_pixels(framebuffer: &Framebuffer) -> Vec<u32> {
-    let mut pixels = Vec::new();
-    for chunk in framebuffer.as_rgba8().chunks_exact(4) {
-        let (red, green, blue, alpha) = match chunk {
-            [red, green, blue, alpha] => (*red, *green, *blue, *alpha),
-            _ => continue,
-        };
-        let packed = pack_argb(
-            alpha,
-            premultiply_channel(red, alpha),
-            premultiply_channel(green, alpha),
-            premultiply_channel(blue, alpha),
-        );
-        pixels.push(packed);
-    }
-    pixels
+    let (pixels, _) = framebuffer.as_rgba8().as_chunks::<4>();
+    pixels.iter().copied().map(premultiplied_argb).collect()
+}
+
+fn premultiplied_argb([red, green, blue, alpha]: [u8; 4]) -> u32 {
+    pack_argb(
+        alpha,
+        premultiply_channel(red, alpha),
+        premultiply_channel(green, alpha),
+        premultiply_channel(blue, alpha),
+    )
 }
 
 fn premultiply_channel(channel: u8, alpha: u8) -> u8 {
