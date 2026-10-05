@@ -19,12 +19,12 @@ pre-commit:
 
     markdown-fmt:
       glob: "*.md"
-      run: pnpm prettier --write {staged_files}
+      run: rumdl fmt {staged_files}
       stage_fixed: true
 
     markdown-lint:
       glob: "*.md"
-      run: pnpm markdownlint-cli2 {staged_files}
+      run: rumdl check {staged_files}
 
 pre-push:
   parallel: false

@@ -20,7 +20,7 @@ cycles. This document covers the human-facing workflow around it.
 ```bash
 git clone https://github.com/jaoppb/alloy.git
 cd alloy
-just setup   # pnpm deps, rust components, cargo-deny, cargo-llvm-cov, arch-lint, git hooks
+just setup   # needs mise: installs every tool in mise.toml, rust components, git hooks
 ```
 
 `just` (no arguments) lists every available recipe. The two you'll use constantly:
@@ -54,8 +54,7 @@ just run --script <path>        # run the alloy binary against a .rhai script
     `no-engine` dependency check. Git hooks (via [Lefthook](https://lefthook.dev/)) run a subset of this automatically
     on `pre-commit`/`pre-push`, but a full `just gate` catches everything before you open the PR.
 
-7. **Format Markdown.** Any `.md` file you touch should pass `pnpm format:md` (tabs, tab width 4, print width 120,
-   `proseWrap: always`) — the pre-commit hook rewrites it for you if you forget, but running it yourself avoids an extra
+7. **Format Markdown.** Any `.md` file you touch should pass `rumdl fmt` (config in `.rumdl.toml`) — the pre-commit hook rewrites it for you if you forget, but running it yourself avoids an extra
    commit.
 
 ## Commit Messages

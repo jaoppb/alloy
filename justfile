@@ -13,7 +13,6 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 cargo := env_var_or_default("CARGO", "cargo")
-pnpm  := env_var_or_default("PNPM", "pnpm")
 
 # Clippy invocation used everywhere (matches lefthook.yml / CI / package.json).
 clippy_flags := "--workspace --all-targets --all-features -- -D warnings"
@@ -62,17 +61,17 @@ conformance:
 # Auto-format Rust + Markdown
 fmt:
     {{cargo}} fmt --all
-    {{pnpm}} format:md
+    rumdl fmt .
 
 # Verify formatting without writing (Rust + Markdown)
 fmt-check:
     {{cargo}} fmt --all --check
-    {{pnpm}} format:check
+    rumdl fmt --check .
 
-# Clippy (warnings = errors) + markdownlint
+# Clippy (warnings = errors) + rumdl
 lint:
     {{cargo}} clippy {{clippy_flags}}
-    {{pnpm}} lint:md
+    rumdl check .
 
 # Apply clippy + rustfmt autofixes to the working tree
 fix:
@@ -91,7 +90,6 @@ ci: gate
 # unsafe-by-threat-surface audit (ADR-0018). Blocking since v0.5 Phase P —
 # see ci/unsafe_audit.sh for the forbid-only sweep + direct-dependency scan.
 unsafe-audit:
-    @command -v cargo-geiger >/dev/null || {{cargo}} install cargo-geiger --locked
     ./ci/unsafe_audit.sh
 
 # Hook-dispatch overhead vs. the committed baseline (PRD-001 N-01, <10us).
@@ -101,7 +99,7 @@ hook-benchmark:
 # ADR-0018 row-1 decoders under cargo-fuzz, 10 min/target (requires nightly
 # and cargo-fuzz — not part of `just gate`, CI-only otherwise).
 fuzz target="":
-    @command -v cargo-fuzz >/dev/null || {{cargo}} install cargo-fuzz --locked
+    @command -v cargo-fuzz >/dev/null || { echo "cargo-fuzz not found — run: just setup"; exit 1; }
     {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do cargo +nightly fuzz run $t -- -max_total_time=600; done" } else { "cargo +nightly fuzz run " + target + " -- -max_total_time=600" } }}
 
 # Supply-chain audit: licenses, advisories, bans, sources
@@ -192,23 +190,17 @@ doc:
 update:
     {{cargo}} update
 
-# Install dev tooling: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, arch-lint, git hooks
+# Install dev tooling: every tool pinned in mise.toml, rust components, git hooks (requires mise)
 setup:
-    {{pnpm}} install --frozen-lockfile
+    mise install
     rustup component add rustfmt clippy llvm-tools-preview
-    @command -v cargo-deny     >/dev/null || {{cargo}} install --locked cargo-deny
-    @command -v cargo-llvm-cov >/dev/null || {{cargo}} install --locked cargo-llvm-cov
-    @command -v arch-lint      >/dev/null || {{cargo}} install --locked arch-lint-cli --version '^0.6'
-    {{pnpm}} exec lefthook install
+    lefthook install
 
 # (Re)install the lefthook git hooks
 hooks:
-    {{pnpm}} exec lefthook install
+    lefthook install
 
 # Remove cargo build artifacts
 clean:
     {{cargo}} clean
 
-# clean + drop node_modules
-distclean: clean
-    rm -rf node_modules

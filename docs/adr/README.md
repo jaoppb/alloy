@@ -28,6 +28,7 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0022](0022-platform-crate-isolates-os-specifics.md)                   | A `platform` Crate Isolates Host-OS Specifics            | Accepted | 2026-10-03 |
 | [ADR-0023](0023-recoverable-diagnostics-are-port-data.md)                  | Recoverable Diagnostics Are Port Data, Not Errors        | Accepted | 2026-10-05 |
 | [ADR-0024](0024-dom-depends-on-the-html-vocabulary.md)                     | `dom` Depends on the `html` Vocabulary                   | Accepted | 2026-10-05 |
+| [ADR-0025](0025-mise-as-the-source-of-truth-for-tool-versions.md)          | mise Is the Source of Truth for Tool Versions            | Accepted | 2026-10-05 |
 
 ---
 

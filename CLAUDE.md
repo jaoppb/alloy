@@ -93,20 +93,20 @@ delivered crate now demonstrates; `docs/adr/` + `docs/requirements/` remain the 
 
 ## Commands
 
-Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `justfile` wraps both — `just` lists every
+Tooling is split: Cargo for Rust, `rumdl` for Markdown quality gates, `mise` (`mise.toml`) pinning every tool version except Rust (`rust-toolchain.toml`, ADR-0025). A root `justfile` wraps them — `just` lists every
 recipe.
 
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection
-just setup                                   # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, arch-lint, git hooks
+just setup                                   # one-time: `mise install` (all tools in mise.toml), rust components, git hooks
 just test engine "-- name"                   # scoped test run
 just run --script scripts/hello.rhai         # run the alloy binary
 just deny | just coverage | just layering    # individual CI gates (`no-engine` still works as an alias for `layering`)
 just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy) — CI-only otherwise, `fuzz` needs nightly + cargo-fuzz
 
 # equivalent raw commands:
-pnpm check                                  # prettier check + markdownlint + cargo fmt --check + clippy
-cargo test --workspace                      # all tests (also `pnpm test`)
+rumdl check . && rumdl fmt --check .        # Markdown lint + format check (also in `just lint` / `just fmt-check`)
+cargo test --workspace                      # all tests
 cargo test -p dom --test tree_invariants     # one integration-test file
 cargo test -p engine mock_engine             # tests matching a name
 cargo check --workspace --all-targets
@@ -114,18 +114,17 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint`, prettier and
-markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
+Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint` and `rumdl`
+(auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
 Clippy warnings are errors — never leave one behind. The strict lint set lives in `[workspace.lints.clippy]` (root
 `Cargo.toml`) plus `clippy.toml`; `arch-lint.toml` adds the `tracing` / no-`unwrap` code-pattern rules. Before writing a
 new architectural or dependency-direction check, extend `arch-lint.toml` with a rule — a bespoke ad hoc script (a
 `cargo tree | grep`, a manual dependency scan) duplicates a mechanism that almost certainly already exists there.
 
-Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `setup-node`, `cache`, …) and `node-version` on
+Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `jdx/mise-action`, `cache`, …) on
 their current stable major/LTS — check before pinning a version, not after review flags a stale one.
 
-Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
-Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.
+Markdown formatting is enforced by **rumdl** (`.rumdl.toml`: print width 120, reflow). Run `rumdl fmt` after editing any `.md` file or the commit hook will rewrite it.
 
 ## Architecture
 

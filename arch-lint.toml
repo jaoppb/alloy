@@ -4,7 +4,6 @@
 [analyzer]
 exclude = [
     "**/target/**",
-    "**/node_modules/**",
     # The port conformance suite (ADR-0011 item 6) is assertion code by nature —
     # it is `pub` (not `#[cfg(test)]`) only so adapter `tests/` can import it, and
     # it `panic!`s / `.expect()`s on the first violation on purpose.

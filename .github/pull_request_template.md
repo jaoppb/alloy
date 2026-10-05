@@ -32,7 +32,7 @@ Closes #
       row in `docs/adr/README.md`, in this same PR.
 - [ ] If this changes a documented invariant (a PRD or ADR claim), I checked it still holds — or opened a tracked,
       explicit exception.
-- [ ] `.md` files I touched are formatted with `pnpm format:md`.
+- [ ] `.md` files I touched are formatted with `rumdl fmt`.
 
 ## Test Plan
 
