@@ -1,6 +1,7 @@
 //! HTML entity resolution for named, decimal, and hexadecimal character references.
 
 use crate::domain::diagnostic::ParseErrorCode;
+use crate::domain::entity::HtmlEntity;
 use crate::infrastructure::tokenizer::cursor::Cursor;
 
 /// Resolves an HTML character reference from the cursor stream.
@@ -111,19 +112,7 @@ pub fn resolve_entity(name: &str) -> Option<String> {
             .map(String::from);
     }
 
-    match name {
-        "amp" => Some("&".to_string()),
-        "lt" => Some("<".to_string()),
-        "gt" => Some(">".to_string()),
-        "quot" => Some("\"".to_string()),
-        "apos" => Some("'".to_string()),
-        "copy" => Some("©".to_string()),
-        "reg" => Some("®".to_string()),
-        "nbsp" => Some("\u{00A0}".to_string()),
-        "mdash" => Some("—".to_string()),
-        "ndash" => Some("–".to_string()),
-        _ => None,
-    }
+    HtmlEntity::from_name(name).map(|entity| entity.as_char().to_string())
 }
 
 #[cfg(test)]
@@ -135,6 +124,7 @@ mod tests {
     fn resolve_named_entities() {
         assert_eq!(resolve_entity("amp").as_deref(), Some("&"));
         assert_eq!(resolve_entity("copy").as_deref(), Some("©"));
+        assert_eq!(resolve_entity("hellip").as_deref(), Some("…"));
         assert_eq!(resolve_entity("unknown"), None);
     }
 

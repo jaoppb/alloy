@@ -1,30 +1,42 @@
 //! Value objects and first-class collections representing element attributes.
 
-use crate::domain::error::HtmlError;
+use crate::domain::error::InvalidAttributeName;
 use crate::domain::location::SourceLocation;
 use core::fmt;
 
-/// A normalized, validated attribute name.
+/// A validated attribute name: non-empty, with no control or whitespace characters and none of
+/// `" ' / = >`; lowercased on construction (ADR-0024).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AttributeName(String);
 
 impl AttributeName {
-    /// Create a validated attribute name.
-    pub fn new(raw_name: impl Into<String>, location: SourceLocation) -> Result<Self, HtmlError> {
-        let normalized = raw_name.into().to_ascii_lowercase();
-        if normalized.is_empty() {
-            return Err(HtmlError::invalid_attribute(
-                "attribute name cannot be empty",
-                location,
-            ));
+    /// Create a validated attribute name; `Err(InvalidAttributeName)` when `raw` breaks the rule.
+    pub fn new(raw: &str) -> Result<Self, InvalidAttributeName> {
+        let valid = !raw.is_empty() && !raw.chars().any(is_forbidden);
+        if !valid {
+            return Err(InvalidAttributeName::new(raw));
         }
-        Ok(Self(normalized))
+        Ok(Self(raw.to_ascii_lowercase()))
     }
 
-    /// Create an attribute name without location check (for trusted sources).
+    /// The `style` attribute — one element's own inline declaration block
+    /// (CSS Cascade L4 §6.4.3).
     #[must_use]
-    pub fn new_unchecked(name: impl Into<String>) -> Self {
-        Self(name.into().to_ascii_lowercase())
+    pub fn style() -> Self {
+        Self("style".to_owned())
+    }
+
+    /// The `class` attribute — a whitespace-separated set of names rather than one string
+    /// (HTML §3.2.6.7).
+    #[must_use]
+    pub fn class() -> Self {
+        Self("class".to_owned())
+    }
+
+    /// The `id` attribute a `#name` selector component is compared against.
+    #[must_use]
+    pub fn id() -> Self {
+        Self("id".to_owned())
     }
 
     /// Access attribute name as string slice.
@@ -44,6 +56,12 @@ impl PartialEq<str> for AttributeName {
     fn eq(&self, other: &str) -> bool {
         self.0.eq_ignore_ascii_case(other)
     }
+}
+
+const fn is_forbidden(character: char) -> bool {
+    character.is_ascii_control()
+        || character.is_whitespace()
+        || matches!(character, '"' | '\'' | '/' | '=' | '>')
 }
 
 /// An attribute value representation.
@@ -217,7 +235,7 @@ mod tests {
     #[test]
     fn attribute_creation_and_lookup() {
         let location = SourceLocation::initial();
-        let name = AttributeName::new("CLASS", location).expect("valid name");
+        let name = AttributeName::new("CLASS").expect("valid name");
         let value = AttributeValue::new("btn primary");
         let entry = AttributeEntry::new(name, value, location);
 
@@ -235,7 +253,7 @@ mod tests {
         let at = SourceLocation::initial();
         let entry = |value: &str| {
             AttributeEntry::new(
-                AttributeName::new_unchecked("id"),
+                AttributeName::new("id").unwrap(),
                 AttributeValue::new(value),
                 at,
             )
@@ -251,7 +269,7 @@ mod tests {
 
     #[test]
     fn entry_equality_ignores_location() {
-        let name = || AttributeName::new_unchecked("id");
+        let name = || AttributeName::new("id").unwrap();
         let one = AttributeEntry::new(name(), AttributeValue::new("a"), SourceLocation::initial());
         let other = AttributeEntry::new(
             name(),
@@ -263,9 +281,28 @@ mod tests {
     }
 
     #[test]
-    fn empty_attribute_name_errors() {
-        let location = SourceLocation::initial();
-        let error = AttributeName::new("", location).unwrap_err();
-        assert!(matches!(error, HtmlError::InvalidAttribute { .. }));
+    fn an_empty_name_is_rejected() {
+        assert_eq!(AttributeName::new(""), Err(InvalidAttributeName::new("")));
+    }
+
+    #[test]
+    fn forbidden_characters_are_rejected() {
+        for raw in [
+            "a b", "a\tb", "a\nb", "a\u{0}b", "a\"b", "a'b", "a/b", "a=b", "a>b",
+        ] {
+            assert_eq!(
+                AttributeName::new(raw),
+                Err(InvalidAttributeName::new(raw)),
+                "{raw:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_valid_name_is_lowercased_and_the_shortcuts_match() {
+        assert_eq!(AttributeName::new("DATA-Id").unwrap().as_str(), "data-id");
+        assert_eq!(AttributeName::new("STYLE"), Ok(AttributeName::style()));
+        assert_eq!(AttributeName::new("class"), Ok(AttributeName::class()));
+        assert_eq!(AttributeName::new("Id"), Ok(AttributeName::id()));
     }
 }

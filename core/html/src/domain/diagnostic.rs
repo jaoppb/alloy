@@ -84,6 +84,9 @@ parse_error_codes! {
     MissingDoctypeName => "missing-doctype-name",
     /// A tag name `TagName` rejects (not `[A-Za-z][A-Za-z0-9-]*`); the tag is dropped.
     InvalidTagName => "invalid-tag-name",
+    /// An attribute name that breaks the strict `AttributeName` rule; the attribute is dropped
+    /// (ADR-0024).
+    InvalidAttributeName => "invalid-attribute-name",
     /// An end tag with no matching open element.
     StrayEndTag => "stray-end-tag",
     /// An end tag closing over an open element that is not spec-implied.
@@ -98,8 +101,6 @@ parse_error_codes! {
     UnexpectedHeadStartTag => "unexpected-head-start-tag",
     /// A doctype that forces quirks mode (missing or non-`html` name).
     QuirksModeDoctype => "quirks-mode-doctype",
-    /// An attribute the DOM adapter refuses; it is not attached (goes away with issue #28).
-    UnsupportedAttributeName => "unsupported-attribute-name",
 }
 
 impl fmt::Display for ParseErrorCode {

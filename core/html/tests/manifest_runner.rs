@@ -82,7 +82,7 @@ fn manifest_and_syntax_registry_match_in_both_directions() {
 }
 
 fn make_tag_probe(tag: &str) -> String {
-    if html::is_void_tag(tag) {
+    if html::TagName::new(tag).unwrap().is_void() {
         return format!("<{tag}>");
     }
     format!("<{tag}>test</{tag}>")
@@ -313,7 +313,7 @@ const PARSE_ERROR_PROBES: &[Probe] = &[
         "<div a\"b=1>x</div>",
         &[
             (ParseErrorCode::UnexpectedCharacterInAttributeName, 1, 7),
-            (ParseErrorCode::UnsupportedAttributeName, 1, 6),
+            (ParseErrorCode::InvalidAttributeName, 1, 6),
         ],
     ),
     (
@@ -324,7 +324,7 @@ const PARSE_ERROR_PROBES: &[Probe] = &[
                 1,
                 6,
             ),
-            (ParseErrorCode::UnsupportedAttributeName, 1, 6),
+            (ParseErrorCode::InvalidAttributeName, 1, 6),
         ],
     ),
     (
@@ -444,13 +444,6 @@ const PARSE_ERROR_PROBES: &[Probe] = &[
     (
         "<!DOCTYPE foo><p>x</p>",
         &[(ParseErrorCode::QuirksModeDoctype, 1, 1)],
-    ),
-    (
-        "<div a\"b=1>x</div>",
-        &[
-            (ParseErrorCode::UnexpectedCharacterInAttributeName, 1, 7),
-            (ParseErrorCode::UnsupportedAttributeName, 1, 6),
-        ],
     ),
 ];
 

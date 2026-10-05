@@ -29,13 +29,11 @@ pub use domain::attribute::{
     AttributeEntry, AttributeList, AttributeName, AttributeValue, DuplicateAttribute,
 };
 pub use domain::diagnostic::{Diagnostics, ParseDiagnostic, ParseErrorCode};
-pub use domain::error::HtmlError;
+pub use domain::entity::HtmlEntity;
+pub use domain::error::{HtmlError, InvalidAttributeName, InvalidTagName};
 pub use domain::handle::NodeHandle;
 pub use domain::location::SourceLocation;
-pub use domain::tag::{
-    TagName, closes_list_item, closes_paragraph, is_block_tag, is_heading_tag, is_rawtext_tag,
-    is_void_tag,
-};
+pub use domain::tag::TagName;
 pub use domain::text::Text;
 pub use domain::token::{DoctypeToken, TagToken, Token};
 #[cfg(feature = "dom")]

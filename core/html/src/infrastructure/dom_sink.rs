@@ -4,7 +4,7 @@
 
 use crate::application::ports::TreeSink;
 use crate::domain::attribute::{AttributeEntry, AttributeList};
-use crate::domain::diagnostic::{Diagnostics, ParseDiagnostic, ParseErrorCode};
+use crate::domain::diagnostic::{Diagnostics, ParseDiagnostic};
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
 use crate::domain::tag::TagName;
@@ -85,13 +85,7 @@ impl DomTreeSink {
         node: dom::NodeId,
         entry: &AttributeEntry,
     ) -> Result<(), HtmlError> {
-        let Ok(attr_name) = dom::AttributeName::new(entry.name().as_str()) else {
-            self.parse_error(ParseDiagnostic::new(
-                ParseErrorCode::UnsupportedAttributeName,
-                entry.location(),
-            ));
-            return Ok(());
-        };
+        let attr_name = dom::AttributeName::new(entry.name().as_str())?;
         let attr_val = dom::AttributeValue::new(entry.value().as_str());
         self.tree.set_attribute(node, attr_name, attr_val)?;
         Ok(())

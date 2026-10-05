@@ -35,13 +35,13 @@ fn check_element_creation_and_append(sink: &mut dyn TreeSink) {
     let root = sink.root_node();
     let mut attributes = AttributeList::new();
     let location = SourceLocation::initial();
-    let name = AttributeName::new("lang", location).expect("valid attribute name");
+    let name = AttributeName::new("lang").expect("valid attribute name");
     let value = AttributeValue::new("en");
     attributes
         .insert(AttributeEntry::new(name, value, location))
         .expect("unique attribute");
 
-    let tag = TagName::new("html", location).expect("valid tag name");
+    let tag = TagName::new("html").expect("valid tag name");
     let html_node = sink
         .create_element(tag, &attributes)
         .expect("element creation must succeed");
@@ -72,8 +72,7 @@ fn check_comment_creation_and_append(sink: &mut dyn TreeSink) {
 
 fn check_append_before_sibling(sink: &mut dyn TreeSink) {
     let root = sink.root_node();
-    let location = SourceLocation::initial();
-    let tag_div = TagName::new("div", location).expect("valid tag");
+    let tag_div = TagName::new("div").expect("valid tag");
     let empty_attrs = AttributeList::new();
     let first = sink
         .create_element(tag_div.clone(), &empty_attrs)
@@ -89,12 +88,12 @@ fn check_append_before_sibling(sink: &mut dyn TreeSink) {
 
 fn check_add_attributes_if_missing(sink: &mut dyn TreeSink) {
     let location = SourceLocation::initial();
-    let tag = TagName::new("div", location).expect("valid tag");
+    let tag = TagName::new("div").expect("valid tag");
     let empty_attrs = AttributeList::new();
     let node = sink.create_element(tag, &empty_attrs).expect("element");
 
     let mut new_attrs = AttributeList::new();
-    let name = AttributeName::new("id", location).expect("name");
+    let name = AttributeName::new("id").expect("name");
     new_attrs
         .insert(AttributeEntry::new(
             name,
@@ -108,19 +107,12 @@ fn check_add_attributes_if_missing(sink: &mut dyn TreeSink) {
 }
 
 fn check_remove_and_reparent(sink: &mut dyn TreeSink) {
-    let location = SourceLocation::initial();
     let empty_attrs = AttributeList::new();
     let parent_one = sink
-        .create_element(
-            TagName::new("div", location).expect("valid tag name"),
-            &empty_attrs,
-        )
+        .create_element(TagName::new("div").expect("valid tag name"), &empty_attrs)
         .expect("parent1");
     let parent_two = sink
-        .create_element(
-            TagName::new("div", location).expect("valid tag name"),
-            &empty_attrs,
-        )
+        .create_element(TagName::new("div").expect("valid tag name"), &empty_attrs)
         .expect("parent2");
     let child = sink
         .create_text(&Text::new("child text"))

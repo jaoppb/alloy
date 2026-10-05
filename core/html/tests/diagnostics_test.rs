@@ -22,14 +22,17 @@ fn parse_error_events(sink: &MockTreeSink) -> Vec<(ParseErrorCode, usize, usize)
 }
 
 #[test]
-fn a_malformed_attribute_name_yields_exactly_one_diagnostic_and_the_document_parses() {
+fn a_malformed_attribute_name_is_reported_twice_and_the_document_parses() {
     let source = "<p>before</p>\n<div a\"b=1>after</div>\n";
     let mut sink = MockTreeSink::new();
     parse_with_sink(source, &mut sink).expect("a malformed attribute must not abort");
 
     assert_eq!(
         parse_error_events(&sink),
-        [(ParseErrorCode::UnexpectedCharacterInAttributeName, 2, 7)]
+        [
+            (ParseErrorCode::UnexpectedCharacterInAttributeName, 2, 7),
+            (ParseErrorCode::InvalidAttributeName, 2, 6),
+        ]
     );
     let texts: Vec<_> = sink
         .events()
@@ -50,7 +53,7 @@ fn a_malformed_attribute_name_yields_exactly_one_diagnostic_and_the_document_par
 }
 
 #[test]
-fn the_dom_adapter_reports_what_it_refuses_instead_of_dropping_silently() {
+fn an_invalid_attribute_name_is_dropped_and_reported_instead_of_dropped_silently() {
     let outcome = parse("<div a\"b=1 id=kept>x</div>").unwrap();
     let codes: Vec<_> = outcome
         .diagnostics()
@@ -61,7 +64,7 @@ fn the_dom_adapter_reports_what_it_refuses_instead_of_dropping_silently() {
         codes,
         [
             ParseErrorCode::UnexpectedCharacterInAttributeName,
-            ParseErrorCode::UnsupportedAttributeName
+            ParseErrorCode::InvalidAttributeName
         ]
     );
     let tree = outcome.into_tree();

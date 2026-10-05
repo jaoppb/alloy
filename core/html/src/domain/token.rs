@@ -131,7 +131,8 @@ impl TagToken {
         attributes: AttributeList,
         self_closing: bool,
     ) -> Result<Self, HtmlError> {
-        let tag = TagName::new(name, location)?;
+        let tag = TagName::new(name)
+            .map_err(|rejected| HtmlError::invalid_tag(rejected.raw(), location))?;
         Ok(Self::new(tag, attributes, self_closing, location))
     }
 
@@ -203,7 +204,7 @@ mod tests {
 
     fn attribute(name: &str, value: &str) -> AttributeEntry {
         AttributeEntry::new(
-            AttributeName::new_unchecked(name),
+            AttributeName::new(name).expect("the fixture names are valid"),
             AttributeValue::new(value),
             SourceLocation::initial(),
         )
