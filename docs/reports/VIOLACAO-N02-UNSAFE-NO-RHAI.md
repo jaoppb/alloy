@@ -9,10 +9,10 @@
 
 ## 1. Sumário executivo
 
-`PRD-001:97` declara como requisito não-funcional: _"**Memory Safety**: Zero unsafe memory operations exposed to script
-runtimes."_ Em `main` o requisito é verdadeiro por vacuidade — não há motor de script na árvore. A **PR #4** o torna
-falso ao introduzir `rhai`, e a **PR #5** constrói o chokepoint de capability exatamente sobre o caminho que contém o
-`unsafe`.
+`PRD-001:97` declara como requisito não-funcional:
+_"**Memory Safety**: Zero unsafe memory operations exposed to script runtimes."_ Em `main` o requisito é verdadeiro por
+vacuidade — não há motor de script na árvore. A **PR #4** o torna falso ao introduzir `rhai`, e a **PR #5** constrói o
+chokepoint de capability exatamente sobre o caminho que contém o `unsafe`.
 
 O achado não é um defeito de memória. `transmute_copy` atrás de checagem de `TypeId` é o padrão de qualquer despacho
 dinâmico em Rust, e o `rhai` não está fazendo nada anormal. O defeito é de **contrato**: um requisito escrito em termos
@@ -41,9 +41,9 @@ registry local do Cargo; inspeção de `Cargo.toml` e `core/runtime/rhai/Cargo.t
 ### 2.2 O que NÃO foi feito — limites desta análise
 
 > **Nenhuma auditoria de dependência transitiva foi executada.** `cargo-geiger` não está instalado nesta máquina e não
-> foi rodado. As quatro ocorrências de S-01 vêm de `grep` sobre o fonte do `rhai`; **as demais dependências transitivas
-> da árvore não foram inspecionadas**, e a contagem real de `unsafe` no grafo completo é desconhecida. Este relatório
-> estabelece que N-02 é falso, não o quanto é falso.
+> foi rodado. As quatro ocorrências de S-01 vêm de `grep` sobre o fonte do `rhai`;
+> **as demais dependências transitivas da árvore não foram inspecionadas**, e a contagem real de `unsafe` no grafo
+> completo é desconhecida. Este relatório estabelece que N-02 é falso, não o quanto é falso.
 
 Também não foi feita análise de exploitabilidade. Nenhuma das ocorrências foi avaliada como vulnerabilidade; a
 classificação de severidade abaixo mede violação de contrato e ausência de portão, não risco de execução de código.
@@ -92,8 +92,8 @@ grep -rn "forbid(unsafe" ~/.cargo/registry/src/*/bitflags-2.13.1/src/lib.rs
 ```
 
 As duas ocorrências de `unsafe impl` em `src/external.rs:236,243` são `Pod`/`Zeroable` do `bytemuck`, dentro de macro
-atrás de feature opcional que o projeto não habilita (`Cargo.toml:36` fixa `bitflags = "=2.13.1"` sem features). **A
-hipótese de que o `bitflags` também violasse N-02 está refutada e fica registrada para não voltar a ser levantada.**
+atrás de feature opcional que o projeto não habilita (`Cargo.toml:36` fixa `bitflags = "=2.13.1"` sem features).
+**A hipótese de que o `bitflags` também violasse N-02 está refutada e fica registrada para não voltar a ser levantada.**
 
 ### 3.4 Os crates do próprio projeto estão corretos
 
@@ -147,10 +147,10 @@ com o comentário citando `PRD-003:21-24`.
 
 `deny.toml:8-53` + `.github/workflows/ci.yml` (job `supply-chain`)
 
-O `roadmap:333` atribui o portão de memória a `#![forbid(unsafe_code)]` por crate. Esse atributo governa **o código do
-crate onde está escrito** e nada mais — ele não olha para dependências. O `roadmap:334` atribui o portão de supply-chain
-ao `cargo-deny`, que audita CVE e licença, não blocos `unsafe`. O resultado é que N-02, ao contrário dos outros quatro
-NFRs, **nunca teve nenhum instrumento**: a tabela de portões da seção 5 do roadmap não tem linha para ele.
+O `roadmap:333` atribui o portão de memória a `#![forbid(unsafe_code)]` por crate. Esse atributo governa
+**o código do crate onde está escrito** e nada mais — ele não olha para dependências. O `roadmap:334` atribui o portão
+de supply-chain ao `cargo-deny`, que audita CVE e licença, não blocos `unsafe`. O resultado é que N-02, ao contrário dos
+outros quatro NFRs, **nunca teve nenhum instrumento**: a tabela de portões da seção 5 do roadmap não tem linha para ele.
 
 Este é o achado transversal — S-01 e S-03 são consequências dele. Um requisito sem instrumento não é verificado por
 disciplina; é verificado por sorte, e neste caso a sorte acabou na primeira dependência real.

@@ -57,8 +57,8 @@ grep -rn "winit\|rustls\|softbuffer\|reqwest\|hyper\|ureq\|tokio\|http" --includ
 
 O que a v0.2 **de fato** entregou e a v0.5 usa como fundação: o port do `RuntimeEngine` com os sete itens do `ADR-0011`
 verdes e `PORT_SCHEMA_VERSION = 2` (`core/engine/src/lib.rs:65`); os nove bitflags de `Capability`
-(`core/engine/src/domain/capability.rs:16-26`); e o chokepoint de capability, que hoje está **vazio de carga de
-produção** — o próprio arquivo declara isso:
+(`core/engine/src/domain/capability.rs:16-26`); e o chokepoint de capability, que hoje está
+**vazio de carga de produção** — o próprio arquivo declara isso:
 
 ```rust
 // core/runtime/rhai/src/infrastructure/sandbox.rs:8-10
@@ -112,9 +112,9 @@ Alavanca de alívio, se F9c estourar: entregar Flexbox de linha única (sem `fle
 ### 1.4 ⚠️ Divergências de documentação a corrigir nesta entrega
 
 `docs/architecture/overview.md:92-93` declara `window → graphics, engine` e `network → engine`. As duas linhas
-contrariam a decisão 2.1 da v0.3 (`IMPLEMENTACAO-DETALHADA-V0-3.md:94-107`), que generalizou a regra da v0.2: **nenhum
-crate de domínio nomeia `engine`**. E `window → graphics` é evitável sem custo — §2.7. As linhas viram `window → nada` e
-`network → nada`, e a correção é entregável desta versão, não dívida.
+contrariam a decisão 2.1 da v0.3 (`IMPLEMENTACAO-DETALHADA-V0-3.md:94-107`), que generalizou a regra da v0.2:
+**nenhum crate de domínio nomeia `engine`**. E `window → graphics` é evitável sem custo — §2.7. As linhas viram
+`window → nada` e `network → nada`, e a correção é entregável desta versão, não dívida.
 
 O índice de ADRs (`docs/adr/README.md:12-25`) pula o **ADR-0012**. Não é lacuna: `ADR-0011:128` o reserva para a escolha
 do motor de JS de conteúdo, que é decisão da v0.7. Os ADRs novos da v0.5 são o **0018** e o **0019**: `0014` e `0015` já
@@ -133,8 +133,9 @@ mesma versão precisa de `winit` e `softbuffer`, e chamar a API de janela do sis
 
 ### ⚠️ Defeito encontrado: N-02 já está violado hoje, no lugar exato que ele protege
 
-Antes de escrever a regra, o estado real. O `rhai` fixado em `Cargo.toml:40` contém quatro blocos `unsafe`, e **três
-deles estão no caminho de registro e de chamada de função nativa** — a costura por onde todo binding guardado passa:
+Antes de escrever a regra, o estado real. O `rhai` fixado em `Cargo.toml:40` contém quatro blocos `unsafe`, e
+**três deles estão no caminho de registro e de chamada de função nativa** — a costura por onde todo binding guardado
+passa:
 
 ```bash
 grep -rn "unsafe " --include="*.rs" ~/.cargo/registry/src/*/rhai-1.26.0/src
@@ -264,9 +265,9 @@ A resolução de nome usa `std::net::ToSocketAddrs`, ou seja, o resolvedor do si
 mora num _worker_ (§2.3). **Não** escrevemos cliente DNS na v0.5.
 
 **TLS**: `rustls` com `CryptoProvider` montado a partir dos crates RustCrypto, em vez do provider padrão
-(`aws-lc-rs`/`ring`, ambos com assembly e `unsafe`). A leitura literal de N-02 (`PRD-001:97`) — _"unsafe exposto a
-runtimes de script"_ — permitiria o provider padrão; a decisão do solicitante foi a leitura estrita, e ela é defensável
-pela regra de §2.1: cripto processa bytes que o atacante escolhe.
+(`aws-lc-rs`/`ring`, ambos com assembly e `unsafe`). A leitura literal de N-02 (`PRD-001:97`) —
+_"unsafe exposto a runtimes de script"_ — permitiria o provider padrão; a decisão do solicitante foi a leitura estrita,
+e ela é defensável pela regra de §2.1: cripto processa bytes que o atacante escolhe.
 
 | Opção                           | O que é                             | Custo                                                                                      | Veredito                                             |
 | ------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
@@ -295,9 +296,9 @@ não suportado, visível, em vez de renderizar lixo em silêncio.
 ### 2.7 `core/window`: `winit`, apresentador `softbuffer`, e zero dependência de `graphics`
 
 `domain/` — `WindowEvent` `#[non_exhaustive]` (`Resized`, `CloseRequested`, `PointerMoved`, `PointerButton`, `Key`,
-`Scroll`, `RedrawRequested`), `SurfaceSize`, `PhysicalPosition`, `ScaleFactor`, `WindowError`. **Nenhum tipo de `winit`
-aparece em assinatura pública** — `infrastructure/winit_system.rs` mapeia os eventos do `winit` para os nossos, que é a
-mesma disciplina de mapeamento explícito do item 3 do contrato (`ADR-0011:90-92`).
+`Scroll`, `RedrawRequested`), `SurfaceSize`, `PhysicalPosition`, `ScaleFactor`, `WindowError`.
+**Nenhum tipo de `winit` aparece em assinatura pública** — `infrastructure/winit_system.rs` mapeia os eventos do `winit`
+para os nossos, que é a mesma disciplina de mapeamento explícito do item 3 do contrato (`ADR-0011:90-92`).
 
 `application/ports.rs` — `WindowSystem` (criar janela, bombear eventos) e `Presenter`:
 
@@ -656,9 +657,10 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 ## 6. Riscos
 
 1. **A pilha TLS é o risco de maior variância da v0.5, e é um risco de disponibilidade, não de esforço.** O provider
-   RustCrypto do `rustls` é o caminho menos trilhado da decisão 1, e **este relatório não verificou que ele existe na
-   forma e na versão necessárias** — a checagem é o primeiro passo da F8a, deliberadamente, para que a alternativa (o
-   provider padrão sob exceção registrada de §2.1) possa ser retomada com dias de custo, não semanas.
+   RustCrypto do `rustls` é o caminho menos trilhado da decisão 1, e
+   **este relatório não verificou que ele existe na forma e na versão necessárias** — a checagem é o primeiro passo da
+   F8a, deliberadamente, para que a alternativa (o provider padrão sob exceção registrada de §2.1) possa ser retomada
+   com dias de custo, não semanas.
 
 2. **F9c é a fase mais longa e a que mais convida a "quase certo".** Colapso de margem, contexto inline e Flexbox são
    três fontes independentes de caso de borda, e nenhuma admite aproximação: uma margem que não colapsa desloca a página

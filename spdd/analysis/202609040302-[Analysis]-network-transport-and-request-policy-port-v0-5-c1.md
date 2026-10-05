@@ -179,10 +179,10 @@ empurrado para um worker de pool `std::thread` pelo consumidor (`alloy`, Fase I4
 
 ### Key Design Decisions
 
-- **TLS: `rustls =0.23.43` + `ring =0.17.14` + `webpki-roots =1.0.9`, provider `ring` sob carve-out `ADR-0018`
-  linha 1.** Trade-off — `ring` traz assembly + C `unsafe` no caminho que descriptografa registros TLS; é exatamente o
-  que a linha 1 proíbe para terceiros. → **Decisão do spike C0** (`docs/reports/SPIKE-C0-TLS-PROVIDER.md` §6): o
-  provider RustCrypto puro (`rustls-rustcrypto`) é **NO-GO** — só existe `0.0.2-alpha` (sem release estável), força um
+- **TLS: `rustls =0.23.43` + `ring =0.17.14` + `webpki-roots =1.0.9`, provider `ring` sob carve-out `ADR-0018` linha
+  1.** Trade-off — `ring` traz assembly + C `unsafe` no caminho que descriptografa registros TLS; é exatamente o que a
+  linha 1 proíbe para terceiros. → **Decisão do spike C0** (`docs/reports/SPIKE-C0-TLS-PROVIDER.md` §6): o provider
+  RustCrypto puro (`rustls-rustcrypto`) é **NO-GO** — só existe `0.0.2-alpha` (sem release estável), força um
   `rustls-webpki` duplicado que o `deny.toml` (`bans.multiple-versions = "deny"`, `deny.toml:42`) proíbe, e **não é**
   `unsafe`-free (intrínsecos AES-NI/SHA/dalek). `ring` concentra o `unsafe` numa crate de linhagem FIPS, amplamente
   auditada, com 26 crates na árvore contra 105. `rustls-webpki` e `untrusted` (os que parseiam bytes do certificado)

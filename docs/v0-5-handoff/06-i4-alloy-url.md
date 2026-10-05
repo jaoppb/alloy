@@ -66,9 +66,9 @@ arquivo antes de I2, C1, C2, M e X estarem todos commitados.
       (`docs/architecture/html-tree-sink-port-contract.md`, que também registra um gap real encontrado: `HtmlError` não
       carrega `SourceLocation`).
 - [x] `cargo test --workspace --all-features` — todo verde (confirmado nesta sessão).
-- [ ] **Checkpoint:** `git push -u origin feat/v0-5` e abrir um PR draft `` `v0.5 · I4 alloy <url>` `` via `gh` — **não
-      feito nesta sessão**: múltiplas sessões estavam mexendo em `feat/v0-5` concorrentemente, e um `push`/PR é uma ação
-      compartilhada que exige confirmação explícita do usuário, não uma chamada unilateral do agente.
+- [ ] **Checkpoint:** `git push -u origin feat/v0-5` e abrir um PR draft `` `v0.5 · I4 alloy <url>` `` via `gh` —
+      **não feito nesta sessão**: múltiplas sessões estavam mexendo em `feat/v0-5` concorrentemente, e um `push`/PR é
+      uma ação compartilhada que exige confirmação explícita do usuário, não uma chamada unilateral do agente.
 
 ## Estado atual (verificado nesta sessão, v0.5 Fase I4)
 

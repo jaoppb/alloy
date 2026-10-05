@@ -63,8 +63,8 @@ transport's state.
 - `HttpRequest` / `HttpResponse` — the two message aggregates.
 - Value objects: `Url`, `HeaderMap` / `HeaderName` / `HeaderValue`, `StatusCode`, `Method`, `MediaType` / `Charset`,
   `Body`, `Authority` / `Host` / `Port`, `Scheme`, `RequestTarget` / `Path` / `Query`.
-- `NetworkError`, `#[non_exhaustive]`, one `thiserror` enum, every variant carrying a `ProtocolPhase` (`ADR-0011`
-  item 4) and a typed defect enum (`UrlDefect`, `FramingDefect`, `MalformedPart`, `RedirectDefect`, `DecodeDefect`,
+- `NetworkError`, `#[non_exhaustive]`, one `thiserror` enum, every variant carrying a `ProtocolPhase` (`ADR-0011` item
+  4) and a typed defect enum (`UrlDefect`, `FramingDefect`, `MalformedPart`, `RedirectDefect`, `DecodeDefect`,
   `WireLimit`) wherever the cause is a closed set.
 - `network::PORT_SCHEMA_VERSION` — the single version knob (`core/network/src/lib.rs`).
 
@@ -88,9 +88,9 @@ pub trait RequestPolicy: Send + Sync {
 }
 ```
 
-`PolicyVerdict` is `Allow | Rewrite(HttpRequest) | Deny { reason: String }`, `#[non_exhaustive]`. **Policy runs before
-mechanism**: a consumer calls `decide` before opening any socket, so a `Deny` costs no connection and leaks no DNS query
-— this is the seam Phase M's scriptable network policy plugs into.
+`PolicyVerdict` is `Allow | Rewrite(HttpRequest) | Deny { reason: String }`, `#[non_exhaustive]`.
+**Policy runs before mechanism**: a consumer calls `decide` before opening any socket, so a `Deny` costs no connection
+and leaks no DNS query — this is the seam Phase M's scriptable network policy plugs into.
 
 ### 3.4 Threading (`ADR-0019`)
 

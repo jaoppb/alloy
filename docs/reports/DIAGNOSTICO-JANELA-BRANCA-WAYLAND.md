@@ -26,12 +26,12 @@ nem o resize recupera, porque a surface do `softbuffer` já entrou em estado rui
 
 ## 2. Causa 2 — a navegação renderizava um documento vazio em silêncio
 
-`alloy/src/application/navigation.rs` fazia `response.body().as_str().unwrap_or_default()` e `html::parse(body)` **sem
-checar o status HTTP**. Um `2xx` com corpo vazio, um `204`, um `3xx` não-seguível, ou um corpo que chegou como bytes
-crus não-UTF-8 (sem `Content-Type` textual → o transcode de `core/network` é pulado) viravam `html::parse("")` → DOM
-vazio → **janela branca**, logada apenas como `navigation complete`. É o único caminho que produz uma tela genuinamente
-vazia **sem** o card de erro — exatamente o sintoma. (O caminho de subrecurso já checava status via `ensure_success`; a
-navegação não.)
+`alloy/src/application/navigation.rs` fazia `response.body().as_str().unwrap_or_default()` e `html::parse(body)`
+**sem checar o status HTTP**. Um `2xx` com corpo vazio, um `204`, um `3xx` não-seguível, ou um corpo que chegou como
+bytes crus não-UTF-8 (sem `Content-Type` textual → o transcode de `core/network` é pulado) viravam `html::parse("")` →
+DOM vazio → **janela branca**, logada apenas como `navigation complete`. É o único caminho que produz uma tela
+genuinamente vazia **sem** o card de erro — exatamente o sintoma. (O caminho de subrecurso já checava status via
+`ensure_success`; a navegação não.)
 
 ## 3. O que mudou
 
@@ -46,10 +46,10 @@ navegação não.)
       o **único** ponto que incrementa `stats.relayouts` (a prova de coalescing do I4 depende disso).
     - `repaint` — re-blita `Session.last_frame` sem pipeline, sem tocar `relayouts`. Serve `RedrawRequested`.
 
-    `pump_once` agora: novo arm `RedrawRequested => needs_repaint = true`; após um relayout chama
-    `system.request_redraw()` (re-arma o redraw da plataforma, cobrindo o primeiro present perdido no Wayland); se houve
-    `needs_repaint` e **não** houve relayout neste ciclo, chama `repaint`. Rajada de `RedrawRequested` num pump colapsa
-    para um `repaint`.
+   `pump_once` agora: novo arm `RedrawRequested => needs_repaint = true`; após um relayout chama
+   `system.request_redraw()` (re-arma o redraw da plataforma, cobrindo o primeiro present perdido no Wayland); se houve
+   `needs_repaint` e **não** houve relayout neste ciclo, chama `repaint`. Rajada de `RedrawRequested` num pump colapsa
+   para um `repaint`.
 
 3. **`alloy/src/application/navigation.rs` — `navigate` valida a resposta.** Ordem: status (`ensure_success`, agora
    compartilhado com os fetches de subrecurso, emitindo `AlloyError::HttpStatus`) → corpo vazio
@@ -95,12 +95,13 @@ usa propriedades fora do corte da v0.5. Primeiro passo, trazido do território v
 
 - **`core/css` — shorthands `background` e `border`** (`SUPPORTED_PROPERTIES` 34 → 36; `css::PORT_SCHEMA_VERSION` 4 → 5;
   nota de migração em [`PRD-007`](../requirements/PRD-007-style-cascade-and-layout-engine-ports.md) §6 e na tabela de
-  [`style-cascade-port-contract.md`](../architecture/style-cascade-port-contract.md) §4). Cada um **estreitado ao único
-  componente que o corte já resolve**: `background` → a **cor** (dobra em `background_color`), `border` → a **largura**
-  (dobra nas arestas `border`, como `border-width`). `url()`, gradientes, `no-repeat`/`center`/`/100%`, e o
-  `<line-style>` e a cor de uma borda são varridos; `none` / `0` zeram. Sem campo novo em `ComputedStyle` — só mais
-  entradas para campos que já existem. `parser/values.rs` ganhou `parse_background_shorthand` /
-  `parse_border_shorthand`; `cascade/values.rs`, `MANIFEST.md` e `manifest_runner.rs` acompanham.
+  [`style-cascade-port-contract.md`](../architecture/style-cascade-port-contract.md) §4). Cada um
+  **estreitado ao único componente que o corte já resolve**: `background` → a **cor** (dobra em `background_color`),
+  `border` → a **largura** (dobra nas arestas `border`, como `border-width`). `url()`, gradientes,
+  `no-repeat`/`center`/`/100%`, e o `<line-style>` e a cor de uma borda são varridos; `none` / `0` zeram. Sem campo novo
+  em `ComputedStyle` — só mais entradas para campos que já existem. `parser/values.rs` ganhou
+  `parse_background_shorthand` / `parse_border_shorthand`; `cascade/values.rs`, `MANIFEST.md` e `manifest_runner.rs`
+  acompanham.
 - **Efeito na DDG/html**: o fundo `#f7f7f7` (`.body--home { background:#f7f7f7 }`) e a caixa de busca com borda passam a
   renderizar — antes a página era 100% branca porque a DDG só usa `background:` shorthand, que era descartado inteiro.
 

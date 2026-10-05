@@ -14,10 +14,10 @@
 ## 1. Sumário executivo
 
 A campanha parte de `main` (`0e83254`, só a fatia F4a de `core/graphics` da v0.3 mergeada) e persegue
-`alloy https://example.com` renderizando uma página real numa janela nativa. Das 16 fases do plano, **9 estão commitadas
-e verificadas de forma independente** — não só pelo relatório do sub-agente que as implementou, mas por `just gate`
-rodado à mão nesta sessão após cada uma: `core/css` (portas, parser CSS Syntax L3, cascata de três origens),
-`core/network` (cliente HTTP/1.1 + TLS via `rustls`/`ring`), `core/window` (`winit` + `softbuffer`),
+`alloy https://example.com` renderizando uma página real numa janela nativa. Das 16 fases do plano,
+**9 estão commitadas e verificadas de forma independente** — não só pelo relatório do sub-agente que as implementou, mas
+por `just gate` rodado à mão nesta sessão após cada uma: `core/css` (portas, parser CSS Syntax L3, cascata de três
+origens), `core/network` (cliente HTTP/1.1 + TLS via `rustls`/`ring`), `core/window` (`winit` + `softbuffer`),
 `EngineError::Subsystem` e rasterização de texto real em `core/graphics`.
 
 A 10ª fase, **B4** (box model, formatação inline, Flexbox), está com ~3.121 linhas escritas em disco mas **não compila**
@@ -84,9 +84,9 @@ Quatro erros, em três categorias:
     # → No such file or directory
     ```
 
-    Só os _value objects_ do Flexbox (`domain/computed/flex.rs`) foram escritos; o algoritmo de layout em si —
-    distribuição de `flex-grow`/`flex-shrink`, `justify-content`, `align-items`/`align-content`/`align-self` — não tem
-    uma linha.
+   Só os _value objects_ do Flexbox (`domain/computed/flex.rs`) foram escritos; o algoritmo de layout em si —
+   distribuição de `flex-grow`/`flex-shrink`, `justify-content`, `align-items`/`align-content`/`align-self` — não tem
+   uma linha.
 
 2. **Argumento faltando** — `block.rs:511` chama
    `inline::layout(context, items, flowing.content_width, flowing.font_size)` com 4 argumentos, mas a assinatura real em
@@ -100,9 +100,9 @@ Quatro erros, em três categorias:
    `const` (`E0493`). Correção: remover `const` das duas assinaturas (nenhum chamador as invoca em contexto `const`).
 
 Um quinto ponto, **não é erro de compilação mas pendência confirmada por leitura**: `infrastructure/mock.rs` tinha uma
-chamada a `LayoutBox::new` com a assinatura antiga (`EdgeSizes, EdgeSizes` em vez de `BoxEdges, IntrinsicSize`) — **já
-corrigido nesta sessão**, junto com a declaração dos seis módulos novos em `infrastructure/layout/mod.rs` (nenhum dos
-dois estava wireado).
+chamada a `LayoutBox::new` com a assinatura antiga (`EdgeSizes, EdgeSizes` em vez de `BoxEdges, IntrinsicSize`) —
+**já corrigido nesta sessão**, junto com a declaração dos seis módulos novos em `infrastructure/layout/mod.rs` (nenhum
+dos dois estava wireado).
 
 ### 3.3 O que falta além de compilar
 

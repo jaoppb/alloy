@@ -146,8 +146,9 @@ dyn_bridge ..> DynRuntimeEngine : eval_typed / run_dyn_suite
       `dyn` API.
     - `lib.rs` re-exports `DynRuntimeEngine`, `DynExecutionContext`, `DynCompiledScript`, `eval_typed`.
 2. **`EngineError::Dom` (`core/engine/src/domain/error.rs`)**: add `Dom { operation: String, reason: String }` +
-   `pub fn dom(operation, reason) -> Self` + a `Display` arm reading _dom operation &lt;operation&gt; failed:
-   &lt;reason&gt;_. Change `PORT_SCHEMA_VERSION` to `2` and extend its doc comment with the v0.2 delta.
+   `pub fn dom(operation, reason) -> Self` + a `Display` arm reading
+   _dom operation &lt;operation&gt; failed: &lt;reason&gt;_. Change `PORT_SCHEMA_VERSION` to `2` and extend its doc
+   comment with the v0.2 delta.
 3. **Guarded bindings (`core/runtime/rhai/src/infrastructure/sandbox.rs`)**:
     - `pub struct GuardedBinding { pub name: &'static str, pub arity: Arity, pub required: Capability, pub handler:`
       `NativeFn }`.
@@ -160,7 +161,7 @@ dyn_bridge ..> DynRuntimeEngine : eval_typed / run_dyn_suite
       future subsystem wiring).
 4. **`NodeHandle` (`core/runtime/rhai/src/infrastructure/dom_bindings.rs`)**:
     - `#[derive(Clone)] pub struct NodeHandle { tree: Arc<Mutex<DomTree>>, id: NodeId, capabilities: CapabilitySet }`.
-    - `impl engine::EngineType for NodeHandle { fn registration() -> TypeRegistration { TypeRegistration::new("Node") } }`.
+    - `impl engine::EngineType for NodeHandle { fn registration() -> TypeRegistration { TypeRegistration::new("Node") } }`. <!-- rumdl-disable-line MD013 -->
     - `impl rhai::CustomType for NodeHandle`: `build` registers `with_name("Node")` and, via `with_fn`, every method of
       the Entities list. Each method body: `self.capabilities.require(CAP).map_err(engine_error_to_eval)?;` →
       `let tree = self.tree.lock().unwrap_or_else(PoisonError::into_inner);` → call the `DomTree` op →
@@ -381,8 +382,8 @@ dyn_bridge ..> DynRuntimeEngine : eval_typed / run_dyn_suite
   `fallback.rs`.
 - **One typed error out**: every `DomError` and every `rhai` failure maps to `engine::EngineError`; `core/dom` never
   names `EngineError`; the mapping is an explicit function (`ADR-0011` item 3), never a re-export.
-- **`#![forbid(unsafe_code)]`** holds in every crate; `AssertUnwindSafe` and `set_hook` are safe API. **No
-  `panic = "abort"`** in any Cargo profile.
+- **`#![forbid(unsafe_code)]`** holds in every crate; `AssertUnwindSafe` and `set_hook` are safe API.
+  **No `panic = "abort"`** in any Cargo profile.
 - **Additive-only for the port**: `dyn_bridge.rs` adds types and blanket impls; it changes **no** existing signature.
   The only boundary-aggregate change is `EngineError::Dom`, and it drives the `PORT_SCHEMA_VERSION` bump + `PRD-002`
   note (`ADR-0011:83-85`).

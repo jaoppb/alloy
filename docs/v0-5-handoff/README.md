@@ -48,9 +48,9 @@ X ✅ ──>   M ✅ (precisa de EE + B4 + C1 + C2 — todas prontas) ─> I4 �
 ```
 
 B4, B5, X, I2, M e I4 estão entregues (I4 ainda sem commit/push desta sessão). P está quase entregue — falta fechar o
-portão `coverage` (~66% < 85%) com mais testes de domínio, e depois abrir o PR final. **Nenhum PR foi aberto e nenhum
-push foi feito**: com várias sessões mexendo em `feat/v0-5` ao mesmo tempo nesta rodada, um `push`/PR é uma ação
-compartilhada que precisa de confirmação explícita do usuário antes de qualquer sessão executar.
+portão `coverage` (~66% < 85%) com mais testes de domínio, e depois abrir o PR final.
+**Nenhum PR foi aberto e nenhum push foi feito**: com várias sessões mexendo em `feat/v0-5` ao mesmo tempo nesta rodada,
+um `push`/PR é uma ação compartilhada que precisa de confirmação explícita do usuário antes de qualquer sessão executar.
 
 ## Como usar cada arquivo de fase
 

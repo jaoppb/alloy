@@ -346,9 +346,9 @@ DomSnapshot o-- NodeRef
     básicas), `Length` (`px`/`em`/`rem`/`%`/`pt` e o `0` sem unidade) e `LengthEdges` (1–4 componentes). `rgb()`/
     `rgba()` e a tabela completa de nomes são de B2 (`plano:420-434`) e caem como declaração descartada com nota.
 11. **O recorte é mecânico nos três sentidos**: `MANIFEST.md` vira duas tabelas `| token | since | notes |`;
-    `manifest_runner.rs` compara (a) manifesto ⇄ `SUPPORTED_PROPERTIES`/ `SUPPORTED_SELECTORS`, (b) manifesto ⇄ **o que
-    o parser aceita de fato** (uma sonda por entrada; entrada sem sonda entra em pânico com a mensagem que diz o que
-    fazer), e (c) uma bateria de formas declaradas **fora** que o parser tem de rejeitar. `UPDATE_MANIFEST` continua
+    `manifest_runner.rs` compara (a) manifesto ⇄ `SUPPORTED_PROPERTIES`/ `SUPPORTED_SELECTORS`, (b) manifesto ⇄
+    **o que o parser aceita de fato** (uma sonda por entrada; entrada sem sonda entra em pânico com a mensagem que diz o
+    que fazer), e (c) uma bateria de formas declaradas **fora** que o parser tem de rejeitar. `UPDATE_MANIFEST` continua
     reescrevendo só a tabela legível; as três checagens não têm caminho de _bless_.
 12. **`PORT_SCHEMA_VERSION` 1 → 2**: `DeclarationBlock` passa de pares `(String, String)` a uma coleção de
     `Declaration`, `StyleRule` troca `selector_text: String` por `SelectorList` + `MediaQuery`, e `StyleSheetSet` ganha
@@ -560,10 +560,11 @@ DomSnapshot o-- NodeRef
    um `match` gigante com laços aninhados; um dot por linha; nomes sem abreviação (`peek_ahead`, não `peek_n`;
    `index_one_based`, não `idx`); entidades < ~100 linhas; sem campo público mutável.
 2. **Clippy `pedantic` + `nursery` = `deny` (`Cargo.toml:67-82`)**: nada de `unwrap`/`expect`/`panic`/`todo`/
-   `unimplemented`/`unreachable` em código de lib. **`string_slice`, `indexing_slicing`, `arithmetic_side_effects` e
-   `as_conversions` são `deny`** — um tokenizador escrito à mão usa `char_indices()`/iteradores, `.get(..)`,
-   `checked_*`/`saturating_*`, e `u32::from`/`TryFrom`, nunca `s[i..j]`, `chars[i]`, `i + 1` ou `c as u32`.
-   `#[must_use]` em todo getter/construtor puro; `const fn` onde o corpo permite; `Self` no lugar do nome do tipo.
+   `unimplemented`/`unreachable` em código de lib.
+   **`string_slice`, `indexing_slicing`, `arithmetic_side_effects` e `as_conversions` são `deny`** — um tokenizador
+   escrito à mão usa `char_indices()`/iteradores, `.get(..)`, `checked_*`/`saturating_*`, e `u32::from`/`TryFrom`, nunca
+   `s[i..j]`, `chars[i]`, `i + 1` ou `c as u32`. `#[must_use]` em todo getter/construtor puro; `const fn` onde o corpo
+   permite; `Self` no lugar do nome do tipo.
 3. **`#[allow(clippy::...)]` só em dois lugares**: o header já existente de `application/conformance.rs` e os arquivos
    de `tests/` (`#![allow(clippy::unwrap_used, clippy::expect_used)]` escopado, com o `//!` que nomeia a regra
    guardada). Nunca em `domain/`, `application/{ports,snapshot,matching,collect_sheets}.rs` ou `infrastructure/`.

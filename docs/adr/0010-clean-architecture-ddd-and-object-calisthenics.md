@@ -10,8 +10,8 @@
 
 Alloy is a highly modular browser engine comprising 11 Cargo workspace crates. To ensure maintainability, testability,
 and zero domain pollution across crates, we must define clear architectural layers, domain boundaries, and code-level
-design rules. Furthermore, we must evaluate and position **Feature-Sliced Design (FSD)** alongside **Clean
-Architecture** and **Domain-Driven Design (DDD)** within the "Skeleton and Muscle" model.
+design rules. Furthermore, we must evaluate and position **Feature-Sliced Design (FSD)** alongside
+**Clean Architecture** and **Domain-Driven Design (DDD)** within the "Skeleton and Muscle" model.
 
 ---
 

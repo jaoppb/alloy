@@ -105,8 +105,8 @@ adapters behind these ports — the contract is dogfooded, not bypassed for the 
 - **`Length` + `Length::resolve_to_au`** (`core/css/src/domain/length.rs:70`): a única travessia autor → `Au`. Não tem
   variante `auto`: `width: auto` precisa de um VO novo por cima de `Length`.
 - **`TextMeasurer` / `TextRun` / `ComputedText` / `TextMetrics`** (`core/css/src/application/ports.rs:53-58`,
-  `core/css/src/domain/text.rs`): a porta que o IFC consome. `TextMetrics` tem `width` + `height` e **nenhum canal de
-  baseline** — "alinhamento por baseline simples" precisa de um.
+  `core/css/src/domain/text.rs`): a porta que o IFC consome. `TextMetrics` tem `width` + `height` e
+  **nenhum canal de baseline** — "alinhamento por baseline simples" precisa de um.
 - **`MonospaceMetrics`** (`core/css/src/infrastructure/text_metrics.rs`) e **`FontBackedMeasurer`**
   (`core/css/src/infrastructure/font_backed_measurer.rs`): os dois adaptadores da porta. O primeiro é sintético e
   determinístico (fracções inteiras `3/5` e `6/5`), o segundo delega a `graphics::FontProvider`. B4 consome a **porta**,
@@ -199,15 +199,15 @@ muda é o **conteúdo** dos agregados, e é por isso que esta é a fase que fech
 
 - **Texto no `StyledTree`**: sem ele o IFC é impossível (o motor só recebe `&StyledTree`). Trade-off: engorda um
   agregado de fronteira **versus** passar `&DomSnapshot` também para `layout` — o que quebraria a assinatura congelada
-  de `PRD-007:56-60` e daria ao motor de layout acesso de leitura ao DOM inteiro. → **Guardar `Option<TextRun>` no
-  `StyledNode`**, preenchido por `recompute_in_document_order` a partir do `NodeRef`, sem tocar na assinatura do closure
-  que os três resolvers passam.
+  de `PRD-007:56-60` e daria ao motor de layout acesso de leitura ao DOM inteiro. →
+  **Guardar `Option<TextRun>` no `StyledNode`**, preenchido por `recompute_in_document_order` a partir do `NodeRef`, sem
+  tocar na assinatura do closure que os três resolvers passam.
 - **Onde nasce o marcador de intrinsic size**: o `LayoutEngine` não vê tags, logo não consegue decidir sozinho que uma
   caixa é `<img>`. Trade-off: (a) passar o snapshot para o layout — rejeitado, mesma razão acima; (b) pôr o marcador no
-  `ComputedStyle` — rejeitado, não é uma propriedade CSS; (c) pôr no `StyledNode`, decidido pelo **construtor da
-  árvore** (que vê o `NodeRef`) e não pelo resolver. → **(c)**: `IntrinsicSize::Pending` para as tags substituídas,
-  copiado para o `LayoutBox` quando a caixa realmente não tem tamanho declarado. Nenhum dos três resolvers muda uma
-  linha.
+  `ComputedStyle` — rejeitado, não é uma propriedade CSS; (c) pôr no `StyledNode`, decidido pelo
+  **construtor da árvore** (que vê o `NodeRef`) e não pelo resolver. → **(c)**: `IntrinsicSize::Pending` para as tags
+  substituídas, copiado para o `LayoutBox` quando a caixa realmente não tem tamanho declarado. Nenhum dos três resolvers
+  muda uma linha.
 - **Agrupar as nove propriedades de flex num `FlexStyle`** em vez de nove campos soltos em `ComputedStyle`: mantém o
   agregado com 13 campos em vez de 21 e dá um lugar natural para `FlexStyle::initial()`. Custo: um salto a mais
   (`style.flex().direction()`), o mesmo comprimento de cadeia que `node.style().display()` já tem hoje.

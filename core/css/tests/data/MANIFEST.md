@@ -204,10 +204,10 @@ Flexbox cuts:
 
 The grid computed values (`core/css/src/domain/computed/grid/`) are `Copy` and fixed-capacity, so a `GridStyle` is one
 flat value; `ComputedStyle` keeps it behind a shared `Arc` that stays empty while every grid property is `initial`, so
-the caps cost nothing on a node that sets no grid property. Unlike the font cuts, exceeding a cap **refuses the whole
-declaration** (the previous value stands) and the cascade parser emits a `tracing::warn!` — a truncated track list or
-area map would lay out a different grid, which is worse than no grid. Names are case-sensitive `<custom-ident>`s (CSS
-Values 4 §4.2): `Nav` and `nav` are two areas.
+the caps cost nothing on a node that sets no grid property. Unlike the font cuts, exceeding a cap
+**refuses the whole declaration** (the previous value stands) and the cascade parser emits a `tracing::warn!` — a
+truncated track list or area map would lay out a different grid, which is worse than no grid. Names are case-sensitive
+`<custom-ident>`s (CSS Values 4 §4.2): `Nav` and `nav` are two areas.
 
 | gap                                                       | behaviour instead                                                                              | tracked for |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------- |

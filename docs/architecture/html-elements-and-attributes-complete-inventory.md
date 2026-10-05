@@ -55,8 +55,8 @@ Code e Object Calisthenics em `core/html` e `core/dom`):
 2. **Tier 2 (Dados Tabulares & Formatação de Tabela — v0.6):**
     - Implementação das tags de tabela: `table`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th`, `caption`, `col`,
       `colgroup`.
-    - Inserção de modos do parser WHATWG: `in_table`, `in_table_body`, `in_row`, `in_cell`, e mecanismo de _foster
-      parenting_ de nós órfãos.
+    - Inserção de modos do parser WHATWG: `in_table`, `in_table_body`, `in_row`, `in_cell`, e mecanismo de
+      _foster parenting_ de nós órfãos.
     - User-Agent Stylesheet: `display: table`, `display: table-row`, `display: table-cell`.
     - Layout em `core/css`: cálculo de larguras de colunas e colapso de bordas.
 3. **Tier 3 (Formulários & Controles Nativos de Entrada — v0.6):**

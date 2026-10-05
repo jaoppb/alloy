@@ -330,9 +330,9 @@ Fragment --> LayoutBox : becomes
 1. **Box model, primeiro e isolado** (passo 1 do spec):
     - `box_model.rs` resolve `margin` / `border` / `padding` / `width` / `height` de um nó em `BoxMetrics`, aplicando
       `box-sizing` na conversão (`border-box` desconta borda e padding da largura declarada, saturando em zero).
-    - `margin_collapse.rs` isola a álgebra: `CollapsedMargin { positive, negative }`, `adjoin` = `(max, min)`, `resolve`
-      = `positive + negative`. Comutativa, associativa, com identidade `ZERO` — três propriedades que o teste unitário
-      afirma diretamente, antes de qualquer retângulo.
+    - `margin_collapse.rs` isola a álgebra: `CollapsedMargin { positive, negative }`, `adjoin` = `(max, min)`,
+      `resolve` = `positive + negative`. Comutativa, associativa, com identidade `ZERO` — três propriedades que o teste
+      unitário afirma diretamente, antes de qualquer retângulo.
 2. **Um contexto de formatação por arquivo, um resultado em comum**:
     - Todo contexto devolve `ContentFlow { height, fragments, leading_margin, trailing_margin }`, com os `Fragment`s
       posicionados **relativamente** à origem da caixa de conteúdo do contêiner. O pai translada. Isso mantém `block.rs`

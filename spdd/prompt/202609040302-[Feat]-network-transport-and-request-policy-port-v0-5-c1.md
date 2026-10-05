@@ -207,8 +207,7 @@ RequestPolicy ..> PolicyVerdict
             .with_no_client_auth()
         ```
 
-        Nunca `ClientConfig::builder()` sem argumento (esconde a escolha de provider).
-
+      Nunca `ClientConfig::builder()` sem argumento (esconde a escolha de provider).
     - `rustls` é sans-I/O: `StreamOwned<ClientConnection, TcpStream>` para o caminho simples, ou dirigir
       `ClientConnection` à mão se C1 quiser seu próprio laço de timeout-por-fase.
     - `webpki-roots =1.0.9` embarcado — **não** o trust store do SO (`~/.claude/plans/…-fancy-dijkstra.md:124`).

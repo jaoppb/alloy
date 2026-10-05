@@ -168,8 +168,8 @@ quase nada.
 
 As traits `RuntimeEngine` e `ExecutionContext` são transcritas como estão. Isso implica aceitar, sem correção:
 
-- `eval<T: FromEngineValue>(&self, context: &mut Self::Context, script: &str)` (`PRD-002:42`) recebe **uma `&str`
-  nova**, não o `CompiledScript` que `compile()` (`PRD-002:41`) devolve.
+- `eval<T: FromEngineValue>(&self, context: &mut Self::Context, script: &str)` (`PRD-002:42`) recebe
+  **uma `&str` nova**, não o `CompiledScript` que `compile()` (`PRD-002:41`) devolve.
 - `register_fn<F, Args, Ret>(...) where F: EngineFunction<Args, Ret>` (`PRD-002:49-51`) referencia um trait
   `EngineFunction` que **não existe** em nenhum arquivo nem PRD.
 - `register_type<T: 'static + CustomType>` (`PRD-002:48`) exige um trait `CustomType` visível em `core/engine`.
@@ -304,8 +304,8 @@ compila o arquivo por `RhaiEngine`, executa com limite de instruções e imprime
    `rhai::Scope` + `CapabilitySet` + handle do `Engine`.
 2. **`compile` + `CompiledScript` (2 d)** — `rhai::Engine::compile` → `CompiledScript(Arc<rhai::AST>)` (já no formato
    que F11 vai precisar), mapeando erro de sintaxe para `EngineError::Compilation` com `line`/`column` (`PRD-002:81`).
-3. **`eval` verbatim (2–3 d)** — recompila a cada chamada (custo aceito da decisão 2.1); adicionar um `eval_ast` **fora
-   da trait** para F11 reusar depois.
+3. **`eval` verbatim (2–3 d)** — recompila a cada chamada (custo aceito da decisão 2.1); adicionar um `eval_ast`
+   **fora da trait** para F11 reusar depois.
 4. **Limites (2–3 d)** — `set_max_operations` / `set_max_call_levels` / `set_max_expr_depths` a partir de config;
    `on_progress`; `ErrorTooManyOperations` → `EngineError::ExecutionLimitExceeded`. Fecha **C-04**.
 5. **Marshaling (2–3 d)** — `EngineValue` ↔ `rhai::Dynamic` por `match`, sem `unsafe`; teste de round-trip preservando
@@ -316,8 +316,8 @@ compila o arquivo por `RhaiEngine`, executa com limite de instruções e imprime
 7. **Fixture C-02 (1–1,5 d)** — `FixtureNode` + `impl CustomType` em `tests/`; teste lê e muta `node.text` via script
    Rhai e confere o struct Rust.
 
-**Mínimo viável** (só C-01 + C-05, sem binário, sem CI, sem `rhai`): parte de F1 ≈ **6–9 d `[modelado]`**. **Escopo
-completo da v0.1:** F0 + F1 + F2 ≈ **28–42 dias-dev `[modelado]`** (roadmap §3.1).
+**Mínimo viável** (só C-01 + C-05, sem binário, sem CI, sem `rhai`): parte de F1 ≈ **6–9 d `[modelado]`**.
+**Escopo completo da v0.1:** F0 + F1 + F2 ≈ **28–42 dias-dev `[modelado]`** (roadmap §3.1).
 
 Ordem: **F0 antes de F1** é obrigatório — o lockfile tem de ser versionado antes de `rhai` entrar. **F1 antes de F2** é
 a direção da dependência (`rhai-runtime → engine`). Dentro de F1, o `MockEngine` (passo 4) pode ser escrito em paralelo

@@ -42,20 +42,19 @@ just run --script <path>        # run the alloy binary against a .rhai script
    clippy warning is a build failure, not a suggestion.
 4. **Add or update tests** for any behavior change. `core/engine`, `core/runtime/rhai`, and `core/dom` are the reference
    for what "well-tested" looks like in this codebase.
-5. **New architectural decision?** Add an ADR under `docs/adr/` (MADR format) plus a row in `docs/adr/README.md`, **in
-   the same PR as the code it justifies** — not as a follow-up after review asks for it.
+5. **New architectural decision?** Add an ADR under `docs/adr/` (MADR format) plus a row in `docs/adr/README.md`,
+   **in the same PR as the code it justifies** — not as a follow-up after review asks for it.
 6. **Run the gate before pushing:**
 
     ```bash
     just gate
     ```
 
-    This mirrors CI: `fmt-check`, `clippy -D warnings`, `check`, `test`, `cargo-deny`, coverage, `arch-lint`, and the
-    `no-engine` dependency check. Git hooks (via [Lefthook](https://lefthook.dev/)) run a subset of this automatically
-    on `pre-commit`/`pre-push`, but a full `just gate` catches everything before you open the PR.
-
-7. **Format Markdown.** Any `.md` file you touch should pass `rumdl fmt` (config in `.rumdl.toml`) — the pre-commit hook rewrites it for you if you forget, but running it yourself avoids an extra
-   commit.
+   This mirrors CI: `fmt-check`, `clippy -D warnings`, `check`, `test`, `cargo-deny`, coverage, `arch-lint`, and the
+   `no-engine` dependency check. Git hooks (via [Lefthook](https://lefthook.dev/)) run a subset of this automatically on
+   `pre-commit`/`pre-push`, but a full `just gate` catches everything before you open the PR.
+7. **Format Markdown.** Any `.md` file you touch should pass `rumdl fmt` (config in `.rumdl.toml`) — the pre-commit hook
+   rewrites it for you if you forget, but running it yourself avoids an extra commit.
 
 ## Commit Messages
 

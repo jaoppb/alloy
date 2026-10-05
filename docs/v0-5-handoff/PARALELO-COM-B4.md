@@ -14,9 +14,9 @@
 
 `01-b4-box-model-inline-flexbox.md` é o único arquivo desta pasta que pede uma IA mais forte dedicada só a ele — o
 algoritmo de Flexbox, os testes de retângulo e a correção do `pipeline.rs` são exatamente as três tarefas 🔴/🟡 da
-[triagem](00-triagem-despacho.md). Enquanto isso roda, quatro pedaços do backlog **não tocam nenhum arquivo do WIP de
-B4** (`core/css/**`) e podem ir para sessões separadas — a mesma máquina/_working tree_, ou uma isolada, tanto faz,
-porque os conjuntos de arquivo são disjuntos.
+[triagem](00-triagem-despacho.md). Enquanto isso roda, quatro pedaços do backlog
+**não tocam nenhum arquivo do WIP de B4** (`core/css/**`) e podem ir para sessões separadas — a mesma
+máquina/_working tree_, ou uma isolada, tanto faz, porque os conjuntos de arquivo são disjuntos.
 
 Isto não é o mesmo recorte da triagem: lá, "🟢 leve" significa "mecânico o bastante para conferir só pelo DoD". Aqui o
 critério é mais estrito — **zero dependência de arquivo com `core/css`**, porque é isso que garante que rodar em

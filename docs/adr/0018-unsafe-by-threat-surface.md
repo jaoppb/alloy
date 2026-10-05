@@ -8,14 +8,15 @@
 
 ## Context and Problem Statement
 
-`PRD-001:97` (roadmap label **N-02**) reads _"Memory Safety: **Zero unsafe memory operations exposed to script
-runtimes**."_ Taken literally this has **never been true and has never been checked**:
+`PRD-001:97` (roadmap label **N-02**) reads
+_"Memory Safety: **Zero unsafe memory operations exposed to script runtimes**."_ Taken literally this has
+**never been true and has never been checked**:
 
-- The pinned `rhai =1.26.0` contains four `unsafe` blocks, **three of them on the binding registration / native-call
-  path** — the seam every guarded binding crosses (`src/reify.rs`, `src/func/register.rs:60`, `src/func/call.rs:87`, all
-  `transmute_copy` behind a `TypeId` check). `rhai::func::call` **is** the script runtime; `func/register.rs` is the
-  path `register_guarded_binding` uses. So N-02 has been violated since v0.1, by the engine choice of `ADR-0002` — see
-  `docs/reports/VIOLACAO-N02-UNSAFE-NO-RHAI.md`.
+- The pinned `rhai =1.26.0` contains four `unsafe` blocks,
+  **three of them on the binding registration / native-call path** — the seam every guarded binding crosses
+  (`src/reify.rs`, `src/func/register.rs:60`, `src/func/call.rs:87`, all `transmute_copy` behind a `TypeId` check).
+  `rhai::func::call` **is** the script runtime; `func/register.rs` is the path `register_guarded_binding` uses. So N-02
+  has been violated since v0.1, by the engine choice of `ADR-0002` — see `docs/reports/VIOLACAO-N02-UNSAFE-NO-RHAI.md`.
 - v0.5 needs `winit` + `softbuffer` for a native window (OS FFI is `unsafe` by construction) and a TLS stack for
   `core/network`. The requester chose a pure-Rust RustCrypto `CryptoProvider` for `rustls` specifically to keep `unsafe`
   off the bytes an attacker controls.
