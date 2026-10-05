@@ -104,7 +104,7 @@ whichever thread calls it.
 
 A `.rhai` `RequestPolicy` runs through `RuntimeEngine` (`PRD-002`) under `Capability::network_interceptor()`
 (`NETWORK_FETCH | FS_WRITE_CACHE`) — never `HttpTransport` itself, which stays a Rust-only mechanism in v0.5. The
-binding lives in `core/runtime/rhai-bindings/src/net_bindings.rs` (`NETWORK_BINDINGS`), following the same
+binding lives in `core/runtime/rhai-bindings/src/network_bindings.rs` (`NETWORK_BINDINGS`), following the same
 self-guarding-per-method pattern as `dom_bindings.rs`. A policy script that panics is trapped
 (`rhai-bindings/tests/fault_injection.rs`) and falls back to `AllowAllPolicy` via `run_with_fallback`, exactly as a DOM
 script fault falls back to the embedded default DOM.
