@@ -25,7 +25,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest_path="${1:-$repo_root/alloy/Cargo.toml}"
 allowlist="$repo_root/unsafe-allowlist.toml"
 
-command -v cargo-geiger >/dev/null || cargo install cargo-geiger --locked
+command -v cargo-geiger >/dev/null || {
+	echo "cargo-geiger not found — run: just setup" >&2
+	exit 1
+}
 command -v jq >/dev/null || {
 	echo "jq is required for the unsafe-audit gate" >&2
 	exit 1

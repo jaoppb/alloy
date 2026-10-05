@@ -127,12 +127,12 @@ The `RhaiEngine` implements `RuntimeEngine`:
 
 ### 4.1 Known gap — script-defined hook invocation (deferred)
 
-`PRD-001 §5.2` defines a hook lifecycle (`on_init`, `on_event`, `on_process`, `on_reload`) of functions **defined by a
-compiled script** and called by the host by name; `PRD-004` ends its flow at "Invoke `on_reload()`". The v0.1 port has
-no method that carries a `CompiledScript` into a by-name call, so `ExecutionContext::call_function` currently means only
-"invoke a registered native binding". Closing this needs either an added method
-(`call_compiled_function(&self, ctx, &CompiledScript, name, args)`) or a compiled AST attached to the context. **This is
-a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signature already frozen at `F1`.
+`PRD-001 §5.2` defines a hook lifecycle (`on_init`, `on_event`, `on_process`, `on_reload`) of functions
+**defined by a compiled script** and called by the host by name; `PRD-004` ends its flow at "Invoke `on_reload()`". The
+v0.1 port has no method that carries a `CompiledScript` into a by-name call, so `ExecutionContext::call_function`
+currently means only "invoke a registered native binding". Closing this needs either an added method
+(`call_compiled_function(&self, ctx, &CompiledScript, name, args)`) or a compiled AST attached to the context.
+**This is a v0.2 decision and a v0.2 amendment to this PRD.** It does not change any signature already frozen at `F1`.
 
 ### 4.2 Boundary-schema migrations (`engine::PORT_SCHEMA_VERSION`)
 
@@ -217,12 +217,12 @@ same thing. The `Display` text of a DOM failure (``dom operation `<operation>` f
 - [x] `RuntimeEngine` and `ExecutionContext` traits defined in `core/engine`. _(with two `ADR-0011`-mandated deviations,
       recorded in §2.1 and `core/engine/src/application/ports.rs`: no associated `type Error` — one `EngineError`; own
       `EngineType` marker instead of `rhai::CustomType`.)_
-- [x] `RhaiEngine` implementation in `core/runtime/rhai` passing trait compliance tests. _(`engine::conformance` suite,
-      run from `core/runtime/rhai/tests/conformance.rs`.)_
+- [x] `RhaiEngine` implementation in `core/runtime/rhai` passing trait compliance tests.
+      _(`engine::conformance` suite, run from `core/runtime/rhai/tests/conformance.rs`.)_
 - [ ] Registered Rust domain struct (`DomNode`) readable and mutable from Rhai script. _(v0.1 proves the mechanism with
       `FixtureNode` in `core/runtime/rhai/tests/fixture_node.rs`; the real `core/dom` `DomNode` — roadmap C-03 — lands
       at integration point `I1`, v0.2.)_
 - [x] Execution limit test: an infinite loop in Rhai is aborted with `EngineError::ExecutionLimitExceeded`.
       _(`core/runtime/rhai/tests/execution_limits.rs` — operation ceiling **and** wall-clock ceiling.)_
-- [x] Trait-mocking test verifying engine can be replaced without modifying domain crates. _(`MockEngine` +
-      `evaluate_subject<E: RuntimeEngine>` in `core/engine/tests/mock_engine.rs`.)_
+- [x] Trait-mocking test verifying engine can be replaced without modifying domain crates.
+      _(`MockEngine` + `evaluate_subject<E: RuntimeEngine>` in `core/engine/tests/mock_engine.rs`.)_

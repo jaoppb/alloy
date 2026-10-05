@@ -243,10 +243,10 @@ codec do §2.7.
   MIT/Apache-2.0 (já coberta pela allowlist de `deny.toml:23-34`), fixada exata no `[workspace.dependencies]` como manda
   a convenção do `Cargo.toml`. O argumento **não** é "preserva N-02": o veredicto §1 (`:27-29`) e o achado **S-01**
   (`:107-142`) do [`VIOLACAO-N02-UNSAFE-NO-RHAI.md`](./VIOLACAO-N02-UNSAFE-NO-RHAI.md) estabelecem que N-02 está falso
-  na forma escrita desde a v0.1. O argumento que se sustenta é de superfície: parsing de fonte processa **bytes que o
-  autor da página escolhe** a partir da v0.5, e é exatamente a primeira linha da regra proposta em S-01 daquele
-  relatório (`:138-142`) — a fatia da árvore onde `unsafe` de terceiro é proibido pelo critério estrito, não pelo
-  critério de conveniência. Um parser pure-Rust sem rasterizador nativo C é a escolha certa **por esse** motivo.
+  na forma escrita desde a v0.1. O argumento que se sustenta é de superfície: parsing de fonte processa
+  **bytes que o autor da página escolhe** a partir da v0.5, e é exatamente a primeira linha da regra proposta em S-01
+  daquele relatório (`:138-142`) — a fatia da árvore onde `unsafe` de terceiro é proibido pelo critério estrito, não
+  pelo critério de conveniência. Um parser pure-Rust sem rasterizador nativo C é a escolha certa **por esse** motivo.
 - **Shaping do v0.3 é deliberadamente ingênuo**: `cmap` char→glyph 1:1, avanços horizontais, kerning por `kern`/`GPOS`
   simples. **Fora**: ligaduras, BiDi, escritas complexas, quebra de linha por dicionário. Declarado em §2.14, e é o que
   `core/css` (F9) e `core/text` (v0.7+) endereçam depois.
@@ -322,8 +322,8 @@ pub trait TextMeasurer: Send + Sync {
 dogfooded):
 
 - `ua_cascade.rs` — folha UA em Rust: `display: block` para `html/body/div/p/h1..h6/section/…`, `inline` para
-  `span/a/em/strong`, margens de bloco default, tamanhos de heading. Herança de `color`/`font_size`. **Sem parser CSS,
-  sem seletores, sem especificidade** — o `<style>` e o `style=` são ignorados no v0.3 (§2.14).
+  `span/a/em/strong`, margens de bloco default, tamanhos de heading. Herança de `color`/`font_size`.
+  **Sem parser CSS, sem seletores, sem especificidade** — o `<style>` e o `style=` são ignorados no v0.3 (§2.14).
 - `block_layout.rs` — fluxo normal em bloco: largura preenche o contentor menos margens/padding, altura é a soma dos
   filhos, texto vira caixas de linha por quebra em espaço. A medição de avanço vem **injetada** como `&dyn TextMeasurer`
   — real (fonte do SO, via o adaptador de `alloy`) em runtime, `FixedMetricsMeasurer` nos testes. **Sem** float, sem
@@ -355,8 +355,9 @@ Duas leituras do PRD que o plano fixa:
 `infrastructure/tokenizer.rs` — máquina de estados **resumível na primeira implementação** (`PRD-008:98-99`,
 `ROADMAP-IMPLEMENTACAO-V1.md:316`). `run(&mut self, input, sink) -> Run`, com `Run::Suspended { resume_at }` quando o
 sink devolve `TokenSinkResult::Script(handle)`, e `resume(resume_at, extra_input)`. Não há JS no v0.3; o handshake é
-exercitado por um sink de teste que injeta `"<p>x"` na retomada e exige o nó no resultado. **Escrever isso agora é a
-diferença entre um contrato e um retrofit no F10** — e é a razão principal de F5 custar 25–40 d.
+exercitado por um sink de teste que injeta `"<p>x"` na retomada e exige o nó no resultado.
+**Escrever isso agora é a diferença entre um contrato e um retrofit no F10** — e é a razão principal de F5 custar 25–40
+d.
 
 **Recorte html5lib vendorizado**, em `core/html/tests/data/` com `MANIFEST.md` que lista arquivo por arquivo:
 
@@ -458,8 +459,9 @@ indexing_slicing        = "deny"    string_slice   = "deny"
 panic = "deny"   unwrap_used = "deny"   expect_used = "deny"   todo = "deny"
 ```
 
-`clippy.toml` afrouxa **só em teste** (`allow-unwrap-in-tests` e os três irmãos). E o workspace hoje tem **zero
-`#[allow(...)]` em código de produção** — v0.1 e v0.2 foram escritas inteiras sob o portão, sem uma única exceção.
+`clippy.toml` afrouxa **só em teste** (`allow-unwrap-in-tests` e os três irmãos). E o workspace hoje tem
+**zero `#[allow(...)]` em código de produção** — v0.1 e v0.2 foram escritas inteiras sob o portão, sem uma única
+exceção.
 
 Onde isso bate no v0.3:
 
@@ -538,9 +540,9 @@ de software e a primeira golden com letra sintética/determinística (1 d).
 
 **F4c — passos (12–17 d), em `core/css/`:** os cinco agregados + `CssError` + `PORT_SCHEMA_VERSION` (2–3 d);
 `snapshot(&DomTree)` e a decisão de `dom` como única dependência (1–2 d); `CascadeResolver`/`LayoutEngine` +
-`run_cascade_suite`/`run_layout_suite` + mocks + feature `no-script` (2–3 d); **porta `TextMeasurer` +
-`FixedMetricsMeasurer` + o adaptador em `alloy` sobre o `FontProvider`** (2 d, §2.8); `ua_cascade` (2–3 d);
-`block_layout` com a medição injetada (3–4 d).
+`run_cascade_suite`/`run_layout_suite` + mocks + feature `no-script` (2–3 d);
+**porta `TextMeasurer` + `FixedMetricsMeasurer` + o adaptador em `alloy` sobre o `FontProvider`** (2 d, §2.8);
+`ua_cascade` (2–3 d); `block_layout` com a medição injetada (3–4 d).
 
 **F5 — passos (25–40 d), em `core/html/`:** `Token` e value objects (2–3 d); `TokenSink`/`TreeSink`/`TokenSinkResult` +
 `MockTreeSink` + feature `no-default-tree` (2–3 d); **máquina de estados resumível** — estados de dados, tag, atributo,
@@ -562,8 +564,8 @@ em nightly, 10 min por alvo, bloqueante (1–1,5 d); job de determinismo (render
 framebuffer nos 3 SOs) (0,5 d); ADR-0016, ADR-0017, linhas no `docs/adr/README.md`, retrofit de `PRD-005`, emendas em
 `PRD-007`/`PRD-008`, três contract records, `overview.md`, `CLAUDE.md` (1 d).
 
-**Mínimo viável** (só C-14 + C-17, sem texto, sem HTML, sem CSS): F4a ≈ **12–18 d**. **Escopo completo:** ≈ **65–101
-dias-dev `[modelado]`**.
+**Mínimo viável** (só C-14 + C-17, sem texto, sem HTML, sem CSS): F4a ≈ **12–18 d**. **Escopo completo:** ≈
+**65–101 dias-dev `[modelado]`**.
 
 ---
 
@@ -677,8 +679,8 @@ Nada aqui foi executado. Nenhum item nasce marcado.
    a reescrita de `PRD-001:97` por superfície de ameaça (item 2) **antes** de qualquer decisão nova de dependência — e o
    risco 7.1 daquele relatório é explícito: rodar `cargo-geiger` na árvore de hoje antes de fixar dependência nova,
    senão a allowlist nasce descrevendo uma árvore que ninguém mediu. Fixar `ttf-parser` sem isso é repetir a assimetria
-   que S-03 documenta. O `ADR-0018` da v0.5 é onde essa regra é escrita; **se ele não vier antes da F4b, a alternativa
-   mínima é rodar `cargo-geiger` uma vez e registrar a saída aqui.**
+   que S-03 documenta. O `ADR-0018` da v0.5 é onde essa regra é escrita;
+   **se ele não vier antes da F4b, a alternativa mínima é rodar `cargo-geiger` uma vez e registrar a saída aqui.**
 
 6. **O v0.3 escreve quatro ports de uma vez.** É o maior lote de superfície pública do projeto até aqui, e o `ADR-0011`
    exige sete itens para cada um, incluindo suíte de conformidade, adaptador de referência, feature `no-*` e contract
@@ -737,8 +739,8 @@ Nada aqui foi executado. Nenhum item nasce marcado.
 > no branch `feat/v0-2-implementation` (`core/graphics`, `core/css` e `core/html` são placeholders de 8 linhas; a API
 > pública de `DomTree` foi lida de `core/dom/src/domain/tree.rs`). **Revisão de 2026-09-03** reconferiu tudo contra
 > `main` (`b4c3cd3`), corrigiu seis citações penduradas e a numeração de ADR, e fixou `ttf-parser` em **`=0.25.1`**
-> (verificado por `cargo search`: pure-Rust, licença MIT/Apache-2.0, já na allowlist do `deny.toml:23-34`). **Não
-> verificado**: o conteúdo exato dos arquivos do upstream html5lib-tests, cujo recorte da §2.9 é declarado por
+> (verificado por `cargo search`: pure-Rust, licença MIT/Apache-2.0, já na allowlist do `deny.toml:23-34`).
+> **Não verificado**: o conteúdo exato dos arquivos do upstream html5lib-tests, cujo recorte da §2.9 é declarado por
 > capacidade e vira lista nominal no `MANIFEST.md` no ato do vendoring. Os esforços em dias-dev são `[modelado]`; os
 > blocos que existem no roadmap reaproveitam `ROADMAP-IMPLEMENTACAO-V1.md:261-262`, e os demais não têm velocidade
 > histórica para calibrá-los.

@@ -1,0 +1,15 @@
+# Markdown lint + format (ADR-0025). Replaces prettier + markdownlint-cli2.
+[global]
+exclude = ["target", ".git", ".agents", ".cursor", "Cargo.lock"]
+disable = ["MD007", "MD010"]
+
+[MD013]
+code-blocks = false
+headings = false
+line-length = 120
+tables = false
+reflow = true
+reflow-mode = "normalize"
+
+[MD024]
+siblings-only = true

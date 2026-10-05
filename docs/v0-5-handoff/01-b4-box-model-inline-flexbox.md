@@ -65,7 +65,7 @@ Estes arquivos foram lidos linha a linha nesta sessão e seguem o estilo do rest
     # → No such file or directory
     ```
 
-    `block.rs:361-363` já chama o que se espera dele:
+   `block.rs:361-363` já chama o que se espera dele:
 
     ```rust
     if display_of(node) == Display::Flex {
@@ -73,7 +73,7 @@ Estes arquivos foram lidos linha a linha nesta sessão e seguem o estilo do rest
     }
     ```
 
-    A assinatura a implementar é exatamente essa:
+   A assinatura a implementar é exatamente essa:
 
     ```rust
     pub(crate) fn layout(
@@ -85,7 +85,7 @@ Estes arquivos foram lidos linha a linha nesta sessão e seguem o estilo do rest
     ) -> Result<ContentFlow, CssError>
     ```
 
-    Ver "Passos" abaixo para o algoritmo.
+   Ver "Passos" abaixo para o algoritmo.
 
 2. **Argumento faltando.** `block.rs:511` chama
    `inline::layout(context, items, flowing.content_width, flowing.font_size)` com 4 argumentos, mas `inline.rs:95-101`
@@ -133,7 +133,7 @@ os primeiros são corrigidos (o compilador para cedo quando há erro de import).
     - Flexbox: `flex-direction`, `flex-wrap`, `justify-content`, `align-items`, `align-content`, `align-self`,
       `flex-grow`, `flex-shrink`, `flex-basis` (9).
 
-    Mude o tipo do array para `[&str; 33]` e documente o motivo do salto no comentário da constante.
+   Mude o tipo do array para `[&str; 33]` e documente o motivo do salto no comentário da constante.
 
 4. **Atualizar `core/css/tests/data/MANIFEST.md`** — acrescente as 19 linhas na tabela `## Properties` (coluna `since` =
    `B4`), e revise a linha "Declared out": remova `width`, `height`, `box-sizing`, `flex-direction` dela (agora

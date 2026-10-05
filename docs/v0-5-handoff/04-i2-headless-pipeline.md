@@ -31,8 +31,8 @@ grep -n "graphics\|css\|html" alloy/Cargo.toml
          → png::encode
     ```
 
-    Cada seta é uma chamada de função já existente em algum crate — esta fase não inventa lógica nova de
-    parsing/cascata/layout, só encadeia o que B0–B5 já produziram.
+   Cada seta é uma chamada de função já existente em algum crate — esta fase não inventa lógica nova de
+   parsing/cascata/layout, só encadeia o que B0–B5 já produziram.
 
 3. **`alloy/src/application/paint.rs`** — `LayoutBoxTree → DisplayList` via `DisplayListBuilder` (de `core/graphics`).
    Decisão já tomada no plano original: fica em `alloy`, não em `core/css` nem `core/graphics` — nenhum "segundo

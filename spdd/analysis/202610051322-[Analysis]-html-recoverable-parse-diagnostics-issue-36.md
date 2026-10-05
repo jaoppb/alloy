@@ -13,8 +13,8 @@ from that:
 
 - `core/html/src/infrastructure/tokenizer/attribute_state.rs:23` does
   `AttributeName::new(name_str, cursor.location())?`. Once #28 makes `AttributeName` strict (it rejects control
-  characters, whitespace and `" ' / = >`), one malformed attribute such as `<div a"b=1>` would fail the **whole
-  document**.
+  characters, whitespace and `" ' / = >`), one malformed attribute such as `<div a"b=1>` would fail the
+  **whole document**.
 - `DomTreeSink` currently hides that mismatch by **silently** dropping attributes `dom` rejects
   (`let Ok(..) = dom::AttributeName::new(..) else { continue };`).
 

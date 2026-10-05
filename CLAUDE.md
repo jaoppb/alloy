@@ -35,14 +35,14 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `docs/architecture/style-cascade-port-contract.md`.
 - **B5 — `core/html`**: HTML5 tokenizer + `TreeSink`/`TokenSink` ports (PRD-008) — WHATWG §13.2.5 state machine for the
   states a real document uses, `<script>`/`<style>` raw-text mode, minimal tag-omission rules.
-  `core/html/tests/data/MANIFEST.md` + `manifest_runner.rs` mirror B1's two-way consistency gate. **Recoverable parse
-  errors (#36, ADR-0023, `html::PORT_SCHEMA_VERSION = 2`)**: malformed input never aborts a parse — it yields located
-  `ParseDiagnostic`s via `Token::ParseError` / `TreeSink::parse_error`, and `dom::parse` returns
-  `ParseOutcome { tree, diagnostics }`; `HtmlError` is fatal-only. **Vocabulary owned by `html` (#27/#28/#29, ADR-0024,
-  `html::PORT_SCHEMA_VERSION = 3`)**: `TagName`, `AttributeName` (one strict rule; an invalid name is dropped and
-  reported as `invalid-attribute-name`), `AttributeValue` and `HtmlEntity` live in `html`, a leaf crate; the dependency
-  is `dom → html`, `DomTreeSink`/`parse` live in `dom`, and `css`, `rhai-bindings` and `alloy` import the vocabulary
-  from `html` directly (`dom` re-exports none of it).
+  `core/html/tests/data/MANIFEST.md` + `manifest_runner.rs` mirror B1's two-way consistency gate.
+  **Recoverable parse errors (#36, ADR-0023, `html::PORT_SCHEMA_VERSION = 2`)**: malformed input never aborts a parse —
+  it yields located `ParseDiagnostic`s via `Token::ParseError` / `TreeSink::parse_error`, and `dom::parse` returns
+  `ParseOutcome { tree, diagnostics }`; `HtmlError` is fatal-only.
+  **Vocabulary owned by `html` (#27/#28/#29, ADR-0024, `html::PORT_SCHEMA_VERSION = 3`)**: `TagName`, `AttributeName`
+  (one strict rule; an invalid name is dropped and reported as `invalid-attribute-name`), `AttributeValue` and
+  `HtmlEntity` live in `html`, a leaf crate; the dependency is `dom → html`, `DomTreeSink`/`parse` live in `dom`, and
+  `css`, `rhai-bindings` and `alloy` import the vocabulary from `html` directly (`dom` re-exports none of it).
 - **X — `core/graphics`**: PNG decoder (`IHDR`/`IDAT`/`IEND`, RGB/RGBA 8-bit) over `network::inflate`, `DrawImage` on
   `SoftwareCpuBackend`, integer box-sample scaling (ADR-0016 — no floating-point in the geometry). Fuzz targets exist
   (`fuzz/fuzz_targets/{inflate,png_decode}.rs`) but were not run for 10 minutes/target in this session — CI's new `fuzz`
@@ -81,10 +81,10 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   future ADR revision), `css-conformance` (extended to `-p html`), `layering` (renamed from `no-engine`, `no-engine`
   kept as a `just` alias, extended to `core/html`), `fuzz` (`{inflate, png_decode, css_parse}`, wiring only — not run to
   completion in this sandbox: no `cargo-fuzz`/nightly toolchain available here), `coverage` (extended to
-  `css`/`network`/`window`/`html` `domain/` only, via `--ignore-filename-regex`). **Known gap this session did not
-  close**: that coverage extension currently measures **~66% lines**, not the 85% the gate requires — it is wired as
-  specified and will fail until more domain-level tests are written for `network` (`Url`, `HeaderMap`, error variants)
-  and `window` (`error`, `attributes`) especially.
+  `css`/`network`/`window`/`html` `domain/` only, via `--ignore-filename-regex`).
+  **Known gap this session did not close**: that coverage extension currently measures **~66% lines**, not the 85% the
+  gate requires — it is wired as specified and will fail until more domain-level tests are written for `network` (`Url`,
+  `HeaderMap`, error variants) and `window` (`error`, `attributes`) especially.
 - **I4 — `alloy <url>`, native window rendering**: **not part of this delivered set** — in progress separately.
 
 Still **stubs** (a doc comment and `#![forbid(unsafe_code)]`, no functions): `core/js`, `devtools`, `extension`. Open
@@ -93,20 +93,20 @@ delivered crate now demonstrates; `docs/adr/` + `docs/requirements/` remain the 
 
 ## Commands
 
-Tooling is split: Cargo for Rust, pnpm for Markdown quality gates. A root `justfile` wraps both — `just` lists every
-recipe.
+Tooling is split: Cargo for Rust, `rumdl` for Markdown quality gates, `mise` (`mise.toml`) pinning every tool version
+except Rust (`rust-toolchain.toml`, ADR-0025). A root `justfile` wraps them — `just` lists every recipe.
 
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection
-just setup                                   # one-time: pnpm deps, rust components, cargo-deny, cargo-llvm-cov, arch-lint, git hooks
+just setup                                   # one-time: `mise install` (all tools in mise.toml), rust components, git hooks
 just test engine "-- name"                   # scoped test run
 just run --script scripts/hello.rhai         # run the alloy binary
 just deny | just coverage | just layering    # individual CI gates (`no-engine` still works as an alias for `layering`)
 just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy) — CI-only otherwise, `fuzz` needs nightly + cargo-fuzz
 
 # equivalent raw commands:
-pnpm check                                  # prettier check + markdownlint + cargo fmt --check + clippy
-cargo test --workspace                      # all tests (also `pnpm test`)
+rumdl check . && rumdl fmt --check .        # Markdown lint + format check (also in `just lint` / `just fmt-check`)
+cargo test --workspace                      # all tests
 cargo test -p dom --test tree_invariants     # one integration-test file
 cargo test -p engine mock_engine             # tests matching a name
 cargo check --workspace --all-targets
@@ -114,18 +114,18 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint`, prettier and
-markdownlint (auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`.
-Clippy warnings are errors — never leave one behind. The strict lint set lives in `[workspace.lints.clippy]` (root
+Git hooks are managed by **Lefthook** (`lefthook.yml`): pre-commit runs `cargo fmt`, clippy, `arch-lint` and `rumdl`
+(auto-staging fixes); pre-push runs `cargo test --workspace` and `cargo check --workspace --all-targets`. Clippy
+warnings are errors — never leave one behind. The strict lint set lives in `[workspace.lints.clippy]` (root
 `Cargo.toml`) plus `clippy.toml`; `arch-lint.toml` adds the `tracing` / no-`unwrap` code-pattern rules. Before writing a
 new architectural or dependency-direction check, extend `arch-lint.toml` with a rule — a bespoke ad hoc script (a
 `cargo tree | grep`, a manual dependency scan) duplicates a mechanism that almost certainly already exists there.
 
-Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `setup-node`, `cache`, …) and `node-version` on
-their current stable major/LTS — check before pinning a version, not after review flags a stale one.
+Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `jdx/mise-action`, `cache`, …) on their current
+stable major/LTS — check before pinning a version, not after review flags a stale one.
 
-Markdown formatting is enforced with **tabs, tab width 4, print width 120, `proseWrap: always`** (`.prettierrc.json`).
-Run `pnpm format:md` after editing any `.md` file or the commit hook will rewrite it.
+Markdown formatting is enforced by **rumdl** (`.rumdl.toml`: print width 120, reflow). Run `rumdl fmt` after editing any
+`.md` file or the commit hook will rewrite it.
 
 ## Architecture
 

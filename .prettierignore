@@ -1,7 +1,0 @@
-target/
-node_modules/
-pnpm-lock.yaml
-Cargo.lock
-.git/
-.agents/
-.cursor/

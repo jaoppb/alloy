@@ -28,14 +28,15 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0022](0022-platform-crate-isolates-os-specifics.md)                   | A `platform` Crate Isolates Host-OS Specifics            | Accepted | 2026-10-03 |
 | [ADR-0023](0023-recoverable-diagnostics-are-port-data.md)                  | Recoverable Diagnostics Are Port Data, Not Errors        | Accepted | 2026-10-05 |
 | [ADR-0024](0024-dom-depends-on-the-html-vocabulary.md)                     | `dom` Depends on the `html` Vocabulary                   | Accepted | 2026-10-05 |
+| [ADR-0025](0025-mise-as-the-source-of-truth-for-tool-versions.md)          | mise Is the Source of Truth for Tool Versions            | Accepted | 2026-10-05 |
 
 ---
 
 ## 🔒 Números reservados
 
 Os planos de implementação em `docs/reports/` reivindicam números de ADR antes de os arquivos existirem, e três
-documentos já colidiram em `0014`–`0017`. Esta tabela é o registro de reserva: **consulte-a antes de numerar um ADR
-novo**, e adicione a linha aqui no mesmo commit em que o plano reivindica o número.
+documentos já colidiram em `0014`–`0017`. Esta tabela é o registro de reserva:
+**consulte-a antes de numerar um ADR novo**, e adicione a linha aqui no mesmo commit em que o plano reivindica o número.
 
 | Número       | Reservado para                                                                    | Origem da reserva                              |
 | ------------ | --------------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -46,5 +47,5 @@ novo**, e adicione a linha aqui no mesmo commit em que o plano reivindica o núm
 | ~~ADR-0019~~ | _Aceito 2026-09-05 (v0.5 Fase P) — ver índice._ Event loop único                  | `IMPLEMENTACAO-DETALHADA-V0-5.md` §2.3         |
 
 > ⚠️ O branch **`docs/benchmark-harness-prd-009`** (`e2f5f1f`, sem PR aberto) tem `0016-…benchmark-harness.md` e
-> `0017-…performance-tiers….md` escritos, ambos `Proposed`. Eles colidem com as reservas acima e **renumeram para
-> `0020`/`0021` ao rebasear** — a v0.3 tem prioridade de fila por ser a próxima versão.
+> `0017-…performance-tiers….md` escritos, ambos `Proposed`. Eles colidem com as reservas acima e
+> **renumeram para `0020`/`0021` ao rebasear** — a v0.3 tem prioridade de fila por ser a próxima versão.

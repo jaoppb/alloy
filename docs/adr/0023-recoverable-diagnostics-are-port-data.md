@@ -10,9 +10,9 @@
 
 `ADR-0011` item 4 requires "exactly one `enum <Port>Error` per port". For `core/html` that error, `HtmlError`, aborted
 the whole parse, so a single malformed construct failed the document or — where a sink worked around it — was dropped
-silently (`DomTreeSink` skipped attributes `dom` rejected). WHATWG HTML treats almost all malformations as _parse
-errors_ that are reported while parsing continues. Issue #36 needs a way to report them without aborting, and #28 (a
-strict `AttributeName`) would otherwise turn one bad attribute into a failed page.
+silently (`DomTreeSink` skipped attributes `dom` rejected). WHATWG HTML treats almost all malformations as
+_parse errors_ that are reported while parsing continues. Issue #36 needs a way to report them without aborting, and #28
+(a strict `AttributeName`) would otherwise turn one bad attribute into a failed page.
 
 The question: where does a recoverable, located error live, given that item 4 allows only one error enum?
 

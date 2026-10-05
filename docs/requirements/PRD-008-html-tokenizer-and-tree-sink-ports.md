@@ -118,8 +118,8 @@ goes through the same traits an alternative implementation would.
 - [ ] `Token`, `TokenSink`, `TreeSink`, and `TokenSinkResult` defined in `core/html` / `core/dom`, frozen at integration
       point `I3`.
 - [ ] Built-in tokenizer and tree builder pass the declared html5lib subset.
-- [ ] An alternative `TreeSink` mock builds a different in-memory structure from the same token stream **without
-      changing** `core/html`.
+- [ ] An alternative `TreeSink` mock builds a different in-memory structure from the same token stream
+      **without changing** `core/html`.
 - [ ] A `<script>` that calls `document.write("<p>x")` suspends the tokenizer, injects input on resume, and the final
       tree contains the written node.
 - [ ] `core/html` tokenizer builds and tests with a stub `TreeSink` (feature `no-default-tree`).

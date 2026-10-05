@@ -1,6 +1,6 @@
 # ADR-0008: Git Hooks and Code Quality Tooling
 
-- **Status**: Accepted
+- **Status**: Accepted (pnpm/prettier/markdownlint-cli2 superseded by ADR-0025)
 - **Deciders**: Architecture Team
 - **Date**: 2026-08-22
 

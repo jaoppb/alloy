@@ -120,11 +120,11 @@ consumer that does not care about fonts is unaffected.
 ### `4 → 5` — "unstyled real sites" follow-up: the `background` / `border` shorthands
 
 `SUPPORTED_PROPERTIES` grows from 34 to 36: the CSS Backgrounds & Borders L3 `background` and `border` shorthands are
-now accepted by the parser and resolved by the cascade, each **narrowed to the single component this cut already has a
-computed value for** — `background` → its colour (folded into `ComputedStyle::background_color`), `border` → its width
-(folded into the `border` edges, like `border-width`). `url()` layers, gradients, position/repeat/size keywords, and a
-border's `<line-style>` and colour are scanned past; `none` / `0` clear. The narrowings are declared in
-`core/css/tests/data/MANIFEST.md` beside the Flexbox and font cuts.
+now accepted by the parser and resolved by the cascade, each
+**narrowed to the single component this cut already has a computed value for** — `background` → its colour (folded into
+`ComputedStyle::background_color`), `border` → its width (folded into the `border` edges, like `border-width`). `url()`
+layers, gradients, position/repeat/size keywords, and a border's `<line-style>` and colour are scanned past; `none` /
+`0` clear. The narrowings are declared in `core/css/tests/data/MANIFEST.md` beside the Flexbox and font cuts.
 
 **No boundary-aggregate field changed** — this is a wider set of _inputs_ for fields that already exist, so a consumer
 that pattern-matches `ComputedStyle` is unaffected; a producer feeding real-world stylesheets simply gets
@@ -135,8 +135,8 @@ fetch/paint are the next items and are **not** in this bump.
 
 ### `7 → 8` — PR #19 review round: `ComputedStyle` loses `Copy`, schema-7 boundary types settled
 
-The review of the schema-7 widening changed boundary types a consumer can observe. Two of the changes are **not
-additive**:
+The review of the schema-7 widening changed boundary types a consumer can observe. Two of the changes are
+**not additive**:
 
 - **`ComputedStyle` is `Clone`, no longer `Copy`.** Its CSS Grid group (`GridStyle`, ~2.9 KB of fixed-capacity track
   lists, area names and line names) was inlined in schema 7 and made every style ~3.7 KB, copied through each cascade

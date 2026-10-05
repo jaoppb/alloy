@@ -22,22 +22,17 @@ env:
 jobs:
   # ---- cheap gates first: markdown + rust style ----------------------------
   markdown:
-    name: Markdown (prettier + markdownlint)
+    name: Markdown (rumdl)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      # pnpm must exist before setup-node@v7 resolves the `packageManager` field.
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: jdx/mise-action@v5
         with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint:md
+          install_args: rumdl
+      - run: rumdl check .
 
   rust-quality:
     name: Rust format + clippy
@@ -222,7 +217,6 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: |
-            ~/.cargo/bin/cargo-fuzz
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             fuzz/target/
@@ -230,8 +224,9 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-fuzz-
       - name: Install nightly (cargo-fuzz requires it)
         run: rustup toolchain install nightly --profile minimal
-      - name: Install cargo-fuzz
-        run: test -x ~/.cargo/bin/cargo-fuzz || cargo install cargo-fuzz --locked
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: cargo:cargo-fuzz
       # 10 minutes per target (ADR-0018 row 1: TLS/HTTP/HTML/CSS/image/font
       # decoders must never panic on hostile bytes) — zero crashes expected.
       # Run from the repo root: cargo-fuzz auto-discovers ./fuzz/Cargo.toml,
@@ -247,13 +242,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/cache@v6
+      - uses: jdx/mise-action@v5
         with:
-          path: ~/.cargo/bin/cargo-deny
-          key: cargo-deny-bin-0.20
-      - name: Install cargo-deny
-        run: |
-          test -x ~/.cargo/bin/cargo-deny || cargo install cargo-deny --locked --version ^0.20
+          install_args: cargo-deny
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
@@ -274,14 +265,14 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: |
-            ~/.cargo/bin/cargo-geiger
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             target/
           key: ${{ runner.os }}-cargo-geiger-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-geiger-
-      - name: Install cargo-geiger
-        run: test -x ~/.cargo/bin/cargo-geiger || cargo install cargo-geiger --locked
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: cargo:cargo-geiger
       - run: ci/unsafe_audit.sh
 
   # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
@@ -294,13 +285,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/cache@v6
+      - uses: jdx/mise-action@v5
         with:
-          path: ~/.cargo/bin/arch-lint
-          key: arch-lint-bin-0.6
-      - name: Install arch-lint
-        run: |
-          test -x ~/.cargo/bin/arch-lint || cargo install arch-lint-cli --locked --version ^0.6
+          install_args: cargo:arch-lint-cli
       - run: arch-lint check
 
   coverage:
@@ -319,12 +306,12 @@ jobs:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
-            ~/.cargo/bin/cargo-llvm-cov
             target/
           key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-cov-
-      - name: Install cargo-llvm-cov
-        run: test -x ~/.cargo/bin/cargo-llvm-cov || cargo install cargo-llvm-cov --locked
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: cargo:cargo-llvm-cov
       # domain/ has no I/O and no excuse — roadmap §5 sets the v0.1 gate at 85%.
       - name: Coverage for engine domain/
         run: >

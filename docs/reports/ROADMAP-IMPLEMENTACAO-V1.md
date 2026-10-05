@@ -88,9 +88,9 @@ cargo fmt --all --check
 # → error: 'cargo-fmt' is not installed for the toolchain 'stable-x86_64-unknown-linux-gnu'
 ```
 
-O hook `rust-fmt` de `lefthook.yml:7-11` roda `cargo fmt` em todo commit que toque `.rs`. Na máquina atual, **qualquer
-commit de código Rust falha**. Correção: `rustup component add rustfmt`, e fixar a toolchain para que isso não dependa
-da máquina de cada dev.
+O hook `rust-fmt` de `lefthook.yml:7-11` roda `cargo fmt` em todo commit que toque `.rs`. Na máquina atual,
+**qualquer commit de código Rust falha**. Correção: `rustup component add rustfmt`, e fixar a toolchain para que isso
+não dependa da máquina de cada dev.
 
 **2. `Cargo.lock` está ignorado.** `.gitignore:4` remove o lockfile do versionamento. Isso é a convenção para
 bibliotecas, e o **oposto** do correto para uma aplicação: destrói a reprodutibilidade do build entre devs e CI, e torna
@@ -171,8 +171,8 @@ Incluir `core/js` na v1.0 foi decisão explícita, e é o maior multiplicador de
 | Motor próprio    | Parser, interpretador e GC escritos do zero | Anos-dev antes do primeiro `alert()`                                                              | Rejeitada: consumiria sozinho o cronograma inteiro                       |
 
 `boa_engine` é a escolha coerente com o projeto: mantém a matriz de CI sem compilador C/C++ e preserva **N-02**. O custo
-assumido é explícito: **páginas com JavaScript moderno pesado não vão funcionar na v1.0**, e a taxa de `test262`
-(seção 5) existe justamente para tornar esse limite visível em vez de vergonhoso.
+assumido é explícito: **páginas com JavaScript moderno pesado não vão funcionar na v1.0**, e a taxa de `test262` (seção
+5) existe justamente para tornar esse limite visível em vez de vergonhoso.
 
 O que **não** se deve fazer é encaixar o motor JS na trait `RuntimeEngine` de `PRD-002:31-56`. Essa trait é do Muscle —
 `ADR-0006:63-68` separa "Web Content JavaScript (`core/js`)" de "Browser Muscle Engine (`core/engine` +
@@ -198,8 +198,8 @@ concedidos. Isso é insuficiente: falta _same-origin policy_, falta isolamento p
 
 A v1.0 precisa de três adições ao PRD-003, e a fase **F7** as implementa: um perfil `WEB_CONTENT` que concede apenas
 `DOM_READ | DOM_MUTATE` sobre a árvore _da própria aba_, uma noção de `Origin` como value object carregado no
-`ExecutionContext`, e um limite de instruções por _task_ distinto do limite de script muscle. **Atualizar o PRD-003 é
-entregável de F7**, não trabalho opcional de documentação.
+`ExecutionContext`, e um limite de instruções por _task_ distinto do limite de script muscle.
+**Atualizar o PRD-003 é entregável de F7**, não trabalho opcional de documentação.
 
 ---
 
@@ -282,8 +282,8 @@ Onde as trilhas obrigatoriamente se encontram — e onde vale marcar reunião:
 | **I5** | A ↔ D     | Event loop de JS convive com o watcher de hot-reload sem deadlock e sem _starvation_                  | F10 + F11 |
 | **I6** | C ↔ todos | Vulkan e OpenGL entram sem que layout ou DOM percebam — prova de que `DisplayList` desacoplou de fato | F12       |
 
-**Mínimo viável** (a tese provada, headless, sem JS e sem GPU): tudo até a **v0.3** ≈ **92–140 d**. **Escopo completo da
-v1.0:** as sete versões ≈ **239–363 dias-dev**.
+**Mínimo viável** (a tese provada, headless, sem JS e sem GPU): tudo até a **v0.3** ≈ **92–140 d**.
+**Escopo completo da v1.0:** as sete versões ≈ **239–363 dias-dev**.
 
 Traduzir isso em calendário exige assumir a eficiência do paralelismo, que é onde estimativas costumam mentir. Com 3
 devs e aproveitamento de ~65% `[modelado]` — trilhas que esperam umas pelas outras nos pontos de integração, revisão de
@@ -406,8 +406,8 @@ Nada aqui foi executado. Nenhum item nasce marcado.
    d é otimista se a superfície de API crescer por demanda das páginas de teste.
 
 2. **Parsing HTML5 é rotineiramente subestimado.** A especificação de tokenização e construção de árvore é longa, cheia
-   de casos de recuperação de erro, e não admite "quase certo": páginas reais dependem de cada regra de _foster
-   parenting_ e de fechamento implícito. F5 pode estourar sozinha o equivalente a uma fase inteira.
+   de casos de recuperação de erro, e não admite "quase certo": páginas reais dependem de cada regra de
+   _foster parenting_ e de fechamento implícito. F5 pode estourar sozinha o equivalente a uma fase inteira.
 
 3. **Três backends gráficos antes de um funcionar bem.** Vulkan e OpenGL na F12 chegam depois do rasterizador de
    software, e a ordem protege o cronograma — mas se a F12 escorregar, a v1.0 sai com um backend só. Isso é aceitável e

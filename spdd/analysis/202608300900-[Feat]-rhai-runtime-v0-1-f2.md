@@ -43,9 +43,9 @@ _mechanism_ here (`ScriptPanic` trapping); the DevTools-logging fallback handler
    so `#[forbid(unsafe_code)]` holds.
 6. **Marshaling** (`marshal.rs`): `EngineValue` ⇄ `rhai::Dynamic` by `match` / typed accessors. Workspace pins `rhai`
    features so `INT = i64`, `FLOAT = f64` — no 64-bit truncation.
-7. **`EngineType` bridge**: `RhaiContext::register_custom_type::<T: EngineType + rhai::CustomType>()` is an _adapter
-   extension_ (the `rhai::CustomType` bound only appears in `rhai-runtime`). The port's `register_type_erased` records
-   the name only; the generic capability-guarded registrar is v0.2 (I1).
+7. **`EngineType` bridge**: `RhaiContext::register_custom_type::<T: EngineType + rhai::CustomType>()` is an
+   _adapter extension_ (the `rhai::CustomType` bound only appears in `rhai-runtime`). The port's `register_type_erased`
+   records the name only; the generic capability-guarded registrar is v0.2 (I1).
 8. **`call_function_value`** invokes a registered _native_ binding directly from Rust (kept in a `HashMap` on the
    context). Calling a _script-defined_ `fn` from Rust needs the AST-retention machinery of F11 and is out of scope.
 9. **`alloy` CLI**: hand-rolled arg parsing (`--script`, `-h`, `-V`), no dependency (v0.1 report decision 2.8). Added as

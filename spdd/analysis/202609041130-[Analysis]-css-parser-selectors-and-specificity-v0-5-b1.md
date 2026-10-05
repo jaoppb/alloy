@@ -169,9 +169,9 @@ Rust, or as a `.rhai` / Wasm adapter driven through `RuntimeEngine` — without 
 - **Parsing é Rust nativo, não porta** (`PRD-007:11-13`): nada do parser aparece numa assinatura de porta; o produto do
   parser é o `StyleSheetSet`, que já é agregado de fronteira. Governa a localização de todo módulo novo
   (`infrastructure/parser/`).
-- **O recorte é declarado, não descoberto** (`relatório §2.8:350-354`): o que está fora tem de ser **rejeitado ou
-  marcado como não-suportado**, nunca ignorado em silêncio. Governa `ParseNotes`, o `manifest_runner` e a decisão de
-  `:has()` / `::before` / `@supports` / namespaces.
+- **O recorte é declarado, não descoberto** (`relatório §2.8:350-354`): o que está fora tem de ser
+  **rejeitado ou marcado como não-suportado**, nunca ignorado em silêncio. Governa `ParseNotes`, o `manifest_runner` e a
+  decisão de `:has()` / `::before` / `@supports` / namespaces.
 - **Recuperação, não abandono** (CSS Syntax L3 §5.4.1, plano B1): uma regra malformada consome até o `}` que a fecha,
   uma declaração malformada até o `;`, e o resto da folha continua sendo parseado. Governa `rules.rs`.
 - **Especificidade + origem + ordem de documento** (`relatório §2.8:334`, `PRD-007:38`): o desempate é

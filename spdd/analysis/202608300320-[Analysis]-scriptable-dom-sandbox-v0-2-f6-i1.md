@@ -184,18 +184,18 @@ through guarded handle methods → on return `alloy` reads `rc.borrow()` and pri
   `impl<T: ExecutionContext> DynExecutionContext for T` is a trivial delegation and needs no `Any`. `DynRuntimeEngine`'s
   `eval_value` receives `&mut dyn DynExecutionContext`; to reach `E::Context` it downcasts via an `as_any_mut` on
   `DynExecutionContext` (blanket-provided). The blanket `impl<E> DynRuntimeEngine for E` is bounded
-  `where E: RuntimeEngine, E::Context: 'static` — which `RhaiContext` and `MockEngine`'s context both satisfy — so **no
-  change to `RuntimeEngine` or `ExecutionContext` is required**. The companion is genuinely additive; the only port
+  `where E: RuntimeEngine, E::Context: 'static` — which `RhaiContext` and `MockEngine`'s context both satisfy — so
+  **no change to `RuntimeEngine` or `ExecutionContext` is required**. The companion is genuinely additive; the only port
   surface change in v0.2 is `EngineError::Dom`.
 - **`RhaiContext` becomes `!Send`; `RhaiEngine` stays `Send + Sync`** — `PRD-002:35` requires `Send + Sync` only on
   `RuntimeEngine`; `PRD-002:45` / contract §5.2 explicitly do **not** require it on `ExecutionContext`. Holding
   `Rc<RefCell<DomTree>>` on the context is therefore legal and is the right idiom (`rhai` eval is single-threaded). The
   conformance suite and `MockEngine` must not assume `RhaiContext: Send`.
-- **Scoped panic hook location** — install/restore `std::panic::set_hook` around each `eval` **inside
-  `run_with_fallback`** (and the panic-injection test helper), via a `Drop` guard that restores the previous hook.
-  Alternative — hoist it into `RhaiEngine::evaluate_ast` so every eval is quiet — is cleaner long-term but widens a v0.1
-  function; deferred. The hook only suppresses the default backtrace on stderr and records the panic location; the
-  actual trap stays `catch_unwind` in `evaluate_ast`.
+- **Scoped panic hook location** — install/restore `std::panic::set_hook` around each `eval`
+  **inside `run_with_fallback`** (and the panic-injection test helper), via a `Drop` guard that restores the previous
+  hook. Alternative — hoist it into `RhaiEngine::evaluate_ast` so every eval is quiet — is cleaner long-term but widens
+  a v0.1 function; deferred. The hook only suppresses the default backtrace on stderr and records the panic location;
+  the actual trap stays `catch_unwind` in `evaluate_ast`.
 - **Fallback starts from a clean `DomTree`** (contract §5.4 / report §2.7) — a limit-aborted or panicking primary script
   may leave the tree half-built; `run_with_fallback` constructs a **new** `DomTree` for the `default_dom.rhai` attempt,
   never reusing the partial one.

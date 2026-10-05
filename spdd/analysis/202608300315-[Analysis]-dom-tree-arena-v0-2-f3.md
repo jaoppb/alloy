@@ -32,8 +32,8 @@ From `ROADMAP-IMPLEMENTACAO-V1.md` §3.2 (F3), `docs/reports/IMPLEMENTACAO-DETAL
 > sem auto-pai → `SelfParent`; **(4)** `Document` é raiz única, não desanexável nem removível → `CannotDetachDocument`;
 > **(5)** todo `NodeId` em um `Children` resolve para `Occupied` com `parent` de volta.
 >
-> Decisão 2.3: `descendants(root)` e `ancestors(node)` são iteradores com pilha `Vec<NodeId>` explícita — **sem
-> recursão**. **Não** há exceção de Object Calisthenics para `core/dom` — as 9 regras valem inteiras.
+> Decisão 2.3: `descendants(root)` e `ancestors(node)` são iteradores com pilha `Vec<NodeId>` explícita —
+> **sem recursão**. **Não** há exceção de Object Calisthenics para `core/dom` — as 9 regras valem inteiras.
 >
 > Decisão 2.4: `core/dom/src/domain/error.rs` define **um** enum (`DomError`), derivado com `thiserror` (ADR-0015).
 > `core/dom` não conhece `EngineError`. O mapeamento `DomError → EngineError::Dom` é do adaptador (I1), nunca de

@@ -1,0 +1,18 @@
+# Single source of truth for developer/CI tool versions (ADR-0025, issue #30).
+#
+# Exception: the Rust toolchain stays in `rust-toolchain.toml` — rustup, cargo and
+# IDEs read that file natively; mise does not manage Rust here.
+#
+# Prebuilt binaries are preferred (aqua/github backends). `cargo:` entries have no
+# prebuilt release and are compiled once, then cached by jdx/mise-action keyed on
+# this file. CI jobs install only what they need via `install_args`.
+
+[tools]
+just = "latest"
+lefthook = "latest"
+rumdl = "latest"
+cargo-deny = "0.20"
+"cargo:cargo-llvm-cov" = "latest"
+"cargo:cargo-fuzz" = "latest"
+"cargo:cargo-geiger" = "latest"
+"cargo:arch-lint-cli" = "0.6"

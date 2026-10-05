@@ -84,9 +84,9 @@ specified; a CI gate is incomplete until items 6 and 7 are enforced.
 1. **Seam PRD** — a `docs/requirements/PRD-*.md` that names the seam, the **variation model** (what legitimately differs
    between implementations), and the **threat model** (trusted author vs hostile third party). It follows the structure
    of the existing PRDs and ends in `- [ ]` acceptance criteria.
-2. **Port traits in `application/ports.rs`** — associated types only (`type Compiled`, `type Error`, …); **zero
-   concrete-adapter types** in any signature; `Send + Sync` wherever the aggregate crosses a thread boundary; no generic
-   method that would make the trait non-object-safe unless a companion object-safe form is also provided.
+2. **Port traits in `application/ports.rs`** — associated types only (`type Compiled`, `type Error`, …);
+   **zero concrete-adapter types** in any signature; `Send + Sync` wherever the aggregate crosses a thread boundary; no
+   generic method that would make the trait non-object-safe unless a companion object-safe form is also provided.
 3. **Boundary aggregates** — the immutable input and output types are **owned by the domain crate**, marked
    `#[non_exhaustive]`, carry an explicit schema version, and never expose a foreign crate's type. Conversion across the
    seam is an explicit mapping function or DTO (`ADR-0010:114-119`), never a re-exported adapter type.
@@ -106,8 +106,8 @@ specified; a CI gate is incomplete until items 6 and 7 are enforced.
 
 ### Mechanism vs. Policy
 
-- **Mechanism ports** (HTML tokenizer, CSS cascade, layout, rasterizer, content JS engine) are swapped **at compile
-  time** by selecting an adapter crate. They are not runtime-loadable.
+- **Mechanism ports** (HTML tokenizer, CSS cascade, layout, rasterizer, content JS engine) are swapped
+  **at compile time** by selecting an adapter crate. They are not runtime-loadable.
 - **Policy ports** (pipeline ordering, event routing, request interception) MAY additionally be driven **at runtime**
   through `RuntimeEngine`, once their boundary aggregates are registered as engine types (`C-03`). The adapter is then a
   `.rhai` script and is subject to the capability profile of `PRD-003:55-58`.
