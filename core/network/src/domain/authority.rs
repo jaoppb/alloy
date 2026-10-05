@@ -1,7 +1,7 @@
 //! [`Host`], [`Port`] and [`Authority`] — the "where" half of a URL.
 //!
 //! Validated newtypes, never a naked `String` or `u16` (Object Calisthenics
-//! rule 3, `ADR-0010:129`), following the `dom::AttributeName` pattern:
+//! rule 3, `ADR-0010:129`), following the `html::AttributeName` pattern:
 //! validate and normalise once, in the constructor.
 
 use core::fmt;

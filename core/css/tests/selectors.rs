@@ -56,7 +56,7 @@ fn fixture() -> DomSnapshot {
 }
 
 fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(name).unwrap());
+    let node = tree.create_element(html::TagName::new(name).unwrap());
     tree.append_child(parent, node).unwrap();
     node
 }
@@ -64,8 +64,8 @@ fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeI
 fn attribute(tree: &mut dom::DomTree, node: dom::NodeId, name: &str, value: &str) {
     tree.set_attribute(
         node,
-        dom::AttributeName::new(name).unwrap(),
-        dom::AttributeValue::new(value),
+        html::AttributeName::new(name).unwrap(),
+        html::AttributeValue::new(value),
     )
     .unwrap();
 }

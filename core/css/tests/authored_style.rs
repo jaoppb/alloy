@@ -46,7 +46,7 @@ fn set_inline_style(tree: &mut dom::DomTree, node: dom::NodeId, attribute: Optio
 }
 
 fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(name).unwrap());
+    let node = tree.create_element(html::TagName::new(name).unwrap());
     tree.append_child(parent, node).unwrap();
     node
 }
@@ -54,8 +54,8 @@ fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeI
 fn attribute_of(tree: &mut dom::DomTree, node: dom::NodeId, name: &str, value: &str) {
     tree.set_attribute(
         node,
-        dom::AttributeName::new(name).unwrap(),
-        dom::AttributeValue::new(value),
+        html::AttributeName::new(name).unwrap(),
+        html::AttributeValue::new(value),
     )
     .unwrap();
 }
@@ -81,7 +81,7 @@ fn paragraph_style(sheet: &str, attribute: Option<&str>) -> ComputedStyle {
     let (dom, styled) = resolve(sheet, attribute);
     let id = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("the document has a paragraph");
     styled
         .node(id)
@@ -154,7 +154,7 @@ fn the_author_colour_is_inherited_by_a_descendant_that_no_rule_selects() {
     let (dom, styled) = resolve("body { color: #008000 }", None);
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("a paragraph");
 
     assert_eq!(
@@ -173,7 +173,7 @@ fn a_media_gated_rule_only_applies_once_the_producer_has_discharged_it() {
     let ungated = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("a paragraph");
     assert_eq!(
         ungated.node(paragraph).expect("styled").style().color(),
@@ -372,7 +372,7 @@ fn the_ua_sheet_gives_form_controls_inline_block_and_list_items_list_item() {
 }
 
 fn styled_id(dom: &DomSnapshot, tag: &str) -> css::SnapshotId {
-    let tag_name = dom::TagName::new(tag).expect("a valid tag name");
+    let tag_name = html::TagName::new(tag).expect("a valid tag name");
     dom.nodes_in_document_order()
         .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&tag_name))
         .expect("the document has the requested tag")
@@ -414,7 +414,7 @@ fn the_style_element_itself_is_never_painted() {
     let (dom, styled) = resolve("style { color: #ff0000 }", None);
     let element = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::Style))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::Style))
         .expect("the style element");
 
     assert!(
@@ -444,7 +444,7 @@ fn a_recovered_rule_leaves_a_note_without_costing_the_rules_around_it() {
     let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("a paragraph");
     let style = styled.node(paragraph).expect("styled").style();
 
@@ -467,7 +467,7 @@ fn a_comma_group_applies_the_members_inside_the_cut_and_notes_the_rest() {
     let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("a paragraph");
     assert_eq!(
         styled.node(paragraph).expect("styled").style().color(),
@@ -497,7 +497,7 @@ fn a_comma_inside_an_unsupported_functional_pseudo_class_is_not_a_group_separato
         let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
         let paragraph = dom
             .nodes_in_document_order()
-            .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+            .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
             .expect("a paragraph");
         assert_eq!(
             styled.node(paragraph).expect("styled").style().color(),
@@ -525,7 +525,7 @@ fn a_comma_group_with_no_readable_member_still_drops_its_rule_whole() {
     let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
     let paragraph = dom
         .nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("a paragraph");
     assert_eq!(
         styled.node(paragraph).expect("styled").style().color(),

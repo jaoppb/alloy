@@ -99,8 +99,8 @@ fn resolve(inline: &str) -> (DomSnapshot, StyledTree) {
     let paragraph = child(&mut tree, body, "p");
     tree.set_attribute(
         paragraph,
-        dom::AttributeName::new("style").unwrap(),
-        dom::AttributeValue::new(inline),
+        html::AttributeName::new("style").unwrap(),
+        html::AttributeValue::new(inline),
     )
     .unwrap();
     let dom = snapshot(&tree, root);
@@ -112,7 +112,7 @@ fn resolve(inline: &str) -> (DomSnapshot, StyledTree) {
 }
 
 fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(name).unwrap());
+    let node = tree.create_element(html::TagName::new(name).unwrap());
     tree.append_child(parent, node).unwrap();
     node
 }
@@ -120,7 +120,7 @@ fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeI
 fn style_of<'tree>(
     dom: &DomSnapshot,
     styled: &'tree StyledTree,
-    tag: &dom::TagName,
+    tag: &html::TagName,
 ) -> &'tree ComputedStyle {
     let id = dom
         .nodes_in_document_order()
@@ -132,9 +132,9 @@ fn style_of<'tree>(
 #[test]
 fn the_cascade_stores_a_grid_only_where_one_is_declared() {
     let (dom, styled) = resolve("gap: 4px; grid-template-columns: 1fr 2fr");
-    let paragraph = style_of(&dom, &styled, &dom::TagName::P);
+    let paragraph = style_of(&dom, &styled, &html::TagName::P);
     assert_eq!(paragraph.grid().row_gap(), Length::pixels(4.0));
     assert_eq!(paragraph.grid().template_columns().len(), 2);
-    let body = style_of(&dom, &styled, &dom::TagName::new("body").unwrap());
+    let body = style_of(&dom, &styled, &html::TagName::new("body").unwrap());
     assert!(core::ptr::eq(body.grid(), ComputedStyle::initial().grid()));
 }

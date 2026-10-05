@@ -1,26 +1,39 @@
-//! Default adapter implementing [`TreeSink`] over [`dom::DomTree`].
+//! Default adapter implementing [`html::TreeSink`] over [`DomTree`], and [`parse`].
 
-#![cfg(feature = "dom")]
+use html::{
+    AttributeEntry, AttributeList, Diagnostics, HtmlError, NodeHandle, ParseDiagnostic, TagName,
+    Text, TreeSink,
+};
 
-use crate::application::ports::TreeSink;
-use crate::domain::attribute::{AttributeEntry, AttributeList};
-use crate::domain::diagnostic::{Diagnostics, ParseDiagnostic};
-use crate::domain::error::HtmlError;
-use crate::domain::handle::NodeHandle;
-use crate::domain::tag::TagName;
-use crate::domain::text::Text;
+use crate::domain::error::DomError;
+use crate::domain::node::NodeId;
+use crate::domain::text::{CommentContent, TextContent};
+use crate::domain::tree::DomTree;
+
+/// Parses `markup` into a [`DomTree`] plus the recoverable errors met on the way.
+pub fn parse(markup: &str) -> Result<ParseOutcome, HtmlError> {
+    let mut sink = DomTreeSink::new();
+    html::parse_with_sink(markup, &mut sink)?;
+    Ok(sink.into_outcome())
+}
+
+impl From<DomError> for HtmlError {
+    fn from(error: DomError) -> Self {
+        Self::tree_construction(error)
+    }
+}
 
 /// What a successful parse produces: the tree and every recoverable error met on the way.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseOutcome {
-    tree: dom::DomTree,
+    tree: DomTree,
     diagnostics: Diagnostics,
 }
 
 impl ParseOutcome {
     /// The built tree.
     #[must_use]
-    pub const fn tree(&self) -> &dom::DomTree {
+    pub const fn tree(&self) -> &DomTree {
         &self.tree
     }
 
@@ -32,30 +45,30 @@ impl ParseOutcome {
 
     /// Discards the diagnostics and returns the tree.
     #[must_use]
-    pub fn into_tree(self) -> dom::DomTree {
+    pub fn into_tree(self) -> DomTree {
         self.tree
     }
 
     /// Splits into the tree and the diagnostics.
     #[must_use]
-    pub fn into_parts(self) -> (dom::DomTree, Diagnostics) {
+    pub fn into_parts(self) -> (DomTree, Diagnostics) {
         (self.tree, self.diagnostics)
     }
 }
 
-/// An adapter that builds a real [`dom::DomTree`].
+/// An adapter that builds a real [`DomTree`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DomTreeSink {
-    tree: dom::DomTree,
-    handles: Vec<dom::NodeId>,
+    tree: DomTree,
+    handles: Vec<NodeId>,
     diagnostics: Diagnostics,
 }
 
 impl DomTreeSink {
-    /// Create a new sink wrapping a fresh [`dom::DomTree`].
+    /// Create a new sink wrapping a fresh [`DomTree`].
     #[must_use]
     pub fn new() -> Self {
-        let tree = dom::DomTree::new();
+        let tree = DomTree::new();
         let document = tree.document();
         Self {
             tree,
@@ -79,37 +92,32 @@ impl DomTreeSink {
         &self.diagnostics
     }
 
-    /// Attaches `entry` to `node`, or reports why the DOM refuses it (never a silent drop).
-    fn attach_attribute(
-        &mut self,
-        node: dom::NodeId,
-        entry: &AttributeEntry,
-    ) -> Result<(), HtmlError> {
-        let attr_name = dom::AttributeName::new(entry.name().as_str())?;
-        let attr_val = dom::AttributeValue::new(entry.value().as_str());
-        self.tree.set_attribute(node, attr_name, attr_val)?;
+    fn attach_attribute(&mut self, node: NodeId, entry: &AttributeEntry) -> Result<(), HtmlError> {
+        let name = entry.name().clone();
+        let value = entry.value().clone();
+        self.tree.set_attribute(node, name, value)?;
         Ok(())
     }
 
     /// Unwrap and return the built DOM tree.
     #[must_use]
-    pub fn into_tree(self) -> dom::DomTree {
+    pub fn into_tree(self) -> DomTree {
         self.tree
     }
 
     /// Access the underlying DOM tree.
     #[must_use]
-    pub const fn tree(&self) -> &dom::DomTree {
+    pub const fn tree(&self) -> &DomTree {
         &self.tree
     }
 
-    fn register_node(&mut self, node: dom::NodeId) -> NodeHandle {
+    fn register_node(&mut self, node: NodeId) -> NodeHandle {
         let index = u32::try_from(self.handles.len()).unwrap_or(0);
         self.handles.push(node);
         NodeHandle::new(index)
     }
 
-    fn resolve_node(&self, handle: NodeHandle) -> Result<dom::NodeId, HtmlError> {
+    fn resolve_node(&self, handle: NodeHandle) -> Result<NodeId, HtmlError> {
         let index = usize::try_from(handle.index()).unwrap_or(usize::MAX);
         self.handles
             .get(index)
@@ -130,8 +138,7 @@ impl TreeSink for DomTreeSink {
         tag: TagName,
         attributes: &AttributeList,
     ) -> Result<NodeHandle, HtmlError> {
-        let dom_tag = dom::TagName::new(tag.as_str())?;
-        let node = self.tree.create_element(dom_tag);
+        let node = self.tree.create_element(tag);
 
         for entry in attributes {
             self.attach_attribute(node, entry)?;
@@ -141,13 +148,13 @@ impl TreeSink for DomTreeSink {
     }
 
     fn create_text(&mut self, text: &Text) -> Result<NodeHandle, HtmlError> {
-        let content = dom::TextContent::new(text.as_str());
+        let content = TextContent::new(text.as_str());
         let node = self.tree.create_text(content);
         Ok(self.register_node(node))
     }
 
     fn create_comment(&mut self, text: &Text) -> Result<NodeHandle, HtmlError> {
-        let content = dom::CommentContent::new(text.as_str());
+        let content = CommentContent::new(text.as_str());
         let node = self.tree.create_comment(content);
         Ok(self.register_node(node))
     }
@@ -181,8 +188,8 @@ impl TreeSink for DomTreeSink {
     ) -> Result<(), HtmlError> {
         let target_node = self.resolve_node(target)?;
         for entry in attributes {
-            let already_present = dom::AttributeName::new(entry.name().as_str())
-                .is_ok_and(|name| matches!(self.tree.attribute(target_node, &name), Ok(Some(_))));
+            let already_present =
+                matches!(self.tree.attribute(target_node, entry.name()), Ok(Some(_)));
             if !already_present {
                 self.attach_attribute(target_node, entry)?;
             }
@@ -199,7 +206,7 @@ impl TreeSink for DomTreeSink {
     fn reparent_children(&mut self, from: NodeHandle, to: NodeHandle) -> Result<(), HtmlError> {
         let from_node = self.resolve_node(from)?;
         let to_node = self.resolve_node(to)?;
-        let children: Vec<dom::NodeId> = self.tree.children(from_node).collect();
+        let children: Vec<NodeId> = self.tree.children(from_node).collect();
         for child in children {
             self.tree.append_child(to_node, child)?;
         }

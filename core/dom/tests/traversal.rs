@@ -3,7 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use dom::{DomTree, NodeId, TagName};
+use dom::{DomTree, NodeId};
+use html::TagName;
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {
     tree.create_element(TagName::new(tag).expect("valid tag"))

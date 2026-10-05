@@ -27,8 +27,9 @@
 
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 
-use dom::{AttributeName, AttributeValue, DomError, DomTree, NodeId, TagName, TextContent};
+use dom::{DomTree, NodeId, TextContent};
 use engine::{Capability, CapabilitySet, EngineError, EngineType, TypeRegistration};
+use html::{AttributeName, AttributeValue, TagName};
 use rhai::{Array, CustomType, Dynamic, EvalAltResult, TypeBuilder};
 
 use rhai_runtime::to_eval_error;
@@ -250,7 +251,7 @@ impl NodeHandle {
 }
 
 #[allow(clippy::unnecessary_box_returns)]
-fn dom_error(operation: &str, error: &DomError) -> Box<EvalAltResult> {
+fn dom_error(operation: &str, error: &impl std::fmt::Display) -> Box<EvalAltResult> {
     to_eval_error(EngineError::dom(operation, error.to_string()))
 }
 

@@ -22,12 +22,12 @@ const fn au(pixels: i32) -> Au {
 }
 
 fn element(tree: &mut dom::DomTree, parent: dom::NodeId, id: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new("div").unwrap());
+    let node = tree.create_element(html::TagName::new("div").unwrap());
     tree.append_child(parent, node).unwrap();
     tree.set_attribute(
         node,
-        dom::AttributeName::new("id").unwrap(),
-        dom::AttributeValue::new(id),
+        html::AttributeName::new("id").unwrap(),
+        html::AttributeValue::new(id),
     )
     .unwrap();
     node

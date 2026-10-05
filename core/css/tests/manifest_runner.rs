@@ -326,7 +326,7 @@ fn fixture() -> DomSnapshot {
 }
 
 fn element(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(name).unwrap());
+    let node = tree.create_element(html::TagName::new(name).unwrap());
     tree.append_child(parent, node).unwrap();
     node
 }
@@ -334,8 +334,8 @@ fn element(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::Nod
 fn attribute(tree: &mut dom::DomTree, node: dom::NodeId, name: &str, value: &str) {
     tree.set_attribute(
         node,
-        dom::AttributeName::new(name).unwrap(),
-        dom::AttributeValue::new(value),
+        html::AttributeName::new(name).unwrap(),
+        html::AttributeValue::new(value),
     )
     .unwrap();
 }
@@ -347,7 +347,7 @@ fn text(tree: &mut dom::DomTree, parent: dom::NodeId, content: &str) {
 
 fn paragraph_of(dom: &DomSnapshot) -> SnapshotId {
     dom.nodes_in_document_order()
-        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&dom::TagName::P))
+        .find(|id| dom.node(*id).and_then(css::NodeRef::tag) == Some(&html::TagName::P))
         .expect("the fixture has a paragraph")
 }
 

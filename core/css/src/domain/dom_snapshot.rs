@@ -13,7 +13,7 @@ use core::fmt;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
-use dom::TagName;
+use html::TagName;
 
 use crate::domain::error::CssError;
 
@@ -111,8 +111,8 @@ impl<'ids> IntoIterator for &'ids ChildIds {
 ///
 /// Non-empty, ASCII, no control or whitespace characters and none of
 /// `" ' / = >`; lowercased on construction — the same grammar
-/// `dom::AttributeName` enforces, kept as this crate's own type so
-/// `dom::AttributeName` never leaks across the port boundary.
+/// `html::AttributeName` enforces, kept as this crate's own type so
+/// `html::AttributeName` never leaks across the port boundary.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AttributeKey(String);
 
@@ -133,12 +133,12 @@ impl AttributeKey {
         &self.0
     }
 
-    /// Crate-internal: copies an already-validated `dom::AttributeName`'s
-    /// string directly. `dom::AttributeName` enforces the identical grammar
+    /// Crate-internal: copies an already-validated `html::AttributeName`'s
+    /// string directly. `html::AttributeName` enforces the identical grammar
     /// [`new`](Self::new) checks, so re-validating a name the DOM already
     /// accepted can never fail — this constructor stays infallible instead of
     /// forcing an unreachable error path onto [`crate::snapshot`].
-    pub(crate) fn from_dom(name: &dom::AttributeName) -> Self {
+    pub(crate) fn from_dom(name: &html::AttributeName) -> Self {
         Self(name.as_str().to_owned())
     }
 }
@@ -163,7 +163,7 @@ impl Borrow<str> for AttributeKey {
 
 /// An attribute value.
 ///
-/// Any string is legal (mirrors `dom::AttributeValue`); its own type keeps the
+/// Any string is legal (mirrors `html::AttributeValue`); its own type keeps the
 /// pair symmetric — a [`BTreeMap`] key and value that are each a value
 /// object, not one validated and the other a naked `String`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]

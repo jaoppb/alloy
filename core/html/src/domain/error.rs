@@ -85,15 +85,6 @@ impl HtmlError {
     }
 }
 
-#[cfg(feature = "dom")]
-impl From<dom::DomError> for HtmlError {
-    fn from(error: dom::DomError) -> Self {
-        Self::TreeConstruction {
-            message: error.to_string(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

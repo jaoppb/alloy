@@ -1,17 +1,9 @@
-//! Conformance tests for [`TreeSink`] adapters (ADR-0011 item 6).
+//! Conformance tests for the reference [`TreeSink`] adapter (ADR-0011 item 6). The real
+//! `DomTreeSink` is exercised in `core/dom/tests/html_sink_conformance.rs`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-#[cfg(feature = "dom")]
-use html::DomTreeSink;
 use html::{MockTreeSink, run_html_conformance};
-
-#[cfg(feature = "dom")]
-#[test]
-fn dom_tree_sink_passes_conformance() {
-    let mut sink = DomTreeSink::new();
-    run_html_conformance(&mut sink);
-}
 
 #[test]
 fn mock_tree_sink_passes_conformance() {

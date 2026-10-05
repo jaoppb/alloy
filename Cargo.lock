@@ -505,6 +505,7 @@ version = "0.1.0"
 dependencies = [
  "dom",
  "graphics",
+ "html",
  "thiserror 2.0.17",
  "tracing",
 ]
@@ -557,6 +558,7 @@ dependencies = [
 name = "dom"
 version = "0.1.0"
 dependencies = [
+ "html",
  "thiserror 2.0.17",
 ]
 
@@ -801,7 +803,6 @@ checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 name = "html"
 version = "0.1.0"
 dependencies = [
- "dom",
  "thiserror 2.0.17",
 ]
 
@@ -1663,6 +1664,7 @@ dependencies = [
  "dom",
  "engine",
  "graphics",
+ "html",
  "network",
  "rhai",
  "rhai-runtime",

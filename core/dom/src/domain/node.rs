@@ -7,8 +7,9 @@
 
 use core::fmt;
 
+use html::TagName;
+
 use crate::domain::attributes::AttributeMap;
-use crate::domain::tag_name::TagName;
 use crate::domain::text::{CommentContent, TextContent};
 
 /// A handle to a node inside one [`crate::DomTree`].
@@ -44,7 +45,7 @@ impl fmt::Display for NodeId {
     }
 }
 
-/// An element's own data: its tag and its insertion-ordered attributes.
+/// An element's own data: its tag and its sorted attributes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ElementData {
     tag: TagName,

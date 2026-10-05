@@ -36,12 +36,12 @@ fn element(
     id: &str,
     text_content: &str,
 ) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new("div").unwrap());
+    let node = tree.create_element(html::TagName::new("div").unwrap());
     tree.append_child(parent, node).unwrap();
     tree.set_attribute(
         node,
-        dom::AttributeName::new("id").unwrap(),
-        dom::AttributeValue::new(id),
+        html::AttributeName::new("id").unwrap(),
+        html::AttributeValue::new(id),
     )
     .unwrap();
     let text = tree.create_text(dom::TextContent::new(text_content));

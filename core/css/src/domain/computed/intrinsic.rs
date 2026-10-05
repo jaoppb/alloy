@@ -38,7 +38,7 @@ impl IntrinsicSize {
     }
 }
 
-use dom::TagName;
+use html::TagName;
 
 /// The elements whose size comes from a resource rather than from CSS
 /// (HTML Living Standard, "replaced elements").

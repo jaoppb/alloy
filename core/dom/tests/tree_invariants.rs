@@ -3,9 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use dom::{
-    AttributeName, AttributeValue, DomError, DomTree, NodeId, TagName, TextContent, serialize_html,
-};
+use dom::{DomError, DomTree, NodeId, TextContent, serialize_html};
+use html::{AttributeName, AttributeValue, TagName};
 
 fn element(tree: &mut DomTree, tag: &str) -> NodeId {
     tree.create_element(TagName::new(tag).expect("valid tag"))
@@ -230,13 +229,16 @@ fn character_data_and_element_operations_are_type_checked() {
 
 #[test]
 fn invalid_tag_and_attribute_names_are_rejected() {
-    assert!(matches!(TagName::new(""), Err(DomError::InvalidTagName(_))));
     assert!(matches!(
-        TagName::new("1bad"),
+        TagName::new("").map_err(DomError::from),
         Err(DomError::InvalidTagName(_))
     ));
     assert!(matches!(
-        TagName::new("has space"),
+        TagName::new("1bad").map_err(DomError::from),
+        Err(DomError::InvalidTagName(_))
+    ));
+    assert!(matches!(
+        TagName::new("has space").map_err(DomError::from),
         Err(DomError::InvalidTagName(_))
     ));
     assert_eq!(TagName::new("DIV").unwrap().as_str(), "div");
@@ -246,7 +248,7 @@ fn invalid_tag_and_attribute_names_are_rejected() {
         TagName::Custom("custom-card".into())
     );
     assert!(matches!(
-        AttributeName::new("bad=name"),
+        AttributeName::new("bad=name").map_err(DomError::from),
         Err(DomError::InvalidAttributeName(_))
     ));
 }
@@ -280,7 +282,7 @@ fn an_attribute_name_rejects_every_character_that_could_break_out_of_a_tag() {
         }
         assert!(
             matches!(
-                AttributeName::new(forbidden),
+                AttributeName::new(forbidden).map_err(DomError::from),
                 Err(DomError::InvalidAttributeName(_))
             ),
             "{forbidden:?} must be rejected: it can break out of the serialized tag"

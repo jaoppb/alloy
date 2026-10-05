@@ -5,12 +5,14 @@
 //! and actual parser execution.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-#![cfg(feature = "dom")]
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use html::{ParseErrorCode, SUPPORTED_PARSE_ERRORS, SUPPORTED_SYNTAX, SUPPORTED_TAGS, parse};
+use html::{
+    AttributeList, MockEvent, MockTreeSink, NodeHandle, ParseErrorCode, SUPPORTED_PARSE_ERRORS,
+    SUPPORTED_SYNTAX, SUPPORTED_TAGS, parse_with_sink,
+};
 
 const MANIFEST_REL: &str = "tests/data/MANIFEST.md";
 
@@ -88,153 +90,107 @@ fn make_tag_probe(tag: &str) -> String {
     format!("<{tag}>test</{tag}>")
 }
 
+fn events_of(source: &str) -> Vec<MockEvent> {
+    let mut sink = MockTreeSink::new();
+    parse_with_sink(source, &mut sink)
+        .unwrap_or_else(|err| panic!("{source:?} must not abort: {err}"));
+    sink.events().to_vec()
+}
+
+fn elements_named<'events>(
+    events: &'events [MockEvent],
+    name: &str,
+) -> Vec<(NodeHandle, &'events AttributeList)> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateElement {
+                id,
+                tag,
+                attributes,
+            } if tag == name => Some((*id, attributes)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn texts(events: &[MockEvent]) -> Vec<&str> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateText { content, .. } => Some(content.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn parent_of(events: &[MockEvent], node: NodeHandle) -> Option<NodeHandle> {
+    events.iter().find_map(|event| match event {
+        MockEvent::AppendChild { parent, child } if *child == node => Some(*parent),
+        _ => None,
+    })
+}
+
 #[test]
 fn every_supported_tag_has_a_passing_probe() {
     for &tag in SUPPORTED_TAGS {
-        let snippet = make_tag_probe(tag);
-        let tree = parse(&snippet)
-            .unwrap_or_else(|err| panic!("Failed to parse probe for <{tag}>: {err}"))
-            .into_tree();
-
-        let found = tree
-            .descendants(tree.document())
-            .any(|node| match tree.node_kind(node) {
-                Ok(dom::NodeKind::Element(elem)) => elem.tag().as_str() == tag,
-                _ => false,
-            });
-
-        assert!(found, "Tag <{tag}> was parsed but not found in DomTree");
+        let events = events_of(&make_tag_probe(tag));
+        assert!(
+            !elements_named(&events, tag).is_empty(),
+            "Tag <{tag}> was parsed but never created"
+        );
     }
 }
 
 #[test]
 fn test_syntax_attributes() {
-    // double-quoted attribute
-    let tree = parse("<div class=\"main\"></div>").unwrap().into_tree();
-    let div = tree
-        .descendants(tree.document())
-        .find(|&n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "div",
-            _ => false,
-        })
-        .unwrap();
-    let class_val = tree.node_kind(div).unwrap();
-    match class_val {
-        dom::NodeKind::Element(el) => {
-            assert_eq!(
-                el.attributes()
-                    .get(&dom::AttributeName::new("class").unwrap())
-                    .unwrap()
-                    .as_str(),
-                "main"
-            );
-        }
-        _ => panic!("Expected element"),
-    }
+    let value_of = |source: &str, element: &str, attribute: &str| {
+        let events = events_of(source);
+        let (_, attributes) = elements_named(&events, element)[0];
+        attributes.get_value_str(attribute).map(str::to_owned)
+    };
 
-    // single-quoted attribute
-    let tree = parse("<div class='sidebar'></div>").unwrap().into_tree();
-    let div = tree
-        .descendants(tree.document())
-        .find(|&n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "div",
-            _ => false,
-        })
-        .unwrap();
-    match tree.node_kind(div).unwrap() {
-        dom::NodeKind::Element(el) => {
-            assert_eq!(
-                el.attributes()
-                    .get(&dom::AttributeName::new("class").unwrap())
-                    .unwrap()
-                    .as_str(),
-                "sidebar"
-            );
-        }
-        _ => panic!("Expected element"),
-    }
-
-    // unquoted attribute
-    let tree = parse("<div id=header></div>").unwrap().into_tree();
-    let div = tree
-        .descendants(tree.document())
-        .find(|&n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "div",
-            _ => false,
-        })
-        .unwrap();
-    match tree.node_kind(div).unwrap() {
-        dom::NodeKind::Element(el) => {
-            assert_eq!(
-                el.attributes()
-                    .get(&dom::AttributeName::new("id").unwrap())
-                    .unwrap()
-                    .as_str(),
-                "header"
-            );
-        }
-        _ => panic!("Expected element"),
-    }
-
-    // boolean attribute
-    let tree = parse("<input disabled>").unwrap().into_tree();
-    let input = tree
-        .descendants(tree.document())
-        .find(|&n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "input",
-            _ => false,
-        })
-        .unwrap();
-    match tree.node_kind(input).unwrap() {
-        dom::NodeKind::Element(el) => {
-            assert!(
-                el.attributes()
-                    .get(&dom::AttributeName::new("disabled").unwrap())
-                    .is_some()
-            );
-        }
-        _ => panic!("Expected element"),
-    }
+    // double-quoted, single-quoted, unquoted and boolean attributes
+    assert_eq!(
+        value_of("<div class=\"main\"></div>", "div", "class").as_deref(),
+        Some("main")
+    );
+    assert_eq!(
+        value_of("<div class='sidebar'></div>", "div", "class").as_deref(),
+        Some("sidebar")
+    );
+    assert_eq!(
+        value_of("<div id=header></div>", "div", "id").as_deref(),
+        Some("header")
+    );
+    assert!(value_of("<input disabled>", "input", "disabled").is_some());
 }
 
 #[test]
 fn test_syntax_doctype_and_tags() {
     // 1. DOCTYPE
-    let tree = parse("<!DOCTYPE html><html><body><p>Hi</p></body></html>")
-        .unwrap()
-        .into_tree();
-    assert!(tree.descendants(tree.document()).count() >= 4);
+    let events = events_of("<!DOCTYPE html><html><body><p>Hi</p></body></html>");
+    for tag in ["html", "body", "p"] {
+        assert_eq!(elements_named(&events, tag).len(), 1, "<{tag}>");
+    }
 
     // 2. self-closing tag
-    let tree = parse("<br />").unwrap().into_tree();
-    assert!(
-        tree.descendants(tree.document())
-            .any(|n| match tree.node_kind(n) {
-                Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "br",
-                _ => false,
-            })
-    );
+    let events = events_of("<br />");
+    assert_eq!(elements_named(&events, "br").len(), 1);
 
     // 3. comments
-    let tree = parse("<!-- note --><div></div>").unwrap().into_tree();
+    let events = events_of("<!-- note --><div></div>");
     assert!(
-        tree.descendants(tree.document())
-            .any(|n| matches!(tree.node_kind(n), Ok(dom::NodeKind::Comment(_))))
+        events
+            .iter()
+            .any(|event| matches!(event, MockEvent::CreateComment { .. }))
     );
 }
 
 #[test]
 fn test_syntax_entities() {
-    let tree = parse("<p>&copy; &amp; &#60; &#x3e;</p>")
-        .unwrap()
-        .into_tree();
-    let text = tree
-        .descendants(tree.document())
-        .find_map(|n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Text(t)) => Some(t.as_str().to_string()),
-            _ => None,
-        })
-        .unwrap();
+    let events = events_of("<p>&copy; &amp; &#60; &#x3e;</p>");
+    let text: String = texts(&events).concat();
     assert!(text.contains('©'));
     assert!(text.contains('&'));
     assert!(text.contains('<'));
@@ -244,43 +200,23 @@ fn test_syntax_entities() {
 #[test]
 fn test_syntax_rawtext_and_omissions() {
     // 1. script rawtext
-    let tree = parse("<script>const markup = '<div>inside</div>';</script>")
-        .unwrap()
-        .into_tree();
-    let has_inner_div = tree
-        .descendants(tree.document())
-        .any(|n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "div",
-            _ => false,
-        });
+    let events = events_of("<script>const markup = '<div>inside</div>';</script>");
     assert!(
-        !has_inner_div,
+        elements_named(&events, "div").is_empty(),
         "<script> rawtext must not parse inner markup as elements"
     );
 
     // 2. p tag omission
-    let tree = parse("<p>First<p>Second").unwrap().into_tree();
-    let p_nodes: Vec<_> = tree
-        .descendants(tree.document())
-        .filter(|&n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "p",
-            _ => false,
-        })
-        .collect();
-    assert_eq!(p_nodes.len(), 2);
-    assert_ne!(tree.parent(p_nodes[1]).unwrap(), Some(p_nodes[0]));
+    let events = events_of("<p>First<p>Second");
+    let paragraphs = elements_named(&events, "p");
+    assert_eq!(paragraphs.len(), 2);
+    assert_ne!(parent_of(&events, paragraphs[1].0), Some(paragraphs[0].0));
 
     // 3. li tag omission
-    let tree = parse("<ul><li>One<li>Two</ul>").unwrap().into_tree();
-    let li_nodes: Vec<_> = tree
-        .descendants(tree.document())
-        .filter(|&n| match tree.node_kind(n) {
-            Ok(dom::NodeKind::Element(el)) => el.tag().as_str() == "li",
-            _ => false,
-        })
-        .collect();
-    assert_eq!(li_nodes.len(), 2);
-    assert_ne!(tree.parent(li_nodes[1]).unwrap(), Some(li_nodes[0]));
+    let events = events_of("<ul><li>One<li>Two</ul>");
+    let items = elements_named(&events, "li");
+    assert_eq!(items.len(), 2);
+    assert_ne!(parent_of(&events, items[1].0), Some(items[0].0));
 }
 
 #[test]
@@ -450,12 +386,14 @@ const PARSE_ERROR_PROBES: &[Probe] = &[
 #[test]
 fn every_parse_error_code_has_an_exact_probe() {
     for (source, expected) in PARSE_ERROR_PROBES {
-        let outcome =
-            parse(source).unwrap_or_else(|err| panic!("{source:?} must not abort: {err}"));
-        let found: Vec<_> = outcome
-            .diagnostics()
+        let found: Vec<_> = events_of(source)
             .iter()
-            .map(|d| (d.code(), d.location().line(), d.location().column()))
+            .filter_map(|event| match event {
+                MockEvent::ParseError { code, location } => {
+                    Some((*code, location.line(), location.column()))
+                }
+                _ => None,
+            })
             .collect();
         assert_eq!(&found, expected, "diagnostics for {source:?}");
     }

@@ -9,7 +9,7 @@ use crate::domain::surface::SurfaceSize;
 /// A window's human-readable title.
 ///
 /// Wrapped rather than a bare `String` (Object Calisthenics: no naked
-/// primitives in the domain model) — the same shape as `dom::TagName`
+/// primitives in the domain model) — the same shape as `html::TagName`
 /// wrapping a validated `String`, minus the validation this field has no need
 /// of (any string is a legal title).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

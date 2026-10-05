@@ -7,9 +7,10 @@
 )]
 
 use css::{CascadeResolver, CssColor, StyleSheetSet};
-use dom::{DomTree, TagName};
+use dom::DomTree;
 use engine::{Capability, CapabilitySet, EngineError, RuntimeEngine, profiles};
 use graphics::{Color, DisplayListBuilder, PxRect, RenderBackend, SoftwareCpuBackend, SurfaceSize};
+use html::TagName;
 use rhai_bindings::{
     DEFAULT_CASCADE_SCRIPT, ScriptCascadeResolver, SnapshotHandle, StyledTreeHandle,
     register_css_bindings,

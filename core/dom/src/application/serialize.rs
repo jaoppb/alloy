@@ -2,7 +2,8 @@
 //! (v0.2 report §3, F3 step 5), and non-recursive: an explicit work stack of
 //! `Step`s, never a self-call.
 
-use crate::domain::entity::HtmlEntity;
+use html::HtmlEntity;
+
 use crate::domain::error::DomError;
 use crate::domain::node::{ElementData, NodeId, NodeKind};
 use crate::domain::tree::DomTree;

@@ -5,12 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "DOM tree aggregate: an arena-backed DomTree with enforced tree invariants, validated value objects, non-recursive traversal, and deterministic HTML serialization. Zero dependencies; names no engine type (v0.2 F3, ADR-0003, ADR-0010)."
+description = "DOM tree aggregate: an arena-backed DomTree with enforced tree invariants, non-recursive traversal, deterministic HTML serialization, and the default html TreeSink adapter. Depends only on the html vocabulary; names no engine type (v0.2 F3, ADR-0003, ADR-0010, ADR-0024)."
 
-# Intentionally empty. `core/dom` is a pure domain crate (v0.2 report decision
-# 2.1): no `engine`, no interpreter, nothing transitive. The DOM↔engine bridge
-# lives in `core/runtime/rhai/infrastructure/` (roadmap I1).
+# `core/dom` is a pure domain crate: no `engine`, no interpreter. Its one
+# workspace dependency is `html`, the leaf crate that owns the HTML vocabulary
+# (ADR-0024, superseding v0.2 report decision 2.1's "zero dependencies"). The
+# DOM↔engine bridge lives in `core/runtime/rhai-bindings` (roadmap I1).
 [dependencies]
+html = { path = "../html" }
 thiserror = { workspace = true }
 
 [lints]

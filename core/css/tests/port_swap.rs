@@ -13,9 +13,9 @@ const fn accept_css_color(_: css::CssColor) {}
 fn body_with_paragraph() -> (dom::DomTree, dom::NodeId) {
     let mut tree = dom::DomTree::new();
     let document = tree.document();
-    let body = tree.create_element(dom::TagName::new("body").unwrap());
+    let body = tree.create_element(html::TagName::new("body").unwrap());
     tree.append_child(document, body).unwrap();
-    let paragraph = tree.create_element(dom::TagName::new("p").unwrap());
+    let paragraph = tree.create_element(html::TagName::new("p").unwrap());
     tree.append_child(body, paragraph).unwrap();
     (tree, document)
 }

@@ -74,7 +74,7 @@ pub enum AlloyError {
 
     /// An HTTP fetch completed but the server answered with a non-`2xx` status
     /// (v0.5 Phase I4). Used for both the main document and subresources: an
-    /// error-page body must never be handed to `html::parse`, the CSS parser
+    /// error-page body must never be handed to `dom::parse`, the CSS parser
     /// or the PNG decoder as if it were the resource.
     #[error("{url} returned HTTP {status}")]
     HttpStatus { url: String, status: u16 },
@@ -88,7 +88,7 @@ pub enum AlloyError {
 
     /// The main document fetch succeeded but the body is not valid UTF-8 text
     /// (a missing or non-textual `Content-Type`, so `core/network` left the
-    /// bytes untranscoded). `html::parse` needs `&str`; falls back to the
+    /// bytes untranscoded). `dom::parse` needs `&str`; falls back to the
     /// error card rather than rendering nothing (v0.5 Phase I4).
     #[error("{url} returned a document body that is not valid UTF-8 text")]
     NonTextualDocument { url: String },

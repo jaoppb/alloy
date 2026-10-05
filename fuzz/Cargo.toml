@@ -12,7 +12,7 @@ libfuzzer-sys = "0.4"
 network = { path = "../core/network", default-features = false }
 graphics = { path = "../core/graphics" }
 css = { path = "../core/css" }
-html = { path = "../core/html" }
+dom = { path = "../core/dom" }
 
 [[bin]]
 name = "inflate"

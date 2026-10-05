@@ -86,8 +86,8 @@ fn append_text(tree: &mut dom::DomTree, parent: dom::NodeId, content: &str) {
         .expect("appending a fresh text node to a container cannot fail");
 }
 
-fn valid_tag(name: &str) -> dom::TagName {
-    dom::TagName::new(name).expect("the fixture uses only valid tag names")
+fn valid_tag(name: &str) -> html::TagName {
+    html::TagName::new(name).expect("the fixture uses only valid tag names")
 }
 
 fn check_cascade_is_deterministic(cascade: &dyn CascadeResolver) {
