@@ -76,11 +76,14 @@ Sub-issues: [#27](https://github.com/jaoppb/alloy/issues/27) (remove duplicated 
 - Expanding the named-entity table (tracked in #31).
 - Making `DomTree` generic over its element payload.
 
-## Open questions
+## Open questions (resolved in implementation)
 
-- None closed by refusal. Deferred to implementation: exact module path of the moved sink in `dom`
-  (`infrastructure/html_sink.rs` proposed) and the name of the location-free error types (`InvalidTagName`,
-  `InvalidAttributeName`).
+- Resolved: the sink is `core/dom/src/infrastructure/html_sink.rs`; the location-free errors are `InvalidTagName` and
+  `InvalidAttributeName`.
+- Deviations from the plan, recorded here after the fact: the attribute rejection code is `invalid-attribute-name`
+  (decision 3's "recoverable diagnostic"); `HtmlError::InvalidTag` is kept and `HtmlError::InvalidAttribute` removed;
+  `MockEvent::CreateElement` carries the attributes but `AddAttributes` keeps a count; the tokenizer resolves entities
+  through `HtmlEntity`; tests are split by subject (`html` on `MockTreeSink`, the real tree in `core/dom/tests/`).
 
 ## Risks
 
