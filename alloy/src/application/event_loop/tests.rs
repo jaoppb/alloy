@@ -88,7 +88,7 @@ fn completed_navigation(
 /// finished navigation thread does.
 fn load(session: &mut TestSession, markup: &str, url: &str) {
     let (sender, _receiver) = mpsc::channel();
-    let document = html::parse(markup).unwrap();
+    let document = html::parse(markup).unwrap().into_tree();
     let url = network::Url::parse(url).unwrap();
     session.apply(LoopMessage::Navigation(Ok((document, url))), &sender);
 }
@@ -412,7 +412,8 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
          <a href=\"docs.html\" style=\"display: block; width: 100px; height: 50px;\">Docs</a>\
          </body></html>",
     )
-    .unwrap();
+    .unwrap()
+    .into_tree();
     let navigation_url = network::Url::parse("https://example.com/index.html").unwrap();
     session.apply(
         LoopMessage::Navigation(Ok((document, navigation_url))),

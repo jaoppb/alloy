@@ -82,7 +82,7 @@ where
         let error_html = format!(
             "<!DOCTYPE html><html><head><title>Navigation Error</title><style>body {{ margin: 32px; background-color: #fdf2e9; color: #78281f; }} h1 {{ color: #c0392b; }} .error-box {{ background-color: #ffffff; padding: 16px; border-width: 2px; }}</style></head><body><h1>Navigation Error</h1><div class=\"error-box\"><p><strong>Failed to load:</strong> {escaped_error}</p></div></body></html>"
         );
-        let Ok(error_tree) = html::parse(&error_html) else {
+        let Ok(error_tree) = crate::application::html_parse::parse_html(&error_html) else {
             return;
         };
         self.reset_document_state();

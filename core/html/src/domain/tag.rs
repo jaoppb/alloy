@@ -472,6 +472,15 @@ pub fn closes_list_item(tag: &str) -> bool {
     TagName::parse(tag).is_some_and(|t| t.closes_list_item())
 }
 
+/// Checks whether an end tag may close over an open `name` without a parse error.
+///
+/// The "generate implied end tags" set restricted to the elements this builder models (WHATWG
+/// §13.2.6.3), plus `body`/`html`, which the spec also lets an end tag close over.
+#[must_use]
+pub fn is_implied_end_tag(name: &str) -> bool {
+    matches!(name, "p" | "li" | "body" | "html")
+}
+
 /// Checks whether `name` is one of the heading tags (`h1` through `h6`).
 #[must_use]
 pub fn is_heading_tag(name: &str) -> bool {

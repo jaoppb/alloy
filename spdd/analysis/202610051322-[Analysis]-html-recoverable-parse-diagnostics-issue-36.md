@@ -27,8 +27,8 @@ with its `SourceLocation`, instead of failing or dropping silently.
 
 ### Scope
 
-- A recoverable-diagnostic type in `html`'s domain, located, typed and `thiserror`-derived. It's distinct from the
-  fatal `HtmlError` (decided below).
+- A recoverable-diagnostic type in `html`'s domain, located, typed and `thiserror`-derived. It's distinct from the fatal
+  `HtmlError` (decided below).
 - The tokenizer and `TreeBuilder` push recoverable errors into the channel instead of returning `Err` or dropping
   silently.
 - `parse` / `parse_with_sink` expose the collected diagnostics (e.g. `ParseOutcome { tree, diagnostics }`).
@@ -62,12 +62,12 @@ with its `SourceLocation`, instead of failing or dropping silently.
    `unexpected-character-in-attribute-name` (`"` `'` `<`, §13.2.5.33) and _keeps_ the attribute.
 3. **The channel lives in the port (html5ever model).** Tokenizer emits `Token::ParseError(ParseDiagnostic)`;
    `TreeBuilder` forwards to a new **required** `TreeSink::parse_error`. The sink owns the collection; `DomTreeSink`
-   reports its own dom-side rejections the same way. Diagnostics are delivered in detection order, before the token
-   that triggered them.
+   reports its own dom-side rejections the same way. Diagnostics are delivered in detection order, before the token that
+   triggered them.
 4. **Locations on boundary aggregates.** `AttributeEntry` carries its name's first-character `SourceLocation`;
    `TagToken` and `DoctypeToken` carry their `<`'s. Equality ignores location on all three.
-5. **Type: `ParseDiagnostic { code: ParseErrorCode, location: SourceLocation }`**, `thiserror`-derived.
-   `ParseErrorCode` is `#[non_exhaustive]`, one variant per WHATWG code. `HtmlError` stays fatal-only.
+5. **Type: `ParseDiagnostic { code: ParseErrorCode, location: SourceLocation }`**, `thiserror`-derived. `ParseErrorCode`
+   is `#[non_exhaustive]`, one variant per WHATWG code. `HtmlError` stays fatal-only.
 6. **Tokenizer codes in scope** — every one the current state machine can reach (attributes, tags, tag open, character
    references, input stream, comments/doctype).
 7. **The diagnostic list is unbounded.**
@@ -89,8 +89,8 @@ with its `SourceLocation`, instead of failing or dropping silently.
 
 - `HtmlError`: the single fatal error of the port (ADR-0011 item 4); today also carries syntax variants nothing could
   recover from — relates to every `Result` in `TokenSink`/`TreeSink`.
-- `SourceLocation`: line/column/offset value object; already produced by `Cursor::location()` — the location source
-  for every diagnostic.
+- `SourceLocation`: line/column/offset value object; already produced by `Cursor::location()` — the location source for
+  every diagnostic.
 - `Token` / `TagToken` / `DoctypeToken`: the tokenizer→builder vocabulary; `Token` is `#[non_exhaustive]`.
 - `AttributeList` / `AttributeEntry` / `AttributeName`: first-class attribute collection; today a `Vec` that accepts
   duplicates (last wins in `DomTreeSink`).
@@ -191,11 +191,11 @@ with its `SourceLocation`, instead of failing or dropping silently.
 
 ### Acceptance Criteria Coverage
 
-| AC# | Description                                                                          | Addressable? | Gaps/Notes                                                          |
-| --- | ------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------- |
-| 1   | No path in `html` drops input silently                                               | Yes          | Verified per code by manifest probes; doctype consumption documented |
-| 2   | No recoverable condition aborts `parse`                                              | Yes          | Remaining `Err` = sink failure / constructor validation only        |
-| 3   | `just gate` green                                                                    | Partial      | Tools missing in sandbox; run each available sub-gate, report rest  |
-| 4   | `render_golden.rs` byte-identical                                                    | Yes          | Fixture hits no behaviour change                                    |
-| 5   | Test: malformed attribute → exactly one diagnostic at right line/col, rest parses    | Yes          | `diagnostics_test.rs`                                               |
-| 6   | Port contract update, `PORT_SCHEMA_VERSION` bump, PRD-008 migration note             | Yes          | Contract record's stale `= 2` corrected                             |
+| AC# | Description                                                                       | Addressable? | Gaps/Notes                                                           |
+| --- | --------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------- |
+| 1   | No path in `html` drops input silently                                            | Yes          | Verified per code by manifest probes; doctype consumption documented |
+| 2   | No recoverable condition aborts `parse`                                           | Yes          | Remaining `Err` = sink failure / constructor validation only         |
+| 3   | `just gate` green                                                                 | Partial      | Tools missing in sandbox; run each available sub-gate, report rest   |
+| 4   | `render_golden.rs` byte-identical                                                 | Yes          | Fixture hits no behaviour change                                     |
+| 5   | Test: malformed attribute → exactly one diagnostic at right line/col, rest parses | Yes          | `diagnostics_test.rs`                                                |
+| 6   | Port contract update, `PORT_SCHEMA_VERSION` bump, PRD-008 migration note          | Yes          | Contract record's stale `= 2` corrected                              |

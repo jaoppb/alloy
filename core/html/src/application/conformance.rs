@@ -6,6 +6,7 @@
 
 use crate::application::ports::TreeSink;
 use crate::domain::attribute::{AttributeEntry, AttributeList, AttributeName, AttributeValue};
+use crate::domain::diagnostic::{ParseDiagnostic, ParseErrorCode};
 use crate::domain::handle::NodeHandle;
 use crate::domain::location::SourceLocation;
 use crate::domain::tag::TagName;
@@ -22,6 +23,7 @@ pub fn run_html_conformance(sink: &mut dyn TreeSink) {
     check_append_before_sibling(sink);
     check_add_attributes_if_missing(sink);
     check_remove_and_reparent(sink);
+    check_parse_error_is_accepted(sink);
 }
 
 fn check_root_is_available(sink: &dyn TreeSink) {
@@ -35,7 +37,9 @@ fn check_element_creation_and_append(sink: &mut dyn TreeSink) {
     let location = SourceLocation::initial();
     let name = AttributeName::new("lang", location).expect("valid attribute name");
     let value = AttributeValue::new("en");
-    attributes.push(AttributeEntry::new(name, value));
+    attributes
+        .insert(AttributeEntry::new(name, value, location))
+        .expect("unique attribute");
 
     let tag = TagName::new("html", location).expect("valid tag name");
     let html_node = sink
@@ -91,7 +95,13 @@ fn check_add_attributes_if_missing(sink: &mut dyn TreeSink) {
 
     let mut new_attrs = AttributeList::new();
     let name = AttributeName::new("id", location).expect("name");
-    new_attrs.push(AttributeEntry::new(name, AttributeValue::new("main")));
+    new_attrs
+        .insert(AttributeEntry::new(
+            name,
+            AttributeValue::new("main"),
+            location,
+        ))
+        .expect("unique attribute");
 
     sink.add_attributes_if_missing(node, &new_attrs)
         .expect("add attributes");
@@ -120,4 +130,16 @@ fn check_remove_and_reparent(sink: &mut dyn TreeSink) {
     sink.reparent_children(parent_one, parent_two)
         .expect("reparent");
     sink.remove_from_parent(parent_one).expect("remove");
+}
+
+fn check_parse_error_is_accepted(sink: &mut dyn TreeSink) {
+    // Infallible and order-preserving: a sink may record the diagnostic but must not fail on it,
+    // and reporting one must leave the tree operations around it working (ADR-0023).
+    let location = SourceLocation::initial();
+    sink.parse_error(ParseDiagnostic::new(ParseErrorCode::StrayEndTag, location));
+    let node = sink
+        .create_text(&Text::new("after diagnostic"))
+        .expect("text creation after a diagnostic");
+    sink.append_child(sink.root_node(), node)
+        .expect("append after a diagnostic");
 }

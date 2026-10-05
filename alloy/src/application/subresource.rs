@@ -213,7 +213,7 @@ mod tests {
     use network::Url;
 
     fn discover_from(markup: &str, navigation_url: &str) -> Vec<SubresourceRequest> {
-        let tree = html::parse(markup).unwrap();
+        let tree = html::parse(markup).unwrap().into_tree();
         let snapshot = css::snapshot(&tree, tree.document());
         let base = document_base_url(&snapshot, &Url::parse(navigation_url).unwrap());
         MarkupDiscoverer
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn without_a_base_element_the_document_base_is_the_navigation_url() {
-        let tree = html::parse("<p>no base here</p>").unwrap();
+        let tree = html::parse("<p>no base here</p>").unwrap().into_tree();
         let snapshot = css::snapshot(&tree, tree.document());
         let navigation_url = Url::parse("https://example.com/dir/page.html").unwrap();
         assert_eq!(

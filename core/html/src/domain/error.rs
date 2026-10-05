@@ -1,30 +1,16 @@
-//! Domain error types for HTML parsing and tree construction.
+//! Fatal domain errors for HTML parsing and tree construction.
+//!
+//! Recoverable malformations are not errors: they are [`crate::ParseDiagnostic`]s delivered through
+//! the port (ADR-0023). `HtmlError` aborts a parse, so it is reserved for sink/adapter failure and
+//! value-object validation.
 
 use crate::domain::location::SourceLocation;
 use core::fmt;
 
-/// Errors arising during HTML tokenization, validation, or DOM construction.
+/// Fatal errors arising from value-object validation or a tree sink.
 #[non_exhaustive]
 #[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum HtmlError {
-    /// A syntax error in HTML input at a specific source location.
-    #[error("Parse syntax error at {location}: {message}")]
-    ParseError {
-        /// Diagnostic message describing the syntax error.
-        message: String,
-        /// Source location where error occurred.
-        location: SourceLocation,
-    },
-
-    /// Unexpected end of file encountered in tokenizer.
-    #[error("Unexpected end of input at {location} in state {state}")]
-    UnexpectedEndOfInput {
-        /// The tokenizer state name when EOF occurred.
-        state: &'static str,
-        /// Source location where unexpected EOF occurred.
-        location: SourceLocation,
-    },
-
     /// An invalid tag name was encountered.
     #[error("Invalid tag name '{name}' at {location}")]
     InvalidTag {
@@ -52,21 +38,6 @@ pub enum HtmlError {
 }
 
 impl HtmlError {
-    /// Create a parse error with a descriptive message and source location.
-    #[must_use]
-    pub fn parse(message: impl fmt::Display, location: SourceLocation) -> Self {
-        Self::ParseError {
-            message: message.to_string(),
-            location,
-        }
-    }
-
-    /// Create an unexpected EOF error.
-    #[must_use]
-    pub const fn unexpected_eof(state: &'static str, location: SourceLocation) -> Self {
-        Self::UnexpectedEndOfInput { state, location }
-    }
-
     /// Create an invalid tag error.
     #[must_use]
     pub fn invalid_tag(name: impl Into<String>, location: SourceLocation) -> Self {
@@ -106,21 +77,6 @@ impl From<dom::DomError> for HtmlError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_error_formats_with_location() {
-        let location = SourceLocation::new(2, 5, 20);
-        let error = HtmlError::parse("expected closing tag", location);
-        assert!(error.to_string().contains("2:5:offset 20"));
-        assert!(error.to_string().contains("expected closing tag"));
-    }
-
-    #[test]
-    fn unexpected_eof_formats_with_state() {
-        let location = SourceLocation::new(1, 10, 9);
-        let error = HtmlError::unexpected_eof("TagOpen", location);
-        assert!(error.to_string().contains("TagOpen"));
-    }
 
     #[test]
     fn invalid_tag_and_attribute_constructors() {

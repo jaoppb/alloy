@@ -1,215 +1,164 @@
 //! Handlers for attribute names, values, and quoting states.
 
-use crate::domain::attribute::{AttributeEntry, AttributeList, AttributeName, AttributeValue};
-use crate::domain::error::HtmlError;
+use crate::domain::diagnostic::ParseErrorCode;
 use crate::domain::token::Token;
 use crate::infrastructure::tokenizer::cursor::Cursor;
 use crate::infrastructure::tokenizer::entity::consume_character_reference;
+use crate::infrastructure::tokenizer::pending_tag::PendingTag;
 use crate::infrastructure::tokenizer::state::State;
-use crate::infrastructure::tokenizer::tag_state::build_start_tag;
+use crate::infrastructure::tokenizer::tag_state::{emit_tag, eof_in_tag};
 
-/// Commits pending attribute name and value into the attribute list.
-pub fn commit_attribute(
+/// Commits the pending attribute, then finishes the tag.
+fn commit_and_emit(
+    cursor: &mut Cursor<'_>,
+    state: &mut State,
+    tag: &mut PendingTag,
+) -> Option<Token> {
+    tag.commit_attribute(cursor);
+    emit_tag(cursor, state, tag)
+}
+
+/// Commits the pending attribute and moves to `SelfClosingStartTag`.
+fn commit_and_self_close(cursor: &mut Cursor<'_>, state: &mut State, tag: &mut PendingTag) {
+    tag.commit_attribute(cursor);
+    *state = State::SelfClosingStartTag;
+}
+
+/// Starts an attribute at the character just read.
+fn begin_attribute_here(
     cursor: &Cursor<'_>,
-    attributes: &mut AttributeList,
-    attribute_name: &mut String,
-    attribute_value: &mut String,
-) -> Result<(), HtmlError> {
-    if attribute_name.is_empty() {
-        return Ok(());
-    }
-    let name_str = core::mem::take(attribute_name);
-    let value_str = core::mem::take(attribute_value);
-    let name = AttributeName::new(name_str, cursor.location())?;
-    let value = AttributeValue::new(value_str);
-    attributes.push(AttributeEntry::new(name, value));
-    Ok(())
+    state: &mut State,
+    tag: &mut PendingTag,
+    character: char,
+) {
+    *state = State::AttributeName;
+    tag.begin_attribute(character, cursor.last_location());
 }
 
 /// Processes `BeforeAttributeName` state.
 pub fn handle_before_attribute_name(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    attribute_name: &mut String,
-    attribute_value: &mut String,
-    tag_name: &mut String,
-    attributes: &mut AttributeList,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character.is_ascii_whitespace() {
             continue;
         }
         if character == '/' {
             *state = State::SelfClosingStartTag;
-            return Ok(None);
+            return None;
         }
         if character == '>' {
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name,
-                attributes,
-                is_self_closing,
-            )?));
+            return emit_tag(cursor, state, tag);
         }
-        *state = State::AttributeName;
-        attribute_name.clear();
-        attribute_name.push(character.to_ascii_lowercase());
-        attribute_value.clear();
-        return Ok(None);
+        if character == '=' {
+            cursor.report(
+                ParseErrorCode::UnexpectedEqualsSignBeforeAttributeName,
+                cursor.last_location(),
+            );
+        }
+        begin_attribute_here(cursor, state, tag, character);
+        return None;
     }
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name,
-        attributes,
-        is_self_closing,
-    )?))
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes `AttributeName` state.
 pub fn handle_attribute_name(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    attribute_name: &mut String,
-    attribute_value: &mut String,
-    attributes: &mut AttributeList,
-    tag_name: &mut String,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character.is_ascii_whitespace() {
             *state = State::AfterAttributeName;
-            return Ok(None);
+            return None;
         }
         if character == '=' {
             *state = State::BeforeAttributeValue;
-            return Ok(None);
+            return None;
         }
         if character == '/' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::SelfClosingStartTag;
-            return Ok(None);
+            commit_and_self_close(cursor, state, tag);
+            return None;
         }
         if character == '>' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name,
-                attributes,
-                is_self_closing,
-            )?));
+            return commit_and_emit(cursor, state, tag);
         }
-        attribute_name.push(character.to_ascii_lowercase());
+        if matches!(character, '"' | '\'' | '<') {
+            // WHATWG §13.2.5.33: reported, and the character stays part of the name.
+            cursor.report(
+                ParseErrorCode::UnexpectedCharacterInAttributeName,
+                cursor.last_location(),
+            );
+        }
+        tag.push_attribute_name_character(character);
     }
-    commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name,
-        attributes,
-        is_self_closing,
-    )?))
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes `AfterAttributeName` state.
 pub fn handle_after_attribute_name(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    attribute_name: &mut String,
-    attribute_value: &mut String,
-    attributes: &mut AttributeList,
-    tag_name: &mut String,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character.is_ascii_whitespace() {
             continue;
         }
         if character == '=' {
             *state = State::BeforeAttributeValue;
-            return Ok(None);
+            return None;
         }
         if character == '/' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::SelfClosingStartTag;
-            return Ok(None);
+            commit_and_self_close(cursor, state, tag);
+            return None;
         }
         if character == '>' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name,
-                attributes,
-                is_self_closing,
-            )?));
+            return commit_and_emit(cursor, state, tag);
         }
-        commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-        *state = State::AttributeName;
-        attribute_name.push(character.to_ascii_lowercase());
-        attribute_value.clear();
-        return Ok(None);
+        tag.commit_attribute(cursor);
+        begin_attribute_here(cursor, state, tag, character);
+        return None;
     }
-    commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name,
-        attributes,
-        is_self_closing,
-    )?))
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes `BeforeAttributeValue` state.
 pub fn handle_before_attribute_value(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    attribute_value: &mut String,
-    attribute_name: &mut String,
-    attributes: &mut AttributeList,
-    tag_name: &mut String,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character.is_ascii_whitespace() {
             continue;
         }
         if character == '"' {
             *state = State::AttributeValueDoubleQuoted;
-            attribute_value.clear();
-            return Ok(None);
+            tag.start_value();
+            return None;
         }
         if character == '\'' {
             *state = State::AttributeValueSingleQuoted;
-            attribute_value.clear();
-            return Ok(None);
+            tag.start_value();
+            return None;
         }
         if character == '>' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name,
-                attributes,
-                is_self_closing,
-            )?));
+            cursor.report(
+                ParseErrorCode::MissingAttributeValue,
+                cursor.last_location(),
+            );
+            return commit_and_emit(cursor, state, tag);
         }
         *state = State::AttributeValueUnquoted;
-        attribute_value.clear();
-        attribute_value.push(character);
-        return Ok(None);
+        tag.start_value();
+        tag.push_value_character(character);
+        return None;
     }
-    commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name,
-        attributes,
-        is_self_closing,
-    )?))
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes quoted attribute values (`"` or `'`).
@@ -217,105 +166,74 @@ pub fn handle_attribute_value_quoted(
     cursor: &mut Cursor<'_>,
     state: &mut State,
     quote: char,
-    attribute_value: &mut String,
-) {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character == quote {
             *state = State::AfterAttributeValueQuoted;
-            return;
+            return None;
         }
         if character == '&' {
-            consume_character_reference(cursor, attribute_value);
+            consume_character_reference(cursor, tag.value_buffer());
             continue;
         }
-        attribute_value.push(character);
+        tag.push_value_character(character);
     }
-    *state = State::AfterAttributeValueQuoted;
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes `AttributeValueUnquoted` state.
 pub fn handle_attribute_value_unquoted(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    attribute_name: &mut String,
-    attribute_value: &mut String,
-    attributes: &mut AttributeList,
-    tag_name: &mut String,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character.is_ascii_whitespace() {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
+            tag.commit_attribute(cursor);
             *state = State::BeforeAttributeName;
-            return Ok(None);
+            return None;
         }
         if character == '/' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::SelfClosingStartTag;
-            return Ok(None);
+            commit_and_self_close(cursor, state, tag);
+            return None;
         }
         if character == '>' {
-            commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name,
-                attributes,
-                is_self_closing,
-            )?));
+            return commit_and_emit(cursor, state, tag);
         }
-        attribute_value.push(character);
+        tag.push_value_character(character);
     }
-    commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name,
-        attributes,
-        is_self_closing,
-    )?))
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes `AfterAttributeValueQuoted` state.
 pub fn handle_after_attribute_value_quoted(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    attribute_name: &mut String,
-    attribute_value: &mut String,
-    attributes: &mut AttributeList,
-    tag_name: &mut String,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
-    commit_attribute(cursor, attributes, attribute_name, attribute_value)?;
+    tag: &mut PendingTag,
+) -> Option<Token> {
+    tag.commit_attribute(cursor);
     let Some(character) = cursor.next_char() else {
-        *state = State::Data;
-        return Ok(Some(build_start_tag(
-            cursor,
-            tag_name,
-            attributes,
-            is_self_closing,
-        )?));
+        return eof_in_tag(cursor, state, tag);
     };
 
     if character.is_ascii_whitespace() {
         *state = State::BeforeAttributeName;
-        return Ok(None);
+        return None;
     }
     if character == '/' {
         *state = State::SelfClosingStartTag;
-        return Ok(None);
+        return None;
     }
     if character == '>' {
-        *state = State::Data;
-        return Ok(Some(build_start_tag(
-            cursor,
-            tag_name,
-            attributes,
-            is_self_closing,
-        )?));
+        return emit_tag(cursor, state, tag);
     }
 
+    cursor.report(
+        ParseErrorCode::MissingWhitespaceBetweenAttributes,
+        cursor.last_location(),
+    );
     *state = State::BeforeAttributeName;
     cursor.reconsume(character);
-    Ok(None)
+    None
 }

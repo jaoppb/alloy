@@ -35,8 +35,10 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `docs/architecture/style-cascade-port-contract.md`.
 - **B5 — `core/html`**: HTML5 tokenizer + `TreeSink`/`TokenSink` ports (PRD-008) over `dom::DomTree` — WHATWG §13.2.5
   state machine for the states a real document uses, `<script>`/`<style>` raw-text mode, minimal tag-omission rules.
-  `core/html/tests/data/MANIFEST.md` + `manifest_runner.rs` mirror B1's two-way consistency gate. **Gap found this
-  session**: `HtmlError` carries no source location (line/column) — ADR-0011 item 4 is not fully met here yet.
+  `core/html/tests/data/MANIFEST.md` + `manifest_runner.rs` mirror B1's two-way consistency gate. **Recoverable parse
+  errors (#36, ADR-0023, `html::PORT_SCHEMA_VERSION = 2`)**: malformed input never aborts a parse — it yields located
+  `ParseDiagnostic`s via `Token::ParseError` / `TreeSink::parse_error`, and `html::parse` returns
+  `ParseOutcome { tree, diagnostics }`; `HtmlError` is fatal-only.
 - **X — `core/graphics`**: PNG decoder (`IHDR`/`IDAT`/`IEND`, RGB/RGBA 8-bit) over `network::inflate`, `DrawImage` on
   `SoftwareCpuBackend`, integer box-sample scaling (ADR-0016 — no floating-point in the geometry). Fuzz targets exist
   (`fuzz/fuzz_targets/{inflate,png_decode}.rs`) but were not run for 10 minutes/target in this session — CI's new `fuzz`

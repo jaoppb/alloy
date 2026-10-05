@@ -51,7 +51,7 @@ pub fn navigate<T: HttpTransport, P: RequestPolicy>(
         .ok_or_else(|| AlloyError::NonTextualDocument {
             url: url.to_string(),
         })?;
-    Ok(html::parse(text)?)
+    Ok(crate::application::html_parse::parse_html(text)?)
 }
 
 /// Rejects a non-`2xx` status with a typed [`AlloyError::HttpStatus`].

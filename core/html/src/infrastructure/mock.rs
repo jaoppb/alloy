@@ -2,8 +2,11 @@
 
 use crate::application::ports::TreeSink;
 use crate::domain::attribute::AttributeList;
+use crate::domain::diagnostic::ParseDiagnostic;
+use crate::domain::diagnostic::ParseErrorCode;
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
+use crate::domain::location::SourceLocation;
 use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 
@@ -65,6 +68,13 @@ pub enum MockEvent {
         from: NodeHandle,
         /// Destination node handle.
         to: NodeHandle,
+    },
+    /// Received a recoverable parse error.
+    ParseError {
+        /// What was reported.
+        code: ParseErrorCode,
+        /// Where it was reported.
+        location: SourceLocation,
     },
 }
 
@@ -232,6 +242,13 @@ impl TreeSink for MockTreeSink {
         }
         self.events.push(MockEvent::ReparentChildren { from, to });
         Ok(())
+    }
+
+    fn parse_error(&mut self, diagnostic: ParseDiagnostic) {
+        self.events.push(MockEvent::ParseError {
+            code: diagnostic.code(),
+            location: diagnostic.location(),
+        });
     }
 
     fn root_node(&self) -> NodeHandle {

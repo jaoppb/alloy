@@ -3,6 +3,7 @@
 //! Conforms to ADR-0011 (Replaceable Subsystem Ports) and PRD-008.
 
 use crate::domain::attribute::AttributeList;
+use crate::domain::diagnostic::ParseDiagnostic;
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
 use crate::domain::tag::TagName;
@@ -102,6 +103,12 @@ pub trait TreeSink: Send + Sync {
     /// Reparent all children from `from` node to `to` node.
     fn reparent_children(&mut self, from: NodeHandle, to: NodeHandle) -> Result<(), HtmlError>;
 
+    /// Receive a recoverable parse error (ADR-0023).
+    ///
+    /// Infallible by design: a sink can record or ignore a diagnostic but never abort the parse
+    /// with it. Diagnostics arrive in detection order, before the operation they relate to.
+    fn parse_error(&mut self, diagnostic: ParseDiagnostic);
+
     /// Return the root document node handle.
     fn root_node(&self) -> NodeHandle;
 }
@@ -149,6 +156,10 @@ impl<T: TreeSink + ?Sized> TreeSink for &mut T {
 
     fn reparent_children(&mut self, from: NodeHandle, to: NodeHandle) -> Result<(), HtmlError> {
         (**self).reparent_children(from, to)
+    }
+
+    fn parse_error(&mut self, diagnostic: ParseDiagnostic) {
+        (**self).parse_error(diagnostic);
     }
 
     fn root_node(&self) -> NodeHandle {
