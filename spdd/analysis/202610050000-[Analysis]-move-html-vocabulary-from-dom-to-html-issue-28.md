@@ -53,9 +53,10 @@ Sub-issues: [#27](https://github.com/jaoppb/alloy/issues/27) (remove duplicated 
     4. `refactor(css,rhai-bindings,alloy)`: import vocabulary from `html`.
     5. `docs`: PRD-008 migration note, `html::PORT_SCHEMA_VERSION` 1→2, port contract record, `CLAUDE.md` crate map,
        `dom`/`html` `Cargo.toml` descriptions.
-8. **Recoverable-diagnostics channel is a separate prerequisite issue.** `parse` returns the tree plus the recoverable
-   parse errors (WHATWG-style); the `TokenSink`/`TreeSink` port contract is updated there. #28 is **blocked** until it
-   merges; #28 then only switches to the strict `AttributeName` and pushes rejections into that channel.
+8. **Recoverable-diagnostics channel is a separate prerequisite issue
+   ([#36](https://github.com/jaoppb/alloy/issues/36)).** `parse` returns the tree plus the recoverable parse errors
+   (WHATWG-style); the `TokenSink`/`TreeSink` port contract is updated there. #28 is **blocked** until it merges; #28
+   then only switches to the strict `AttributeName` and pushes rejections into that channel.
 
 ## Done (v1 of this change)
 
@@ -85,8 +86,9 @@ Sub-issues: [#27](https://github.com/jaoppb/alloy/issues/27) (remove duplicated 
 
 - **WHATWG deviation (decision 3).** Pages with attribute names containing `" ' / = >` lose those attributes. Accepted;
   must be stated in ADR-0023 and PRD-008, and surfaced through the diagnostics channel rather than hidden.
-- **Blocked on an unwritten prerequisite (decision 8).** #28 cannot start its attribute work until the diagnostics issue
-  exists and merges; the TagName/HtmlEntity move does not depend on it but ships in the same PR.
+- **Blocked on a prerequisite (decision 8, [#36](https://github.com/jaoppb/alloy/issues/36)).** #28 cannot start its
+  attribute work until the diagnostics issue exists and merges; the TagName/HtmlEntity move does not depend on it but
+  ships in the same PR.
 - **`dom` loses its "zero dependencies" property.** Any future `html` dependency (e.g. `tracing`) now flows transitively
   into `dom` and every crate above it; ADR-0023 must constrain `html`'s own dependency set.
 - **Port contract churn.** `html::PORT_SCHEMA_VERSION` bumps (public `DomTreeSink`, `dom` feature and free functions
