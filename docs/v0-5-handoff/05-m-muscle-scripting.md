@@ -30,8 +30,8 @@ grep -rn "NETWORK_BINDINGS\|WINDOW_BINDINGS" core/runtime/rhai-bindings/src/
 1. **Perfis de capability** — confirme que `engine::capability::profiles` tem `css_cascade()`
    (`DOM_READ | GRAPHICS_DRAW`); se faltar, adicione ao lado de `network_interceptor()`/`ui_window()` já existentes.
 
-2. **`core/runtime/rhai-bindings/src/net_bindings.rs`** — `NETWORK_BINDINGS`: fetch, allow, deny, rewrite, header — cada
-   operação exigindo `NETWORK_FETCH` (e `FS_WRITE_CACHE` quando grava cache), instalada via `install_guarded_table`
+2. **`core/runtime/rhai-bindings/src/network_bindings.rs`** — `NETWORK_BINDINGS`: fetch, allow, deny, rewrite, header —
+   cada operação exigindo `NETWORK_FETCH` (e `FS_WRITE_CACHE` quando grava cache), instalada via `install_guarded_table`
    (`sandbox.rs:40`).
 
 3. **`core/runtime/rhai-bindings/src/window_bindings.rs`** — `WINDOW_BINDINGS`: repaint, title, route, atalho de teclado

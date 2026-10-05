@@ -183,16 +183,6 @@ pub fn register_network_bindings(context: &mut RhaiContext) -> Result<(), Engine
     install_guarded_table(context, &bindings)
 }
 
-/// Deprecated alias for [`register_network_bindings`]; removal is tracked in
-/// <https://github.com/jaoppb/alloy/issues/32>.
-#[deprecated(
-    since = "0.5.0",
-    note = "use register_network_bindings to avoid abbreviation"
-)]
-pub fn register_net_bindings(context: &mut RhaiContext) -> Result<(), EngineError> {
-    register_network_bindings(context)
-}
-
 /// A scriptable request policy running `.rhai` under [`profiles::network_interceptor`].
 ///
 /// Falls back safely via 3-tier fallback to [`DEFAULT_NETWORK_SCRIPT`] and [`AllowAllPolicy`]
