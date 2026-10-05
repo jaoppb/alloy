@@ -5,7 +5,7 @@
 #   just run --script scripts/hello.rhai
 #   just test engine
 #
-# Thin wrappers over cargo + pnpm. `just` replaces the old Makefile: this is a
+# Thin wrappers over cargo + rumdl. `just` replaces the old Makefile: this is a
 # command runner, not a compiler recipe, and `just` says so honestly (no phony
 # targets, no implicit file rules). Source of truth stays lefthook.yml,
 # package.json and .github/workflows/ci.yml.
