@@ -14,6 +14,7 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 mod messages;
 
 use super::frame::CachedFrame;
+use super::generation::NavigationGeneration;
 use super::hit_test::hit_test;
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
@@ -50,6 +51,9 @@ pub struct Session<F, T, P, D> {
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
     stats: LoopStats,
+    /// Results from any other generation belong to a navigation the user has
+    /// since replaced, and [`Session::apply`] drops them.
+    generation: NavigationGeneration,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -72,6 +76,7 @@ where
             viewport,
             last_frame: None,
             stats: LoopStats::default(),
+            generation: NavigationGeneration::default(),
         }
     }
 
@@ -99,16 +104,19 @@ where
     }
 
     /// Starts fetching `url` on a worker thread; the result arrives as a
-    /// [`LoopMessage::Navigation`].
-    pub fn navigate(&self, url: Url, sender: &Sender<LoopMessage>) {
+    /// [`LoopMessage::Navigation`]. Supersedes every navigation and
+    /// subresource fetch still in flight: their results are dropped on
+    /// arrival.
+    pub fn navigate(&mut self, url: Url, sender: &Sender<LoopMessage>) {
+        self.generation = self.generation.next();
         let transport = Arc::clone(self.services.transport());
         let policy = Arc::clone(self.services.policy());
-        spawn_navigation(url, transport, policy, sender.clone());
+        spawn_navigation(url, transport, policy, self.generation, sender.clone());
     }
 
     /// Navigates to the topmost link under `position`, resolved against the
     /// document's base URL. An in-page `#anchor` is a no-op in v0.5.
-    pub fn follow_link_at(&self, position: PhysicalPosition, sender: &Sender<LoopMessage>) {
+    pub fn follow_link_at(&mut self, position: PhysicalPosition, sender: &Sender<LoopMessage>) {
         let Some(href) = hit_test(&self.links, position) else {
             return;
         };
@@ -173,6 +181,10 @@ where
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P, D> Session<F, T, P, D> {
+    pub const fn generation(&self) -> NavigationGeneration {
+        self.generation
+    }
+
     pub const fn viewport(&self) -> SurfaceSize {
         self.viewport
     }

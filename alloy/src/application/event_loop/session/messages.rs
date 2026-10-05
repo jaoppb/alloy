@@ -24,26 +24,37 @@ where
 {
     /// Applies one drained background-fetch result, spawning whatever
     /// follow-up fetches it reveals (a fresh document's subresources).
+    ///
+    /// A result from a superseded navigation (an older `NavigationGeneration`)
+    /// is dropped untouched.
     pub fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
+        if message.generation() != self.generation {
+            tracing::debug!(
+                message_generation = ?message.generation(),
+                current_generation = ?self.generation,
+                "stale background result dropped"
+            );
+            return;
+        }
         match message {
-            LoopMessage::Navigation(Ok((dom_tree, navigation_url))) => {
+            LoopMessage::Navigation(_, Ok((dom_tree, navigation_url))) => {
                 self.load_document(dom_tree, &navigation_url, sender);
             }
-            LoopMessage::Navigation(Err(error)) => {
+            LoopMessage::Navigation(_, Err(error)) => {
                 tracing::error!(%error, "navigation failed");
                 self.stats.navigation_errors = self.stats.navigation_errors.saturating_add(1);
                 self.show_navigation_error(&error);
             }
-            LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
-            LoopMessage::Stylesheet(Err(error)) => {
+            LoopMessage::Stylesheet(_, Ok(text)) => self.absorb_stylesheet(&text),
+            LoopMessage::Stylesheet(_, Err(error)) => {
                 tracing::warn!(%error, "stylesheet fetch failed");
             }
-            LoopMessage::Image(id, Ok(framebuffer)) => {
+            LoopMessage::Image(_, id, Ok(framebuffer)) => {
                 self.images.insert(id, framebuffer);
                 self.dirty = true;
                 self.stats.images_loaded = self.stats.images_loaded.saturating_add(1);
             }
-            LoopMessage::Image(id, Err(error)) => {
+            LoopMessage::Image(_, id, Err(error)) => {
                 tracing::warn!(%error, %id, "image fetch failed");
             }
         }
@@ -126,7 +137,12 @@ where
             if let SubresourceRequest::Image(image) = &request {
                 self.images.reserve_placeholder(image.id());
             }
-            spawn_subresource_fetch(request, Arc::clone(self.services.transport()), sender);
+            spawn_subresource_fetch(
+                request,
+                Arc::clone(self.services.transport()),
+                self.generation,
+                sender,
+            );
         }
     }
 }

@@ -12,6 +12,7 @@
 //! pump cycles cost one relayout, not ten or fifty.
 
 mod frame;
+mod generation;
 mod hit_test;
 mod pixel;
 mod session;

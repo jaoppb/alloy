@@ -18,6 +18,7 @@ use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
 
+use super::generation::NavigationGeneration;
 use super::session::Session;
 use super::worker::{LoopMessage, fetch_text};
 use super::{initial_window_attributes, pump_once};
@@ -78,7 +79,7 @@ fn completed_navigation(
     let message = receiver
         .recv_timeout(std::time::Duration::from_secs(5))
         .expect("navigation message received");
-    let LoopMessage::Navigation(Ok((_, target_url))) = message else {
+    let LoopMessage::Navigation(_, Ok((_, target_url))) = message else {
         panic!("expected a successful navigation");
     };
     target_url
@@ -90,7 +91,11 @@ fn load(session: &mut TestSession, markup: &str, url: &str) {
     let (sender, _receiver) = mpsc::channel();
     let document = dom::parse(markup).unwrap().into_tree();
     let url = network::Url::parse(url).unwrap();
-    session.apply(LoopMessage::Navigation(Ok((document, url))), &sender);
+    let generation = session.generation();
+    session.apply(
+        LoopMessage::Navigation(generation, Ok((document, url))),
+        &sender,
+    );
 }
 
 fn loaded_session(viewport: SurfaceSize) -> TestSession {
@@ -150,6 +155,7 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     for index in 0..50u32 {
         sender
             .send(LoopMessage::Image(
+                session.generation(),
                 ImageId::new(index),
                 Ok(placeholder_framebuffer()),
             ))
@@ -415,8 +421,9 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     .unwrap()
     .into_tree();
     let navigation_url = network::Url::parse("https://example.com/index.html").unwrap();
+    let generation = session.generation();
     session.apply(
-        LoopMessage::Navigation(Ok((document, navigation_url))),
+        LoopMessage::Navigation(generation, Ok((document, navigation_url))),
         &sender,
     );
 
@@ -484,5 +491,192 @@ fn a_resize_before_any_document_counts_no_relayout() {
     assert!(
         !session.needs_relayout(),
         "the dropped request is not retried"
+    );
+}
+
+/// A sender whose receiver is already gone: `Session::navigate` still bumps
+/// the generation, and its worker's result goes nowhere instead of racing the
+/// messages a test queues by hand.
+fn discarding_sender() -> mpsc::Sender<LoopMessage> {
+    mpsc::channel().0
+}
+
+fn page_url(path: &str) -> network::Url {
+    network::Url::parse(&format!("http://example.com/{path}")).unwrap()
+}
+
+fn queue_navigation(
+    sender: &mpsc::Sender<LoopMessage>,
+    generation: NavigationGeneration,
+    markup: &str,
+    url: network::Url,
+) {
+    let document = dom::parse(markup).unwrap().into_tree();
+    sender
+        .send(LoopMessage::Navigation(generation, Ok((document, url))))
+        .unwrap();
+}
+
+fn pump_queued(
+    receiver: &mpsc::Receiver<LoopMessage>,
+    sender: &mpsc::Sender<LoopMessage>,
+    session: &mut TestSession,
+) {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    pump(&mut system, &mut presenter, receiver, sender, session);
+}
+
+#[test]
+fn a_subresource_fetched_for_a_page_the_user_left_is_not_applied_to_the_next_one() {
+    let (sender, receiver) = mpsc::channel();
+    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
+    let page_a = session.generation();
+    session.navigate(page_url("b.html"), &discarding_sender());
+    let page_b = session.generation();
+    queue_navigation(
+        &sender,
+        page_b,
+        "<html><body>b</body></html>",
+        page_url("b.html"),
+    );
+    // Both were started for page A; ImageId 12 names a different <img> in B.
+    sender
+        .send(LoopMessage::Stylesheet(
+            page_a,
+            Ok("p { color: red }".into()),
+        ))
+        .unwrap();
+    sender
+        .send(LoopMessage::Image(
+            page_a,
+            ImageId::new(12),
+            Ok(placeholder_framebuffer()),
+        ))
+        .unwrap();
+
+    pump_queued(&receiver, &sender, &mut session);
+
+    let stats = session.stats();
+    assert_eq!(stats.navigations, 2, "page B itself must still be applied");
+    assert_eq!(
+        stats.stylesheets_loaded, 0,
+        "A's stylesheet must not enter B's cascade"
+    );
+    assert_eq!(
+        stats.images_loaded, 0,
+        "A's image must not replace whatever B has at the same ImageId"
+    );
+}
+
+#[test]
+fn a_slower_earlier_navigation_does_not_replace_the_latest_one() {
+    let (sender, receiver) = mpsc::channel();
+    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
+    session.navigate(page_url("slow.html"), &discarding_sender());
+    let slow = session.generation();
+    session.navigate(page_url("fast.html"), &discarding_sender());
+    let fast = session.generation();
+    queue_navigation(
+        &sender,
+        fast,
+        "<html><body>fast</body></html>",
+        page_url("fast.html"),
+    );
+    queue_navigation(
+        &sender,
+        slow,
+        "<html><body>slow</body></html>",
+        page_url("slow.html"),
+    );
+
+    pump_queued(&receiver, &sender, &mut session);
+
+    assert_eq!(
+        session.base_url(),
+        Some(&page_url("fast.html")),
+        "the response of the link clicked first must not replace the page clicked last"
+    );
+    assert_eq!(
+        session.stats().navigations,
+        2,
+        "the slow one is not counted"
+    );
+}
+
+#[test]
+fn a_failure_of_a_superseded_navigation_does_not_replace_the_current_page() {
+    let (sender, receiver) = mpsc::channel();
+    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
+    session.navigate(page_url("slow.html"), &discarding_sender());
+    let slow = session.generation();
+    session.navigate(page_url("fast.html"), &discarding_sender());
+    let fast = session.generation();
+    queue_navigation(
+        &sender,
+        fast,
+        "<html><body>fast</body></html>",
+        page_url("fast.html"),
+    );
+    sender
+        .send(LoopMessage::Navigation(
+            slow,
+            Err(AlloyError::InvalidDimensions),
+        ))
+        .unwrap();
+
+    pump_queued(&receiver, &sender, &mut session);
+
+    assert_eq!(
+        session.stats().navigation_errors,
+        0,
+        "an error nobody is waiting for must not become the error card"
+    );
+    assert_eq!(session.base_url(), Some(&page_url("fast.html")));
+}
+
+#[test]
+fn following_a_link_supersedes_the_navigation_in_flight() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let (sender, receiver) = mpsc::channel();
+    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    load(
+        &mut session,
+        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(
+        &mut system,
+        &mut presenter,
+        &receiver,
+        &sender,
+        &mut session,
+    );
+    let before_click = session.generation();
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(20.0, 20.0),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+
+    pump(
+        &mut system,
+        &mut presenter,
+        &receiver,
+        &sender,
+        &mut session,
+    );
+
+    assert_ne!(
+        session.generation(),
+        before_click,
+        "a click that navigates must retire everything still in flight"
     );
 }
