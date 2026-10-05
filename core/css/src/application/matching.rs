@@ -213,7 +213,7 @@ fn type_matches(selector: &TypeSelector, node: NodeRef<'_>) -> bool {
 
 fn classes_match(classes: &IdentifierList, node: NodeRef<'_>) -> bool {
     let list = node
-        .attribute(dom::AttributeName::class().as_str())
+        .attribute(html::AttributeName::class().as_str())
         .unwrap_or_default();
     classes
         .iter()
@@ -227,7 +227,7 @@ fn class_list_contains(list: &str, name: &str) -> bool {
 }
 
 fn ids_match(ids: &IdentifierList, node: NodeRef<'_>) -> bool {
-    let actual = node.attribute(dom::AttributeName::id().as_str());
+    let actual = node.attribute(html::AttributeName::id().as_str());
     ids.iter().all(|name| actual == Some(name.as_str()))
 }
 

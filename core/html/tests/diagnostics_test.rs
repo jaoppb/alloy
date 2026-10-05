@@ -2,11 +2,10 @@
 //! delivered in order, and the rest of the document still parses.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-#![cfg(feature = "dom")]
 
 use html::{
     MockEvent, MockTreeSink, ParseErrorCode, Token, TokenSink, TokenSinkResult, Tokenizer,
-    TokenizerRunResult, TreeBuilder, parse, parse_with_sink,
+    TokenizerRunResult, TreeBuilder, parse_with_sink,
 };
 
 fn parse_error_events(sink: &MockTreeSink) -> Vec<(ParseErrorCode, usize, usize)> {
@@ -22,14 +21,17 @@ fn parse_error_events(sink: &MockTreeSink) -> Vec<(ParseErrorCode, usize, usize)
 }
 
 #[test]
-fn a_malformed_attribute_name_yields_exactly_one_diagnostic_and_the_document_parses() {
+fn a_malformed_attribute_name_is_reported_twice_and_the_document_parses() {
     let source = "<p>before</p>\n<div a\"b=1>after</div>\n";
     let mut sink = MockTreeSink::new();
     parse_with_sink(source, &mut sink).expect("a malformed attribute must not abort");
 
     assert_eq!(
         parse_error_events(&sink),
-        [(ParseErrorCode::UnexpectedCharacterInAttributeName, 2, 7)]
+        [
+            (ParseErrorCode::UnexpectedCharacterInAttributeName, 2, 7),
+            (ParseErrorCode::InvalidAttributeName, 2, 6),
+        ]
     );
     let texts: Vec<_> = sink
         .events()
@@ -49,94 +51,74 @@ fn a_malformed_attribute_name_yields_exactly_one_diagnostic_and_the_document_par
     );
 }
 
-#[test]
-fn the_dom_adapter_reports_what_it_refuses_instead_of_dropping_silently() {
-    let outcome = parse("<div a\"b=1 id=kept>x</div>").unwrap();
-    let codes: Vec<_> = outcome
-        .diagnostics()
+fn mock_for(source: &str) -> MockTreeSink {
+    let mut sink = MockTreeSink::new();
+    parse_with_sink(source, &mut sink).unwrap();
+    sink
+}
+
+fn created(sink: &MockTreeSink, name: &str) -> Vec<html::AttributeList> {
+    sink.events()
         .iter()
-        .map(html::ParseDiagnostic::code)
+        .filter_map(|event| match event {
+            MockEvent::CreateElement {
+                tag, attributes, ..
+            } if tag == name => Some(attributes.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn an_invalid_attribute_name_is_dropped_and_reported_instead_of_dropped_silently() {
+    let sink = mock_for("<div a\"b=1 id=kept>x</div>");
+    let codes: Vec<_> = parse_error_events(&sink)
+        .into_iter()
+        .map(|(code, _, _)| code)
         .collect();
     assert_eq!(
         codes,
         [
             ParseErrorCode::UnexpectedCharacterInAttributeName,
-            ParseErrorCode::UnsupportedAttributeName
+            ParseErrorCode::InvalidAttributeName
         ]
     );
-    let tree = outcome.into_tree();
-    let div = tree
-        .descendants(tree.document())
-        .find(|&node| matches!(tree.node_kind(node), Ok(dom::NodeKind::Element(el)) if el.tag().as_str() == "div"))
-        .unwrap();
-    let Ok(dom::NodeKind::Element(element)) = tree.node_kind(div) else {
-        panic!("div is an element");
-    };
-    let id = dom::AttributeName::new("id").unwrap();
-    assert_eq!(
-        element
-            .attributes()
-            .get(&id)
-            .map(dom::AttributeValue::as_str),
-        Some("kept")
-    );
+    let divs = created(&sink, "div");
+    assert_eq!(divs[0].len(), 1);
+    assert_eq!(divs[0].get_value_str("id"), Some("kept"));
 }
 
 #[test]
 fn an_invalid_tag_name_no_longer_aborts_the_document() {
-    let outcome = parse("<p>a</p><my_widget>kept</my_widget><p>b</p>").unwrap();
-    let tree = outcome.tree();
-    let text: String = tree
-        .descendants(tree.document())
-        .filter_map(|node| match tree.node_kind(node) {
-            Ok(dom::NodeKind::Text(text)) => Some(text.as_str().to_string()),
+    let sink = mock_for("<p>a</p><my_widget>kept</my_widget><p>b</p>");
+    let text: String = sink
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateText { content, .. } => Some(content.as_str()),
             _ => None,
         })
         .collect();
     assert_eq!(text, "akeptb");
-    assert_eq!(outcome.diagnostics().len(), 2);
+    assert_eq!(parse_error_events(&sink).len(), 2);
 }
 
 #[test]
 fn a_duplicate_attribute_keeps_the_first() {
-    let outcome = parse("<div id=first id=second></div>").unwrap();
-    let tree = outcome.tree();
-    let div = tree
-        .descendants(tree.document())
-        .find(|&node| matches!(tree.node_kind(node), Ok(dom::NodeKind::Element(el)) if el.tag().as_str() == "div"))
-        .unwrap();
-    let Ok(dom::NodeKind::Element(element)) = tree.node_kind(div) else {
-        panic!("div is an element");
-    };
-    let id = dom::AttributeName::new("id").unwrap();
-    assert_eq!(
-        element
-            .attributes()
-            .get(&id)
-            .map(dom::AttributeValue::as_str),
-        Some("first")
-    );
+    let sink = mock_for("<div id=first id=second></div>");
+    assert_eq!(created(&sink, "div")[0].get_value_str("id"), Some("first"));
 }
 
 #[test]
-fn a_repeated_body_start_tag_merges_attributes_instead_of_dropping_them() {
-    let outcome = parse("<body class=a><body id=b><p>x</p>").unwrap();
-    let tree = outcome.tree();
-    let body = tree
-        .descendants(tree.document())
-        .find(|&node| matches!(tree.node_kind(node), Ok(dom::NodeKind::Element(el)) if el.tag().as_str() == "body"))
-        .unwrap();
-    let Ok(dom::NodeKind::Element(element)) = tree.node_kind(body) else {
-        panic!("body is an element");
-    };
-    let id = dom::AttributeName::new("id").unwrap();
-    assert_eq!(
-        element
-            .attributes()
-            .get(&id)
-            .map(dom::AttributeValue::as_str),
-        Some("b")
-    );
+fn a_repeated_body_start_tag_hands_its_attributes_to_the_sink_to_merge() {
+    let sink = mock_for("<body class=a><body id=b><p>x</p>");
+    assert!(sink.events().iter().any(|event| matches!(
+        event,
+        MockEvent::AddAttributes {
+            attribute_count: 1,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -147,11 +129,11 @@ fn spec_implied_closures_stay_silent() {
         "<ul><li><p>one</li></ul>",
         "<!DOCTYPE html><html><head></head><body><p>x</p></body></html>",
     ] {
-        let outcome = parse(source).unwrap();
+        let sink = mock_for(source);
         assert!(
-            outcome.diagnostics().is_empty(),
+            parse_error_events(&sink).is_empty(),
             "{source:?}: {:?}",
-            outcome.diagnostics()
+            parse_error_events(&sink)
         );
     }
 }
@@ -245,6 +227,6 @@ fn hostile_input_never_aborts_or_panics() {
         "<a/ / />",
         "<=>",
     ] {
-        parse(source).unwrap_or_else(|err| panic!("{source:?} aborted: {err}"));
+        mock_for(source);
     }
 }

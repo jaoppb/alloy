@@ -80,7 +80,7 @@ impl Resolved {
 
     /// The computed style of the first element named `tag`.
     fn style(&self, tag: &str) -> ComputedStyle {
-        let tag_name = dom::TagName::new(tag).expect("a valid tag name");
+        let tag_name = html::TagName::new(tag).expect("a valid tag name");
         let id = self
             .dom
             .nodes_in_document_order()
@@ -125,7 +125,7 @@ fn decorate(tree: &mut dom::DomTree, node: dom::NodeId, id: &str, inline: Option
 }
 
 fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(name).unwrap());
+    let node = tree.create_element(html::TagName::new(name).unwrap());
     tree.append_child(parent, node).unwrap();
     node
 }
@@ -133,8 +133,8 @@ fn child(tree: &mut dom::DomTree, parent: dom::NodeId, name: &str) -> dom::NodeI
 fn attribute_of(tree: &mut dom::DomTree, node: dom::NodeId, name: &str, value: &str) {
     tree.set_attribute(
         node,
-        dom::AttributeName::new(name).unwrap(),
-        dom::AttributeValue::new(value),
+        html::AttributeName::new(name).unwrap(),
+        html::AttributeValue::new(value),
     )
     .unwrap();
 }

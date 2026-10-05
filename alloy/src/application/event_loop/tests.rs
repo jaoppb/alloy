@@ -88,7 +88,7 @@ fn completed_navigation(
 /// finished navigation thread does.
 fn load(session: &mut TestSession, markup: &str, url: &str) {
     let (sender, _receiver) = mpsc::channel();
-    let document = html::parse(markup).unwrap().into_tree();
+    let document = dom::parse(markup).unwrap().into_tree();
     let url = network::Url::parse(url).unwrap();
     session.apply(LoopMessage::Navigation(Ok((document, url))), &sender);
 }
@@ -407,7 +407,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
         MockTransport::new().with_response(expected.clone(), response),
         attributes.initial_size(),
     );
-    let document = html::parse(
+    let document = dom::parse(
         "<html><head><base href=\"https://cdn.example/app/\"></head><body>\
          <a href=\"docs.html\" style=\"display: block; width: 100px; height: 50px;\">Docs</a>\
          </body></html>",

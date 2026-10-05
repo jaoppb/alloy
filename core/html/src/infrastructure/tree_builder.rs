@@ -7,7 +7,6 @@ use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
 use crate::domain::location::SourceLocation;
 use crate::domain::tag::TagName;
-use crate::domain::tag::{closes_list_item, closes_paragraph, is_implied_end_tag, is_void_tag};
 use crate::domain::text::Text;
 use crate::domain::token::{DoctypeToken, TagToken, Token};
 
@@ -124,7 +123,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             self.ensure_body_element()?;
         }
 
-        self.apply_omission_rules(tag_str, tag.location());
+        self.apply_omission_rules(tag.tag_name(), tag.location());
 
         let parent = self.current_parent();
         let handle = self
@@ -132,7 +131,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             .create_element(tag.tag_name().clone(), tag.attributes())?;
         self.sink.append_child(parent, handle)?;
 
-        let is_void = is_void_tag(tag_str) || tag.is_self_closing();
+        let is_void = tag.tag_name().is_void() || tag.is_self_closing();
         if !is_void {
             self.open_elements.push(OpenElement {
                 tag: tag.tag_name().clone(),
@@ -232,11 +231,11 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         Ok(TokenSinkResult::Continue)
     }
 
-    fn apply_omission_rules(&mut self, tag_name: &str, location: SourceLocation) {
-        if closes_paragraph(tag_name) {
+    fn apply_omission_rules(&mut self, tag_name: &TagName, location: SourceLocation) {
+        if tag_name.closes_paragraph() {
             self.pop_matching_tag("p", ParseErrorCode::ElementClosedImplicitly, location);
         }
-        if closes_list_item(tag_name) {
+        if tag_name.closes_list_item() {
             self.pop_matching_tag("li", ParseErrorCode::ElementClosedImplicitly, location);
         }
     }
@@ -259,7 +258,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             .open_elements
             .iter()
             .skip(position.saturating_add(1))
-            .any(|open| !is_implied_end_tag(open.tag.as_str()));
+            .any(|open| !open.tag.is_implied_end_tag());
         if closes_non_implied {
             self.report(code, location);
         }

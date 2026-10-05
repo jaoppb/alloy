@@ -6,8 +6,9 @@
 //! irremovable `Document` root, `Children` ⇄ `parent` coherence). Mutation only
 //! ever happens through [`DomTree`]'s methods (Object Calisthenics rule 8).
 //!
-//! This crate has **zero dependencies** and names no engine type (v0.2 report
-//! decision 2.1). Making a node scriptable — the `NodeHandle` bridge and the
+//! This crate depends only on the `html` vocabulary crate (`ADR-0024`; it
+//! supersedes v0.2 report decision 2.1's "zero dependencies") and names no
+//! engine type. Making a node scriptable — the `NodeHandle` bridge and the
 //! `DomError` → `EngineError::Subsystem { subsystem: SubsystemName::Dom, .. }`
 //! mapping — is `core/runtime/rhai`'s job at roadmap point I1, not this
 //! crate's.
@@ -15,26 +16,27 @@
 //! ## Layout (`ADR-0010` §1)
 //!
 //! - [`domain`] — [`DomTree`], [`NodeId`], [`NodeKind`] / [`ElementData`], the
-//!   value objects ([`TagName`], [`AttributeName`], [`AttributeValue`],
-//!   [`TextContent`], [`CommentContent`]), the first-class collections
+//!   value objects ([`TextContent`], [`CommentContent`]; the tag and attribute
+//!   vocabulary is `html`'s), the first-class collections
 //!   ([`Children`], [`AttributeMap`]), the typed [`DomError`], and the
 //!   [`Descendants`] / [`Ancestors`] iterators.
 //! - [`application`] — [`serialize_html`], a pure deterministic serializer.
+//! - [`infrastructure`] — [`DomTreeSink`], the default `html::TreeSink` adapter, and [`parse`].
 
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc)]
 
 pub mod application;
 pub mod domain;
+pub mod infrastructure;
 
 pub use application::serialize::serialize_html;
 pub use domain::{
-    attributes::{AttributeMap, AttributeName, AttributeValue},
-    entity::HtmlEntity,
+    attributes::AttributeMap,
     error::DomError,
     node::{ElementData, NodeId, NodeKind},
-    tag_name::TagName,
     text::{CommentContent, TextContent},
     traversal::{Ancestors, Children, Descendants},
     tree::DomTree,
 };
+pub use infrastructure::html_sink::{DomTreeSink, ParseOutcome, parse};

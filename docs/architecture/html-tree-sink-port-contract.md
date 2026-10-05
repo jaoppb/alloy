@@ -3,15 +3,15 @@
 The `TokenSink` / `TreeSink` seam in `core/html` is a **Replaceable Subsystem Port** under `ADR-0011`. This document is
 its contract record: the state of all seven mandatory items as of v0.5 B5.
 
-| Item | Contract requirement                                                      | State                                                                                                                                                                                                                                             |
-| ---- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-008` (variation model §1; threat model §2.3: network input is hostile by definition, a parser panic is a denial of service)                                                                                                               |
-| 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ `TokenSink` and `TreeSink` are object-safe traits speaking only domain value objects (`NodeHandle`, `TagName`, `Text`, `AttributeList`). Zero foreign adapter types leak through the boundary. See §2 below                                    |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `Token`, `AttributeList`/`AttributeEntry`, `TagName`, `Text`, `NodeHandle`, `SourceLocation`, `HtmlError` domain-owned in `core/html`, `#[non_exhaustive]`; `html::PORT_SCHEMA_VERSION = 2` (see §3; `2` = recoverable diagnostics, issue #36) |
-| 4    | Exactly one typed error, source location                                  | ✅ `HtmlError` is a single typed error enum carrying `SourceLocation` (`line`, `column`, `byte_offset`) on all syntax and parsing variants; derives `thiserror::Error` (ADR-0015). See §4                                                         |
-| 5    | Written lifecycle & concurrency contract                                  | ✅ Written in §5 below; includes streaming tokenizer re-entrancy and suspension protocol for `<script>` and `document.write`                                                                                                                      |
-| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `run_html_conformance` conformance suite; `DomTreeSink` (real) and `MockTreeSink` (reference mock) both pass; `feature = "dom"` is optional with `--no-default-features` verified in CI. See §6                                                |
-| 7    | Frozen-API milestone                                                      | 🟡 Working surface at `html::PORT_SCHEMA_VERSION = 2`; freezes at integration point `I4`                                                                                                                                                          |
+| Item | Contract requirement                                                      | State                                                                                                                                                                                                                                                                            |
+| ---- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-008` (variation model §1; threat model §2.3: network input is hostile by definition, a parser panic is a denial of service)                                                                                                                                              |
+| 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ `TokenSink` and `TreeSink` are object-safe traits speaking only domain value objects (`NodeHandle`, `TagName`, `Text`, `AttributeList`). Zero foreign adapter types leak through the boundary. See §2 below                                                                   |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `Token`, `AttributeList`/`AttributeEntry`, `TagName`, `Text`, `NodeHandle`, `SourceLocation`, `HtmlError` domain-owned in `core/html`, `#[non_exhaustive]`; `html::PORT_SCHEMA_VERSION = 3` (see §3; `2` = recoverable diagnostics #36, `3` = vocabulary owned by `html` #28) |
+| 4    | Exactly one typed error, source location                                  | ✅ `HtmlError` is a single typed error enum carrying `SourceLocation` (`line`, `column`, `byte_offset`) on all syntax and parsing variants; derives `thiserror::Error` (ADR-0015). See §4                                                                                        |
+| 5    | Written lifecycle & concurrency contract                                  | ✅ Written in §5 below; includes streaming tokenizer re-entrancy and suspension protocol for `<script>` and `document.write`                                                                                                                                                     |
+| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `run_html_conformance` conformance suite; `DomTreeSink` (real, in `core/dom`) and `MockTreeSink` (reference mock) both pass; `core/html` has no `dom` dependency, enforced by `arch-lint`. See §6                                                                             |
+| 7    | Frozen-API milestone                                                      | 🟡 Working surface at `html::PORT_SCHEMA_VERSION = 3`; freezes at integration point `I4`                                                                                                                                                                                         |
 
 ---
 
@@ -53,11 +53,12 @@ Boundary types are domain-owned in `core/html` and marked `#[non_exhaustive]`:
   `ParseDiagnostic`.
 - `AttributeList`: unique by name (`insert` keeps the first, hands the later one back as `DuplicateAttribute`).
 - `ParseDiagnostic` / `ParseErrorCode` / `Diagnostics`: recoverable, located parse errors (`ADR-0023`). `ParseOutcome`
-  (`dom` feature) is what `parse` returns: the tree plus the diagnostics.
+  (defined in `core/dom`, with `DomTreeSink` and `dom::parse`) is what parsing into a `DomTree` returns: the tree plus
+  the diagnostics.
 - `PORT_SCHEMA_VERSION`:
 
 ```rust
-pub const PORT_SCHEMA_VERSION: u32 = 2; // 1 = B5 surface; 2 = recoverable diagnostics (#36)
+pub const PORT_SCHEMA_VERSION: u32 = 3; // 1 = B5 surface; 2 = recoverable diagnostics (#36); 3 = vocabulary owned by html (#28)
 ```
 
 ---
@@ -77,15 +78,16 @@ pub enum HtmlError {
 ```
 
 It is returned only for sink/adapter failure and value-object constructor validation; the tokenizer and tree builder
-never abort on malformed input. In accordance with `ADR-0015`, it derives `thiserror::Error`. When the `dom` cargo
-feature is enabled, `From<dom::DomError>` maps tree invariant violations into `HtmlError::TreeConstruction`.
+never abort on malformed input. In accordance with `ADR-0015`, it derives `thiserror::Error`. `core/dom` implements
+`From<DomError> for HtmlError` (mapping tree invariant violations into `HtmlError::TreeConstruction`); `html` itself
+does not know `dom`.
 
 **Recoverable** malformations are `ParseDiagnostic { code: ParseErrorCode, location: SourceLocation }` (`thiserror`),
 delivered in-band as `Token::ParseError` and to `TreeSink::parse_error` ahead of the token that triggered them. Codes
 use the WHATWG names where one exists (`duplicate-attribute`, `eof-in-tag`, `unexpected-character-in-attribute-name`, …)
 plus tree-builder codes (`stray-end-tag`, `end-tag-does-not-match-current-node`, `element-closed-implicitly`,
-`unexpected-{html,body,head}-start-tag`, `quirks-mode-doctype`) and one adapter code (`unsupported-attribute-name`,
-which disappears when #28 aligns the `dom` and `html` attribute vocabularies). `parse` returns them as
+`unexpected-{html,body,head}-start-tag`, `quirks-mode-doctype`) and `invalid-attribute-name` (an attribute name breaking
+the strict `AttributeName` rule is dropped and reported; ADR-0024). `dom::parse` returns them as
 `ParseOutcome { tree, diagnostics }`. This closes the known gap that a parse error carried no source location.
 
 Boundaries: the doctype is consumed by design (no `DocumentType` node); a quirks-forcing doctype is reported. The
@@ -133,13 +135,14 @@ The port protocol fully supports parser re-entrancy and suspension:
 
 - `html::run_html_conformance(sink: &mut dyn TreeSink)`: exhaustive validation suite testing element creation,
   hierarchical appends, text/comment insertion, sibling insertions, and reparenting invariants.
-- `DomTreeSink`: concrete adapter mapping `NodeHandle` to `dom::DomTree` via `NodeId`.
+- `DomTreeSink`: concrete adapter in `core/dom` (`infrastructure/html_sink.rs`) mapping `NodeHandle` to `DomTree` via
+  `NodeId`; its conformance run is `core/dom/tests/html_sink_conformance.rs`.
 - `MockTreeSink`: reference mock adapter recording parser events (including `MockEvent::ParseError`) in memory without
   depending on `core/dom`.
 - `core/html/tests/data/MANIFEST.md` lists tags, syntax and parse-error codes; `manifest_runner.rs` checks each registry
   against it in both directions and probes every code at its exact line and column.
-- `core/html/Cargo.toml` provides the optional `dom` feature (`default = ["dom"]`). When building with
-  `--no-default-features`, `core/html` compiles completely decoupled from `core/dom`, verified by CI.
+- `core/html` is a leaf crate: the dependency is `dom → html` (ADR-0024), forbidden in the other direction by the
+  `arch-lint` rules `html` (`deny-scope-dep`) and `html-isolated` (`restrict-use`). There is no `dom` feature.
 
 ---
 
@@ -149,6 +152,6 @@ Run tests and conformance checks:
 
 ```bash
 cargo test -p html
-cargo test -p html --no-default-features
+cargo test -p dom --test html_sink_conformance
 cargo llvm-cov --package html --ignore-filename-regex '(/application/|/infrastructure/)' --fail-under-lines 85
 ```

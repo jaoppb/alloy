@@ -110,8 +110,12 @@ impl PendingTag {
         }
         let raw_name = core::mem::take(&mut self.attribute_name);
         let value = AttributeValue::new(core::mem::take(&mut self.attribute_value));
-        // `raw_name` is non-empty, the only thing `AttributeName::new` rejects (strictness is #28).
-        let Ok(name) = AttributeName::new(raw_name, self.attribute_location) else {
+        // WHATWG keeps such an attribute; this crate drops it, loudly (ADR-0024).
+        let Ok(name) = AttributeName::new(&raw_name) else {
+            cursor.report(
+                ParseErrorCode::InvalidAttributeName,
+                self.attribute_location,
+            );
             return;
         };
         let entry = AttributeEntry::new(name, value, self.attribute_location);
@@ -135,7 +139,7 @@ impl PendingTag {
     /// Builds the token for the finished tag, or reports why there is none.
     pub fn finish(&mut self, cursor: &mut Cursor<'_>) -> Option<Token> {
         let name = core::mem::take(&mut self.name);
-        let Ok(tag_name) = TagName::new(&name, self.open_location) else {
+        let Ok(tag_name) = TagName::new(&name) else {
             cursor.report(ParseErrorCode::InvalidTagName, self.open_location);
             self.discard();
             return None;

@@ -7,6 +7,44 @@
 use crate::domain::location::SourceLocation;
 use core::fmt;
 
+/// A string that is not a valid tag name (see [`crate::TagName::new`]).
+#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
+#[error("not a valid tag name: {0:?}")]
+pub struct InvalidTagName(String);
+
+impl InvalidTagName {
+    /// Records the rejected `raw` name.
+    #[must_use]
+    pub fn new(raw: impl Into<String>) -> Self {
+        Self(raw.into())
+    }
+
+    /// The rejected name, as written.
+    #[must_use]
+    pub fn raw(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A string that is not a valid attribute name (see [`crate::AttributeName::new`]).
+#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
+#[error("not a valid attribute name: {0:?}")]
+pub struct InvalidAttributeName(String);
+
+impl InvalidAttributeName {
+    /// Records the rejected `raw` name.
+    #[must_use]
+    pub fn new(raw: impl Into<String>) -> Self {
+        Self(raw.into())
+    }
+
+    /// The rejected name, as written.
+    #[must_use]
+    pub fn raw(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Fatal errors arising from value-object validation or a tree sink.
 #[non_exhaustive]
 #[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
@@ -17,15 +55,6 @@ pub enum HtmlError {
         /// The invalid tag name.
         name: String,
         /// Source location where invalid tag was found.
-        location: SourceLocation,
-    },
-
-    /// An invalid attribute was encountered.
-    #[error("Invalid attribute '{name}' at {location}")]
-    InvalidAttribute {
-        /// The invalid attribute name.
-        name: String,
-        /// Source location where invalid attribute was found.
         location: SourceLocation,
     },
 
@@ -47,15 +76,6 @@ impl HtmlError {
         }
     }
 
-    /// Create an invalid attribute error.
-    #[must_use]
-    pub fn invalid_attribute(name: impl Into<String>, location: SourceLocation) -> Self {
-        Self::InvalidAttribute {
-            name: name.into(),
-            location,
-        }
-    }
-
     /// Create a tree construction error.
     #[must_use]
     pub fn tree_construction(message: impl fmt::Display) -> Self {
@@ -65,27 +85,21 @@ impl HtmlError {
     }
 }
 
-#[cfg(feature = "dom")]
-impl From<dom::DomError> for HtmlError {
-    fn from(error: dom::DomError) -> Self {
-        Self::TreeConstruction {
-            message: error.to_string(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn invalid_tag_and_attribute_constructors() {
-        let location = SourceLocation::initial();
-        let tag_error = HtmlError::invalid_tag("123", location);
+    fn invalid_tag_constructor_and_value_object_errors() {
+        let tag_error = HtmlError::invalid_tag("123", SourceLocation::initial());
         assert!(tag_error.to_string().contains("123"));
 
-        let attr_error = HtmlError::invalid_attribute("", location);
-        assert!(attr_error.to_string().contains("Invalid attribute"));
+        assert_eq!(InvalidTagName::new("1x").raw(), "1x");
+        assert!(
+            InvalidAttributeName::new("a\"b")
+                .to_string()
+                .contains("a\\\"b")
+        );
     }
 
     #[test]
@@ -95,13 +109,5 @@ mod tests {
             error.to_string(),
             "Tree construction error: capacity exceeded"
         );
-    }
-
-    #[cfg(feature = "dom")]
-    #[test]
-    fn dom_error_converts_into_tree_construction() {
-        let dom_error = dom::DomError::InvalidAttributeName("bad".to_string());
-        let html_error: HtmlError = dom_error.into();
-        assert!(html_error.to_string().contains("Tree construction error"));
     }
 }

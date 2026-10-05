@@ -45,7 +45,7 @@ fn collect_from_node(
 
 /// One element's `style=` attribute.
 fn collect_inline_block(node: NodeRef<'_>, sheets: &mut StyleSheetSet) -> Result<(), CssError> {
-    let Some(source) = node.attribute(dom::AttributeName::style().as_str()) else {
+    let Some(source) = node.attribute(html::AttributeName::style().as_str()) else {
         return Ok(());
     };
     let block = parse_inline_style_recording(source, sheets)?;
@@ -68,7 +68,7 @@ fn collect_style_element(
     node: NodeRef<'_>,
     sheets: &mut StyleSheetSet,
 ) -> Result<(), CssError> {
-    if node.tag() != Some(&dom::TagName::Style) {
+    if node.tag() != Some(&html::TagName::Style) {
         return Ok(());
     }
     let source = style_element_text(snapshot, node);

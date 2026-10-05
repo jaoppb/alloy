@@ -8,7 +8,7 @@
 //! single parent-before-child pass so an inheriting resolver always sees its
 //! parent's finished style.
 
-use dom::TagName;
+use html::TagName;
 
 use crate::domain::computed::intrinsic::{self, IntrinsicSize};
 use crate::domain::computed::style::ComputedStyle;

@@ -1,11 +1,10 @@
-//! Corpus test verifying parsing of real-world pages (class-example.com) into a correct [`dom::DomTree`].
+//! Corpus test verifying parsing of real-world pages (class-example.com) into a correct [`dom::DomTree`] through the real sink.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-#![cfg(feature = "dom")]
 
 use std::path::PathBuf;
 
-use html::parse;
+use dom::parse;
 
 fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/fixtures/example_com.html")
@@ -115,18 +114,18 @@ fn malformed_attribute_in_real_world_tag_is_skipped_gracefully() {
         .expect("svg element must exist");
 
     if let Ok(dom::NodeKind::Element(elem)) = tree.node_kind(svg_node) {
-        let stroke_name = dom::AttributeName::new("stroke").unwrap();
-        let stroke_width_name = dom::AttributeName::new("stroke-width").unwrap();
+        let stroke_name = html::AttributeName::new("stroke").unwrap();
+        let stroke_width_name = html::AttributeName::new("stroke-width").unwrap();
         assert_eq!(
             elem.attributes()
                 .get(&stroke_name)
-                .map(dom::AttributeValue::as_str),
+                .map(html::AttributeValue::as_str),
             Some("currentColor")
         );
         assert_eq!(
             elem.attributes()
                 .get(&stroke_width_name)
-                .map(dom::AttributeValue::as_str),
+                .map(html::AttributeValue::as_str),
             Some("2")
         );
     }

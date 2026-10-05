@@ -9,10 +9,11 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use dom::{DomTree, TagName};
+use dom::DomTree;
 use engine::{
     CapabilitySet, EngineError, EngineValue, ExecutionContext, RuntimeEngine, VariableName,
 };
+use html::TagName;
 use rhai_runtime::{PanicHookGuard, RhaiContext, RhaiEngine, run_with_fallback};
 
 use crate::dom_bindings::NodeHandle;

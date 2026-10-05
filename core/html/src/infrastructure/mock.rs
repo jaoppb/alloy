@@ -19,8 +19,8 @@ pub enum MockEvent {
         id: NodeHandle,
         /// Element tag name.
         tag: String,
-        /// Number of attributes attached.
-        attribute_count: usize,
+        /// The attributes attached.
+        attributes: AttributeList,
     },
     /// Created text node.
     CreateText {
@@ -144,7 +144,7 @@ impl TreeSink for MockTreeSink {
         self.events.push(MockEvent::CreateElement {
             id: handle,
             tag: tag.as_str().to_owned(),
-            attribute_count: attributes.len(),
+            attributes: attributes.clone(),
         });
         Ok(handle)
     }

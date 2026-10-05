@@ -1,11 +1,11 @@
-//! The one place `alloy` calls `html::parse`: a page's recoverable parse errors are summarized in
+//! The one place `alloy` calls `dom::parse`: a page's recoverable parse errors are summarized in
 //! a single log line instead of being dropped or logged one by one (issue #36, ADR-0023).
 
 use html::HtmlError;
 
 /// Parses `markup` into a DOM tree, logging one summary when the parser had to recover.
 pub fn parse_html(markup: &str) -> Result<dom::DomTree, HtmlError> {
-    let outcome = html::parse(markup)?;
+    let outcome = dom::parse(markup)?;
     let diagnostics = outcome.diagnostics();
     if let Some(first) = diagnostics.first() {
         tracing::debug!(

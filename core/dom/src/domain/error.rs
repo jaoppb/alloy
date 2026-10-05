@@ -26,10 +26,10 @@ pub enum DomError {
     /// The chosen parent is a `Text` or `Comment` node and cannot hold children.
     #[error("{0} cannot hold children")]
     CannotHaveChildren(NodeId),
-    /// A tag string failed [`crate::TagName`] validation.
+    /// A tag string failed [`html::TagName`] validation.
     #[error("not a valid tag name: {0:?}")]
     InvalidTagName(String),
-    /// An attribute name failed [`crate::AttributeName`] validation.
+    /// An attribute name failed [`html::AttributeName`] validation.
     #[error("not a valid attribute name: {0:?}")]
     InvalidAttributeName(String),
     /// A tag / attribute operation targeted a non-`Element` node.
@@ -40,14 +40,14 @@ pub enum DomError {
     NotCharacterData(NodeId),
 }
 
-impl DomError {
-    #[must_use]
-    pub fn invalid_tag_name(raw: impl Into<String>) -> Self {
-        Self::InvalidTagName(raw.into())
+impl From<html::InvalidTagName> for DomError {
+    fn from(error: html::InvalidTagName) -> Self {
+        Self::InvalidTagName(error.raw().to_owned())
     }
+}
 
-    #[must_use]
-    pub fn invalid_attribute_name(raw: impl Into<String>) -> Self {
-        Self::InvalidAttributeName(raw.into())
+impl From<html::InvalidAttributeName> for DomError {
+    fn from(error: html::InvalidAttributeName) -> Self {
+        Self::InvalidAttributeName(error.raw().to_owned())
     }
 }

@@ -22,7 +22,7 @@ const fn au(pixels: i32) -> Au {
 }
 
 fn element(tree: &mut dom::DomTree, parent: dom::NodeId, tag: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(tag).unwrap());
+    let node = tree.create_element(html::TagName::new(tag).unwrap());
     tree.append_child(parent, node).unwrap();
     node
 }
@@ -35,8 +35,8 @@ fn text(tree: &mut dom::DomTree, parent: dom::NodeId, content: &str) {
 fn class(tree: &mut dom::DomTree, node: dom::NodeId, value: &str) {
     tree.set_attribute(
         node,
-        dom::AttributeName::new("class").unwrap(),
-        dom::AttributeValue::new(value),
+        html::AttributeName::new("class").unwrap(),
+        html::AttributeValue::new(value),
     )
     .unwrap();
 }

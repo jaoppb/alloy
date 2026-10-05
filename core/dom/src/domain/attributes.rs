@@ -1,77 +1,9 @@
-//! [`AttributeName`] / [`AttributeValue`] value objects and [`AttributeMap`], the
-//! first-class collection of an element's attributes (v0.2 report §2.2; `ADR-0010:132` rule 4).
+//! [`AttributeMap`], the first-class collection of an element's attributes (v0.2 report §2.2;
+//! `ADR-0010:132` rule 4), keyed by the `html` vocabulary (`ADR-0024`).
 
-use core::fmt;
 use std::collections::BTreeMap;
 
-use crate::domain::error::DomError;
-
-/// A validated attribute name: non-empty, ASCII, no control or whitespace
-/// characters and none of `" ' / = >`; lowercased on construction.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct AttributeName(String);
-
-impl AttributeName {
-    pub fn new(raw: &str) -> Result<Self, DomError> {
-        let valid = !raw.is_empty() && !raw.chars().any(is_forbidden);
-        if !valid {
-            return Err(DomError::invalid_attribute_name(raw));
-        }
-        Ok(Self(raw.to_ascii_lowercase()))
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// The `style` attribute — one element's own inline declaration block
-    /// (CSS Cascade L4 §6.4.3).
-    #[must_use]
-    pub fn style() -> Self {
-        Self("style".to_string())
-    }
-
-    /// The `class` attribute — a whitespace-separated set of names rather than
-    /// one string (HTML §3.2.6.7).
-    #[must_use]
-    pub fn class() -> Self {
-        Self("class".to_string())
-    }
-
-    /// The `id` attribute a `#name` selector component is compared against.
-    #[must_use]
-    pub fn id() -> Self {
-        Self("id".to_string())
-    }
-}
-
-const fn is_forbidden(character: char) -> bool {
-    character.is_ascii_control()
-        || character.is_whitespace()
-        || matches!(character, '"' | '\'' | '/' | '=' | '>')
-}
-
-impl fmt::Display for AttributeName {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-
-/// An attribute value. Any string is legal; the serializer escapes it.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AttributeValue(String);
-
-impl AttributeValue {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
+use html::{AttributeName, AttributeValue};
 
 /// An element's attributes backed by a [`BTreeMap`] for fast lookups and
 /// deterministic, alphabetically sorted serialization output (v0.2 report §2.2).

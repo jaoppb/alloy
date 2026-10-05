@@ -76,13 +76,13 @@ fn a_value_attribute_overrides_the_default_label() {
 fn synthesized_label(tag: &str, attributes: &[(&str, &str)]) -> Option<String> {
     let mut tree = dom::DomTree::new();
     let root = tree.document();
-    let node = tree.create_element(dom::TagName::new(tag).unwrap());
+    let node = tree.create_element(html::TagName::new(tag).unwrap());
     tree.append_child(root, node).unwrap();
     for (name, value) in attributes {
         tree.set_attribute(
             node,
-            dom::AttributeName::new(name).unwrap(),
-            dom::AttributeValue::new(*value),
+            html::AttributeName::new(name).unwrap(),
+            html::AttributeValue::new(*value),
         )
         .unwrap();
     }

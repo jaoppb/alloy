@@ -120,4 +120,4 @@ probe in `manifest_runner.rs` asserting the exact code and location.
 | `unexpected-body-start-tag`                        | #36   | repeated `<body>`; attributes merged                                              |
 | `unexpected-head-start-tag`                        | #36   | repeated `<head>`; ignored                                                        |
 | `quirks-mode-doctype`                              | #36   | doctype that forces quirks mode (consumed, not stored: no DocumentType node)      |
-| `unsupported-attribute-name`                       | #36   | attribute the DOM adapter refuses; not attached (goes away with #28)              |
+| `invalid-attribute-name`                           | #28   | attribute name breaking the strict `AttributeName` rule; the attribute is dropped |

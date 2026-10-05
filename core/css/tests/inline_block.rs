@@ -34,7 +34,7 @@ const fn glyphs(count: i32) -> Au {
 }
 
 fn element(tree: &mut dom::DomTree, parent: dom::NodeId, tag: &str, id: &str) -> dom::NodeId {
-    let node = tree.create_element(dom::TagName::new(tag).unwrap());
+    let node = tree.create_element(html::TagName::new(tag).unwrap());
     tree.append_child(parent, node).unwrap();
     attribute(tree, node, "id", id);
     node
@@ -43,8 +43,8 @@ fn element(tree: &mut dom::DomTree, parent: dom::NodeId, tag: &str, id: &str) ->
 fn attribute(tree: &mut dom::DomTree, node: dom::NodeId, name: &str, value: &str) {
     tree.set_attribute(
         node,
-        dom::AttributeName::new(name).unwrap(),
-        dom::AttributeValue::new(value),
+        html::AttributeName::new(name).unwrap(),
+        html::AttributeValue::new(value),
     )
     .unwrap();
 }

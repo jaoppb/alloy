@@ -9,10 +9,10 @@
 //! Traversal ([`DomTree::descendants`], [`DomTree::ancestors`]) and
 //! serialization ([`crate::serialize_html`]) are read-only and never recurse.
 
-use crate::domain::attributes::{AttributeName, AttributeValue};
+use html::{AttributeName, AttributeValue, TagName};
+
 use crate::domain::error::DomError;
 use crate::domain::node::{ElementData, NodeData, NodeId, NodeKind, Slot};
-use crate::domain::tag_name::TagName;
 use crate::domain::text::{CommentContent, TextContent};
 use crate::domain::traversal::{Ancestors, Children, Descendants};
 

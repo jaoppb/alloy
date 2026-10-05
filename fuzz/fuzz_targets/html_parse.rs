@@ -6,5 +6,5 @@ fuzz_target!(|data: &[u8]| {
     let Ok(source) = std::str::from_utf8(data) else {
         return;
     };
-    let _ = html::parse(source);
+    let _ = dom::parse(source);
 });
