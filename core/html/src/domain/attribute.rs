@@ -76,18 +76,39 @@ impl fmt::Display for AttributeValue {
     }
 }
 
-/// A paired attribute name and attribute value.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A paired attribute name and attribute value, with where its name started in the source.
+///
+/// Equality ignores the location: two entries are the same attribute wherever they were written.
+#[derive(Clone, Debug)]
 pub struct AttributeEntry {
     name: AttributeName,
     value: AttributeValue,
+    location: SourceLocation,
 }
 
+impl PartialEq for AttributeEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.value == other.value
+    }
+}
+
+impl Eq for AttributeEntry {}
+
 impl AttributeEntry {
-    /// Create an attribute entry from name and value.
+    /// Create an attribute entry from name, value and the location of the name's first character.
     #[must_use]
-    pub const fn new(name: AttributeName, value: AttributeValue) -> Self {
-        Self { name, value }
+    pub const fn new(name: AttributeName, value: AttributeValue, location: SourceLocation) -> Self {
+        Self {
+            name,
+            value,
+            location,
+        }
+    }
+
+    /// Where the attribute name started in the source.
+    #[must_use]
+    pub const fn location(&self) -> SourceLocation {
+        self.location
     }
 
     /// The attribute name.
@@ -103,7 +124,19 @@ impl AttributeEntry {
     }
 }
 
-/// A first-class collection of element attributes.
+/// An attribute that [`AttributeList::insert`] refused because the name was already present.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DuplicateAttribute(AttributeEntry);
+
+impl DuplicateAttribute {
+    /// The rejected (later) entry.
+    #[must_use]
+    pub const fn entry(&self) -> &AttributeEntry {
+        &self.0
+    }
+}
+
+/// A first-class collection of element attributes, unique by name, in source order.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AttributeList {
     entries: Vec<AttributeEntry>,
@@ -118,9 +151,15 @@ impl AttributeList {
         }
     }
 
-    /// Pushes a new entry into the list.
-    pub fn push(&mut self, entry: AttributeEntry) {
+    /// Inserts an entry; the first attribute of a name wins (WHATWG `duplicate-attribute`).
+    ///
+    /// Uniqueness is the list's invariant so no sink can drift back to last-wins.
+    pub fn insert(&mut self, entry: AttributeEntry) -> Result<(), DuplicateAttribute> {
+        if self.entries.iter().any(|kept| kept.name() == entry.name()) {
+            return Err(DuplicateAttribute(entry));
+        }
         self.entries.push(entry);
+        Ok(())
     }
 
     /// Number of attributes in the list.
@@ -180,15 +219,47 @@ mod tests {
         let location = SourceLocation::initial();
         let name = AttributeName::new("CLASS", location).expect("valid name");
         let value = AttributeValue::new("btn primary");
-        let entry = AttributeEntry::new(name, value);
+        let entry = AttributeEntry::new(name, value, location);
 
         let mut list = AttributeList::new();
-        list.push(entry);
+        list.insert(entry).expect("first entry is unique");
 
         assert_eq!(list.len(), 1);
         assert!(!list.is_empty());
         assert_eq!(list.get_value_str("class"), Some("btn primary"));
         assert_eq!(list.get_value_str("nonexistent"), None);
+    }
+
+    #[test]
+    fn a_duplicate_name_is_rejected_and_the_first_wins() {
+        let at = SourceLocation::initial();
+        let entry = |value: &str| {
+            AttributeEntry::new(
+                AttributeName::new_unchecked("id"),
+                AttributeValue::new(value),
+                at,
+            )
+        };
+        let mut list = AttributeList::new();
+        list.insert(entry("first")).unwrap();
+        let rejected = list.insert(entry("second")).unwrap_err();
+
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.get_value_str("id"), Some("first"));
+        assert_eq!(rejected.entry().value().as_str(), "second");
+    }
+
+    #[test]
+    fn entry_equality_ignores_location() {
+        let name = || AttributeName::new_unchecked("id");
+        let one = AttributeEntry::new(name(), AttributeValue::new("a"), SourceLocation::initial());
+        let other = AttributeEntry::new(
+            name(),
+            AttributeValue::new("a"),
+            SourceLocation::new(9, 9, 9),
+        );
+        assert_eq!(one, other);
+        assert_eq!(other.location().line(), 9);
     }
 
     #[test]

@@ -15,7 +15,9 @@ fn fixture_path() -> PathBuf {
 fn test_example_com_corpus_parsing() {
     let content =
         std::fs::read_to_string(fixture_path()).expect("Fixture example_com.html must exist");
-    let tree = parse(&content).expect("Parsing example_com.html must succeed");
+    let tree = parse(&content)
+        .expect("Parsing example_com.html must succeed")
+        .into_tree();
 
     let doc = tree.document();
     let descendants: Vec<_> = tree.descendants(doc).collect();
@@ -98,7 +100,9 @@ fn malformed_attribute_in_real_world_tag_is_skipped_gracefully() {
     // Real-world malformed HTML from CERN (https://home.web.cern.ch/about):
     // Accidental double-quote after attribute value `stroke="currentColor""`
     let html = r#"<svg class="header-icon" stroke="currentColor"" stroke-width="2"></svg>"#;
-    let tree = parse(html).expect("Parsing HTML with malformed attribute must succeed");
+    let tree = parse(html)
+        .expect("Parsing HTML with malformed attribute must succeed")
+        .into_tree();
     let doc = tree.document();
     let svg_node = tree
         .descendants(doc)

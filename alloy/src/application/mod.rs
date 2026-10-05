@@ -2,6 +2,7 @@
 
 pub mod browser_services;
 pub mod event_loop;
+pub mod html_parse;
 pub mod image_store;
 pub mod navigation;
 pub mod paint;

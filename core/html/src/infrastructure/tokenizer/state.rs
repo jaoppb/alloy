@@ -9,8 +9,6 @@ pub enum State {
     TagOpen,
     EndTagOpen,
     TagName,
-    EndTagName,
-    AfterEndTagName,
     BeforeAttributeName,
     AttributeName,
     AfterAttributeName,

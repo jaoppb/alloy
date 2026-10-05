@@ -24,9 +24,11 @@ pub fn consume_rawtext(
 
     while let Some(character) = cursor.next_char() {
         if character == '<' && is_appropriate_end_tag(cursor, tag_name_str) {
+            let end_tag_location = cursor.last_location();
             consume_end_tag_chars(cursor, tag_name_str);
             *state = State::Data;
-            let end_tag = TagToken::new(end_tag_name, AttributeList::new(), false);
+            let end_tag =
+                TagToken::new(end_tag_name, AttributeList::new(), false, end_tag_location);
             *pending_token = Some(Token::EndTag(end_tag));
             return Token::Character(Text::new(content));
         }

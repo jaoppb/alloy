@@ -40,9 +40,14 @@ pub enum Token {
     EndTag(TagToken),
     Character(Text),
     Comment(Text),
+    ParseError(ParseDiagnostic), // recoverable, schema 2 — ADR-0023
     Eof,
 }
 ```
+
+`ParseDiagnostic { code: ParseErrorCode, location: SourceLocation }` is a recoverable parse error. The tokenizer emits
+it ahead of the token that triggered it; `HtmlError` stays the only fatal error (`ADR-0023`). `TagToken`, `DoctypeToken`
+and `AttributeEntry` carry the `SourceLocation` they started at (ignored by equality).
 
 Input to the tokenizer is a decoded `&str`; character-encoding detection is an explicit upstream step and is out of
 scope for this port. `Token` is frozen at integration point `I3`.
@@ -75,6 +80,8 @@ pub trait TreeSink {
     fn add_attrs_if_missing(&mut self, target: &Self::Handle, attrs: Vec<Attribute>);
     fn remove_from_parent(&mut self, target: &Self::Handle);
     fn reparent_children(&mut self, from: &Self::Handle, to: &Self::Handle);
+    /// Recoverable parse error (schema 2). Infallible: a sink cannot abort a parse with it.
+    fn parse_error(&mut self, diagnostic: ParseDiagnostic);
 }
 ```
 
@@ -117,3 +124,12 @@ goes through the same traits an alternative implementation would.
       tree contains the written node.
 - [ ] `core/html` tokenizer builds and tests with a stub `TreeSink` (feature `no-default-tree`).
 - [ ] `cargo-fuzz` on the tokenizer and tree-builder targets: zero panics in ten minutes each.
+
+---
+
+## 6. Boundary-schema migrations (`html::PORT_SCHEMA_VERSION`)
+
+| Version | Change                                                                                                                                                                                                                                                                                                                                                                                                | Adapter action                                                                                                                                                                                                        |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1**   | Surface introduced in v0.5 Phase B5 (`Token`, `TokenSink`, `TreeSink`, `HtmlError`).                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                                                                     |
+| **2**   | Recoverable diagnostics (issue #36, `ADR-0023`): `Token::ParseError`, required `TreeSink::parse_error`, `ParseDiagnostic`/`ParseErrorCode`/`Diagnostics`; `TagToken`/`DoctypeToken`/`AttributeEntry` carry a `SourceLocation` (constructors take it); `AttributeList::push` → `insert` (unique, first wins); `parse` returns `ParseOutcome`; `HtmlError::{ParseError, UnexpectedEndOfInput}` removed. | Implement `parse_error` (record or ignore); handle `Token::ParseError` in any `TokenSink`; pass locations to `TagToken::new`/`DoctypeToken::new`/`AttributeEntry::new`; use `insert`; call `.into_tree()` on `parse`. |

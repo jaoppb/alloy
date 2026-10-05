@@ -2,12 +2,14 @@
 
 use crate::application::ports::{RawKind, TokenSink, TokenSinkResult, TreeSink};
 use crate::domain::attribute::AttributeList;
+use crate::domain::diagnostic::{ParseDiagnostic, ParseErrorCode};
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
+use crate::domain::location::SourceLocation;
 use crate::domain::tag::TagName;
-use crate::domain::tag::{closes_list_item, closes_paragraph, is_void_tag};
+use crate::domain::tag::{closes_list_item, closes_paragraph, is_implied_end_tag, is_void_tag};
 use crate::domain::text::Text;
-use crate::domain::token::{TagToken, Token};
+use crate::domain::token::{DoctypeToken, TagToken, Token};
 
 struct OpenElement {
     tag: TagName,
@@ -36,6 +38,10 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             body_handle: None,
             in_head: false,
         }
+    }
+
+    fn report(&mut self, code: ParseErrorCode, location: SourceLocation) {
+        self.sink.parse_error(ParseDiagnostic::new(code, location));
     }
 
     fn current_parent(&self) -> NodeHandle {
@@ -118,7 +124,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             self.ensure_body_element()?;
         }
 
-        self.apply_omission_rules(tag_str);
+        self.apply_omission_rules(tag_str, tag.location());
 
         let parent = self.current_parent();
         let handle = self
@@ -145,8 +151,12 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
     }
 
     fn process_html_start_tag(&mut self, tag: &TagToken) -> Result<TokenSinkResult, HtmlError> {
-        if self.html_handle.is_some() {
-            return Ok(TokenSinkResult::Continue);
+        if let Some(existing) = self.html_handle {
+            return self.merge_repeated_start_tag(
+                existing,
+                ParseErrorCode::UnexpectedHtmlStartTag,
+                tag,
+            );
         }
         let root = self.sink.root_node();
         let handle = self
@@ -164,6 +174,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
     fn process_head_start_tag(&mut self, tag: &TagToken) -> Result<TokenSinkResult, HtmlError> {
         self.ensure_html_element()?;
         if self.head_handle.is_some() {
+            self.report(ParseErrorCode::UnexpectedHeadStartTag, tag.location());
             return Ok(TokenSinkResult::Continue);
         }
         let parent = self.current_parent();
@@ -185,8 +196,12 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         if self.in_head {
             self.pop_head();
         }
-        if self.body_handle.is_some() {
-            return Ok(TokenSinkResult::Continue);
+        if let Some(existing) = self.body_handle {
+            return self.merge_repeated_start_tag(
+                existing,
+                ParseErrorCode::UnexpectedBodyStartTag,
+                tag,
+            );
         }
         let parent = self.html_handle.unwrap_or_else(|| self.sink.root_node());
         let handle = self
@@ -201,30 +216,81 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         Ok(TokenSinkResult::Continue)
     }
 
-    fn apply_omission_rules(&mut self, tag_name: &str) {
+    /// A repeated `<html>`/`<body>`: reported, and its attributes are merged onto the existing
+    /// element (WHATWG §13.2.6.4.7) instead of being dropped.
+    fn merge_repeated_start_tag(
+        &mut self,
+        existing: NodeHandle,
+        code: ParseErrorCode,
+        tag: &TagToken,
+    ) -> Result<TokenSinkResult, HtmlError> {
+        self.report(code, tag.location());
+        if !tag.attributes().is_empty() {
+            self.sink
+                .add_attributes_if_missing(existing, tag.attributes())?;
+        }
+        Ok(TokenSinkResult::Continue)
+    }
+
+    fn apply_omission_rules(&mut self, tag_name: &str, location: SourceLocation) {
         if closes_paragraph(tag_name) {
-            self.pop_matching_tag("p");
+            self.pop_matching_tag("p", ParseErrorCode::ElementClosedImplicitly, location);
         }
         if closes_list_item(tag_name) {
-            self.pop_matching_tag("li");
+            self.pop_matching_tag("li", ParseErrorCode::ElementClosedImplicitly, location);
         }
     }
 
-    fn pop_matching_tag(&mut self, target_tag: &str) {
-        if let Some(pos) = self.open_elements.iter().rposition(|e| e.tag == target_tag) {
-            self.open_elements.truncate(pos);
+    fn pop_matching_tag(
+        &mut self,
+        target_tag: &str,
+        code: ParseErrorCode,
+        location: SourceLocation,
+    ) {
+        if let Some(position) = self.open_elements.iter().rposition(|e| e.tag == target_tag) {
+            self.close_through(position, code, location);
         }
+    }
+
+    /// Closes the element at `position` and everything above it. Anything above it that the spec
+    /// does not let an end tag imply-close is reported once (WHATWG "generate implied end tags").
+    fn close_through(&mut self, position: usize, code: ParseErrorCode, location: SourceLocation) {
+        let closes_non_implied = self
+            .open_elements
+            .iter()
+            .skip(position.saturating_add(1))
+            .any(|open| !is_implied_end_tag(open.tag.as_str()));
+        if closes_non_implied {
+            self.report(code, location);
+        }
+        self.open_elements.truncate(position);
     }
 
     fn handle_end_tag(&mut self, tag: &TagToken) {
         let name = tag.name();
-        if name == "head" {
+        let location = tag.location();
+        if name == "head" && self.in_head {
             self.pop_head();
             return;
         }
 
-        if let Some(pos) = self.open_elements.iter().rposition(|e| e.tag == name) {
-            self.open_elements.truncate(pos);
+        let matched = self.open_elements.iter().rposition(|e| e.tag == name);
+        let Some(position) = matched else {
+            self.report(ParseErrorCode::StrayEndTag, location);
+            return;
+        };
+        self.close_through(
+            position,
+            ParseErrorCode::EndTagDoesNotMatchCurrentNode,
+            location,
+        );
+    }
+
+    /// The doctype is consumed by design: the DOM has no `DocumentType` node and no quirks mode
+    /// (issue #36 non-goal). A quirks-forcing doctype is still made visible.
+    fn handle_doctype(&mut self, doctype: &DoctypeToken) {
+        if doctype.force_quirks() {
+            self.report(ParseErrorCode::QuirksModeDoctype, doctype.location());
         }
     }
 
@@ -264,6 +330,14 @@ impl<S: TreeSink + ?Sized> TokenSink for TreeBuilder<'_, S> {
                 self.handle_end_tag(tag);
                 Ok(TokenSinkResult::Continue)
             }
+            Token::ParseError(diagnostic) => {
+                self.sink.parse_error(diagnostic);
+                Ok(TokenSinkResult::Continue)
+            }
+            Token::Doctype(ref doctype) => {
+                self.handle_doctype(doctype);
+                Ok(TokenSinkResult::Continue)
+            }
             Token::Character(ref text) => {
                 self.handle_character(text)?;
                 Ok(TokenSinkResult::Continue)
@@ -272,7 +346,7 @@ impl<S: TreeSink + ?Sized> TokenSink for TreeBuilder<'_, S> {
                 self.handle_comment(text)?;
                 Ok(TokenSinkResult::Continue)
             }
-            Token::Doctype(_) | Token::EndOfFile => Ok(TokenSinkResult::Continue),
+            Token::EndOfFile => Ok(TokenSinkResult::Continue),
         }
     }
 

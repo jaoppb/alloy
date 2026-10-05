@@ -73,7 +73,7 @@ pub fn default_runtime_font_provider() -> Arc<RuntimeFontProvider> {
 /// Renders HTML source text to a PNG byte vector using the specified options and synthetic font.
 pub fn render_html_to_png(html_str: &str, options: &RenderOptions) -> Result<Vec<u8>, AlloyError> {
     let surface_size = options.surface_size()?;
-    let dom_tree = html::parse(html_str)?;
+    let dom_tree = crate::application::html_parse::parse_html(html_str)?;
     let framebuffer = render_dom(
         &dom_tree,
         StyleSheetSet::default(),
@@ -90,7 +90,7 @@ pub fn render_html_with_font_provider<F: FontProvider + 'static>(
     font_provider: Arc<F>,
 ) -> Result<Vec<u8>, AlloyError> {
     let surface_size = options.surface_size()?;
-    let dom_tree = html::parse(html_str)?;
+    let dom_tree = crate::application::html_parse::parse_html(html_str)?;
     let framebuffer = render_dom_with_font_provider(
         &dom_tree,
         StyleSheetSet::default(),

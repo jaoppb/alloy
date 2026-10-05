@@ -1,15 +1,20 @@
 //! HTML5 streaming tokenizer complying with WHATWG HTML §13.2.5.
+//!
+//! Recoverable malformations never abort tokenization: handlers report them on the [`Cursor`] and
+//! recover per the spec, and [`Tokenizer::pump_next_token`] delivers each report as a
+//! [`Token::ParseError`] ahead of the token that triggered it (ADR-0023).
 
 pub mod attribute_state;
 pub mod cursor;
 pub mod doctype;
 pub mod entity;
+pub mod pending_tag;
 pub mod rawtext;
 pub mod state;
 pub mod tag_state;
 
 use crate::application::ports::{TokenSink, TokenSinkResult};
-use crate::domain::attribute::AttributeList;
+use crate::domain::diagnostic::ParseErrorCode;
 use crate::domain::error::HtmlError;
 use crate::domain::text::Text;
 use crate::domain::token::Token;
@@ -21,13 +26,12 @@ use attribute_state::{
 use cursor::Cursor;
 use doctype::handle_doctype;
 use entity::consume_character_reference;
+use pending_tag::PendingTag;
 use rawtext::consume_rawtext;
 use state::State;
 use std::borrow::Cow;
-use tag_state::{
-    handle_after_end_tag_name, handle_end_tag_name, handle_end_tag_open, handle_self_closing,
-    handle_tag_name, handle_tag_open,
-};
+use std::collections::VecDeque;
+use tag_state::{handle_end_tag_open, handle_self_closing, handle_tag_name, handle_tag_open};
 
 /// Result of a resumable tokenizer execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,12 +50,9 @@ pub struct Tokenizer<'a> {
     cursor: Cursor<'a>,
     state: State,
     buffer: String,
-    current_tag_name: String,
-    current_attributes: AttributeList,
-    current_attribute_name: String,
-    current_attribute_value: String,
-    is_self_closing: bool,
+    tag: PendingTag,
     pending_token: Option<Token>,
+    outbox: VecDeque<Token>,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -62,12 +63,9 @@ impl<'a> Tokenizer<'a> {
             cursor: Cursor::new(input),
             state: State::Data,
             buffer: String::new(),
-            current_tag_name: String::new(),
-            current_attributes: AttributeList::new(),
-            current_attribute_name: String::new(),
-            current_attribute_value: String::new(),
-            is_self_closing: false,
+            tag: PendingTag::new(),
             pending_token: None,
+            outbox: VecDeque::new(),
         }
     }
 
@@ -75,7 +73,7 @@ impl<'a> Tokenizer<'a> {
     pub fn run(mut self, sink: &mut dyn TokenSink) -> Result<(), HtmlError> {
         let mut done = false;
         while !done {
-            let token = self.pump_next_token()?;
+            let token = self.pump_next_token();
             done = token == Token::EndOfFile;
             let result = sink.process_token(token)?;
             self.handle_sink_result(&result);
@@ -89,7 +87,7 @@ impl<'a> Tokenizer<'a> {
         sink: &mut dyn TokenSink,
     ) -> Result<TokenizerRunResult, HtmlError> {
         loop {
-            let token = self.pump_next_token()?;
+            let token = self.pump_next_token();
             let is_eof = token == Token::EndOfFile;
             let result = sink.process_token(token)?;
             match result {
@@ -139,27 +137,34 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Pumps and returns the next token from the stream.
-    pub fn pump_next_token(&mut self) -> Result<Token, HtmlError> {
-        if let Some(token) = self.pending_token.take() {
-            return Ok(token);
-        }
-
+    ///
+    /// Diagnostics reported while producing a token come out first, in report order.
+    pub fn pump_next_token(&mut self) -> Token {
         loop {
-            if let Some(token) = self.step_state()? {
-                return Ok(token);
+            if let Some(token) = self.outbox.pop_front() {
+                return token;
             }
+            if let Some(token) = self.pending_token.take() {
+                return token;
+            }
+            let produced = self.step_state();
+            self.queue_diagnostics();
+            self.outbox.extend(produced);
         }
     }
 
-    fn step_state(&mut self) -> Result<Option<Token>, HtmlError> {
+    fn queue_diagnostics(&mut self) {
+        let diagnostics = self.cursor.take_diagnostics();
+        self.outbox
+            .extend(diagnostics.into_iter().map(Token::ParseError));
+    }
+
+    fn step_state(&mut self) -> Option<Token> {
         match self.state {
-            State::Data => Ok(self.handle_data_state()),
-            State::TagOpen
-            | State::EndTagOpen
-            | State::TagName
-            | State::EndTagName
-            | State::AfterEndTagName
-            | State::SelfClosingStartTag => self.step_tag_state(),
+            State::Data => self.handle_data_state(),
+            State::TagOpen | State::EndTagOpen | State::TagName | State::SelfClosingStartTag => {
+                self.step_tag_state()
+            }
             State::BeforeAttributeName
             | State::AttributeName
             | State::AfterAttributeName
@@ -172,143 +177,58 @@ impl<'a> Tokenizer<'a> {
             | State::Comment
             | State::BogusComment
             | State::Doctype
-            | State::RawText(_) => Ok(self.step_markup_state()),
+            | State::RawText(_) => self.step_markup_state(),
         }
     }
 
-    fn step_tag_state(&mut self) -> Result<Option<Token>, HtmlError> {
+    fn step_tag_state(&mut self) -> Option<Token> {
         match self.state {
-            State::TagOpen => Ok(handle_tag_open(
+            State::TagOpen => handle_tag_open(&mut self.cursor, &mut self.state, &mut self.tag),
+            State::EndTagOpen => handle_end_tag_open(
                 &mut self.cursor,
                 &mut self.state,
-                &mut self.current_tag_name,
-                &mut self.current_attributes,
-                &mut self.is_self_closing,
-            )),
-            State::EndTagOpen => {
-                handle_end_tag_open(
-                    &mut self.cursor,
-                    &mut self.state,
-                    &mut self.current_tag_name,
-                    &mut self.buffer,
-                );
-                Ok(None)
+                &mut self.tag,
+                &mut self.buffer,
+            ),
+            State::TagName => handle_tag_name(&mut self.cursor, &mut self.state, &mut self.tag),
+            State::SelfClosingStartTag => {
+                handle_self_closing(&mut self.cursor, &mut self.state, &mut self.tag)
             }
-            State::TagName => handle_tag_name(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_tag_name,
-                &mut self.current_attributes,
-                &mut self.is_self_closing,
-            ),
-            State::EndTagName => handle_end_tag_name(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_tag_name,
-            ),
-            State::AfterEndTagName => handle_after_end_tag_name(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_tag_name,
-            ),
-            State::SelfClosingStartTag => handle_self_closing(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_tag_name,
-                &mut self.current_attributes,
-                &mut self.is_self_closing,
-            ),
-            _ => Ok(None),
+            _ => None,
         }
     }
 
-    fn step_attribute_state(&mut self) -> Result<Option<Token>, HtmlError> {
-        match self.state {
-            State::BeforeAttributeName => handle_before_attribute_name(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_attribute_name,
-                &mut self.current_attribute_value,
-                &mut self.current_tag_name,
-                &mut self.current_attributes,
-                &mut self.is_self_closing,
-            ),
-            State::AttributeName => handle_attribute_name(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_attribute_name,
-                &mut self.current_attribute_value,
-                &mut self.current_attributes,
-                &mut self.current_tag_name,
-                &mut self.is_self_closing,
-            ),
-            State::AfterAttributeName => handle_after_attribute_name(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_attribute_name,
-                &mut self.current_attribute_value,
-                &mut self.current_attributes,
-                &mut self.current_tag_name,
-                &mut self.is_self_closing,
-            ),
-            State::BeforeAttributeValue => handle_before_attribute_value(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_attribute_value,
-                &mut self.current_attribute_name,
-                &mut self.current_attributes,
-                &mut self.current_tag_name,
-                &mut self.is_self_closing,
-            ),
+    fn step_attribute_state(&mut self) -> Option<Token> {
+        let (cursor, state, tag) = (&mut self.cursor, &mut self.state, &mut self.tag);
+        match *state {
+            State::BeforeAttributeName => handle_before_attribute_name(cursor, state, tag),
+            State::AttributeName => handle_attribute_name(cursor, state, tag),
+            State::AfterAttributeName => handle_after_attribute_name(cursor, state, tag),
+            State::BeforeAttributeValue => handle_before_attribute_value(cursor, state, tag),
             State::AttributeValueDoubleQuoted => {
-                handle_attribute_value_quoted(
-                    &mut self.cursor,
-                    &mut self.state,
-                    '"',
-                    &mut self.current_attribute_value,
-                );
-                Ok(None)
+                handle_attribute_value_quoted(cursor, state, '"', tag)
             }
             State::AttributeValueSingleQuoted => {
-                handle_attribute_value_quoted(
-                    &mut self.cursor,
-                    &mut self.state,
-                    '\'',
-                    &mut self.current_attribute_value,
-                );
-                Ok(None)
+                handle_attribute_value_quoted(cursor, state, '\'', tag)
             }
-            State::AttributeValueUnquoted => handle_attribute_value_unquoted(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_attribute_name,
-                &mut self.current_attribute_value,
-                &mut self.current_attributes,
-                &mut self.current_tag_name,
-                &mut self.is_self_closing,
-            ),
-            State::AfterAttributeValueQuoted => handle_after_attribute_value_quoted(
-                &mut self.cursor,
-                &mut self.state,
-                &mut self.current_attribute_name,
-                &mut self.current_attribute_value,
-                &mut self.current_attributes,
-                &mut self.current_tag_name,
-                &mut self.is_self_closing,
-            ),
-            _ => Ok(None),
+            State::AttributeValueUnquoted => handle_attribute_value_unquoted(cursor, state, tag),
+            State::AfterAttributeValueQuoted => {
+                handle_after_attribute_value_quoted(cursor, state, tag)
+            }
+            _ => None,
         }
     }
 
     fn step_markup_state(&mut self) -> Option<Token> {
         match self.state {
-            State::MarkupDeclarationOpen => {
-                self.handle_markup_declaration_state();
-                None
-            }
+            State::MarkupDeclarationOpen => self.handle_markup_declaration_state(),
             State::Comment => Some(self.handle_comment_state()),
             State::BogusComment => Some(self.handle_bogus_comment_state()),
-            State::Doctype => Some(handle_doctype(&mut self.cursor, &mut self.state)),
+            State::Doctype => Some(handle_doctype(
+                &mut self.cursor,
+                &mut self.state,
+                self.tag.open_location(),
+            )),
             State::RawText(kind) => Some(consume_rawtext(
                 &mut self.cursor,
                 &mut self.state,
@@ -323,6 +243,7 @@ impl<'a> Tokenizer<'a> {
         let mut text = String::new();
         while let Some(character) = self.cursor.next_char() {
             if character == '<' {
+                self.tag.mark_open(self.cursor.last_location());
                 self.state = State::TagOpen;
                 if text.is_empty() {
                     return None;
@@ -341,28 +262,56 @@ impl<'a> Tokenizer<'a> {
         Some(Token::EndOfFile)
     }
 
-    fn handle_markup_declaration_state(&mut self) {
+    fn handle_markup_declaration_state(&mut self) -> Option<Token> {
         let remaining = self.cursor.remaining();
         if remaining.starts_with("--") {
             self.cursor.next_char();
             self.cursor.next_char();
-            self.state = State::Comment;
             self.buffer.clear();
-            return;
+            return self.open_comment();
         }
 
-        let upper = remaining.to_ascii_uppercase();
-        if upper.starts_with("DOCTYPE") {
+        let is_doctype = remaining
+            .get(..7)
+            .is_some_and(|keyword| keyword.eq_ignore_ascii_case("DOCTYPE"));
+        if is_doctype {
             for _ in 0..7 {
                 self.cursor.next_char();
             }
             self.state = State::Doctype;
             self.buffer.clear();
-            return;
+            return None;
         }
 
+        self.cursor.report(
+            ParseErrorCode::IncorrectlyOpenedComment,
+            self.tag.open_location(),
+        );
         self.state = State::BogusComment;
         self.buffer.clear();
+        None
+    }
+
+    /// After `<!--`: `<!-->` and `<!--->` close an empty comment abruptly (§13.2.5.43).
+    fn open_comment(&mut self) -> Option<Token> {
+        let remaining = self.cursor.remaining();
+        let closing_length = if remaining.starts_with('>') {
+            1
+        } else if remaining.starts_with("->") {
+            2
+        } else {
+            self.state = State::Comment;
+            return None;
+        };
+        for _ in 0..closing_length {
+            self.cursor.next_char();
+        }
+        self.cursor.report(
+            ParseErrorCode::AbruptClosingOfEmptyComment,
+            self.tag.open_location(),
+        );
+        self.state = State::Data;
+        Some(Token::Comment(Text::new("")))
     }
 
     fn handle_comment_state(&mut self) -> Token {
@@ -383,6 +332,8 @@ impl<'a> Tokenizer<'a> {
             dashes = 0;
             self.buffer.push(character);
         }
+        self.cursor
+            .report(ParseErrorCode::EofInComment, self.cursor.location());
         let comment = core::mem::take(&mut self.buffer);
         self.state = State::Data;
         Token::Comment(Text::new(comment))

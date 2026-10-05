@@ -5,7 +5,8 @@ construct.
 
 `core/html/tests/manifest_runner.rs` checks three things and fails loudly on any of them:
 
-1. this file and `html::SUPPORTED_TAGS` / `html::SUPPORTED_SYNTAX` name the same sets, **in both directions**;
+1. this file and `html::SUPPORTED_TAGS` / `html::SUPPORTED_SYNTAX` / `html::SUPPORTED_PARSE_ERRORS` name the same sets,
+   **in both directions**;
 2. every listed token has a probe that the parser really accepts, and correctly constructs in the `dom::DomTree`;
 3. a battery of invalid forms is safely handled or refused with typed errors.
 
@@ -79,3 +80,44 @@ Syntactic constructs handled by the HTML5 tokenizer state machine and tree build
 | `p tag omission`            | B5    | open `<p>` is implicitly closed before opening another `<p>` or block element |
 | `li tag omission`           | B5    | open `<li>` is implicitly closed before opening another `<li>`                |
 | `void tags auto-close`      | B5    | void tags do not trap subsequent elements as children                         |
+
+## Parse errors
+
+Recoverable conditions the tokenizer, tree builder and DOM adapter report as `ParseDiagnostic`s (ADR-0023). Each has a
+probe in `manifest_runner.rs` asserting the exact code and location.
+
+| token                                              | since | notes                                                                             |
+| -------------------------------------------------- | ----- | --------------------------------------------------------------------------------- |
+| `unexpected-character-in-attribute-name`           | #36   | `"`, `'` or `<` inside an attribute name; the attribute is kept (§13.2.5.33)      |
+| `unexpected-equals-sign-before-attribute-name`     | #36   | `=` where a name should start; it becomes the name's first character              |
+| `duplicate-attribute`                              | #36   | second attribute of the same name; first wins, the later one is dropped           |
+| `missing-attribute-value`                          | #36   | `name=` directly followed by `>`; empty value                                     |
+| `missing-whitespace-between-attributes`            | #36   | quoted value followed directly by another attribute name                          |
+| `unexpected-solidus-in-tag`                        | #36   | a `/` inside a tag that is not part of `/>`                                       |
+| `end-tag-with-attributes`                          | #36   | end tag carrying attributes; they are dropped                                     |
+| `eof-in-tag`                                       | #36   | end of input inside a tag; the unfinished tag is dropped                          |
+| `missing-end-tag-name`                             | #36   | `</>`; nothing is emitted                                                         |
+| `eof-before-tag-name`                              | #36   | end of input right after `<` or `</`; the characters become text                  |
+| `invalid-first-character-of-tag-name`              | #36   | non-letter after `<` or `</`                                                      |
+| `unexpected-question-mark-instead-of-tag-name`     | #36   | `<?`; handled as a bogus comment                                                  |
+| `unknown-named-character-reference`                | #36   | `&name;` naming no known reference; left as text                                  |
+| `absence-of-digits-in-numeric-character-reference` | #36   | `&#` without digits; left as text                                                 |
+| `null-character-reference`                         | #36   | `&#0;`; becomes U+FFFD                                                            |
+| `character-reference-outside-unicode-range`        | #36   | numeric reference above U+10FFFF; becomes U+FFFD                                  |
+| `surrogate-character-reference`                    | #36   | numeric reference to a surrogate; becomes U+FFFD                                  |
+| `unexpected-null-character`                        | #36   | NUL in the input stream; passed through                                           |
+| `control-character-in-input-stream`                | #36   | non-whitespace control character in the input stream; passed through              |
+| `abrupt-closing-of-empty-comment`                  | #36   | `<!-->` or the one-dash variant; an empty comment                                 |
+| `incorrectly-opened-comment`                       | #36   | `<!` opening neither a comment nor a doctype; bogus comment                       |
+| `eof-in-comment`                                   | #36   | end of input inside a comment                                                     |
+| `eof-in-doctype`                                   | #36   | end of input inside a doctype                                                     |
+| `missing-doctype-name`                             | #36   | `<!DOCTYPE>` without a name; forces quirks                                        |
+| `invalid-tag-name`                                 | #36   | tag name outside `[A-Za-z][A-Za-z0-9-]*`; the tag is dropped, its content is kept |
+| `stray-end-tag`                                    | #36   | end tag with no matching open element; ignored                                    |
+| `end-tag-does-not-match-current-node`              | #36   | end tag closing over an element the spec does not imply-close                     |
+| `element-closed-implicitly`                        | #36   | tag omission closing a non-implied element                                        |
+| `unexpected-html-start-tag`                        | #36   | repeated `<html>`; attributes merged                                              |
+| `unexpected-body-start-tag`                        | #36   | repeated `<body>`; attributes merged                                              |
+| `unexpected-head-start-tag`                        | #36   | repeated `<head>`; ignored                                                        |
+| `quirks-mode-doctype`                              | #36   | doctype that forces quirks mode (consumed, not stored: no DocumentType node)      |
+| `unsupported-attribute-name`                       | #36   | attribute the DOM adapter refuses; not attached (goes away with #28)              |

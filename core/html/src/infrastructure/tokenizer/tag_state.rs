@@ -1,22 +1,38 @@
 //! Handlers for tag opening, naming, closing, and self-closing states.
 
-use crate::domain::attribute::AttributeList;
-use crate::domain::error::HtmlError;
-use crate::domain::tag::TagName;
+use crate::domain::diagnostic::ParseErrorCode;
 use crate::domain::text::Text;
-use crate::domain::token::{TagToken, Token};
+use crate::domain::token::Token;
 use crate::infrastructure::tokenizer::cursor::Cursor;
+use crate::infrastructure::tokenizer::pending_tag::{PendingTag, TagKind};
 use crate::infrastructure::tokenizer::state::State;
+
+/// WHATWG `eof-in-tag`: the unfinished tag is dropped and tokenization resumes in `Data`.
+pub fn eof_in_tag(
+    cursor: &mut Cursor<'_>,
+    state: &mut State,
+    tag: &mut PendingTag,
+) -> Option<Token> {
+    cursor.report(ParseErrorCode::EofInTag, cursor.location());
+    tag.discard();
+    *state = State::Data;
+    None
+}
+
+/// Finishes the pending tag in `Data`; `None` when it was invalid and therefore dropped.
+pub fn emit_tag(cursor: &mut Cursor<'_>, state: &mut State, tag: &mut PendingTag) -> Option<Token> {
+    *state = State::Data;
+    tag.finish(cursor)
+}
 
 /// Processes the `TagOpen` state.
 pub fn handle_tag_open(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    tag_name_buffer: &mut String,
-    attributes: &mut AttributeList,
-    is_self_closing: &mut bool,
+    tag: &mut PendingTag,
 ) -> Option<Token> {
     let Some(character) = cursor.next_char() else {
+        cursor.report(ParseErrorCode::EofBeforeTagName, cursor.location());
         *state = State::Data;
         return Some(Token::Character(Text::new("<")));
     };
@@ -31,18 +47,23 @@ pub fn handle_tag_open(
     }
     if character.is_ascii_alphabetic() {
         *state = State::TagName;
-        tag_name_buffer.clear();
-        tag_name_buffer.push(character.to_ascii_lowercase());
-        *attributes = AttributeList::new();
-        *is_self_closing = false;
+        tag.begin(TagKind::Start, character);
         return None;
     }
     if character == '?' {
+        cursor.report(
+            ParseErrorCode::UnexpectedQuestionMarkInsteadOfTagName,
+            cursor.last_location(),
+        );
         *state = State::BogusComment;
         return None;
     }
 
     // WHATWG §13.2.5.6: Emit `<` character token and reconsume character in Data state.
+    cursor.report(
+        ParseErrorCode::InvalidFirstCharacterOfTagName,
+        cursor.last_location(),
+    );
     *state = State::Data;
     cursor.reconsume(character);
     Some(Token::Character(Text::new("<")))
@@ -52,192 +73,106 @@ pub fn handle_tag_open(
 pub fn handle_end_tag_open(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    tag_name_buffer: &mut String,
+    tag: &mut PendingTag,
     buffer: &mut String,
-) {
+) -> Option<Token> {
     let Some(character) = cursor.next_char() else {
+        cursor.report(ParseErrorCode::EofBeforeTagName, cursor.location());
         *state = State::Data;
-        return;
+        return Some(Token::Character(Text::new("</")));
     };
 
     if character.is_ascii_alphabetic() {
-        *state = State::EndTagName;
-        tag_name_buffer.clear();
-        tag_name_buffer.push(character.to_ascii_lowercase());
-        return;
+        *state = State::TagName;
+        tag.begin(TagKind::End, character);
+        return None;
     }
     if character == '>' {
+        cursor.report(ParseErrorCode::MissingEndTagName, cursor.last_location());
         *state = State::Data;
-        return;
+        return None;
     }
 
+    cursor.report(
+        ParseErrorCode::InvalidFirstCharacterOfTagName,
+        cursor.last_location(),
+    );
     *state = State::BogusComment;
     buffer.clear();
     buffer.push(character);
+    None
 }
 
-/// Processes the `TagName` state.
+/// Processes the `TagName` state (start and end tags share the name rules).
 pub fn handle_tag_name(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    tag_name_buffer: &mut String,
-    attributes: &mut AttributeList,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character.is_ascii_whitespace() {
             *state = State::BeforeAttributeName;
-            return Ok(None);
+            return None;
         }
         if character == '/' {
             *state = State::SelfClosingStartTag;
-            return Ok(None);
+            return None;
         }
         if character == '>' {
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name_buffer,
-                attributes,
-                is_self_closing,
-            )?));
+            return emit_tag(cursor, state, tag);
         }
-        tag_name_buffer.push(character.to_ascii_lowercase());
+        tag.push_name_character(character);
     }
-
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name_buffer,
-        attributes,
-        is_self_closing,
-    )?))
-}
-
-/// Processes the `EndTagName` state.
-pub fn handle_end_tag_name(
-    cursor: &mut Cursor<'_>,
-    state: &mut State,
-    tag_name_buffer: &mut String,
-) -> Result<Option<Token>, HtmlError> {
-    while let Some(character) = cursor.next_char() {
-        if character.is_ascii_whitespace() {
-            *state = State::AfterEndTagName;
-            return Ok(None);
-        }
-        if character == '>' {
-            *state = State::Data;
-            return Ok(Some(build_end_tag(cursor, tag_name_buffer)?));
-        }
-        tag_name_buffer.push(character.to_ascii_lowercase());
-    }
-
-    *state = State::Data;
-    Ok(Some(build_end_tag(cursor, tag_name_buffer)?))
-}
-
-/// Processes the `AfterEndTagName` state.
-pub fn handle_after_end_tag_name(
-    cursor: &mut Cursor<'_>,
-    state: &mut State,
-    tag_name_buffer: &mut String,
-) -> Result<Option<Token>, HtmlError> {
-    while let Some(character) = cursor.next_char() {
-        if character.is_ascii_whitespace() {
-            continue;
-        }
-        if character == '>' {
-            *state = State::Data;
-            return Ok(Some(build_end_tag(cursor, tag_name_buffer)?));
-        }
-    }
-    *state = State::Data;
-    Ok(Some(build_end_tag(cursor, tag_name_buffer)?))
+    eof_in_tag(cursor, state, tag)
 }
 
 /// Processes the `SelfClosingStartTag` state.
 pub fn handle_self_closing(
     cursor: &mut Cursor<'_>,
     state: &mut State,
-    tag_name_buffer: &mut String,
-    attributes: &mut AttributeList,
-    is_self_closing: &mut bool,
-) -> Result<Option<Token>, HtmlError> {
+    tag: &mut PendingTag,
+) -> Option<Token> {
     while let Some(character) = cursor.next_char() {
         if character == '>' {
-            *is_self_closing = true;
-            *state = State::Data;
-            return Ok(Some(build_start_tag(
-                cursor,
-                tag_name_buffer,
-                attributes,
-                is_self_closing,
-            )?));
+            tag.mark_self_closing();
+            return emit_tag(cursor, state, tag);
         }
         if character.is_ascii_whitespace() {
             continue;
         }
+        cursor.report(
+            ParseErrorCode::UnexpectedSolidusInTag,
+            cursor.last_location(),
+        );
         *state = State::BeforeAttributeName;
         cursor.reconsume(character);
-        return Ok(None);
+        return None;
     }
-    *state = State::Data;
-    Ok(Some(build_start_tag(
-        cursor,
-        tag_name_buffer,
-        attributes,
-        is_self_closing,
-    )?))
-}
-
-/// Builds a start tag token from accumulated tag name and attributes.
-pub fn build_start_tag(
-    cursor: &Cursor<'_>,
-    tag_name_buffer: &mut String,
-    attributes: &mut AttributeList,
-    is_self_closing: &mut bool,
-) -> Result<Token, HtmlError> {
-    let name_str = core::mem::take(tag_name_buffer);
-    let tag_name = TagName::new(&name_str, cursor.location())?;
-    let tag = TagToken::new(tag_name, core::mem::take(attributes), *is_self_closing);
-    *is_self_closing = false;
-    Ok(Token::StartTag(tag))
-}
-
-/// Builds an end tag token from accumulated tag name buffer.
-pub fn build_end_tag(
-    cursor: &Cursor<'_>,
-    tag_name_buffer: &mut String,
-) -> Result<Token, HtmlError> {
-    let name_str = core::mem::take(tag_name_buffer);
-    let tag_name = TagName::new(&name_str, cursor.location())?;
-    let tag = TagToken::new(tag_name, AttributeList::new(), false);
-    Ok(Token::EndTag(tag))
+    eof_in_tag(cursor, state, tag)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::diagnostic::ParseDiagnostic;
 
     #[test]
     fn unexpected_char_after_less_than_emits_character_and_reconsumes() {
         let mut cursor = Cursor::new("3 world");
         let mut state = State::TagOpen;
-        let mut tag_name = String::new();
-        let mut attrs = AttributeList::new();
-        let mut self_closing = false;
+        let mut tag = PendingTag::new();
 
-        let token = handle_tag_open(
-            &mut cursor,
-            &mut state,
-            &mut tag_name,
-            &mut attrs,
-            &mut self_closing,
-        );
+        let token = handle_tag_open(&mut cursor, &mut state, &mut tag);
 
         assert_eq!(token, Some(Token::Character(Text::new("<"))));
         assert_eq!(state, State::Data);
         // The character '3' must be reconsumed!
         assert_eq!(cursor.next_char(), Some('3'));
+        let reported = cursor.take_diagnostics();
+        assert_eq!(
+            reported.first().map(ParseDiagnostic::code),
+            Some(ParseErrorCode::InvalidFirstCharacterOfTagName)
+        );
+        assert_eq!(reported.first().map(|d| d.location().column()), Some(1));
     }
 }
