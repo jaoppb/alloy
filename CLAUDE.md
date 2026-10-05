@@ -33,12 +33,16 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `justify`, baseline alignment), and Flexbox (CSS Flexbox L1 §9, single-line; multi-line `flex-wrap` documented as a
   cut in `core/css/tests/data/MANIFEST.md` for v0.7). `css::PORT_SCHEMA_VERSION = 3`. Frozen at integration point `I3`:
   `docs/architecture/style-cascade-port-contract.md`.
-- **B5 — `core/html`**: HTML5 tokenizer + `TreeSink`/`TokenSink` ports (PRD-008) over `dom::DomTree` — WHATWG §13.2.5
-  state machine for the states a real document uses, `<script>`/`<style>` raw-text mode, minimal tag-omission rules.
+- **B5 — `core/html`**: HTML5 tokenizer + `TreeSink`/`TokenSink` ports (PRD-008) — WHATWG §13.2.5 state machine for the
+  states a real document uses, `<script>`/`<style>` raw-text mode, minimal tag-omission rules.
   `core/html/tests/data/MANIFEST.md` + `manifest_runner.rs` mirror B1's two-way consistency gate. **Recoverable parse
   errors (#36, ADR-0023, `html::PORT_SCHEMA_VERSION = 2`)**: malformed input never aborts a parse — it yields located
-  `ParseDiagnostic`s via `Token::ParseError` / `TreeSink::parse_error`, and `html::parse` returns
-  `ParseOutcome { tree, diagnostics }`; `HtmlError` is fatal-only.
+  `ParseDiagnostic`s via `Token::ParseError` / `TreeSink::parse_error`, and `dom::parse` returns
+  `ParseOutcome { tree, diagnostics }`; `HtmlError` is fatal-only. **Vocabulary owned by `html` (#27/#28/#29, ADR-0024,
+  `html::PORT_SCHEMA_VERSION = 3`)**: `TagName`, `AttributeName` (one strict rule; an invalid name is dropped and
+  reported as `invalid-attribute-name`), `AttributeValue` and `HtmlEntity` live in `html`, a leaf crate; the dependency
+  is `dom → html`, `DomTreeSink`/`parse` live in `dom`, and `css`, `rhai-bindings` and `alloy` import the vocabulary
+  from `html` directly (`dom` re-exports none of it).
 - **X — `core/graphics`**: PNG decoder (`IHDR`/`IDAT`/`IEND`, RGB/RGBA 8-bit) over `network::inflate`, `DrawImage` on
   `SoftwareCpuBackend`, integer box-sample scaling (ADR-0016 — no floating-point in the geometry). Fuzz targets exist
   (`fuzz/fuzz_targets/{inflate,png_decode}.rs`) but were not run for 10 minutes/target in this session — CI's new `fuzz`
@@ -137,8 +141,8 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/runtime/rhai`          | `rhai-runtime`  | Concrete Rhai backend implementing `engine`'s traits — names no domain crate                                              |
 | `core/runtime/rhai-bindings` | `rhai-bindings` | Domain-coupled script bridges (DOM/CSS/network/window bindings) split out of `rhai-runtime` (v0.5 "R")                    |
 | `core/js`                    | `js`            | Web-content ECMAScript runtime (untrusted page `<script>`) — distinct from the Rhai muscle engine. **Stub (v0.7+)**       |
-| `core/dom`                   | `dom`           | Node hierarchy, elements, mutations                                                                                       |
-| `core/html`                  | `html`          | HTML5 tokenizer & `TreeSink`/`TokenSink` ports over `core/dom` (v0.5 B5)                                                  |
+| `core/dom`                   | `dom`           | Node hierarchy, elements, mutations; `DomTreeSink` + `parse` over `html` (depends on `html`, ADR-0024)                    |
+| `core/html`                  | `html`          | HTML vocabulary (`TagName`, `AttributeName`, `HtmlEntity`), HTML5 tokenizer & `TreeSink`/`TokenSink` ports. Leaf crate    |
 | `core/css`                   | `css`           | Parser, selectors, cascade, box model / inline formatting / Flexbox layout (v0.5 B0–B4)                                   |
 | `core/graphics`              | `graphics`      | `DisplayList`, `RenderBackend` port, `SoftwareCpuBackend`, PNG codec, text rasterization (v0.3–v0.5)                      |
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |
