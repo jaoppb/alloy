@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "HTML vocabulary (TagName, AttributeName, AttributeValue, HtmlEntity), HTML5 tokenization and the TokenSink/TreeSink ports. A leaf crate: no workspace dependency (PRD-008, ADR-0010, ADR-0011, ADR-0024)."
+description = "HTML vocabulary (TagName, AttributeName, AttributeValue, NamedCharacterReference), HTML5 tokenization and the TokenSink/TreeSink ports. A leaf crate: no workspace dependency (PRD-008, ADR-0010, ADR-0011, ADR-0024)."
 
 [dependencies]
 thiserror = { workspace = true }

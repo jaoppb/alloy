@@ -21,8 +21,9 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Introduced in v0.5 Phase P, recording the surface v0.5
 /// Phase B5 shipped — see `docs/architecture/html-tree-sink-port-contract.md`. `2` = recoverable
-/// diagnostics (#36); `3` = the vocabulary is owned by `html` (#28).
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+/// diagnostics (#36); `3` = the vocabulary is owned by `html` (#28); `4` = `HtmlEntity` becomes
+/// `NamedCharacterReference` over the full WHATWG table (#31).
+pub const PORT_SCHEMA_VERSION: u32 = 4;
 
 pub use application::conformance::run_html_conformance;
 pub use application::ports::{RawKind, ScriptDescriptor, TokenSink, TokenSinkResult, TreeSink};

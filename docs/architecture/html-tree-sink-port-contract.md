@@ -7,11 +7,11 @@ its contract record: the state of all seven mandatory items as of v0.5 B5.
 | ---- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-008` (variation model §1; threat model §2.3: network input is hostile by definition, a parser panic is a denial of service)                                                                                                                                              |
 | 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ `TokenSink` and `TreeSink` are object-safe traits speaking only domain value objects (`NodeHandle`, `TagName`, `Text`, `AttributeList`). Zero foreign adapter types leak through the boundary. See §2 below                                                                   |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `Token`, `AttributeList`/`AttributeEntry`, `TagName`, `Text`, `NodeHandle`, `SourceLocation`, `HtmlError` domain-owned in `core/html`, `#[non_exhaustive]`; `html::PORT_SCHEMA_VERSION = 3` (see §3; `2` = recoverable diagnostics #36, `3` = vocabulary owned by `html` #28) |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `Token`, `AttributeList`/`AttributeEntry`, `TagName`, `Text`, `NodeHandle`, `SourceLocation`, `HtmlError` domain-owned in `core/html`, `#[non_exhaustive]`; `html::PORT_SCHEMA_VERSION = 4` (see §3; `2` = recoverable diagnostics #36, `3` = vocabulary owned by `html` #28, `4` = full named character reference table #31) |
 | 4    | Exactly one typed error, source location                                  | ✅ `HtmlError` is a single typed error enum carrying `SourceLocation` (`line`, `column`, `byte_offset`) on all syntax and parsing variants; derives `thiserror::Error` (ADR-0015). See §4                                                                                        |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ Written in §5 below; includes streaming tokenizer re-entrancy and suspension protocol for `<script>` and `document.write`                                                                                                                                                     |
 | 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `run_html_conformance` conformance suite; `DomTreeSink` (real, in `core/dom`) and `MockTreeSink` (reference mock) both pass; `core/html` has no `dom` dependency, enforced by `arch-lint`. See §6                                                                             |
-| 7    | Frozen-API milestone                                                      | 🟡 Working surface at `html::PORT_SCHEMA_VERSION = 3`; freezes at integration point `I4`                                                                                                                                                                                         |
+| 7    | Frozen-API milestone                                                      | 🟡 Working surface at `html::PORT_SCHEMA_VERSION = 4`; freezes at integration point `I4`                                                                                                                                                                                         |
 
 ---
 
@@ -58,7 +58,7 @@ Boundary types are domain-owned in `core/html` and marked `#[non_exhaustive]`:
 - `PORT_SCHEMA_VERSION`:
 
 ```rust
-pub const PORT_SCHEMA_VERSION: u32 = 3; // 1 = B5 surface; 2 = recoverable diagnostics (#36); 3 = vocabulary owned by html (#28)
+pub const PORT_SCHEMA_VERSION: u32 = 4; // 1 = B5 surface; 2 = recoverable diagnostics (#36); 3 = vocabulary owned by html (#28); 4 = full named character references (#31)
 ```
 
 ---
