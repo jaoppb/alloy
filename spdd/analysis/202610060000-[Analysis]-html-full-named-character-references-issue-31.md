@@ -24,9 +24,10 @@ green. Raised in review of #17.
 
 ## Decisions
 
-1. **One table, one type.** `HtmlEntity` becomes a handle into a single generated table (`struct HtmlEntity(u16)`, a
-   row index). `from_name` searches all ~2,231 rows; `from_char` searches only the escape set; `as_char()` is replaced
-   by `expansion() -> &'static str` (1–2 code points); `as_entity()` / `entity_name()` stay. The enum variants go, so
+1. **One table, one type, renamed.** `HtmlEntity` is replaced by `NamedCharacterReference`, a handle into a single
+   generated table (`struct NamedCharacterReference(u16)`, a row index; WHATWG §13.5 term). Every import, ADR-0024,
+   PRD-008 row 3 and the `CLAUDE.md` vocabulary list are updated in the same PR. `from_name` searches all ~2,231 rows; `from_char` searches only the escape set; `as_char()` is replaced
+   by `expansion() -> &'static str` (1–2 code points); `as_entity()` / `entity_name()` stay (the `dom` serializer calls them on the new type). The enum variants go, so
    `html::PORT_SCHEMA_VERSION` 3→4 and a PRD-008 migration row.
 2. **The escape set is a hand-written list of names** (`ESCAPED`), resolved against the table in a `const` block. A typo
    or missing name is a compile error, not a test. No characters are duplicated between the table and the set.
@@ -45,7 +46,11 @@ green. Raised in review of #17.
    `core/html/tests/data/html5lib/`, run by a new integration test with `serde_json` as a **dev-dependency** (already in
    `Cargo.lock`; `unsafe-audit` scans direct normal dependencies only). It asserts decoded output, diagnostic codes and
    line/column.
-8. **Manifest**: new syntax rows (legacy no-semicolon, multi-code-point, attribute rule) and parse-error rows for the
+8. **Location rule.** Our convention (ADR-0023, #36) is the contract; the html5lib runner translates html5lib's
+   line/col to it through one documented mapping function. `Cursor` is not changed to match html5lib.
+9. **Done = zero skipped cases.** Every case in `namedEntities.test` and `entities.test` passes on output, codes and
+   location, with no skip list; a deviation is fixed in the tokenizer or blocks the PR.
+10. **Manifest**: new syntax rows (legacy no-semicolon, multi-code-point, attribute rule) and parse-error rows for the
    three new codes, with probes in `manifest_runner.rs` and `SUPPORTED_SYNTAX` updated, so the two-way gate stays green.
 
 ## Non-goals
@@ -56,14 +61,12 @@ green. Raised in review of #17.
 
 ## Open questions
 
-- **Name of the type.** Keep `HtmlEntity` (smallest diff, schema bump already paid) or rename to
-  `NamedCharacterReference` (matches §13.5, but churns every import).
-- **Location convention.** html5lib reports line/col by its own convention; if `Cursor::last_location` differs, either
-  adapt the runner's mapping or change `Cursor`. Decide once the first failing case shows the real delta.
+None. Remaining choices (e.g. the context enum replacing a boolean flag on `consume_character_reference`, vendored
+file licence header) are implementation details.
 
 ## Risks
 
-- A location off-by-one forces `Cursor` changes that touch every diagnostic.
+- The location mapping can hide a real mislocation; it must stay one documented rule, never per-case fixes.
 - The html5lib fixture is ~1 MB of vendored data.
 - The `const` binary search over `str` must be byte-wise and hand-written; subtle.
 - The one-time-generated table is verified only by the oracle, not reproducibly.
