@@ -3,7 +3,7 @@
 //! in [`messages`].
 
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{self, Receiver, Sender};
 
 use css::StyleSheetSet;
 use dom::DomTree;
@@ -50,6 +50,14 @@ pub struct Session<F, T, P, D> {
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
     stats: LoopStats,
+    /// Where the workers of the current navigation report. A worker cannot be
+    /// cancelled, so [`Session::open_channel`] replaces both ends on every
+    /// navigation: dropping the old `inbox` discards what its workers already
+    /// queued and makes their later `send` fail, so a result from a page the
+    /// user left has no way back in. That includes an `ImageId` — a DOM node
+    /// index reused by every document — naming an `<img>` of the new page.
+    inbox: Receiver<LoopMessage>,
+    outbox: Sender<LoopMessage>,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -60,6 +68,7 @@ where
     D: SubresourceDiscoverer,
 {
     pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
+        let (outbox, inbox) = mpsc::channel();
         Self {
             services,
             dom_tree: None,
@@ -72,6 +81,8 @@ where
             viewport,
             last_frame: None,
             stats: LoopStats::default(),
+            inbox,
+            outbox,
         }
     }
 
@@ -99,16 +110,19 @@ where
     }
 
     /// Starts fetching `url` on a worker thread; the result arrives as a
-    /// [`LoopMessage::Navigation`].
-    pub fn navigate(&self, url: Url, sender: &Sender<LoopMessage>) {
+    /// [`LoopMessage::Navigation`]. Supersedes every navigation and
+    /// subresource fetch still in flight: they report on a channel nobody
+    /// reads any more.
+    pub fn navigate(&mut self, url: Url) {
+        self.open_channel();
         let transport = Arc::clone(self.services.transport());
         let policy = Arc::clone(self.services.policy());
-        spawn_navigation(url, transport, policy, sender.clone());
+        spawn_navigation(url, transport, policy, self.outbox.clone());
     }
 
     /// Navigates to the topmost link under `position`, resolved against the
     /// document's base URL. An in-page `#anchor` is a no-op in v0.5.
-    pub fn follow_link_at(&self, position: PhysicalPosition, sender: &Sender<LoopMessage>) {
+    pub fn follow_link_at(&mut self, position: PhysicalPosition) {
         let Some(href) = hit_test(&self.links, position) else {
             return;
         };
@@ -122,7 +136,7 @@ where
         match base_url.join(href) {
             Ok(target_url) => {
                 tracing::info!(url = %target_url, "link clicked, navigating");
-                self.navigate(target_url, sender);
+                self.navigate(target_url);
             }
             Err(error) => tracing::warn!(href, %error, "failed to resolve link target"),
         }
@@ -170,9 +184,26 @@ where
     }
 }
 
+impl<F, T, P, D> Session<F, T, P, D> {
+    fn open_channel(&mut self) {
+        (self.outbox, self.inbox) = mpsc::channel();
+    }
+}
+
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P, D> Session<F, T, P, D> {
+    /// A clone of the sender the current page's workers hold.
+    pub fn outbox_for_test(&self) -> Sender<LoopMessage> {
+        self.outbox.clone()
+    }
+
+    /// Supersedes the current page the way [`Session::navigate`] does, without
+    /// spawning a fetch.
+    pub fn begin_navigation_for_test(&mut self) {
+        self.open_channel();
+    }
+
     pub const fn viewport(&self) -> SurfaceSize {
         self.viewport
     }
