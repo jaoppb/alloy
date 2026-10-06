@@ -1,7 +1,6 @@
 //! Folding drained background-fetch results into the [`Session`].
 
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
@@ -22,39 +21,42 @@ where
     P: RequestPolicy + 'static,
     D: SubresourceDiscoverer,
 {
+    /// Applies every result waiting now; tells the caller whether there were
+    /// any.
+    ///
+    /// Re-reads `inbox` on every iteration, so a navigation started while
+    /// draining carries on with the new channel.
+    pub fn drain_messages(&mut self) -> bool {
+        let mut saw_message = false;
+        while let Ok(message) = self.inbox.try_recv() {
+            saw_message = true;
+            self.apply(message);
+        }
+        saw_message
+    }
+
     /// Applies one drained background-fetch result, spawning whatever
     /// follow-up fetches it reveals (a fresh document's subresources).
-    ///
-    /// A result from a superseded navigation (an older `NavigationGeneration`)
-    /// is dropped untouched.
-    pub fn apply(&mut self, message: LoopMessage, sender: &Sender<LoopMessage>) {
-        if message.generation() != self.generation {
-            tracing::debug!(
-                message_generation = ?message.generation(),
-                current_generation = ?self.generation,
-                "stale background result dropped"
-            );
-            return;
-        }
+    fn apply(&mut self, message: LoopMessage) {
         match message {
-            LoopMessage::Navigation(_, Ok((dom_tree, navigation_url))) => {
-                self.load_document(dom_tree, &navigation_url, sender);
+            LoopMessage::Navigation(Ok((dom_tree, navigation_url))) => {
+                self.load_document(dom_tree, &navigation_url);
             }
-            LoopMessage::Navigation(_, Err(error)) => {
+            LoopMessage::Navigation(Err(error)) => {
                 tracing::error!(%error, "navigation failed");
                 self.stats.navigation_errors = self.stats.navigation_errors.saturating_add(1);
                 self.show_navigation_error(&error);
             }
-            LoopMessage::Stylesheet(_, Ok(text)) => self.absorb_stylesheet(&text),
-            LoopMessage::Stylesheet(_, Err(error)) => {
+            LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
+            LoopMessage::Stylesheet(Err(error)) => {
                 tracing::warn!(%error, "stylesheet fetch failed");
             }
-            LoopMessage::Image(_, id, Ok(framebuffer)) => {
+            LoopMessage::Image(id, Ok(framebuffer)) => {
                 self.images.insert(id, framebuffer);
                 self.dirty = true;
                 self.stats.images_loaded = self.stats.images_loaded.saturating_add(1);
             }
-            LoopMessage::Image(_, id, Err(error)) => {
+            LoopMessage::Image(id, Err(error)) => {
                 tracing::warn!(%error, %id, "image fetch failed");
             }
         }
@@ -62,17 +64,12 @@ where
 
     /// Installs a freshly navigated document under its effective base URL
     /// (`<base href>` applied) and starts fetching what it references.
-    fn load_document(
-        &mut self,
-        dom_tree: DomTree,
-        navigation_url: &Url,
-        sender: &Sender<LoopMessage>,
-    ) {
+    fn load_document(&mut self, dom_tree: DomTree, navigation_url: &Url) {
         let snapshot = css::snapshot(&dom_tree, dom_tree.document());
         let base_url = document_base_url(&snapshot, navigation_url);
         tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
         self.reset_document_state();
-        self.spawn_subresources(&snapshot, &base_url, sender);
+        self.spawn_subresources(&snapshot, &base_url);
         self.base_url = Some(base_url);
         self.dom_tree = Some(dom_tree);
         self.dirty = true;
@@ -125,24 +122,14 @@ where
     /// registers a placeholder for every image found (see
     /// `subresource::placeholder_framebuffer`), and spawns one worker thread
     /// per subresource.
-    fn spawn_subresources(
-        &mut self,
-        snapshot: &css::DomSnapshot,
-        base_url: &Url,
-        sender: &Sender<LoopMessage>,
-    ) {
+    fn spawn_subresources(&mut self, snapshot: &css::DomSnapshot, base_url: &Url) {
         let found = self.services.discoverer().discover(snapshot, base_url);
         for request in found {
             tracing::debug!(?request, "subresource discovered");
             if let SubresourceRequest::Image(image) = &request {
                 self.images.reserve_placeholder(image.id());
             }
-            spawn_subresource_fetch(
-                request,
-                Arc::clone(self.services.transport()),
-                self.generation,
-                sender,
-            );
+            spawn_subresource_fetch(request, Arc::clone(self.services.transport()), &self.outbox);
         }
     }
 }

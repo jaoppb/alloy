@@ -12,7 +12,6 @@
 //! pump cycles cost one relayout, not ten or fifty.
 
 mod frame;
-mod generation;
 mod hit_test;
 mod pixel;
 mod session;
@@ -22,7 +21,6 @@ mod worker;
 #[cfg(test)]
 mod tests;
 
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use graphics::FontProvider;
@@ -34,7 +32,6 @@ use window::{
 
 use self::session::Session;
 pub use self::stats::LoopStats;
-use self::worker::LoopMessage;
 use crate::application::browser_services::BrowserServices;
 use crate::application::pipeline::RenderOptions;
 use crate::application::subresource::SubresourceDiscoverer;
@@ -161,11 +158,10 @@ where
     P: RequestPolicy + 'static,
     D: SubresourceDiscoverer,
 {
-    let (sender, receiver) = mpsc::channel();
-    session.navigate(url.clone(), &sender);
+    session.navigate(url.clone());
 
     loop {
-        let (outcome, did_work) = pump_once(system, presenter, &receiver, &sender, session)?;
+        let (outcome, did_work) = pump_once(system, presenter, session)?;
         if outcome == PumpStatus::Exit || should_stop(&session.stats()) {
             return Ok(session.stats());
         }
@@ -187,8 +183,6 @@ where
 fn pump_once<S, R, F, T, P, D>(
     system: &mut S,
     presenter: &mut R,
-    receiver: &Receiver<LoopMessage>,
-    sender: &Sender<LoopMessage>,
     session: &mut Session<F, T, P, D>,
 ) -> Result<(PumpStatus, bool), AlloyError>
 where
@@ -207,14 +201,10 @@ where
         session.resize(viewport);
     }
     if let Some(position) = events.clicked_at {
-        session.follow_link_at(position, sender);
+        session.follow_link_at(position);
     }
 
-    let mut saw_message = false;
-    while let Ok(message) = receiver.try_recv() {
-        saw_message = true;
-        session.apply(message, sender);
-    }
+    let saw_message = session.drain_messages();
 
     let relaid_out = session.needs_relayout();
     if relaid_out {
