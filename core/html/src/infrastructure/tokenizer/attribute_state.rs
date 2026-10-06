@@ -3,7 +3,7 @@
 use crate::domain::diagnostic::ParseErrorCode;
 use crate::domain::token::Token;
 use crate::infrastructure::tokenizer::cursor::Cursor;
-use crate::infrastructure::tokenizer::entity::consume_character_reference;
+use crate::infrastructure::tokenizer::entity::{ReferenceContext, consume_character_reference};
 use crate::infrastructure::tokenizer::pending_tag::PendingTag;
 use crate::infrastructure::tokenizer::state::State;
 use crate::infrastructure::tokenizer::tag_state::{emit_tag, eof_in_tag};
@@ -174,7 +174,11 @@ pub fn handle_attribute_value_quoted(
             return None;
         }
         if character == '&' {
-            consume_character_reference(cursor, tag.value_buffer());
+            consume_character_reference(
+                cursor,
+                tag.value_buffer(),
+                ReferenceContext::AttributeValue,
+            );
             continue;
         }
         tag.push_value_character(character);
@@ -201,9 +205,28 @@ pub fn handle_attribute_value_unquoted(
         if character == '>' {
             return commit_and_emit(cursor, state, tag);
         }
+        if character == '&' {
+            consume_character_reference(
+                cursor,
+                tag.value_buffer(),
+                ReferenceContext::AttributeValue,
+            );
+            continue;
+        }
+        report_unexpected_unquoted_character(cursor, character);
         tag.push_value_character(character);
     }
     eof_in_tag(cursor, state, tag)
+}
+
+/// §13.2.5.38: these characters are kept in an unquoted value but are almost certainly a typo.
+fn report_unexpected_unquoted_character(cursor: &mut Cursor<'_>, character: char) {
+    if matches!(character, '"' | '\'' | '<' | '=' | '`') {
+        cursor.report(
+            ParseErrorCode::UnexpectedCharacterInUnquotedAttributeValue,
+            cursor.last_location(),
+        );
+    }
 }
 
 /// Processes `AfterAttributeValueQuoted` state.

@@ -34,6 +34,7 @@ pub use domain::error::{HtmlError, InvalidAttributeName, InvalidTagName};
 pub use domain::handle::NodeHandle;
 pub use domain::location::SourceLocation;
 pub use domain::named_reference::{NamedCharacterReference, ReferenceMatch};
+pub use domain::numeric_reference::{NumericReference, Radix, ResolvedReference};
 pub use domain::tag::TagName;
 pub use domain::text::Text;
 pub use domain::token::{DoctypeToken, TagToken, Token};
@@ -93,6 +94,9 @@ pub const SUPPORTED_SYNTAX: &[&str] = &[
     "&entity; named entity",
     "&#decimal; numeric entity",
     "&#xhex; numeric entity",
+    "&entity named entity without semicolon",
+    "&#128; windows-1252 numeric entity",
+    "attr value &name= stays literal",
     "<script> rawtext",
     "<style> rawtext",
     "p tag omission",

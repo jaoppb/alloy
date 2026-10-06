@@ -1,6 +1,6 @@
 //! The WHATWG named character reference table (HTML Standard §13.5) — **generated data, do not edit**.
 //!
-//! Source: the WHATWG `entities.json` table, taken from CPython 3.11's `html.entities.html5` (a verbatim
+//! Source: the WHATWG `entities.json` table, taken from `CPython` 3.11's `html.entities.html5` (a verbatim
 //! mirror; `html.spec.whatwg.org` was not reachable from the build sandbox). One row per name, the name
 //! without `&` / `;`, sorted bytewise so lookups can binary-search. `semicolon_optional` marks the 106
 //! legacy names the spec also accepts without a trailing `;`. 2125 rows.

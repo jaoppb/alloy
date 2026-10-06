@@ -25,7 +25,7 @@ use attribute_state::{
 };
 use cursor::Cursor;
 use doctype::handle_doctype;
-use entity::consume_character_reference;
+use entity::{ReferenceContext, consume_character_reference};
 use pending_tag::PendingTag;
 use rawtext::consume_rawtext;
 use state::State;
@@ -251,7 +251,7 @@ impl<'a> Tokenizer<'a> {
                 return Some(Token::Character(Text::new(text)));
             }
             if character == '&' {
-                consume_character_reference(&mut self.cursor, &mut text);
+                consume_character_reference(&mut self.cursor, &mut text, ReferenceContext::Text);
                 continue;
             }
             text.push(character);
