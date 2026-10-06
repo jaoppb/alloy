@@ -27,6 +27,9 @@ exclude = [
     # (ADR-0011 item 6), and the manifest runner is a two-way-consistency gate.
     "core/html/src/application/conformance.rs",
     "core/html/tests/manifest_runner.rs",
+    # The html5lib replay is the same: it panics on a malformed fixture and reports every
+    # diverging case at once (#31).
+    "core/html/tests/html5lib_entities.rs",
 ]
 respect_gitignore = true
 

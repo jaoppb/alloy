@@ -44,6 +44,8 @@ rhai = { version = "=1.26.0", default-features = false, features = ["std", "sync
 clap = { version = "=4.5.51", features = ["derive"] }
 # Structured logging (ADR-0014). `alloy` inits the subscriber; libraries only emit.
 tracing = "=0.1.44"
+# Test-only: the html5lib entity cases of `core/html/tests/html5lib_entities.rs` (#31).
+serde_json = "=1.0.151"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json", "fmt"] }
 # Typed errors outside the engine port (ADR-0015); `core/engine` keeps its manual `Display`.
 thiserror = "=2.0.17"
