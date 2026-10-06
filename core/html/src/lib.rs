@@ -30,10 +30,10 @@ pub use domain::attribute::{
     AttributeEntry, AttributeList, AttributeName, AttributeValue, DuplicateAttribute,
 };
 pub use domain::diagnostic::{Diagnostics, ParseDiagnostic, ParseErrorCode};
-pub use domain::entity::HtmlEntity;
 pub use domain::error::{HtmlError, InvalidAttributeName, InvalidTagName};
 pub use domain::handle::NodeHandle;
 pub use domain::location::SourceLocation;
+pub use domain::named_reference::{NamedCharacterReference, ReferenceMatch};
 pub use domain::tag::TagName;
 pub use domain::text::Text;
 pub use domain::token::{DoctypeToken, TagToken, Token};

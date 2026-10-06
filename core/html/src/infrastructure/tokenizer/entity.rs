@@ -1,7 +1,7 @@
 //! HTML entity resolution for named, decimal, and hexadecimal character references.
 
 use crate::domain::diagnostic::ParseErrorCode;
-use crate::domain::entity::HtmlEntity;
+use crate::domain::named_reference::NamedCharacterReference;
 use crate::infrastructure::tokenizer::cursor::Cursor;
 
 /// Resolves an HTML character reference from the cursor stream.
@@ -112,7 +112,7 @@ pub fn resolve_entity(name: &str) -> Option<String> {
             .map(String::from);
     }
 
-    HtmlEntity::from_name(name).map(|entity| entity.as_char().to_string())
+    NamedCharacterReference::from_name(name).map(|entity| entity.expansion().to_string())
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
 //! (v0.2 report §3, F3 step 5), and non-recursive: an explicit work stack of
 //! `Step`s, never a self-call.
 
-use html::HtmlEntity;
+use html::NamedCharacterReference;
 
 use crate::domain::error::DomError;
 use crate::domain::node::{ElementData, NodeId, NodeKind};
@@ -55,7 +55,7 @@ fn enter(
             Ok(())
         }
         NodeKind::Text(content) => {
-            output.push_str(&escape_text(content.as_str()));
+            output.push_str(&escape(content.as_str(), EscapeContext::Text));
             Ok(())
         }
         NodeKind::Comment(content) => {
@@ -105,7 +105,7 @@ fn write_attribute(output: &mut String, name: &str, value: &str) {
     output.push(' ');
     output.push_str(name);
     output.push_str("=\"");
-    output.push_str(&escape_attribute(value));
+    output.push_str(&escape(value, EscapeContext::AttributeValue));
     output.push('"');
 }
 
@@ -123,23 +123,28 @@ fn push_children(tree: &DomTree, parent: NodeId, steps: &mut Vec<Step>) {
     }
 }
 
-fn escape_text(raw: &str) -> String {
-    let mut escaped = String::with_capacity(raw.len());
-    for ch in raw.chars() {
-        match HtmlEntity::from_char(ch) {
-            Some(entity) => escaped.push_str(entity.as_entity()),
-            None => escaped.push(ch),
-        }
-    }
-    escaped
+/// Where text is being escaped: WHATWG §13.3 escapes `"` only inside an attribute value.
+#[derive(Clone, Copy)]
+enum EscapeContext {
+    Text,
+    AttributeValue,
 }
 
-fn escape_attribute(raw: &str) -> String {
+impl EscapeContext {
+    fn escapes(self, reference: NamedCharacterReference) -> bool {
+        match self {
+            Self::Text => reference != NamedCharacterReference::QUOT,
+            Self::AttributeValue => true,
+        }
+    }
+}
+
+fn escape(raw: &str, context: EscapeContext) -> String {
     let mut escaped = String::with_capacity(raw.len());
-    for ch in raw.chars() {
-        match HtmlEntity::from_char(ch) {
-            Some(entity) => escaped.push_str(entity.as_entity()),
-            None => escaped.push(ch),
+    for character in raw.chars() {
+        match NamedCharacterReference::from_char(character) {
+            Some(reference) if context.escapes(reference) => reference.append_entity(&mut escaped),
+            _ => escaped.push(character),
         }
     }
     escaped
