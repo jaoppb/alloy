@@ -47,8 +47,8 @@ the point of detection, so its runner maps them to the `&` through one documente
 
 ## Norms
 
-As in issue #36: `thiserror`-free pure domain, no `unwrap`/`expect` on reachable paths, no `else`, one indentation
-level, no boolean parameters, comments cite §13.2.5.x. `rumdl fmt` after editing Markdown.
+As in issue #36: a pure `domain/` (no I/O), no `unwrap`/`expect` on reachable paths, no `else`, one indentation level,
+no boolean parameters, comments cite §13.2.5.x. `rumdl fmt` after editing Markdown.
 
 ## Safeguards
 
