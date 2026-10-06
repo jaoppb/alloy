@@ -62,12 +62,21 @@ parse_error_codes! {
     UnknownNamedCharacterReference => "unknown-named-character-reference",
     /// `&#` without digits.
     AbsenceOfDigitsInNumericCharacterReference => "absence-of-digits-in-numeric-character-reference",
+    /// A named or numeric reference with no trailing `;` (§13.2.5.73, §13.2.5.75); it is still resolved.
+    MissingSemicolonAfterCharacterReference => "missing-semicolon-after-character-reference",
+    /// A numeric reference to a control character (§13.2.5.80); the 0x80–0x9F ones are remapped to
+    /// their Windows-1252 character.
+    ControlCharacterReference => "control-character-reference",
+    /// A numeric reference to a Unicode noncharacter; the character is kept.
+    NoncharacterCharacterReference => "noncharacter-character-reference",
     /// `&#0;`.
     NullCharacterReference => "null-character-reference",
     /// A numeric reference above U+10FFFF.
     CharacterReferenceOutsideUnicodeRange => "character-reference-outside-unicode-range",
     /// A numeric reference to a surrogate.
     SurrogateCharacterReference => "surrogate-character-reference",
+    /// `"`, `'`, `<`, `=` or a backtick inside an unquoted attribute value (§13.2.5.38); kept in the value.
+    UnexpectedCharacterInUnquotedAttributeValue => "unexpected-character-in-unquoted-attribute-value",
     /// A NUL in the input stream.
     UnexpectedNullCharacter => "unexpected-null-character",
     /// A control character other than whitespace in the input stream.

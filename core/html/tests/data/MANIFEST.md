@@ -72,9 +72,12 @@ Syntactic constructs handled by the HTML5 tokenizer state machine and tree build
 | `<tag bool-attr>`           | B5    | boolean attribute syntax without value                                        |
 | `<tag />`                   | B5    | self-closing tag syntax                                                       |
 | `<!-- comment -->`          | B5    | HTML comment syntax                                                           |
-| `&entity; named entity`     | B5    | named character reference entity resolution                                   |
+| `&entity; named entity`     | B5    | named character reference resolution over the full WHATWG §13.5 table (#31)  |
 | `&#decimal; numeric entity` | B5    | decimal character reference resolution                                        |
 | `&#xhex; numeric entity`    | B5    | hexadecimal character reference resolution                                    |
+| `&entity named entity without semicolon` | #31 | the 106 legacy names resolve without `;` (reported as `missing-semicolon-after-character-reference`) |
+| `&#128; windows-1252 numeric entity` | #31 | `&#128;`..`&#159;` become their Windows-1252 character (§13.2.5.80)  |
+| `attr value &name= stays literal` | #31 | in an attribute value, a legacy name without `;` before `=` or alphanumeric is text |
 | `<script> rawtext`          | B5    | rawtext mode in `<script>`: inner markup is never parsed as HTML elements     |
 | `<style> rawtext`           | B5    | rawtext mode in `<style>`: inner CSS markup is never parsed as HTML elements  |
 | `p tag omission`            | B5    | open `<p>` is implicitly closed before opening another `<p>` or block element |
@@ -120,4 +123,8 @@ probe in `manifest_runner.rs` asserting the exact code and location.
 | `unexpected-body-start-tag`                        | #36   | repeated `<body>`; attributes merged                                              |
 | `unexpected-head-start-tag`                        | #36   | repeated `<head>`; ignored                                                        |
 | `quirks-mode-doctype`                              | #36   | doctype that forces quirks mode (consumed, not stored: no DocumentType node)      |
+| `missing-semicolon-after-character-reference`      | #31   | reference without `;`; still resolved                                             |
+| `control-character-reference`                      | #31   | numeric reference to a control character; the C1 ones are remapped (Windows-1252) |
+| `noncharacter-character-reference`                 | #31   | numeric reference to a Unicode noncharacter; kept                                 |
+| `unexpected-character-in-unquoted-attribute-value` | #31   | `"` `'` `<` `=` or a backtick in an unquoted value; kept in the value             |
 | `invalid-attribute-name`                           | #28   | attribute name breaking the strict `AttributeName` rule; the attribute is dropped |

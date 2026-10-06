@@ -1,118 +1,133 @@
-//! HTML entity resolution for named, decimal, and hexadecimal character references.
+//! HTML character reference resolution: WHATWG §13.2.5.72–§13.2.5.80.
+//!
+//! A reference that does not resolve is left as literal text. Parse errors are reported at the `&`
+//! that opens the reference (ADR-0023); the spec reports some of them later, at the point of detection.
 
 use crate::domain::diagnostic::ParseErrorCode;
-use crate::domain::entity::HtmlEntity;
+use crate::domain::location::SourceLocation;
+use crate::domain::named_reference::{NamedCharacterReference, ReferenceMatch};
+use crate::domain::numeric_reference::{NumericReference, Radix};
 use crate::infrastructure::tokenizer::cursor::Cursor;
 
-/// Resolves an HTML character reference from the cursor stream.
-///
-/// A reference that does not resolve is left as literal text (`&`), and — where WHATWG §13.2.5.72+
-/// names the malformation — reported at the `&`.
-pub fn consume_character_reference(cursor: &mut Cursor<'_>, output: &mut String) {
+/// Where a character reference appears: the spec treats the two differently (§13.2.5.73).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReferenceContext {
+    /// Character data.
+    Text,
+    /// An attribute value, quoted or not.
+    AttributeValue,
+}
+
+/// Resolves the character reference that starts at the `&` the cursor just returned, appending its
+/// text — or a literal `&` when it does not resolve — to `output`.
+pub fn consume_character_reference(
+    cursor: &mut Cursor<'_>,
+    output: &mut String,
+    context: ReferenceContext,
+) {
     let ampersand = cursor.last_location();
-    let mut candidate = String::new();
-    let mut cloned_cursor = cursor.clone();
-    let mut matched_chars = 0_usize;
-    let mut terminated = false;
-
-    while let Some(character) = cloned_cursor.next_char() {
-        matched_chars = matched_chars.saturating_add(1);
-        if character == ';' {
-            terminated = true;
-            if let Some(resolved) = resolve_entity(&candidate) {
-                output.push_str(&resolved);
-                for _ in 0..matched_chars {
-                    cursor.next_char();
-                }
-                return;
-            }
-            break;
+    match cursor.peek() {
+        Some('#') => consume_numeric_reference(cursor, output, ampersand),
+        Some(next) if next.is_ascii_alphanumeric() => {
+            consume_named_reference(cursor, output, ampersand, context);
         }
-        if !character.is_ascii_alphanumeric() && character != '#' {
-            break;
-        }
-        candidate.push(character);
-        if candidate.len() > 16 {
-            break;
-        }
+        _ => output.push('&'),
     }
+}
 
-    let Some(code) = unresolved_reference_error(&candidate, terminated) else {
+fn consume_named_reference(
+    cursor: &mut Cursor<'_>,
+    output: &mut String,
+    ampersand: SourceLocation,
+    context: ReferenceContext,
+) {
+    let Some(found) = NamedCharacterReference::longest_match(cursor.remaining()) else {
+        report_unknown_name(cursor, ampersand);
         output.push('&');
         return;
     };
-    cursor.report(code, ampersand);
-    if terminated && is_invalid_code_point_error(code) {
-        // WHATWG §13.2.5.80: a NUL, surrogate or out-of-range reference becomes U+FFFD.
-        for _ in 0..matched_chars {
-            cursor.next_char();
-        }
-        output.push(char::REPLACEMENT_CHARACTER);
+    if is_left_literal(&found, cursor.remaining(), context) {
+        output.push('&');
         return;
     }
-    output.push('&');
+    advance(cursor, found.consumed());
+    if !found.is_terminated() {
+        cursor.report(
+            ParseErrorCode::MissingSemicolonAfterCharacterReference,
+            ampersand,
+        );
+    }
+    output.push_str(found.reference().expansion());
 }
 
-const fn is_invalid_code_point_error(code: ParseErrorCode) -> bool {
-    matches!(
-        code,
-        ParseErrorCode::NullCharacterReference
-            | ParseErrorCode::SurrogateCharacterReference
-            | ParseErrorCode::CharacterReferenceOutsideUnicodeRange
-    )
+/// §13.2.5.73: in an attribute value, a name without `;` followed by `=` or a letter or digit is
+/// historical text (`?a=1&copy=2`), not a reference — and not an error.
+fn is_left_literal(found: &ReferenceMatch, remaining: &str, context: ReferenceContext) -> bool {
+    if context != ReferenceContext::AttributeValue || found.is_terminated() {
+        return false;
+    }
+    let following = remaining
+        .get(found.consumed()..)
+        .and_then(|rest| rest.chars().next());
+    following.is_some_and(|next| next == '=' || next.is_ascii_alphanumeric())
 }
 
-/// Which WHATWG error, if any, an unresolved `&candidate` (`;`-terminated or not) is.
-fn unresolved_reference_error(candidate: &str, terminated: bool) -> Option<ParseErrorCode> {
-    let Some(numeric) = candidate.strip_prefix('#') else {
-        let is_named_reference = terminated && !candidate.is_empty();
-        return is_named_reference.then_some(ParseErrorCode::UnknownNamedCharacterReference);
-    };
-    let (digits, radix) = numeric
-        .strip_prefix(['x', 'X'])
-        .map_or((numeric, 10), |hex| (hex, 16));
-    if !digits
+/// §13.2.5.74: a run of letters and digits closed by `;` names nothing.
+fn report_unknown_name(cursor: &mut Cursor<'_>, ampersand: SourceLocation) {
+    let name_length = cursor
+        .remaining()
         .chars()
-        .next()
-        .is_some_and(|first| first.is_digit(radix))
-    {
-        return Some(ParseErrorCode::AbsenceOfDigitsInNumericCharacterReference);
-    }
-    if !digits.chars().all(|digit| digit.is_digit(radix)) {
-        // Trailing letters after the digits (`&#12ab;`) are outside the codes this tokenizer models.
-        return None;
-    }
-    let Ok(code_point) = u32::from_str_radix(digits, radix) else {
-        return Some(ParseErrorCode::CharacterReferenceOutsideUnicodeRange);
-    };
-    match code_point {
-        0 => Some(ParseErrorCode::NullCharacterReference),
-        0xD800..=0xDFFF => Some(ParseErrorCode::SurrogateCharacterReference),
-        0x11_0000.. => Some(ParseErrorCode::CharacterReferenceOutsideUnicodeRange),
-        _ => None,
+        .take_while(char::is_ascii_alphanumeric)
+        .count();
+    if cursor.remaining().chars().nth(name_length) == Some(';') {
+        cursor.report(ParseErrorCode::UnknownNamedCharacterReference, ampersand);
     }
 }
 
-/// Resolves a named or numeric entity name.
-///
-/// Named references cover only a small subset of the WHATWG table; the rest is tracked in
-/// <https://github.com/jaoppb/alloy/issues/31>.
-#[must_use]
-pub fn resolve_entity(name: &str) -> Option<String> {
-    if let Some(stripped) = name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")) {
-        let code = u32::from_str_radix(stripped, 16).ok()?;
-        return char::from_u32(code)
-            .filter(|resolved| *resolved != '\0')
-            .map(String::from);
+fn consume_numeric_reference(
+    cursor: &mut Cursor<'_>,
+    output: &mut String,
+    ampersand: SourceLocation,
+) {
+    let radix = Radix::of_reference(cursor.remaining());
+    let digits: String = cursor
+        .remaining()
+        .chars()
+        .skip(radix.prefix_length())
+        .take_while(|digit| digit.is_digit(radix.base()))
+        .collect();
+    if digits.is_empty() {
+        cursor.report(
+            ParseErrorCode::AbsenceOfDigitsInNumericCharacterReference,
+            ampersand,
+        );
+        output.push('&');
+        return;
     }
-    if let Some(stripped) = name.strip_prefix('#') {
-        let code = stripped.parse::<u32>().ok()?;
-        return char::from_u32(code)
-            .filter(|resolved| *resolved != '\0')
-            .map(String::from);
+    advance(cursor, radix.prefix_length().saturating_add(digits.len()));
+    consume_numeric_terminator(cursor, ampersand);
+    let resolved = NumericReference::parse(&digits, radix).resolve();
+    if let Some(error) = resolved.error() {
+        cursor.report(error, ampersand);
     }
+    output.push(resolved.character());
+}
 
-    HtmlEntity::from_name(name).map(|entity| entity.as_char().to_string())
+fn consume_numeric_terminator(cursor: &mut Cursor<'_>, ampersand: SourceLocation) {
+    if cursor.peek() == Some(';') {
+        cursor.next_char();
+        return;
+    }
+    cursor.report(
+        ParseErrorCode::MissingSemicolonAfterCharacterReference,
+        ampersand,
+    );
+}
+
+fn advance(cursor: &mut Cursor<'_>, characters: usize) {
+    for _ in 0..characters {
+        cursor.next_char();
+    }
 }
 
 #[cfg(test)]
@@ -120,24 +135,83 @@ mod tests {
     use super::*;
     use crate::domain::diagnostic::ParseDiagnostic;
 
-    #[test]
-    fn resolve_named_entities() {
-        assert_eq!(resolve_entity("amp").as_deref(), Some("&"));
-        assert_eq!(resolve_entity("copy").as_deref(), Some("©"));
-        assert_eq!(resolve_entity("hellip").as_deref(), Some("…"));
-        assert_eq!(resolve_entity("unknown"), None);
-    }
-
-    fn reported(source: &str) -> Vec<ParseErrorCode> {
+    fn consume(source: &str, context: ReferenceContext) -> (String, Vec<ParseErrorCode>, String) {
         let mut cursor = Cursor::new(source);
         cursor.next_char();
         let mut output = String::new();
-        consume_character_reference(&mut cursor, &mut output);
-        cursor
+        consume_character_reference(&mut cursor, &mut output, context);
+        let codes = cursor
             .take_diagnostics()
             .iter()
             .map(ParseDiagnostic::code)
-            .collect()
+            .collect();
+        (output, codes, cursor.remaining().to_string())
+    }
+
+    fn in_text(source: &str) -> (String, Vec<ParseErrorCode>, String) {
+        consume(source, ReferenceContext::Text)
+    }
+
+    fn reported(source: &str) -> Vec<ParseErrorCode> {
+        in_text(source).1
+    }
+
+    #[test]
+    fn named_references_resolve_from_the_full_table() {
+        assert_eq!(in_text("&amp;").0, "&");
+        assert_eq!(in_text("&hellip;").0, "…");
+        assert_eq!(in_text("&euro;").0, "€");
+        assert_eq!(in_text("&NotEqualTilde;").0, "\u{2242}\u{338}");
+    }
+
+    #[test]
+    fn a_legacy_name_resolves_without_its_semicolon_and_is_reported() {
+        assert_eq!(
+            in_text("&copy rest"),
+            (
+                "©".into(),
+                vec![ParseErrorCode::MissingSemicolonAfterCharacterReference],
+                " rest".into()
+            )
+        );
+    }
+
+    #[test]
+    fn the_longest_legacy_prefix_wins_when_the_full_name_is_unknown() {
+        assert_eq!(
+            in_text("&noti;"),
+            (
+                "¬".into(),
+                vec![ParseErrorCode::MissingSemicolonAfterCharacterReference],
+                "i;".into()
+            )
+        );
+    }
+
+    #[test]
+    fn a_name_that_needs_its_semicolon_stays_text() {
+        assert_eq!(
+            in_text("&hellip b"),
+            ("&".into(), vec![], "hellip b".into())
+        );
+    }
+
+    #[test]
+    fn in_an_attribute_value_a_legacy_name_before_equals_or_alphanumeric_is_literal() {
+        let literal = ("&".into(), vec![], "not=".into());
+        assert_eq!(consume("&not=", ReferenceContext::AttributeValue), literal);
+        let literal = ("&".into(), vec![], "notx".into());
+        assert_eq!(consume("&notx", ReferenceContext::AttributeValue), literal);
+    }
+
+    #[test]
+    fn in_an_attribute_value_a_legacy_name_before_anything_else_still_resolves() {
+        let (output, codes, _) = consume("&not ", ReferenceContext::AttributeValue);
+        assert_eq!(output, "¬");
+        assert_eq!(
+            codes,
+            [ParseErrorCode::MissingSemicolonAfterCharacterReference]
+        );
     }
 
     #[test]
@@ -171,12 +245,37 @@ mod tests {
 
     #[test]
     fn an_invalid_code_point_reference_becomes_the_replacement_character() {
-        let mut cursor = Cursor::new("&#xD800;z");
-        cursor.next_char();
-        let mut output = String::new();
-        consume_character_reference(&mut cursor, &mut output);
+        let (output, _, remaining) = in_text("&#xD800;z");
         assert_eq!(output, "\u{FFFD}");
-        assert_eq!(cursor.next_char(), Some('z'));
+        assert_eq!(remaining, "z");
+    }
+
+    #[test]
+    fn an_unterminated_numeric_reference_still_resolves_and_is_reported() {
+        assert_eq!(
+            in_text("&#97ab"),
+            (
+                "a".into(),
+                vec![ParseErrorCode::MissingSemicolonAfterCharacterReference],
+                "ab".into()
+            )
+        );
+    }
+
+    #[test]
+    fn numeric_references_follow_the_windows_1252_remap() {
+        assert_eq!(
+            in_text("&#128;"),
+            (
+                "€".into(),
+                vec![ParseErrorCode::ControlCharacterReference],
+                String::new()
+            )
+        );
+        assert_eq!(
+            reported("&#xFDD0;"),
+            [ParseErrorCode::NoncharacterCharacterReference]
+        );
     }
 
     #[test]
@@ -185,12 +284,13 @@ mod tests {
         assert!(reported("&amp;").is_empty());
         assert!(reported("&#60;").is_empty());
         assert!(reported("&bogus b").is_empty());
+        assert!(reported("&").is_empty());
     }
 
     #[test]
-    fn resolve_numeric_entities() {
-        assert_eq!(resolve_entity("#60").as_deref(), Some("<"));
-        assert_eq!(resolve_entity("#x3e").as_deref(), Some(">"));
-        assert_eq!(resolve_entity("#X3E").as_deref(), Some(">"));
+    fn numeric_references_in_both_radixes_resolve() {
+        assert_eq!(in_text("&#60;").0, "<");
+        assert_eq!(in_text("&#x3e;").0, ">");
+        assert_eq!(in_text("&#X3E;").0, ">");
     }
 }

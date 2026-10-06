@@ -198,6 +198,20 @@ fn test_syntax_entities() {
 }
 
 #[test]
+fn test_syntax_full_named_reference_table() {
+    let events = events_of("<p>&hellip; &euro; &larr; &NotEqualTilde; &copy &#128;</p>");
+    let text: String = texts(&events).concat();
+    assert_eq!(text, "… € ← \u{2242}\u{338} © €");
+}
+
+#[test]
+fn test_syntax_attribute_reference_rule() {
+    let events = events_of("<a href=\"?q=1&copy=2&amp;x\">y</a>");
+    let (_, attributes) = elements_named(&events, "a")[0];
+    assert_eq!(attributes.get_value_str("href"), Some("?q=1&copy=2&x"));
+}
+
+#[test]
 fn test_syntax_rawtext_and_omissions() {
     // 1. script rawtext
     let events = events_of("<script>const markup = '<div>inside</div>';</script>");
@@ -320,6 +334,30 @@ const PARSE_ERROR_PROBES: &[Probe] = &[
     (
         "<p>&#xD800;</p>",
         &[(ParseErrorCode::SurrogateCharacterReference, 1, 4)],
+    ),
+    (
+        "<p>&copy</p>",
+        &[(
+            ParseErrorCode::MissingSemicolonAfterCharacterReference,
+            1,
+            4,
+        )],
+    ),
+    (
+        "<p>&#128;</p>",
+        &[(ParseErrorCode::ControlCharacterReference, 1, 4)],
+    ),
+    (
+        "<p>&#xFDD0;</p>",
+        &[(ParseErrorCode::NoncharacterCharacterReference, 1, 4)],
+    ),
+    (
+        "<div a=x=y></div>",
+        &[(
+            ParseErrorCode::UnexpectedCharacterInUnquotedAttributeValue,
+            1,
+            9,
+        )],
     ),
     (
         "<p>a\0b</p>",

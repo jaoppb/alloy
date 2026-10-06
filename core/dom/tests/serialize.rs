@@ -95,11 +95,11 @@ fn custom_elements_serialize_with_open_and_close_tags() {
 }
 
 #[test]
-fn full_w3c_named_entities_are_escaped_in_text_and_attributes() {
+fn only_the_whatwg_escape_set_is_escaped_in_text_and_attributes() {
     let mut tree = DomTree::new();
     let p = element(&mut tree, "p");
     let text = tree.create_text(TextContent::new(
-        "Alloy © 2026 • 100€ & 50£ \u{00A0} trade™",
+        "Alloy © 2026 • 100€ & 50£ \u{00A0} trade™ \"q\" <b>",
     ));
     tree.append_child(tree.document(), p).unwrap();
     tree.append_child(p, text).unwrap();
@@ -107,7 +107,7 @@ fn full_w3c_named_entities_are_escaped_in_text_and_attributes() {
 
     assert_eq!(
         serialize_html(&tree, tree.document()).unwrap(),
-        r#"<p data-symbol="&copy; &amp; &quot;quoted&quot;">Alloy &copy; 2026 &bull; 100&euro; &amp; 50&pound; &nbsp; trade&trade;</p>"#
+        "<p data-symbol=\"© &amp; &quot;quoted&quot;\">Alloy © 2026 • 100€ &amp; 50£ &nbsp; trade™ \"q\" &lt;b&gt;</p>"
     );
 }
 

@@ -21,8 +21,9 @@ pub mod infrastructure;
 ///
 /// `ADR-0011` item 3. Introduced in v0.5 Phase P, recording the surface v0.5
 /// Phase B5 shipped — see `docs/architecture/html-tree-sink-port-contract.md`. `2` = recoverable
-/// diagnostics (#36); `3` = the vocabulary is owned by `html` (#28).
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+/// diagnostics (#36); `3` = the vocabulary is owned by `html` (#28); `4` = `HtmlEntity` becomes
+/// `NamedCharacterReference` over the full WHATWG table (#31).
+pub const PORT_SCHEMA_VERSION: u32 = 4;
 
 pub use application::conformance::run_html_conformance;
 pub use application::ports::{RawKind, ScriptDescriptor, TokenSink, TokenSinkResult, TreeSink};
@@ -30,10 +31,11 @@ pub use domain::attribute::{
     AttributeEntry, AttributeList, AttributeName, AttributeValue, DuplicateAttribute,
 };
 pub use domain::diagnostic::{Diagnostics, ParseDiagnostic, ParseErrorCode};
-pub use domain::entity::HtmlEntity;
 pub use domain::error::{HtmlError, InvalidAttributeName, InvalidTagName};
 pub use domain::handle::NodeHandle;
 pub use domain::location::SourceLocation;
+pub use domain::named_reference::{NamedCharacterReference, ReferenceMatch};
+pub use domain::numeric_reference::{NumericReference, Radix, ResolvedReference};
 pub use domain::tag::TagName;
 pub use domain::text::Text;
 pub use domain::token::{DoctypeToken, TagToken, Token};
@@ -93,6 +95,9 @@ pub const SUPPORTED_SYNTAX: &[&str] = &[
     "&entity; named entity",
     "&#decimal; numeric entity",
     "&#xhex; numeric entity",
+    "&entity named entity without semicolon",
+    "&#128; windows-1252 numeric entity",
+    "attr value &name= stays literal",
     "<script> rawtext",
     "<style> rawtext",
     "p tag omission",

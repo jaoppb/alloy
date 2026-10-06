@@ -39,10 +39,16 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   **Recoverable parse errors (#36, ADR-0023, `html::PORT_SCHEMA_VERSION = 2`)**: malformed input never aborts a parse —
   it yields located `ParseDiagnostic`s via `Token::ParseError` / `TreeSink::parse_error`, and `dom::parse` returns
   `ParseOutcome { tree, diagnostics }`; `HtmlError` is fatal-only.
-  **Vocabulary owned by `html` (#27/#28/#29, ADR-0024, `html::PORT_SCHEMA_VERSION = 3`)**: `TagName`, `AttributeName`
-  (one strict rule; an invalid name is dropped and reported as `invalid-attribute-name`), `AttributeValue` and
-  `HtmlEntity` live in `html`, a leaf crate; the dependency is `dom → html`, `DomTreeSink`/`parse` live in `dom`, and
-  `css`, `rhai-bindings` and `alloy` import the vocabulary from `html` directly (`dom` re-exports none of it).
+  **Vocabulary owned by `html` (#27/#28/#29, ADR-0024, `html::PORT_SCHEMA_VERSION = 3`, then 4 below)**: `TagName`,
+  `AttributeName` (one strict rule; an invalid name is dropped and reported as `invalid-attribute-name`),
+  `AttributeValue` and `HtmlEntity` (renamed `NamedCharacterReference` in #31) live in `html`, a leaf crate; the
+  dependency is `dom → html`, `DomTreeSink`/`parse` live in `dom`, and `css`, `rhai-bindings` and `alloy` import the
+  vocabulary from `html` directly (`dom` re-exports none of it).
+  **Full named character references (#31, `html::PORT_SCHEMA_VERSION = 4`)**: `NamedCharacterReference` is a handle on
+  one generated row of the 2,125-name WHATWG §13.5 table (`domain/named_references.rs`, expansion = 1–2 code points);
+  the tokenizer follows §13.2.5.72–.80 (longest prefix, legacy names without `;`, the attribute-value literal rule,
+  Windows-1252 numeric remap) and `dom` escapes only the §13.3 set. `tests/html5lib_entities.rs` replays html5lib's
+  4,290 character-reference cases (output, codes, locations) with no skip list.
 - **X — `core/graphics`**: PNG decoder (`IHDR`/`IDAT`/`IEND`, RGB/RGBA 8-bit) over `network::inflate`, `DrawImage` on
   `SoftwareCpuBackend`, integer box-sample scaling (ADR-0016 — no floating-point in the geometry). Fuzz targets exist
   (`fuzz/fuzz_targets/{inflate,png_decode}.rs`) but were not run for 10 minutes/target in this session — CI's new `fuzz`
@@ -142,7 +148,7 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/runtime/rhai-bindings` | `rhai-bindings` | Domain-coupled script bridges (DOM/CSS/network/window bindings) split out of `rhai-runtime` (v0.5 "R")                    |
 | `core/js`                    | `js`            | Web-content ECMAScript runtime (untrusted page `<script>`) — distinct from the Rhai muscle engine. **Stub (v0.7+)**       |
 | `core/dom`                   | `dom`           | Node hierarchy, elements, mutations; `DomTreeSink` + `parse` over `html` (depends on `html`, ADR-0024)                    |
-| `core/html`                  | `html`          | HTML vocabulary (`TagName`, `AttributeName`, `HtmlEntity`), HTML5 tokenizer & `TreeSink`/`TokenSink` ports. Leaf crate    |
+| `core/html`                  | `html`          | HTML vocabulary (`TagName`, `AttributeName`, `NamedCharacterReference`), HTML5 tokenizer & `TreeSink`/`TokenSink` ports. Leaf crate    |
 | `core/css`                   | `css`           | Parser, selectors, cascade, box model / inline formatting / Flexbox layout (v0.5 B0–B4)                                   |
 | `core/graphics`              | `graphics`      | `DisplayList`, `RenderBackend` port, `SoftwareCpuBackend`, PNG codec, text rasterization (v0.3–v0.5)                      |
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |

@@ -8,11 +8,12 @@
 
 ## Context and Problem Statement
 
-`TagName`, `AttributeName`, `AttributeValue` and `HtmlEntity` are HTML-standard vocabulary, yet they were defined in
-`core/dom`, and `core/html` carried near-duplicates with diverging validation (`dom` rejected control characters,
-whitespace and `" ' / = >` in attribute names; `html` only rejected empty names). `html` depended on `dom` (optional
-`dom` feature) so it could ship `DomTreeSink` and `parse() -> DomTree`. v0.2 decision 2.1 made `dom` a "zero dependency"
-crate. Issues #27, #28 and #29 ask for one definition, owned by `html`, and for consumers to import it from there.
+`TagName`, `AttributeName`, `AttributeValue` and `HtmlEntity` (since #31: `NamedCharacterReference`) are HTML-standard
+vocabulary, yet they were defined in `core/dom`, and `core/html` carried near-duplicates with diverging validation
+(`dom` rejected control characters, whitespace and `" ' / = >` in attribute names; `html` only rejected empty names).
+`html` depended on `dom` (optional `dom` feature) so it could ship `DomTreeSink` and `parse() -> DomTree`. v0.2 decision
+2.1 made `dom` a "zero dependency" crate. Issues #27, #28 and #29 ask for one definition, owned by `html`, and for
+consumers to import it from there.
 
 ---
 
