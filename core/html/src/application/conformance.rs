@@ -9,6 +9,7 @@ use crate::domain::attribute::{AttributeEntry, AttributeList, AttributeName, Att
 use crate::domain::diagnostic::{ParseDiagnostic, ParseErrorCode};
 use crate::domain::handle::NodeHandle;
 use crate::domain::location::SourceLocation;
+use crate::domain::namespace::Namespace;
 use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 
@@ -18,6 +19,7 @@ use crate::domain::text::Text;
 pub fn run_html_conformance(sink: &mut dyn TreeSink) {
     check_root_is_available(sink);
     check_element_creation_and_append(sink);
+    check_foreign_element_creation_and_append(sink);
     check_text_creation_and_append(sink);
     check_comment_creation_and_append(sink);
     check_append_before_sibling(sink);
@@ -43,11 +45,23 @@ fn check_element_creation_and_append(sink: &mut dyn TreeSink) {
 
     let tag = TagName::new("html").expect("valid tag name");
     let html_node = sink
-        .create_element(tag, &attributes)
+        .create_element(tag, Namespace::Html, &attributes)
         .expect("element creation must succeed");
 
     sink.append_child(root, html_node)
         .expect("appending child to root must succeed");
+}
+
+fn check_foreign_element_creation_and_append(sink: &mut dyn TreeSink) {
+    let root = sink.root_node();
+    let empty_attrs = AttributeList::new();
+    let tag = TagName::new("svg").expect("valid tag name");
+    let svg_node = sink
+        .create_element(tag, Namespace::Svg, &empty_attrs)
+        .expect("svg foreign element creation must succeed");
+
+    sink.append_child(root, svg_node)
+        .expect("appending svg child to root must succeed");
 }
 
 fn check_text_creation_and_append(sink: &mut dyn TreeSink) {
@@ -75,10 +89,10 @@ fn check_append_before_sibling(sink: &mut dyn TreeSink) {
     let tag_div = TagName::new("div").expect("valid tag");
     let empty_attrs = AttributeList::new();
     let first = sink
-        .create_element(tag_div.clone(), &empty_attrs)
+        .create_element(tag_div.clone(), Namespace::Html, &empty_attrs)
         .expect("first child");
     let second = sink
-        .create_element(tag_div, &empty_attrs)
+        .create_element(tag_div, Namespace::Html, &empty_attrs)
         .expect("second child");
 
     sink.append_child(root, second).expect("append second");
@@ -90,7 +104,9 @@ fn check_add_attributes_if_missing(sink: &mut dyn TreeSink) {
     let location = SourceLocation::initial();
     let tag = TagName::new("div").expect("valid tag");
     let empty_attrs = AttributeList::new();
-    let node = sink.create_element(tag, &empty_attrs).expect("element");
+    let node = sink
+        .create_element(tag, Namespace::Html, &empty_attrs)
+        .expect("element");
 
     let mut new_attrs = AttributeList::new();
     let name = AttributeName::new("id").expect("name");
@@ -109,10 +125,18 @@ fn check_add_attributes_if_missing(sink: &mut dyn TreeSink) {
 fn check_remove_and_reparent(sink: &mut dyn TreeSink) {
     let empty_attrs = AttributeList::new();
     let parent_one = sink
-        .create_element(TagName::new("div").expect("valid tag name"), &empty_attrs)
+        .create_element(
+            TagName::new("div").expect("valid tag name"),
+            Namespace::Html,
+            &empty_attrs,
+        )
         .expect("parent1");
     let parent_two = sink
-        .create_element(TagName::new("div").expect("valid tag name"), &empty_attrs)
+        .create_element(
+            TagName::new("div").expect("valid tag name"),
+            Namespace::Html,
+            &empty_attrs,
+        )
         .expect("parent2");
     let child = sink
         .create_text(&Text::new("child text"))
