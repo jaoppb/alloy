@@ -248,6 +248,17 @@ fn matched_declarations<'sheets>(
         .enumerate()
         .flat_map(|(order, (origin, rule))| rule_declarations(order, origin, rule, node, snapshot))
         .collect();
+    if let Some(hints) = sheets.presentational_of(node.id()) {
+        for (position, declaration) in hints.iter().enumerate() {
+            matched.push(MatchedDeclaration {
+                precedence: Origin::Author.cascade_precedence(declaration.importance()),
+                specificity: Specificity::ZERO,
+                order: 0,
+                position,
+                declaration,
+            });
+        }
+    }
     matched.sort_by_key(MatchedDeclaration::sort_key);
     matched
 }
