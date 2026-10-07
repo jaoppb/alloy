@@ -246,3 +246,57 @@ impl fmt::Display for KeyCode {
         write!(formatter, "key#{}", self.0)
     }
 }
+
+/// A logical editing or navigation control key independent of physical layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LogicalKey {
+    Enter,
+    Backspace,
+    Delete,
+    Escape,
+    ArrowLeft,
+    ArrowRight,
+    Home,
+    End,
+}
+
+impl fmt::Display for LogicalKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Enter => "Enter",
+            Self::Backspace => "Backspace",
+            Self::Delete => "Delete",
+            Self::Escape => "Escape",
+            Self::ArrowLeft => "ArrowLeft",
+            Self::ArrowRight => "ArrowRight",
+            Self::Home => "Home",
+            Self::End => "End",
+        };
+        formatter.write_str(name)
+    }
+}
+
+/// The press or release state of a keyboard key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum KeyState {
+    Pressed,
+    Released,
+}
+
+impl KeyState {
+    #[must_use]
+    pub const fn is_pressed(self) -> bool {
+        matches!(self, Self::Pressed)
+    }
+}
+
+impl fmt::Display for KeyState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Pressed => "pressed",
+            Self::Released => "released",
+        };
+        formatter.write_str(name)
+    }
+}

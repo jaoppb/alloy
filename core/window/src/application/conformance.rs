@@ -53,6 +53,59 @@ pub fn run_window_suite(system: &mut dyn WindowSystem, presenter: &mut dyn Prese
     check_pump_events_is_reusable(system);
     check_request_redraw_is_reusable(system);
     check_presenting_is_reusable(presenter, size);
+    check_event_vocabulary_coverage();
+}
+
+/// Asserts that a [`WindowEvent`] can be matched and inspected by standard event
+/// dispatchers, verifying coverage of all current variants including `TextInput`
+/// and `ControlKey`.
+#[must_use]
+pub const fn describes_window_event(event: &WindowEvent) -> &'static str {
+    match event {
+        WindowEvent::Resized(_) => "resized",
+        WindowEvent::CloseRequested => "close_requested",
+        WindowEvent::PointerMoved { .. } => "pointer_moved",
+        WindowEvent::PointerButton { .. } => "pointer_button",
+        WindowEvent::Key { .. } => "key",
+        WindowEvent::TextInput { .. } => "text_input",
+        WindowEvent::ControlKey { .. } => "control_key",
+        WindowEvent::Scroll { .. } => "scroll",
+        WindowEvent::RedrawRequested => "redraw_requested",
+    }
+}
+
+fn check_event_vocabulary_coverage() {
+    let dummy_size = tiny_surface_size();
+    let events = [
+        WindowEvent::Resized(dummy_size),
+        WindowEvent::CloseRequested,
+        WindowEvent::PointerMoved {
+            position: crate::domain::surface::PhysicalPosition::new(0.0, 0.0),
+        },
+        WindowEvent::PointerButton {
+            button: crate::domain::event::PointerButton::Left,
+            pressed: true,
+        },
+        WindowEvent::Key {
+            code: crate::domain::key::KeyCode::UNIDENTIFIED,
+            pressed: true,
+        },
+        WindowEvent::TextInput {
+            text: String::from("a"),
+        },
+        WindowEvent::ControlKey {
+            key: crate::domain::key::LogicalKey::Enter,
+            state: crate::domain::key::KeyState::Pressed,
+        },
+        WindowEvent::Scroll {
+            delta_x: 0.0,
+            delta_y: 0.0,
+        },
+        WindowEvent::RedrawRequested,
+    ];
+    for event in &events {
+        assert!(!describes_window_event(event).is_empty());
+    }
 }
 
 /// A small, easy-to-eyeball surface for the whole suite.
