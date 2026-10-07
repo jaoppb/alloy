@@ -16,8 +16,10 @@
 #![cfg(feature = "winit-system")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
-use window::infrastructure::event_map::map_window_event;
-use window::{PointerButton, SurfaceSize, WindowEvent};
+use window::infrastructure::event_map::{
+    is_valid_text_input, map_key_state, map_logical_key, map_window_event,
+};
+use window::{KeyState, LogicalKey, PointerButton, SurfaceSize, WindowEvent};
 
 #[test]
 fn resized_maps_to_the_same_dimensions() {
@@ -151,4 +153,94 @@ fn variants_not_yet_represented_in_the_domain_vocabulary_map_to_none() {
             "{event:?} is a deliberate, reviewed drop — it must map to None, not panic or map to Some"
         );
     }
+}
+
+#[test]
+fn ime_commit_maps_directly_to_text_input() {
+    let event = winit::event::WindowEvent::Ime(winit::event::Ime::Commit(String::from("Alloy")));
+    let mapped = map_window_event(event).expect("Ime::Commit must map to Some");
+
+    assert_eq!(
+        mapped,
+        WindowEvent::TextInput {
+            text: String::from("Alloy"),
+        }
+    );
+}
+
+#[test]
+fn ime_non_commit_variants_map_to_none() {
+    let dropped_ime = [
+        winit::event::WindowEvent::Ime(winit::event::Ime::Enabled),
+        winit::event::WindowEvent::Ime(winit::event::Ime::Preedit(
+            String::from("composing"),
+            Some((0, 9)),
+        )),
+        winit::event::WindowEvent::Ime(winit::event::Ime::Disabled),
+    ];
+
+    for event in dropped_ime {
+        assert_eq!(
+            map_window_event(event),
+            None,
+            "non-commit IME events must map to None"
+        );
+    }
+}
+
+#[test]
+fn logical_keys_map_accurately() {
+    let test_cases = [
+        (winit::keyboard::NamedKey::Enter, LogicalKey::Enter),
+        (winit::keyboard::NamedKey::Backspace, LogicalKey::Backspace),
+        (winit::keyboard::NamedKey::Delete, LogicalKey::Delete),
+        (winit::keyboard::NamedKey::Escape, LogicalKey::Escape),
+        (winit::keyboard::NamedKey::ArrowLeft, LogicalKey::ArrowLeft),
+        (
+            winit::keyboard::NamedKey::ArrowRight,
+            LogicalKey::ArrowRight,
+        ),
+        (winit::keyboard::NamedKey::Home, LogicalKey::Home),
+        (winit::keyboard::NamedKey::End, LogicalKey::End),
+    ];
+
+    for (named, expected) in test_cases {
+        let key = winit::keyboard::Key::Named(named);
+        assert_eq!(map_logical_key(&key), Some(expected));
+    }
+
+    let unmapped = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Tab);
+    assert_eq!(map_logical_key(&unmapped), None);
+
+    let char_key = winit::keyboard::Key::Character("a".into());
+    assert_eq!(map_logical_key(&char_key), None);
+}
+
+#[test]
+fn key_state_maps_accurately() {
+    assert_eq!(
+        map_key_state(winit::event::ElementState::Pressed),
+        KeyState::Pressed
+    );
+    assert_eq!(
+        map_key_state(winit::event::ElementState::Released),
+        KeyState::Released
+    );
+}
+
+#[test]
+fn text_input_validation_filters_controls_and_empty() {
+    assert!(!is_valid_text_input(""));
+    assert!(!is_valid_text_input("\r"));
+    assert!(!is_valid_text_input("\n"));
+    assert!(!is_valid_text_input("\t"));
+    assert!(!is_valid_text_input("\x08"));
+    assert!(!is_valid_text_input("\x1b"));
+
+    assert!(is_valid_text_input("a"));
+    assert!(is_valid_text_input(" "));
+    assert!(is_valid_text_input("Alloy 123"));
+    assert!(is_valid_text_input("café"));
+    assert!(is_valid_text_input("日本語"));
+    assert!(is_valid_text_input("🦀"));
 }
