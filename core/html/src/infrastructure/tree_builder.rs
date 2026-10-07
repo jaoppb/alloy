@@ -6,12 +6,14 @@ use crate::domain::diagnostic::{ParseDiagnostic, ParseErrorCode};
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
 use crate::domain::location::SourceLocation;
+use crate::domain::namespace::Namespace;
 use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 use crate::domain::token::{DoctypeToken, TagToken, Token};
 
 struct OpenElement {
     tag: TagName,
+    namespace: Namespace,
     handle: NodeHandle,
 }
 
@@ -43,6 +45,12 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         self.sink.parse_error(ParseDiagnostic::new(code, location));
     }
 
+    fn current_namespace(&self) -> Namespace {
+        self.open_elements
+            .last()
+            .map_or(Namespace::Html, |open| open.namespace)
+    }
+
     fn current_parent(&self) -> NodeHandle {
         if let Some(open) = self.open_elements.last() {
             return open.handle;
@@ -63,11 +71,17 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
 
         let empty_attributes = AttributeList::new();
         let tag = TagName::Html;
-        let handle = self.sink.create_element(tag.clone(), &empty_attributes)?;
+        let handle = self
+            .sink
+            .create_element(tag.clone(), Namespace::Html, &empty_attributes)?;
         let root = self.sink.root_node();
         self.sink.append_child(root, handle)?;
         self.html_handle = Some(handle);
-        self.open_elements.push(OpenElement { tag, handle });
+        self.open_elements.push(OpenElement {
+            tag,
+            namespace: Namespace::Html,
+            handle,
+        });
         Ok(handle)
     }
 
@@ -84,10 +98,16 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         let html = self.html_handle.unwrap_or_else(|| self.sink.root_node());
         let empty_attributes = AttributeList::new();
         let tag = TagName::Body;
-        let handle = self.sink.create_element(tag.clone(), &empty_attributes)?;
+        let handle = self
+            .sink
+            .create_element(tag.clone(), Namespace::Html, &empty_attributes)?;
         self.sink.append_child(html, handle)?;
         self.body_handle = Some(handle);
-        self.open_elements.push(OpenElement { tag, handle });
+        self.open_elements.push(OpenElement {
+            tag,
+            namespace: Namespace::Html,
+            handle,
+        });
         Ok(handle)
     }
 
@@ -98,7 +118,45 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         self.in_head = false;
     }
 
+    fn pop_to_html_namespace(&mut self) {
+        while let Some(open) = self.open_elements.last() {
+            if !open.namespace.is_foreign() {
+                break;
+            }
+            self.open_elements.pop();
+        }
+    }
+
+    fn process_foreign_start_tag(
+        &mut self,
+        tag: &TagToken,
+        namespace: Namespace,
+    ) -> Result<TokenSinkResult, HtmlError> {
+        let parent = self.current_parent();
+        let handle =
+            self.sink
+                .create_element(tag.tag_name().clone(), namespace, tag.attributes())?;
+        self.sink.append_child(parent, handle)?;
+
+        if !tag.is_self_closing() {
+            self.open_elements.push(OpenElement {
+                tag: tag.tag_name().clone(),
+                namespace,
+                handle,
+            });
+        }
+        Ok(TokenSinkResult::Continue)
+    }
+
     fn handle_start_tag(&mut self, tag: &TagToken) -> Result<TokenSinkResult, HtmlError> {
+        let current_ns = self.current_namespace();
+        if current_ns.is_foreign() && !is_html_breakout_tag(tag.name()) {
+            return self.process_foreign_start_tag(tag, current_ns);
+        }
+        if current_ns.is_foreign() {
+            self.pop_to_html_namespace();
+        }
+
         let tag_str = tag.name();
         if tag_str == "html" {
             return self.process_html_start_tag(tag);
@@ -125,16 +183,18 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
 
         self.apply_omission_rules(tag.tag_name(), tag.location());
 
+        let namespace = namespace_for_tag(tag_str);
         let parent = self.current_parent();
-        let handle = self
-            .sink
-            .create_element(tag.tag_name().clone(), tag.attributes())?;
+        let handle =
+            self.sink
+                .create_element(tag.tag_name().clone(), namespace, tag.attributes())?;
         self.sink.append_child(parent, handle)?;
 
         let is_void = tag.tag_name().is_void() || tag.is_self_closing();
         if !is_void {
             self.open_elements.push(OpenElement {
                 tag: tag.tag_name().clone(),
+                namespace,
                 handle,
             });
         }
@@ -158,13 +218,14 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             );
         }
         let root = self.sink.root_node();
-        let handle = self
-            .sink
-            .create_element(tag.tag_name().clone(), tag.attributes())?;
+        let handle =
+            self.sink
+                .create_element(tag.tag_name().clone(), Namespace::Html, tag.attributes())?;
         self.sink.append_child(root, handle)?;
         self.html_handle = Some(handle);
         self.open_elements.push(OpenElement {
             tag: tag.tag_name().clone(),
+            namespace: Namespace::Html,
             handle,
         });
         Ok(TokenSinkResult::Continue)
@@ -177,14 +238,15 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             return Ok(TokenSinkResult::Continue);
         }
         let parent = self.current_parent();
-        let handle = self
-            .sink
-            .create_element(tag.tag_name().clone(), tag.attributes())?;
+        let handle =
+            self.sink
+                .create_element(tag.tag_name().clone(), Namespace::Html, tag.attributes())?;
         self.sink.append_child(parent, handle)?;
         self.head_handle = Some(handle);
         self.in_head = true;
         self.open_elements.push(OpenElement {
             tag: tag.tag_name().clone(),
+            namespace: Namespace::Html,
             handle,
         });
         Ok(TokenSinkResult::Continue)
@@ -203,13 +265,14 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             );
         }
         let parent = self.html_handle.unwrap_or_else(|| self.sink.root_node());
-        let handle = self
-            .sink
-            .create_element(tag.tag_name().clone(), tag.attributes())?;
+        let handle =
+            self.sink
+                .create_element(tag.tag_name().clone(), Namespace::Html, tag.attributes())?;
         self.sink.append_child(parent, handle)?;
         self.body_handle = Some(handle);
         self.open_elements.push(OpenElement {
             tag: tag.tag_name().clone(),
+            namespace: Namespace::Html,
             handle,
         });
         Ok(TokenSinkResult::Continue)
@@ -353,4 +416,60 @@ impl<S: TreeSink + ?Sized> TokenSink for TreeBuilder<'_, S> {
         self.open_elements.clear();
         Ok(())
     }
+}
+
+fn namespace_for_tag(name: &str) -> Namespace {
+    match name {
+        "svg" => Namespace::Svg,
+        "math" => Namespace::MathMl,
+        _ => Namespace::Html,
+    }
+}
+
+fn is_html_breakout_tag(name: &str) -> bool {
+    matches!(
+        name,
+        "b" | "big"
+            | "blockquote"
+            | "body"
+            | "br"
+            | "center"
+            | "code"
+            | "dd"
+            | "div"
+            | "dl"
+            | "dt"
+            | "em"
+            | "embed"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "head"
+            | "hr"
+            | "i"
+            | "img"
+            | "li"
+            | "main"
+            | "meta"
+            | "nobr"
+            | "ol"
+            | "p"
+            | "pre"
+            | "ruby"
+            | "s"
+            | "small"
+            | "span"
+            | "strong"
+            | "strike"
+            | "sub"
+            | "sup"
+            | "table"
+            | "tt"
+            | "u"
+            | "ul"
+            | "var"
+    )
 }

@@ -6,6 +6,7 @@ use crate::domain::attribute::AttributeList;
 use crate::domain::diagnostic::ParseDiagnostic;
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
+use crate::domain::namespace::Namespace;
 use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 use crate::domain::token::Token;
@@ -67,10 +68,11 @@ pub trait TokenSink: Send + Sync {
 ///
 /// Implements PRD-008 §3.3 without exposing any foreign concrete types.
 pub trait TreeSink: Send + Sync {
-    /// Create an element node with given tag name and attributes.
+    /// Create an element node with given tag name, namespace, and attributes.
     fn create_element(
         &mut self,
         tag: TagName,
+        namespace: Namespace,
         attributes: &AttributeList,
     ) -> Result<NodeHandle, HtmlError>;
 
@@ -117,9 +119,10 @@ impl<T: TreeSink + ?Sized> TreeSink for &mut T {
     fn create_element(
         &mut self,
         tag: TagName,
+        namespace: Namespace,
         attributes: &AttributeList,
     ) -> Result<NodeHandle, HtmlError> {
-        (**self).create_element(tag, attributes)
+        (**self).create_element(tag, namespace, attributes)
     }
 
     fn create_text(&mut self, text: &Text) -> Result<NodeHandle, HtmlError> {

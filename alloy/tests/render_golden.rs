@@ -113,3 +113,18 @@ fn rendering_html_with_svg_and_unregistered_images_does_not_crash() {
         render_html_to_png(html, &options).expect("render succeeds without ImageUnavailable crash");
     assert!(!bytes.is_empty());
 }
+
+#[test]
+fn inline_svg_renders_byte_identical_to_inline_block_span() {
+    let options = RenderOptions::new(100, 100);
+    let svg_html = "<!DOCTYPE html><html><body><svg width=\"20\" height=\"20\"><text>hello</text></svg></body></html>";
+    let span_html = "<!DOCTYPE html><html><body><span style=\"display:inline-block;width:20px;height:20px\"></span></body></html>";
+
+    let svg_bytes = render_html_to_png(svg_html, &options).expect("svg render succeeds");
+    let span_bytes = render_html_to_png(span_html, &options).expect("span render succeeds");
+
+    assert_eq!(
+        svg_bytes, span_bytes,
+        "<svg width=\"20\" height=\"20\"><text>hello</text></svg> must render byte-identical to inline-block span"
+    );
+}

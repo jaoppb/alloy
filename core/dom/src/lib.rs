@@ -39,4 +39,5 @@ pub use domain::{
     traversal::{Ancestors, Children, Descendants},
     tree::DomTree,
 };
+pub use html::Namespace;
 pub use infrastructure::html_sink::{DomTreeSink, ParseOutcome, parse};

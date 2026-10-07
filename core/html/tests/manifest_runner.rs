@@ -108,7 +108,26 @@ fn elements_named<'events>(
                 id,
                 tag,
                 attributes,
+                ..
             } if tag == name => Some((*id, attributes)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn elements_named_ns<'events>(
+    events: &'events [MockEvent],
+    name: &str,
+) -> Vec<(NodeHandle, html::Namespace, &'events AttributeList)> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateElement {
+                id,
+                tag,
+                namespace,
+                attributes,
+            } if tag == name => Some((*id, *namespace, attributes)),
             _ => None,
         })
         .collect()
@@ -231,6 +250,76 @@ fn test_syntax_rawtext_and_omissions() {
     let items = elements_named(&events, "li");
     assert_eq!(items.len(), 2);
     assert_ne!(parent_of(&events, items[1].0), Some(items[0].0));
+}
+
+#[test]
+fn test_syntax_foreign_content() {
+    // 1. <svg><path/></svg><p>x</p>
+    let events = events_of("<svg><path/></svg><p>x</p>");
+    let svgs = elements_named_ns(&events, "svg");
+    let paths = elements_named_ns(&events, "path");
+    let paragraphs = elements_named_ns(&events, "p");
+
+    assert_eq!(svgs.len(), 1, "svg element created");
+    assert_eq!(svgs[0].1, html::Namespace::Svg, "svg namespace is Svg");
+
+    assert_eq!(paths.len(), 1, "path element created");
+    assert_eq!(paths[0].1, html::Namespace::Svg, "path namespace is Svg");
+    assert_eq!(
+        parent_of(&events, paths[0].0),
+        Some(svgs[0].0),
+        "path is child of svg"
+    );
+
+    assert_eq!(paragraphs.len(), 1, "p element created");
+    assert_eq!(
+        paragraphs[0].1,
+        html::Namespace::Html,
+        "p namespace is Html"
+    );
+    assert_ne!(
+        parent_of(&events, paragraphs[0].0),
+        Some(svgs[0].0),
+        "p must not be child of svg"
+    );
+    assert_eq!(
+        parent_of(&events, paragraphs[0].0),
+        parent_of(&events, svgs[0].0),
+        "p must be sibling of svg"
+    );
+
+    // 2. HTML breakout tag inside svg
+    let events_breakout = events_of("<svg><path><p>x</p></svg>");
+    let paragraphs_breakout = elements_named_ns(&events_breakout, "p");
+    let svgs_breakout = elements_named_ns(&events_breakout, "svg");
+    assert_eq!(paragraphs_breakout.len(), 1);
+    assert_eq!(
+        paragraphs_breakout[0].1,
+        html::Namespace::Html,
+        "breakout p is in Html namespace"
+    );
+    assert_ne!(
+        parent_of(&events_breakout, paragraphs_breakout[0].0),
+        Some(svgs_breakout[0].0),
+        "breakout p is not child of svg"
+    );
+
+    // 3. MathML
+    let events_math = events_of("<math><mi>x</mi></math>");
+    let maths = elements_named_ns(&events_math, "math");
+    let mis = elements_named_ns(&events_math, "mi");
+    assert_eq!(maths.len(), 1);
+    assert_eq!(
+        maths[0].1,
+        html::Namespace::MathMl,
+        "math is in MathMl namespace"
+    );
+    assert_eq!(mis.len(), 1);
+    assert_eq!(
+        mis[0].1,
+        html::Namespace::MathMl,
+        "mi is in MathMl namespace"
+    );
 }
 
 #[test]
