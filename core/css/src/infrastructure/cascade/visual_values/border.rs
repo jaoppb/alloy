@@ -1,7 +1,6 @@
 //! Border longhand parsers: single styles, colors, and radii.
 
-use crate::domain::color::CssColor;
-use crate::domain::computed::visual::BorderStyle;
+use crate::domain::computed::visual::{BorderColor, BorderStyle};
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{parse_color, parse_length};
@@ -15,10 +14,15 @@ pub fn parse_border_style(tokens: &[Token]) -> Option<BorderStyle> {
 }
 
 /// One border colour — any form the canonical colour parser reads, `rgb()` /
-/// `rgba()` included (CSS Backgrounds & Borders L3 §4.1).
+/// `rgba()` included, or `currentcolor` (CSS Backgrounds & Borders L3 §4.1).
 #[must_use]
-pub fn parse_border_color(tokens: &[Token]) -> Option<CssColor> {
-    parse_color(tokens)
+pub fn parse_border_color(tokens: &[Token]) -> Option<BorderColor> {
+    match tokens {
+        [Token::Ident(name)] if name.eq_ignore_ascii_case("currentcolor") => {
+            Some(BorderColor::CurrentColor)
+        }
+        _ => parse_color(tokens).map(BorderColor::Color),
+    }
 }
 
 /// One corner radius: a single length or percentage.

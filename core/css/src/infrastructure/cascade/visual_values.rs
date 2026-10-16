@@ -26,7 +26,8 @@ pub use background::{parse_background_image, parse_background_repeat, parse_back
 pub use background_position::parse_background_position;
 pub use border::{parse_border_color, parse_border_radius_corner, parse_border_style};
 pub use border_shorthand::{
-    parse_border_color_shorthand, parse_border_radius_shorthand, parse_border_style_shorthand,
+    ParsedBorderShorthand, parse_border_color_shorthand, parse_border_radius_shorthand,
+    parse_border_shorthand, parse_border_style_shorthand,
 };
 pub use opacity::parse_opacity;
 pub use shadow::parse_box_shadow;

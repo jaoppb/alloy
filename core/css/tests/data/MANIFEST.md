@@ -43,7 +43,7 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 | `font-size`                  | B1    | inherited; `px` / `em` / `rem` / `%` / `pt`, and the unitless `0`                                                                                                                          |
 | `font-family`                | fonts | inherited; comma list of quoted / bare names and `serif` / `sans-serif` / `monospace` — see the font simplifications below                                                                 |
 | `border-width`               | B4    | the 1–4 component shorthand; `border-style` / `border-color` stay out of the cut                                                                                                           |
-| `border`                     | ddg   | shorthand narrowed to the border **width** (the only geometry); `<line-style>` and colour scanned past; `none` / `0` → no border, no width given → dropped (`medium` is not representable) |
+| `border`                     | ddg   | shorthand setting width, style and colour; omitted style defaults to `none`, omitted colour to `currentColor` (see border simplifications)                                                  |
 | `width`                      | B4    | `Sizing::Auto` or a `Length`; the flow content width when auto                                                                                                                             |
 | `height`                     | B4    | `Sizing::Auto` or a `Length`; a `%` against an indefinite container computes to auto                                                                                                       |
 | `box-sizing`                 | B4    | `content-box` (initial) / `border-box` (CSS Box Sizing L3 §5)                                                                                                                              |
@@ -218,6 +218,16 @@ truncated track list or area map would lay out a different grid, which is worse 
 
 `box-shadow` follows the same rule: more than `BoxShadowList::CAPACITY` (4) shadows is refused with a warning, never
 truncated.
+
+### Border simplifications
+
+The `border-style` keywords `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, and `outset` are parsed and stored
+in the domain model (`core/css/src/domain/computed/visual/border_style.rs`), but are rendered as solid rectangles by the
+software rasterizer (`alloy/src/application/paint.rs`).
+
+| gap                                                               | behaviour instead                   | tracked for |
+| ----------------------------------------------------------------- | ----------------------------------- | ----------- |
+| stroke pattern rasterization (`dashed`, `dotted`, `double`, etc.) | rendered as solid filled rectangles | v0.7        |
 
 ### Custom properties
 
