@@ -236,7 +236,36 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             self.pop_matching_tag("p", ParseErrorCode::ElementClosedImplicitly, location);
         }
         if tag_name.closes_list_item() {
-            self.pop_matching_tag("li", ParseErrorCode::ElementClosedImplicitly, location);
+            self.close_list_item(location);
+        }
+        if tag_name.closes_definition_item() {
+            self.close_definition_item(location);
+        }
+    }
+
+    fn find_scoped_omission_target(&self, is_target: impl Fn(&TagName) -> bool) -> Option<usize> {
+        for (index, element) in self.open_elements.iter().enumerate().rev() {
+            if is_target(&element.tag) {
+                return Some(index);
+            }
+            if element.tag.is_list_item_scope_boundary() {
+                return None;
+            }
+        }
+        None
+    }
+
+    fn close_list_item(&mut self, location: SourceLocation) {
+        let target = self.find_scoped_omission_target(|tag| *tag == TagName::Li);
+        if let Some(position) = target {
+            self.close_through(position, ParseErrorCode::ElementClosedImplicitly, location);
+        }
+    }
+
+    fn close_definition_item(&mut self, location: SourceLocation) {
+        let target = self.find_scoped_omission_target(TagName::closes_definition_item);
+        if let Some(position) = target {
+            self.close_through(position, ParseErrorCode::ElementClosedImplicitly, location);
         }
     }
 

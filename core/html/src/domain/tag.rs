@@ -379,13 +379,97 @@ impl TagName {
         matches!(self, Self::Li)
     }
 
+    /// Checks whether an open `<dd>` or `<dt>` tag should be automatically closed before inserting this tag.
+    #[must_use]
+    pub const fn closes_definition_item(&self) -> bool {
+        matches!(self, Self::Dd | Self::Dt)
+    }
+
+    /// Checks whether this tag belongs to the WHATWG §13.2.4.2 "special" category.
+    #[must_use]
+    pub const fn is_special(&self) -> bool {
+        if self.is_void() {
+            return true;
+        }
+        matches!(
+            self,
+            Self::Html
+                | Self::Head
+                | Self::Title
+                | Self::Style
+                | Self::Body
+                | Self::Article
+                | Self::Section
+                | Self::Nav
+                | Self::Aside
+                | Self::H1
+                | Self::H2
+                | Self::H3
+                | Self::H4
+                | Self::H5
+                | Self::H6
+                | Self::Header
+                | Self::Footer
+                | Self::Address
+                | Self::Main
+                | Self::Hgroup
+                | Self::P
+                | Self::Pre
+                | Self::Blockquote
+                | Self::Ol
+                | Self::Ul
+                | Self::Menu
+                | Self::Li
+                | Self::Dl
+                | Self::Dt
+                | Self::Dd
+                | Self::Figure
+                | Self::Figcaption
+                | Self::Div
+                | Self::Table
+                | Self::Caption
+                | Self::Colgroup
+                | Self::Tbody
+                | Self::Thead
+                | Self::Tfoot
+                | Self::Tr
+                | Self::Td
+                | Self::Th
+                | Self::Form
+                | Self::Button
+                | Self::Select
+                | Self::Textarea
+                | Self::Fieldset
+                | Self::Details
+                | Self::Summary
+                | Self::Dialog
+                | Self::Script
+                | Self::Noscript
+                | Self::Template
+                | Self::Iframe
+        )
+    }
+
+    /// Checks whether this tag acts as a list-item scope boundary (WHATWG §13.2.6.4.7: any
+    /// element in the "special" category other than `address`, `div`, or `p`).
+    #[must_use]
+    pub const fn is_list_item_scope_boundary(&self) -> bool {
+        if matches!(self, Self::Address | Self::Div | Self::P) {
+            return false;
+        }
+        self.is_special()
+    }
+
     /// Checks whether an end tag may close over this open element without a parse error.
     ///
     /// The "generate implied end tags" set restricted to the elements this builder models (WHATWG
     /// §13.2.6.3), plus `body`/`html`, which the spec also lets an end tag close over.
     #[must_use]
     pub const fn is_implied_end_tag(&self) -> bool {
-        matches!(self, Self::P | Self::Li | Self::Body | Self::Html)
+        matches!(
+            self,
+            Self::P | Self::Li | Self::Dd | Self::Dt | Self::Body | Self::Html
+        )
     }
 
     /// Checks whether this is one of the heading tags (`h1` through `h6`).
@@ -595,6 +679,14 @@ mod tests {
     }
 
     #[test]
+    fn closes_definition_item_matches_dd_and_dt() {
+        assert!(tag("dd").closes_definition_item());
+        assert!(tag("dt").closes_definition_item());
+        assert!(!tag("dl").closes_definition_item());
+        assert!(!tag("li").closes_definition_item());
+    }
+
+    #[test]
     fn headings_are_h1_through_h6() {
         for name in ["h1", "h2", "h3", "h4", "h5", "h6"] {
             assert!(tag(name).is_heading());
@@ -603,11 +695,27 @@ mod tests {
     }
 
     #[test]
-    fn only_p_li_body_and_html_are_implied_end_tags() {
-        for name in ["p", "li", "body", "html"] {
+    fn implied_end_tags_match_spec_subset() {
+        for name in ["p", "li", "dd", "dt", "body", "html"] {
             assert!(tag(name).is_implied_end_tag(), "{name}");
         }
         assert!(!tag("span").is_implied_end_tag());
+    }
+
+    #[test]
+    fn list_item_scope_boundary_respects_spec_rules() {
+        for name in ["ul", "ol", "dl", "body", "html", "table", "section"] {
+            assert!(
+                tag(name).is_list_item_scope_boundary(),
+                "{name} must be a scope boundary"
+            );
+        }
+        for name in ["address", "div", "p", "span", "a", "strong"] {
+            assert!(
+                !tag(name).is_list_item_scope_boundary(),
+                "{name} must not be a scope boundary"
+            );
+        }
     }
 
     #[test]
