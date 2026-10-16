@@ -12,6 +12,8 @@
 //! `<link rel=stylesheet>` is a subresource and belongs to the network phase
 //! (`relatório §2.11`); this function is the seam it will hand its bytes to.
 
+use core::fmt::Write;
+
 use crate::domain::declaration::DeclarationBlock;
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotNodeKind};
 use crate::domain::error::CssError;
@@ -39,8 +41,45 @@ fn collect_from_node(
     let Some(node) = snapshot.node(id) else {
         return Ok(());
     };
+    collect_presentational_hints(node, sheets)?;
     collect_inline_block(node, sheets)?;
     collect_style_element(snapshot, node, sheets)
+}
+
+/// Element presentational hints mapped to author declarations (CSS Cascade L4 §4.2, HTML §15.3.7).
+fn collect_presentational_hints(
+    node: NodeRef<'_>,
+    sheets: &mut StyleSheetSet,
+) -> Result<(), CssError> {
+    if node.tag() != Some(&html::TagName::Svg) {
+        return Ok(());
+    }
+    let mut declarations = String::new();
+    append_hint_dimension(node.attribute("width"), "width", &mut declarations);
+    append_hint_dimension(node.attribute("height"), "height", &mut declarations);
+    if declarations.is_empty() {
+        return Ok(());
+    }
+    let block = parse_inline_style_recording(&declarations, sheets)?;
+    if !block.is_empty() {
+        sheets.push_presentational_hint(node.id(), block);
+    }
+    Ok(())
+}
+
+fn append_hint_dimension(value: Option<&str>, property: &str, target: &mut String) {
+    let Some(raw) = value else {
+        return;
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    if trimmed.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        let _ = write!(target, "{property}: {trimmed}px; ");
+        return;
+    }
+    let _ = write!(target, "{property}: {trimmed}; ");
 }
 
 /// One element's `style=` attribute.

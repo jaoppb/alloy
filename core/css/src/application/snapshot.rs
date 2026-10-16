@@ -70,9 +70,12 @@ fn add_node(
     parent: Option<SnapshotId>,
 ) -> SnapshotId {
     match tree.node_kind(dom_node) {
-        Ok(dom::NodeKind::Element(element)) => {
-            builder.add_element(parent, element.tag().clone(), collect_attributes(element))
-        }
+        Ok(dom::NodeKind::Element(element)) => builder.add_element(
+            parent,
+            element.tag().clone(),
+            element.namespace(),
+            collect_attributes(element),
+        ),
         Ok(dom::NodeKind::Text(content)) => {
             builder.add_character_data(SnapshotNodeKind::Text, parent, content.as_str().to_owned())
         }

@@ -33,6 +33,7 @@ pub struct StyledNode {
     style: ComputedStyle,
     text: Option<TextRun>,
     intrinsic_size: IntrinsicSize,
+    is_foreign_descendant: bool,
 }
 
 impl StyledNode {
@@ -51,6 +52,12 @@ impl StyledNode {
     #[must_use]
     pub const fn intrinsic_size(&self) -> IntrinsicSize {
         self.intrinsic_size
+    }
+
+    /// Whether this node sits inside foreign content (<svg>, <math>).
+    #[must_use]
+    pub const fn is_foreign_descendant(&self) -> bool {
+        self.is_foreign_descendant
     }
 
     #[must_use]
@@ -127,6 +134,7 @@ impl StyledTree {
                 style,
                 text: character_data_of(node_ref),
                 intrinsic_size: intrinsic::for_tag(node_ref.tag()),
+                is_foreign_descendant: node_ref.is_foreign_descendant(),
             });
         }
         Self {
@@ -149,6 +157,9 @@ impl StyledTree {
 /// states that are not buttons get no synthesized text.
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
     if node_ref.kind() == SnapshotNodeKind::Text {
+        if node_ref.is_foreign_descendant() {
+            return None;
+        }
         return node_ref.text().map(TextRun::new);
     }
     synthesized_input_text(node_ref)

@@ -9,7 +9,7 @@
 //! Traversal ([`DomTree::descendants`], [`DomTree::ancestors`]) and
 //! serialization ([`crate::serialize_html`]) are read-only and never recurse.
 
-use html::{AttributeName, AttributeValue, TagName};
+use html::{AttributeName, AttributeValue, Namespace, TagName};
 
 use crate::domain::error::DomError;
 use crate::domain::node::{ElementData, NodeData, NodeId, NodeKind, Slot};
@@ -50,7 +50,13 @@ impl DomTree {
     // ---- creation (nodes start detached) -------------------------------
 
     pub fn create_element(&mut self, tag: TagName) -> NodeId {
-        self.push_node(NodeData::new(NodeKind::Element(ElementData::new(tag))))
+        self.create_element_ns(tag, Namespace::Html)
+    }
+
+    pub fn create_element_ns(&mut self, tag: TagName, namespace: Namespace) -> NodeId {
+        self.push_node(NodeData::new(NodeKind::Element(ElementData::new(
+            tag, namespace,
+        ))))
     }
 
     pub fn create_text(&mut self, content: TextContent) -> NodeId {
@@ -162,6 +168,17 @@ impl DomTree {
             NodeKind::Element(element) => Ok(element.tag()),
             _ => Err(DomError::NotAnElement(node)),
         }
+    }
+
+    pub fn namespace(&self, node: NodeId) -> Result<Namespace, DomError> {
+        match self.node(node)?.kind() {
+            NodeKind::Element(element) => Ok(element.namespace()),
+            _ => Err(DomError::NotAnElement(node)),
+        }
+    }
+
+    pub fn is_foreign(&self, node: NodeId) -> Result<bool, DomError> {
+        self.namespace(node).map(Namespace::is_foreign)
     }
 
     pub fn attribute(

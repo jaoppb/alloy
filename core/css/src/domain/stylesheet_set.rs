@@ -188,6 +188,7 @@ impl InlineStyles {
 #[non_exhaustive]
 pub struct StyleSheetSet {
     rules: Vec<OriginRule>,
+    presentational: InlineStyles,
     inline: InlineStyles,
     notes: ParseNotes,
 }
@@ -198,6 +199,7 @@ impl StyleSheetSet {
     pub const fn new() -> Self {
         Self {
             rules: Vec::new(),
+            presentational: InlineStyles::new(),
             inline: InlineStyles::new(),
             notes: ParseNotes::new(),
         }
@@ -206,6 +208,11 @@ impl StyleSheetSet {
     /// Appends a rule for `origin`.
     pub fn push_rule(&mut self, origin: Origin, rule: StyleRule) {
         self.rules.push(OriginRule { origin, rule });
+    }
+
+    /// Records the presentational hint block of one element.
+    pub fn push_presentational_hint(&mut self, node: SnapshotId, block: DeclarationBlock) {
+        self.presentational.push(node, block);
     }
 
     /// Records the `style=` block of one element.
@@ -223,6 +230,9 @@ impl StyleSheetSet {
     /// set.
     pub fn absorb(&mut self, other: Self) {
         self.rules.extend(other.rules);
+        for (node, block) in other.presentational.iter() {
+            self.presentational.push(node, block.clone());
+        }
         for (node, block) in other.inline.iter() {
             self.inline.push(node, block.clone());
         }
@@ -231,6 +241,17 @@ impl StyleSheetSet {
 
     pub fn rules(&self) -> impl Iterator<Item = (Origin, &StyleRule)> + '_ {
         self.rules.iter().map(|entry| (entry.origin, &entry.rule))
+    }
+
+    /// The presentational hint block of `node`, or `None`.
+    #[must_use]
+    pub fn presentational_of(&self, node: SnapshotId) -> Option<&DeclarationBlock> {
+        self.presentational.get(node)
+    }
+
+    #[must_use]
+    pub const fn presentational(&self) -> &InlineStyles {
+        &self.presentational
     }
 
     /// The `style=` block of `node`, or `None`.
@@ -265,6 +286,7 @@ impl StyleSheetSet {
             .map(unconditional);
         Self {
             rules: rules.collect(),
+            presentational: self.presentational.clone(),
             inline: self.inline.clone(),
             notes: self.notes.clone(),
         }

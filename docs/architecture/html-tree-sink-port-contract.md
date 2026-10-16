@@ -7,11 +7,11 @@ its contract record: the state of all seven mandatory items as of v0.5 B5.
 | ---- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-008` (variation model §1; threat model §2.3: network input is hostile by definition, a parser panic is a denial of service)                                                                                                                                              |
 | 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ `TokenSink` and `TreeSink` are object-safe traits speaking only domain value objects (`NodeHandle`, `TagName`, `Text`, `AttributeList`). Zero foreign adapter types leak through the boundary. See §2 below                                                                   |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `Token`, `AttributeList`/`AttributeEntry`, `TagName`, `Text`, `NodeHandle`, `SourceLocation`, `HtmlError` domain-owned in `core/html`, `#[non_exhaustive]`; `html::PORT_SCHEMA_VERSION = 4` (see §3; `2` = recoverable diagnostics #36, `3` = vocabulary owned by `html` #28, `4` = full named character reference table #31) |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `Token`, `AttributeList`/`AttributeEntry`, `TagName`, `Text`, `NodeHandle`, `SourceLocation`, `HtmlError`, `Namespace` domain-owned in `core/html`, `#[non_exhaustive]`; `html::PORT_SCHEMA_VERSION = 5` (see §3; `2` = recoverable diagnostics #36, `3` = vocabulary owned by `html` #28, `4` = full named character reference table #31, `5` = foreign content namespaces #86) |
 | 4    | Exactly one typed error, source location                                  | ✅ `HtmlError` is a single typed error enum carrying `SourceLocation` (`line`, `column`, `byte_offset`) on all syntax and parsing variants; derives `thiserror::Error` (ADR-0015). See §4                                                                                        |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ Written in §5 below; includes streaming tokenizer re-entrancy and suspension protocol for `<script>` and `document.write`                                                                                                                                                     |
 | 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `run_html_conformance` conformance suite; `DomTreeSink` (real, in `core/dom`) and `MockTreeSink` (reference mock) both pass; `core/html` has no `dom` dependency, enforced by `arch-lint`. See §6                                                                             |
-| 7    | Frozen-API milestone                                                      | 🟡 Working surface at `html::PORT_SCHEMA_VERSION = 4`; freezes at integration point `I4`                                                                                                                                                                                         |
+| 7    | Frozen-API milestone                                                      | 🟡 Working surface at `html::PORT_SCHEMA_VERSION = 5`; freezes at integration point `I4`                                                                                                                                                                                         |
 
 ---
 
@@ -21,7 +21,8 @@ Neither trait requires a `dyn`-dispatch companion because both are object-safe:
 
 - `TokenSink::process_token(&mut self, token: Token) -> Result<TokenSinkResult, HtmlError>`
 - `TokenSink::finish(&mut self) -> Result<(), HtmlError>`
-- `TreeSink::create_element(&mut self, tag: TagName, attributes: &AttributeList) -> Result<NodeHandle, HtmlError>`
+- `TreeSink::create_element(&mut self, tag: TagName, namespace: Namespace, attributes: &AttributeList)`
+  `-> Result<NodeHandle, HtmlError>`
 - `TreeSink::create_text(&mut self, text: &Text) -> Result<NodeHandle, HtmlError>`
 - `TreeSink::create_comment(&mut self, text: &Text) -> Result<NodeHandle, HtmlError>`
 - `TreeSink::append_child(&mut self, parent: NodeHandle, child: NodeHandle) -> Result<(), HtmlError>`
@@ -44,6 +45,7 @@ Boundary types are domain-owned in `core/html` and marked `#[non_exhaustive]`:
 
 - `NodeHandle`: canonical opaque handle wrapping a `u32` identifier (`NodeHandle::root()` = 0).
 - `TagName`: validated, normalized lowercase tag identifier.
+- `Namespace`: domain enum (`Html`, `Svg`, `MathMl`) for foreign content element namespaces.
 - `Text`: newtype wrapping character slice and text payload.
 - `AttributeList`, `AttributeEntry`, `AttributeName`, `AttributeValue`: first-class collections preventing naked
   primitives and abbreviation anti-patterns.
@@ -58,7 +60,7 @@ Boundary types are domain-owned in `core/html` and marked `#[non_exhaustive]`:
 - `PORT_SCHEMA_VERSION`:
 
 ```rust
-pub const PORT_SCHEMA_VERSION: u32 = 4; // 1 = B5 surface; 2 = recoverable diagnostics (#36); 3 = vocabulary owned by html (#28); 4 = full named character references (#31)
+pub const PORT_SCHEMA_VERSION: u32 = 5; // 1 = B5 surface; 2 = recoverable diagnostics (#36); 3 = vocabulary owned by html (#28); 4 = full named character references (#31); 5 = foreign content namespaces (#86)
 ```
 
 ---

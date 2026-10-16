@@ -7,7 +7,7 @@
 
 use core::fmt;
 
-use html::TagName;
+use html::{Namespace, TagName};
 
 use crate::domain::attributes::AttributeMap;
 use crate::domain::text::{CommentContent, TextContent};
@@ -45,17 +45,19 @@ impl fmt::Display for NodeId {
     }
 }
 
-/// An element's own data: its tag and its sorted attributes.
+/// An element's own data: its tag, namespace and its sorted attributes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ElementData {
     tag: TagName,
+    namespace: Namespace,
     attributes: AttributeMap,
 }
 
 impl ElementData {
-    pub(crate) const fn new(tag: TagName) -> Self {
+    pub(crate) const fn new(tag: TagName, namespace: Namespace) -> Self {
         Self {
             tag,
+            namespace,
             attributes: AttributeMap::new(),
         }
     }
@@ -63,6 +65,16 @@ impl ElementData {
     #[must_use]
     pub const fn tag(&self) -> &TagName {
         &self.tag
+    }
+
+    #[must_use]
+    pub const fn namespace(&self) -> Namespace {
+        self.namespace
+    }
+
+    #[must_use]
+    pub const fn is_foreign(&self) -> bool {
+        self.namespace.is_foreign()
     }
 
     #[must_use]

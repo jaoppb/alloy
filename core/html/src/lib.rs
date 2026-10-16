@@ -22,8 +22,9 @@ pub mod infrastructure;
 /// `ADR-0011` item 3. Introduced in v0.5 Phase P, recording the surface v0.5
 /// Phase B5 shipped — see `docs/architecture/html-tree-sink-port-contract.md`. `2` = recoverable
 /// diagnostics (#36); `3` = the vocabulary is owned by `html` (#28); `4` = `HtmlEntity` becomes
-/// `NamedCharacterReference` over the full WHATWG table (#31).
-pub const PORT_SCHEMA_VERSION: u32 = 4;
+/// `NamedCharacterReference` over the full WHATWG table (#31); `5` = foreign content
+/// and `Namespace` support (#86).
+pub const PORT_SCHEMA_VERSION: u32 = 5;
 
 pub use application::conformance::run_html_conformance;
 pub use application::ports::{RawKind, ScriptDescriptor, TokenSink, TokenSinkResult, TreeSink};
@@ -35,6 +36,7 @@ pub use domain::error::{HtmlError, InvalidAttributeName, InvalidTagName};
 pub use domain::handle::NodeHandle;
 pub use domain::location::SourceLocation;
 pub use domain::named_reference::{NamedCharacterReference, ReferenceMatch};
+pub use domain::namespace::Namespace;
 pub use domain::numeric_reference::{NumericReference, Radix, ResolvedReference};
 pub use domain::tag::TagName;
 pub use domain::text::Text;
@@ -103,6 +105,7 @@ pub const SUPPORTED_SYNTAX: &[&str] = &[
     "p tag omission",
     "li tag omission",
     "void tags auto-close",
+    "foreign content",
 ];
 
 /// Declared parse-error codes the tokenizer and tree builder report, verified by the manifest.

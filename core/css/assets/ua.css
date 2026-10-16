@@ -147,6 +147,7 @@ center {
 input,
 button,
 select,
-textarea {
+textarea,
+svg {
 	display: inline-block;
 }

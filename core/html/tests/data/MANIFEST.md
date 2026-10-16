@@ -83,6 +83,7 @@ Syntactic constructs handled by the HTML5 tokenizer state machine and tree build
 | `p tag omission`            | B5    | open `<p>` is implicitly closed before opening another `<p>` or block element |
 | `li tag omission`           | B5    | open `<li>` is implicitly closed before opening another `<li>`                |
 | `void tags auto-close`      | B5    | void tags do not trap subsequent elements as children                         |
+| `foreign content`           | #86   | foreign content elements (`<svg>`, `<math>`) and children retain their namespace; HTML elements break out to HTML namespace |
 
 ## Parse errors
 

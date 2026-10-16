@@ -203,6 +203,9 @@ fn collect<M: TextMeasurer>(
     run: &mut Run,
 ) -> Result<(), CssError> {
     let styled = context.node(node_id)?;
+    if styled.is_foreign_descendant() {
+        return Ok(());
+    }
     let style = styled.style();
     let display = style.display();
     if display.is_none() {

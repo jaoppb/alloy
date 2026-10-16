@@ -1,8 +1,8 @@
 //! Default adapter implementing [`html::TreeSink`] over [`DomTree`], and [`parse`].
 
 use html::{
-    AttributeEntry, AttributeList, Diagnostics, HtmlError, NodeHandle, ParseDiagnostic, TagName,
-    Text, TreeSink,
+    AttributeEntry, AttributeList, Diagnostics, HtmlError, Namespace, NodeHandle, ParseDiagnostic,
+    TagName, Text, TreeSink,
 };
 
 use crate::domain::error::DomError;
@@ -136,9 +136,10 @@ impl TreeSink for DomTreeSink {
     fn create_element(
         &mut self,
         tag: TagName,
+        namespace: Namespace,
         attributes: &AttributeList,
     ) -> Result<NodeHandle, HtmlError> {
-        let node = self.tree.create_element(tag);
+        let node = self.tree.create_element_ns(tag, namespace);
 
         for entry in attributes {
             self.attach_attribute(node, entry)?;

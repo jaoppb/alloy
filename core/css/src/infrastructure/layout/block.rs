@@ -114,6 +114,9 @@ fn generates_box<M: TextMeasurer>(context: &LayoutContext<'_, M>, node: Snapshot
     let Ok(styled) = context.node(node) else {
         return false;
     };
+    if styled.is_foreign_descendant() {
+        return false;
+    }
     !display_of(styled).is_none()
 }
 
@@ -172,9 +175,21 @@ pub(crate) fn layout_inline_block<M: TextMeasurer>(
     node_id: SnapshotId,
     input: BlockInput,
 ) -> Result<BlockResult, CssError> {
-    let style = context.node(node_id)?.style();
+    let node = context.node(node_id)?;
+    let style = node.style();
     if style.width() != Sizing::Auto {
         return layout_box(context, node_id, input);
+    }
+    if node.intrinsic_size().is_pending() {
+        let fallback_width = input
+            .forced_content_width()
+            .or_else(|| Au::from_whole_px(300))
+            .unwrap_or(Au::ZERO);
+        return layout_box(
+            context,
+            node_id,
+            input.with_forced_content_width(fallback_width),
+        );
     }
     let available = available_content_width(style, input)?;
     let Some(fitted) = context.remembered_fit(node_id, available) else {
@@ -391,6 +406,7 @@ fn assemble<M: TextMeasurer>(
         children.trailing_margin(),
     );
     let content_height = used_content_height(
+        node,
         &children,
         metrics,
         input,
@@ -460,13 +476,20 @@ const fn bottom_arrangement(
 /// A forced height (a flex item) wins over a declared one, which wins over the
 /// height the children produced.
 fn used_content_height(
+    node: &StyledNode,
     children: &ContentFlow,
     metrics: BoxMetrics,
     input: BlockInput,
     escaping: Au,
 ) -> Au {
     let declared = definite_content_height(metrics, input);
-    declared.unwrap_or_else(|| children.height().saturating_add(escaping))
+    if let Some(height) = declared {
+        return height;
+    }
+    if node.intrinsic_size().is_pending() {
+        return Au::from_whole_px(150).unwrap_or(Au::ZERO);
+    }
+    children.height().saturating_add(escaping)
 }
 
 /// Whether this box's own top and bottom margins end up adjoining: nothing of
@@ -581,6 +604,9 @@ fn layout_content<M: TextMeasurer>(
     font_size: Au,
     input: BlockInput,
 ) -> Result<ContentFlow, CssError> {
+    if node.intrinsic_size().is_pending() {
+        return Ok(ContentFlow::empty());
+    }
     if display_of(node) == Display::Flex {
         return flex::layout(context, node, inner, font_size, input);
     }

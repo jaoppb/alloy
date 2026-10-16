@@ -13,7 +13,7 @@ use core::fmt;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
-use html::TagName;
+use html::{Namespace, TagName};
 
 use crate::domain::error::CssError;
 
@@ -234,10 +234,11 @@ impl AttributeList {
     }
 }
 
-/// An element's own facts: its tag and its attributes.
+/// An element's own facts: its tag, namespace and its attributes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ElementFacts {
     tag: TagName,
+    namespace: Namespace,
     attributes: AttributeList,
 }
 
@@ -324,6 +325,34 @@ impl<'snapshot> NodeRef<'snapshot> {
         self.element().map(|element| element.tag.as_str())
     }
 
+    /// The element's namespace, or `None` for a non-element.
+    #[must_use]
+    pub fn namespace(self) -> Option<Namespace> {
+        self.element().map(|element| element.namespace)
+    }
+
+    /// Whether this element is in a foreign namespace (<svg>, <math>).
+    #[must_use]
+    pub fn is_foreign(self) -> bool {
+        self.namespace().is_some_and(Namespace::is_foreign)
+    }
+
+    /// Whether this node is inside a foreign content container (<svg>, <math>).
+    #[must_use]
+    pub fn is_foreign_descendant(self) -> bool {
+        let mut current = self.parent();
+        while let Some(parent_id) = current {
+            let Some(parent_ref) = self.snapshot.node(parent_id) else {
+                return false;
+            };
+            if parent_ref.is_foreign() {
+                return true;
+            }
+            current = parent_ref.parent();
+        }
+        false
+    }
+
     /// The value of attribute `name`, or `None`.
     #[must_use]
     pub fn attribute(self, name: &str) -> Option<&'snapshot str> {
@@ -383,9 +412,14 @@ impl SnapshotBuilder {
         &mut self,
         parent: Option<SnapshotId>,
         tag: TagName,
+        namespace: Namespace,
         attributes: AttributeList,
     ) -> SnapshotId {
-        let facts = ElementFacts { tag, attributes };
+        let facts = ElementFacts {
+            tag,
+            namespace,
+            attributes,
+        };
         self.add(SnapshotNodeKind::Element, parent, Some(facts), None)
     }
 

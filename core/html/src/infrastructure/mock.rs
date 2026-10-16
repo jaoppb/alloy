@@ -7,6 +7,7 @@ use crate::domain::diagnostic::ParseErrorCode;
 use crate::domain::error::HtmlError;
 use crate::domain::handle::NodeHandle;
 use crate::domain::location::SourceLocation;
+use crate::domain::namespace::Namespace;
 use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 
@@ -19,6 +20,8 @@ pub enum MockEvent {
         id: NodeHandle,
         /// Element tag name.
         tag: String,
+        /// Element namespace.
+        namespace: Namespace,
         /// The attributes attached.
         attributes: AttributeList,
     },
@@ -138,12 +141,14 @@ impl TreeSink for MockTreeSink {
     fn create_element(
         &mut self,
         tag: TagName,
+        namespace: Namespace,
         attributes: &AttributeList,
     ) -> Result<NodeHandle, HtmlError> {
         let handle = self.allocate_handle();
         self.events.push(MockEvent::CreateElement {
             id: handle,
             tag: tag.as_str().to_owned(),
+            namespace,
             attributes: attributes.clone(),
         });
         Ok(handle)
