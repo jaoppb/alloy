@@ -161,7 +161,10 @@ impl ApplicationHandler for Handler {
             return;
         };
         match event_loop.create_window(attributes) {
-            Ok(window) => self.window = Some(Arc::new(window)),
+            Ok(window) => {
+                window.set_ime_allowed(true);
+                self.window = Some(Arc::new(window));
+            }
             Err(error) => {
                 self.creation_error = Some(WindowError::creation_failed(error.to_string()));
             }

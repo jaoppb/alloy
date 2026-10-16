@@ -75,7 +75,10 @@ pub mod infrastructure;
 /// `1 -> 2`: `WindowSystem` gained `request_redraw` — the event loop needs an
 /// explicit repaint signal so a Wayland compositor that dropped the first
 /// present still gets the frame, and so expose/occlusion redraws are served.
-pub const PORT_SCHEMA_VERSION: u32 = 2;
+///
+/// `2 -> 3`: Added `WindowEvent::TextInput` and `WindowEvent::ControlKey`
+/// to capture typed characters and logical editing keys for the omnibox (issue #44).
+pub const PORT_SCHEMA_VERSION: u32 = 3;
 
 pub use application::conformance;
 pub use application::{Presenter, PumpStatus, WindowSystem};
@@ -83,7 +86,7 @@ pub use domain::attributes::{WindowAttributes, WindowId, WindowTitle};
 pub use domain::error::{WindowError, WindowOperation};
 pub use domain::event::{PointerButton, WindowEvent};
 pub use domain::frame::FrameView;
-pub use domain::key::KeyCode;
+pub use domain::key::{KeyCode, KeyState, LogicalKey};
 pub use domain::surface::{PhysicalPosition, ScaleFactor, SurfaceSize};
 pub use infrastructure::{HeadlessWindowSystem, RecordingPresenter};
 

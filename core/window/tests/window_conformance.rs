@@ -7,8 +7,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use window::{
-    HeadlessWindowSystem, Presenter as _, RecordingPresenter, SurfaceSize, WindowAttributes,
-    WindowError, WindowEvent, WindowSystem as _,
+    HeadlessWindowSystem, KeyState, LogicalKey, Presenter as _, RecordingPresenter, SurfaceSize,
+    WindowAttributes, WindowError, WindowEvent, WindowSystem as _,
 };
 
 #[test]
@@ -47,6 +47,13 @@ fn scheduled_events_are_delivered_in_order_after_the_automatic_resize() {
         .create_window(&attrs)
         .expect("create_window succeeds");
     system.schedule(WindowEvent::RedrawRequested);
+    system.schedule(WindowEvent::TextInput {
+        text: String::from("https://alloy.engine"),
+    });
+    system.schedule(WindowEvent::ControlKey {
+        key: LogicalKey::Enter,
+        state: KeyState::Pressed,
+    });
     system.schedule(WindowEvent::CloseRequested);
 
     let mut observed = Vec::new();
@@ -58,10 +65,48 @@ fn scheduled_events_are_delivered_in_order_after_the_automatic_resize() {
         [
             WindowEvent::Resized(_),
             WindowEvent::RedrawRequested,
+            WindowEvent::TextInput { .. },
+            WindowEvent::ControlKey { .. },
             WindowEvent::CloseRequested,
         ]
     ));
     assert_eq!(status, window::PumpStatus::Exit);
+}
+
+#[test]
+fn scheduled_text_input_and_control_keys_preserve_payload() {
+    let size = SurfaceSize::new(4, 4).expect("4x4 is valid");
+    let attrs = WindowAttributes::new("probe", size);
+    let mut system = HeadlessWindowSystem::new();
+    system
+        .create_window(&attrs)
+        .expect("create_window succeeds");
+
+    system.schedule(WindowEvent::TextInput {
+        text: String::from("hello"),
+    });
+    system.schedule(WindowEvent::ControlKey {
+        key: LogicalKey::Backspace,
+        state: KeyState::Released,
+    });
+
+    let mut observed = Vec::new();
+    let mut sink = |event: WindowEvent| observed.push(event);
+    let _ = system.pump_events(&mut sink).expect("pump_events succeeds");
+
+    assert_eq!(
+        observed[1],
+        WindowEvent::TextInput {
+            text: String::from("hello"),
+        }
+    );
+    assert_eq!(
+        observed[2],
+        WindowEvent::ControlKey {
+            key: LogicalKey::Backspace,
+            state: KeyState::Released,
+        }
+    );
 }
 
 #[test]

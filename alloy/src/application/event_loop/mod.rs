@@ -194,7 +194,7 @@ where
     D: SubresourceDiscoverer,
 {
     let mut events = PumpEvents::starting_at(session.pointer_position());
-    let window_status = system.pump_events(&mut |event| events.observe(event))?;
+    let window_status = system.pump_events(&mut |event| events.observe(&event))?;
     session.track_pointer(events.pointer_position);
 
     if let Some(viewport) = events.latest_resize {
@@ -244,13 +244,13 @@ impl PumpEvents {
         }
     }
 
-    fn observe(&mut self, event: WindowEvent) {
+    fn observe(&mut self, event: &WindowEvent) {
         self.saw_window_event = true;
         match event {
             WindowEvent::CloseRequested => self.close_requested = true,
-            WindowEvent::Resized(viewport) => self.latest_resize = Some(viewport),
+            WindowEvent::Resized(viewport) => self.latest_resize = Some(*viewport),
             WindowEvent::RedrawRequested => self.needs_repaint = true,
-            WindowEvent::PointerMoved { position } => self.pointer_position = Some(position),
+            WindowEvent::PointerMoved { position } => self.pointer_position = Some(*position),
             WindowEvent::PointerButton {
                 button: PointerButton::Left,
                 pressed: true,

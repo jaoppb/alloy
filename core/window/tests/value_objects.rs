@@ -5,8 +5,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
 use window::{
-    FrameView, KeyCode, PhysicalPosition, PointerButton, ScaleFactor, SurfaceSize,
-    WindowAttributes, WindowError, WindowEvent, WindowId, WindowOperation, WindowTitle,
+    FrameView, KeyCode, KeyState, LogicalKey, PhysicalPosition, PointerButton, ScaleFactor,
+    SurfaceSize, WindowAttributes, WindowError, WindowEvent, WindowId, WindowOperation,
+    WindowTitle,
 };
 
 // ---- SurfaceSize ----
@@ -167,6 +168,58 @@ fn a_resized_event_carries_the_reported_size() {
         panic!("expected Resized");
     };
     assert_eq!(reported, size);
+}
+
+#[test]
+fn distinct_logical_keys_are_not_equal() {
+    assert_ne!(LogicalKey::Enter, LogicalKey::Escape);
+    assert_ne!(LogicalKey::ArrowLeft, LogicalKey::ArrowRight);
+    assert_ne!(LogicalKey::Backspace, LogicalKey::Delete);
+    assert_ne!(LogicalKey::Home, LogicalKey::End);
+}
+
+#[test]
+fn logical_key_display_matches_name() {
+    assert_eq!(LogicalKey::Enter.to_string(), "Enter");
+    assert_eq!(LogicalKey::Backspace.to_string(), "Backspace");
+    assert_eq!(LogicalKey::Delete.to_string(), "Delete");
+    assert_eq!(LogicalKey::Escape.to_string(), "Escape");
+    assert_eq!(LogicalKey::ArrowLeft.to_string(), "ArrowLeft");
+    assert_eq!(LogicalKey::ArrowRight.to_string(), "ArrowRight");
+    assert_eq!(LogicalKey::Home.to_string(), "Home");
+    assert_eq!(LogicalKey::End.to_string(), "End");
+}
+
+#[test]
+fn key_state_is_pressed_and_display() {
+    assert!(KeyState::Pressed.is_pressed());
+    assert!(!KeyState::Released.is_pressed());
+    assert_eq!(KeyState::Pressed.to_string(), "pressed");
+    assert_eq!(KeyState::Released.to_string(), "released");
+}
+
+#[test]
+fn a_text_input_event_carries_text() {
+    let event = WindowEvent::TextInput {
+        text: String::from("Olá, mundo! 🦀"),
+    };
+    let WindowEvent::TextInput { text } = event else {
+        panic!("expected TextInput");
+    };
+    assert_eq!(text, "Olá, mundo! 🦀");
+}
+
+#[test]
+fn a_control_key_event_carries_logical_key_and_state() {
+    let event = WindowEvent::ControlKey {
+        key: LogicalKey::Enter,
+        state: KeyState::Pressed,
+    };
+    let WindowEvent::ControlKey { key, state } = event else {
+        panic!("expected ControlKey");
+    };
+    assert_eq!(key, LogicalKey::Enter);
+    assert_eq!(state, KeyState::Pressed);
 }
 
 // ---- Attributes and errors ----
