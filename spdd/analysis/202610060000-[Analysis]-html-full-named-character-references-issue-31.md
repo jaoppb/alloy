@@ -58,7 +58,8 @@ Raised in review of #17.
 9. **Done = zero skipped cases.** Every case in `namedEntities.test` and `entities.test` passes on output, codes and
    location, with no skip list; a deviation is fixed in the tokenizer or blocks the PR.
 10. **Manifest**: new syntax rows (legacy no-semicolon, multi-code-point, attribute rule) and parse-error rows for the
-   three new codes, with probes in `manifest_runner.rs` and `SUPPORTED_SYNTAX` updated, so the two-way gate stays green.
+    three new codes, with probes in `manifest_runner.rs` and `SUPPORTED_SYNTAX` updated, so the two-way gate stays
+    green.
 
 ## Done (v1 of this change)
 
