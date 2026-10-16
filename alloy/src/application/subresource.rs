@@ -6,28 +6,35 @@
 //! [`crate::application::event_loop`] — this module only answers "what does
 //! this document reference", a pure function of a [`DomSnapshot`].
 
-use css::{DomSnapshot, NodeRef, SnapshotId};
+use css::{DomSnapshot, MediaQuery, NodeRef, SnapshotId};
 use graphics::{Color, Framebuffer, ImageId, SurfaceSize};
 use network::Url;
 
 /// A `<link rel="stylesheet" href>` target, already resolved against the
-/// document's base URL ([`document_base_url`]).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// document's base URL ([`document_base_url`]), gated by its `media=` attribute.
+#[derive(Clone, Debug, PartialEq)]
 pub struct StylesheetRequest {
     url: Url,
+    media: MediaQuery,
 }
 
 impl StylesheetRequest {
-    /// A request for the stylesheet at `url`.
+    /// A request for the stylesheet at `url` with `media` constraints.
     #[must_use]
-    pub const fn new(url: Url) -> Self {
-        Self { url }
+    pub const fn new(url: Url, media: MediaQuery) -> Self {
+        Self { url, media }
     }
 
     /// Where to fetch the stylesheet from.
     #[must_use]
     pub const fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// Which media the stylesheet applies to.
+    #[must_use]
+    pub const fn media(&self) -> &MediaQuery {
+        &self.media
     }
 }
 
@@ -61,7 +68,7 @@ impl ImageRequest {
 
 /// Everything a page can ask to have fetched — closed on purpose: a new kind
 /// of subresource is a new variant the fetch loop must then handle.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SubresourceRequest {
     /// An external stylesheet.
     Stylesheet(StylesheetRequest),
@@ -163,7 +170,10 @@ fn stylesheet_request(node: NodeRef<'_>, base: &Url) -> Option<StylesheetRequest
         return None;
     }
     let href = node.attribute("href")?;
-    base.join(href).ok().map(StylesheetRequest::new)
+    let media = css::parse_media_attribute(node.attribute(html::AttributeName::media().as_str()));
+    base.join(href)
+        .ok()
+        .map(|url| StylesheetRequest::new(url, media))
 }
 
 /// `rel` is a space-separated, case-insensitive token set: `rel="stylesheet"`
@@ -316,5 +326,25 @@ mod tests {
             document_base_url(&snapshot, &navigation_url),
             navigation_url
         );
+    }
+
+    #[test]
+    fn stylesheet_link_media_attribute_is_carried_on_request() {
+        let found = discover(
+            r#"<html><head>
+                 <link rel="stylesheet" media="print" href="print.css">
+                 <link rel="stylesheet" media="(min-width: 300px)" href="wide.css">
+               </head></html>"#,
+        );
+        let [
+            SubresourceRequest::Stylesheet(print_sheet),
+            SubresourceRequest::Stylesheet(wide_sheet),
+        ] = found.as_slice()
+        else {
+            panic!("expected two stylesheet requests, got {found:?}");
+        };
+        assert!(print_sheet.media().is_never());
+        assert_eq!(wide_sheet.media().condition_count(), 1);
+        assert!(!wide_sheet.media().is_never());
     }
 }

@@ -103,6 +103,7 @@ impl fmt::Display for MediaCondition {
 #[non_exhaustive]
 pub struct MediaQuery {
     conditions: Vec<MediaCondition>,
+    never: bool,
 }
 
 impl MediaQuery {
@@ -111,6 +112,17 @@ impl MediaQuery {
     pub const fn always() -> Self {
         Self {
             conditions: Vec::new(),
+            never: false,
+        }
+    }
+
+    /// An impossible query that never matches: unparseable media expressions or
+    /// media types outside screen/all (e.g. `print`, `speech`).
+    #[must_use]
+    pub const fn never() -> Self {
+        Self {
+            conditions: Vec::new(),
+            never: true,
         }
     }
 
@@ -134,12 +146,35 @@ impl MediaQuery {
     /// cascade, not for the emptiness of the vector behind it.
     #[must_use]
     pub const fn is_always(&self) -> bool {
-        self.conditions.is_empty()
+        !self.never && self.conditions.is_empty()
+    }
+
+    /// Whether the query never matches any environment.
+    #[must_use]
+    pub const fn is_never(&self) -> bool {
+        self.never
+    }
+
+    /// Joins `other` with `self`. Both queries must hold for the combined query to match.
+    #[must_use]
+    pub fn and(&self, other: &Self) -> Self {
+        if self.never || other.never {
+            return Self::never();
+        }
+        let mut conditions = self.conditions.clone();
+        conditions.extend(other.conditions.iter().copied());
+        Self {
+            conditions,
+            never: false,
+        }
     }
 
     /// Whether **every** condition holds — `@media` joins them with `and`.
     #[must_use]
     pub fn matches(&self, constraints: &ViewportConstraints) -> bool {
+        if self.never {
+            return false;
+        }
         self.conditions
             .iter()
             .all(|condition| condition.matches(constraints))
@@ -148,6 +183,9 @@ impl MediaQuery {
 
 impl fmt::Display for MediaQuery {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.never {
+            return formatter.write_str("not all");
+        }
         let mut separator = "";
         for condition in &self.conditions {
             formatter.write_str(separator)?;
@@ -155,5 +193,58 @@ impl fmt::Display for MediaQuery {
             separator = " and ";
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn px(pixels: i32) -> Au {
+        Au::from_whole_px(pixels).unwrap()
+    }
+
+    #[test]
+    fn always_and_never_predicates() {
+        let always = MediaQuery::always();
+        let never = MediaQuery::never();
+        let constraints = ViewportConstraints::new(px(400), px(300));
+
+        assert!(always.is_always());
+        assert!(!always.is_never());
+        assert!(always.matches(&constraints));
+
+        assert!(!never.is_always());
+        assert!(never.is_never());
+        assert!(!never.matches(&constraints));
+        assert_eq!(never.to_string(), "not all");
+    }
+
+    #[test]
+    fn combining_queries_with_and() {
+        let always = MediaQuery::always();
+        let never = MediaQuery::never();
+        let condition = MediaCondition::new(MediaFeature::MinWidth, Length::pixels(300.0));
+        let mut query = MediaQuery::always();
+        query.push(condition);
+
+        assert_eq!(always.and(&query), query);
+        assert_eq!(query.and(&always), query);
+        assert_eq!(never.and(&query), never);
+        assert_eq!(query.and(&never), never);
+
+        let condition2 = MediaCondition::new(MediaFeature::MaxWidth, Length::pixels(600.0));
+        let mut query2 = MediaQuery::always();
+        query2.push(condition2);
+
+        let combined = query.and(&query2);
+        assert_eq!(combined.condition_count(), 2);
+        assert!(!combined.is_always());
+        assert!(!combined.is_never());
+
+        let constraints_in = ViewportConstraints::new(px(400), px(300));
+        let constraints_out = ViewportConstraints::new(px(200), px(300));
+        assert!(combined.matches(&constraints_in));
+        assert!(!combined.matches(&constraints_out));
     }
 }

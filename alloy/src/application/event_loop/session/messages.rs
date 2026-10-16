@@ -47,8 +47,8 @@ where
                 self.stats.navigation_errors = self.stats.navigation_errors.saturating_add(1);
                 self.show_navigation_error(&error);
             }
-            LoopMessage::Stylesheet(Ok(text)) => self.absorb_stylesheet(&text),
-            LoopMessage::Stylesheet(Err(error)) => {
+            LoopMessage::Stylesheet(media, Ok(text)) => self.absorb_stylesheet(&text, &media),
+            LoopMessage::Stylesheet(_media, Err(error)) => {
                 tracing::warn!(%error, "stylesheet fetch failed");
             }
             LoopMessage::Image(id, Ok(framebuffer)) => {
@@ -98,14 +98,19 @@ where
         self.dirty = true;
     }
 
-    fn absorb_stylesheet(&mut self, text: &str) {
-        let sheet = match css::parse_stylesheet(text, Origin::Author) {
+    fn absorb_stylesheet(&mut self, text: &str, media: &css::MediaQuery) {
+        if media.is_never() {
+            tracing::debug!("stylesheet skipped: media query does not match screen");
+            return;
+        }
+        let mut sheet = match css::parse_stylesheet(text, Origin::Author) {
             Ok(sheet) => sheet,
             Err(error) => {
                 tracing::warn!(%error, bytes = text.len(), "stylesheet parse failed");
                 return;
             }
         };
+        sheet.apply_media(media);
         tracing::debug!(
             rules = sheet.rules().count(),
             notes = sheet.notes().len(),
