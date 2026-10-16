@@ -101,7 +101,11 @@ pub mod infrastructure;
 /// size, `TextDecorationLine::adding` replaces the `with_*(bool)` builders,
 /// and [`SUPPORTED_PROPERTIES`] gains four legacy aliases (137). `PRD-007`
 /// carries the migration note.
-pub const PORT_SCHEMA_VERSION: u32 = 8;
+///
+/// `9` adds the inherited [`Visibility`] property (`visible`, `hidden`,
+/// `collapse` treated as `hidden` outside tables; CSS 2.2 §11.2), expanding
+/// [`SUPPORTED_PROPERTIES`] from 137 to 138 (issue #63).
+pub const PORT_SCHEMA_VERSION: u32 = 9;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -114,10 +118,11 @@ pub const PORT_SCHEMA_VERSION: u32 = 8;
 ///
 /// Jumped from 14 to 33 in v0.5 B4, 34 in the fonts increment, 36 in the
 /// "unstyled real sites" follow-up, 49 in v0.5 P1, 133 in v0.5 P2
-/// (visual, typography, grid, logical properties), and 137 in the PR #19
+/// (visual, typography, grid, logical properties), 137 in the PR #19
 /// review round (the legacy aliases `word-wrap`, `grid-gap`, `grid-row-gap`
-/// and `grid-column-gap`, which real sites still write).
-pub const SUPPORTED_PROPERTIES: [&str; 137] = [
+/// and `grid-column-gap`, which real sites still write), and 138 in the
+/// issue #63 increment (`visibility`).
+pub const SUPPORTED_PROPERTIES: [&str; 138] = [
     "display",
     "color",
     "background-color",
@@ -255,6 +260,7 @@ pub const SUPPORTED_PROPERTIES: [&str; 137] = [
     "inset-block",
     "inset-block-start",
     "inset-block-end",
+    "visibility",
 ];
 
 /// The selector and `@media` forms this crate parses and matches against a
@@ -295,7 +301,8 @@ pub use domain::color::{CssColor, ParseColorError};
 pub use domain::computed::display::ParseDisplayError;
 pub use domain::computed::{
     ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, LengthEdges,
-    Overflow, OverflowStyle, PositionStyle, PositionType, Sizing, SizingConstraints, ZIndex,
+    Overflow, OverflowStyle, PositionStyle, PositionType, Sizing, SizingConstraints, Visibility,
+    ZIndex,
 };
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{

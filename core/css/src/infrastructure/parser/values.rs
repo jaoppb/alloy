@@ -22,6 +22,7 @@ use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use crate::domain::computed::overflow::Overflow;
 use crate::domain::computed::position::{PositionType, ZIndex};
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
+use crate::domain::computed::visibility::Visibility;
 use crate::domain::declaration::DeclarationValue;
 use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
@@ -367,6 +368,12 @@ pub(crate) fn parse_white_space(tokens: &[Token]) -> Option<WhiteSpace> {
         "nowrap" => Some(WhiteSpace::NoWrap),
         _ => None,
     })
+}
+
+/// `visibility` (CSS 2.2 §11.2).
+#[must_use]
+pub(crate) fn parse_visibility(tokens: &[Token]) -> Option<Visibility> {
+    keyword(tokens).and_then(|name| name.parse().ok())
 }
 
 /// `flex-direction` (CSS Flexbox L1 §5.1).

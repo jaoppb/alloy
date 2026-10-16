@@ -180,3 +180,15 @@ The rest is additive or confined to the cascade helpers:
 - Custom properties and `var()` are cascaded, in a per-node side table outside `ComputedStyle`; their semantics (and
   those of logical properties and relative font weights) are recorded in
   `docs/architecture/style-cascade-port-contract.md`, "Cascade semantics of schema 7".
+
+### `8 → 9` — Issue #63: `visibility` property support
+
+- **`ComputedStyle` gains `visibility` (`Visibility`).** The CSS 2.2 §11.2 `visibility` property is now parsed and
+  cascaded. It is an inherited property with initial value `Visibility::Visible`. The `visibility(&self)` getter and
+  `with_visibility(self, Visibility)` builder are added to `ComputedStyle`.
+- **`Visibility` enum added.** Carries `Visible`, `Hidden`, `Collapse` (with `Collapse` treated as `Hidden` outside
+  tables). `Visibility::is_visible(&self) -> bool` returns true only for `Visible`.
+- **`SUPPORTED_PROPERTIES` is `[&str; 138]`** (was 137), adding `"visibility"`.
+- **Painting honors visibility without changing layout.** `alloy/src/application/paint.rs` skips painting backgrounds,
+  borders, text, and images for non-visible boxes, while continuing to traverse descendants (allowing
+  `visibility: visible` children of hidden boxes to paint).
