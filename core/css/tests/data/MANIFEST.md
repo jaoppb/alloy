@@ -163,16 +163,17 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 | `inset-block`                | P2    | logical insets shorthand                                                                                                                                                                   |
 | `inset-block-start`          | P2    | logical inset                                                                                                                                                                              |
 | `inset-block-end`            | P2    | logical inset                                                                                                                                                                              |
+| `visibility`                 | ddg   | inherited; `visible` (initial) / `hidden` / `collapse` (treated as `hidden` outside tables; CSS 2.2 §11.2)                                                                                |
 
 Every property above also accepts the CSS-wide keywords `initial` and `inherit` (B2, CSS Cascade L4 §7.1): `initial`
 resets to the value `ComputedStyle::initial()` gives it, `inherit` copies the parent's computed value even for a
 property that does not normally inherit. `unset` and `revert` are not recognised.
 
-Declared **out** for v0.5, and refused with a note: `float`, `clear`, `visibility`, and every other property.
-(`background` and `border` are now **in**, narrowed to one component each — see the rows above and
-`PORT_SCHEMA_VERSION = 5`; the `background`/`border` _longhands_ other than `-width` stay out.) `!important` is parsed,
-preserved on the declaration, **and** wins the cascade as of B2 (`plano:435-443`): CSS Cascade L4 §4.2's
-origin/importance ordering, `User` origin included by construction even though nothing sources it yet.
+Declared **out** for v0.5, and refused with a note: `float`, `clear`, and every other property. (`background` and
+`border` are now **in**, narrowed to one component each — see the rows above and `PORT_SCHEMA_VERSION = 5`; the
+`background`/`border` _longhands_ other than `-width` stay out.) `!important` is parsed, preserved on the declaration,
+**and** wins the cascade as of B2 (`plano:435-443`): CSS Cascade L4 §4.2's origin/importance ordering, `User` origin
+included by construction even though nothing sources it yet.
 
 ### Flexbox simplifications (B4)
 

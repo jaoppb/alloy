@@ -16,6 +16,7 @@ pub mod sizing_constraints;
 pub mod style;
 pub mod text_advance;
 pub mod variables;
+pub mod visibility;
 pub mod visual;
 
 pub use display::Display;
@@ -46,6 +47,7 @@ pub use text_advance::{
     TextOverflow, TextTransform, WordBreak, WordSpacing,
 };
 pub use variables::{CustomPropertiesMap, VariableName, VariableValue};
+pub use visibility::Visibility;
 pub use visual::{
     BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, BorderColor,
     BorderColorEdges, BorderRadius, BorderStyle, BorderStyleEdges, BoxShadow, BoxShadowList,

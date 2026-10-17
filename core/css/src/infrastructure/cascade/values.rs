@@ -28,7 +28,8 @@ use crate::infrastructure::cascade::{
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
     parse_background_shorthand, parse_box_sizing, parse_color, parse_display, parse_length,
-    parse_length_edges, parse_sizing, parse_text_align, parse_white_space, value_tokens,
+    parse_length_edges, parse_sizing, parse_text_align, parse_visibility, parse_white_space,
+    value_tokens,
 };
 
 /// Which box property a `-top` / `-right` / `-bottom` / `-left` longhand edits.
@@ -147,6 +148,7 @@ fn apply_property_value(
         "white-space" => {
             parse_white_space(tokens).map(|value| style.clone().with_white_space(value))
         }
+        "visibility" => parse_visibility(tokens).map(|value| style.clone().with_visibility(value)),
         _ => apply_edge_or_flex(style, parent, property, tokens),
     }
 }
@@ -361,6 +363,7 @@ fn reset_to_initial(style: &ComputedStyle, property: &str) -> Option<ComputedSty
         "box-sizing" => Some(style.clone().with_box_sizing(initial.box_sizing())),
         "text-align" => Some(style.clone().with_text_align(initial.text_align())),
         "white-space" => Some(style.clone().with_white_space(initial.white_space())),
+        "visibility" => Some(style.clone().with_visibility(initial.visibility())),
         _ => reset_edge_or_flex(style, property),
     }
 }
@@ -441,6 +444,7 @@ fn copy_property(
         "box-sizing" => Some(style.clone().with_box_sizing(parent.box_sizing())),
         "text-align" => Some(style.clone().with_text_align(parent.text_align())),
         "white-space" => Some(style.clone().with_white_space(parent.white_space())),
+        "visibility" => Some(style.clone().with_visibility(parent.visibility())),
         _ => copy_edge_or_flex(style, parent, property),
     }
 }

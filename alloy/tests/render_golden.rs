@@ -128,7 +128,6 @@ fn inline_svg_renders_byte_identical_to_inline_block_span() {
         "<svg width=\"20\" height=\"20\"><text>hello</text></svg> must render byte-identical to inline-block span"
     );
 }
-
 const RED: graphics::Color = graphics::Color::rgb(0xFF, 0x00, 0x00);
 
 #[test]
@@ -163,4 +162,78 @@ fn border_width_with_no_border_style_renders_same_as_no_border() {
         bytes_with_width, bytes_without,
         "border-width alone with no border-style must render identically to no border"
     );
+}
+
+#[test]
+fn visibility_hidden_renders_same_as_empty_box_while_preserving_sibling_layout() {
+    let with_visibility_hidden = "<!doctype html><html><head><style>\
+                                  body{margin:0;background:#fff}\
+                                  #hidden{visibility:hidden;background:red;height:50px}\
+                                  #sibling{background:blue;height:50px}\
+                                  </style></head>\
+                                  <body><div id=\"hidden\">Hidden text content</div>\
+                                  <div id=\"sibling\">Following sibling</div></body></html>";
+
+    let without_bg_and_text = "<!doctype html><html><head><style>\
+                               body{margin:0;background:#fff}\
+                               #hidden{height:50px}\
+                               #sibling{background:blue;height:50px}\
+                               </style></head>\
+                               <body><div id=\"hidden\"></div>\
+                               <div id=\"sibling\">Following sibling</div></body></html>";
+
+    let options = RenderOptions::new(400, 200);
+    let bytes_hidden =
+        render_html_to_png(with_visibility_hidden, &options).expect("render hidden succeeds");
+    let bytes_empty =
+        render_html_to_png(without_bg_and_text, &options).expect("render empty succeeds");
+
+    assert_eq!(
+        bytes_hidden, bytes_empty,
+        "visibility:hidden must render identically to a box with no background and no text"
+    );
+
+    let with_visibility_collapse = "<!doctype html><html><head><style>\
+                                    body{margin:0;background:#fff}\
+                                    #hidden{visibility:collapse;background:red;height:50px}\
+                                    #sibling{background:blue;height:50px}\
+                                    </style></head>\
+                                    <body><div id=\"hidden\">Hidden text content</div>\
+                                    <div id=\"sibling\">Following sibling</div></body></html>";
+    let bytes_collapse =
+        render_html_to_png(with_visibility_collapse, &options).expect("render collapse succeeds");
+    assert_eq!(
+        bytes_collapse, bytes_empty,
+        "visibility:collapse outside tables must render identically to visibility:hidden"
+    );
+}
+
+#[test]
+fn visible_child_inside_hidden_parent_paints_and_matches_golden() {
+    let html = "<!doctype html><html><head><style>\
+                body{margin:0;background:#fff}\
+                #parent{visibility:hidden;background:red;width:200px;height:100px}\
+                #child{visibility:visible;background:#00ff00;width:100px;height:50px}\
+                </style></head>\
+                <body><div id=\"parent\"><div id=\"child\">Visible child</div></div></body></html>";
+
+    let options = RenderOptions::new(320, 240);
+    let bytes = render_html_to_png(html, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    // Parent background (red) must NOT be drawn; body's white background shows through outside child
+    assert_eq!(
+        frame.pixel(150, 20),
+        Some(graphics::Color::WHITE),
+        "parent background must not be painted"
+    );
+
+    // Child background (green) MUST be drawn
+    assert_eq!(
+        frame.pixel(80, 40),
+        Some(GREEN),
+        "child background must be painted"
+    );
+
+    assert_matches_golden(&frame, &golden_path("visibility_child.png"));
 }
