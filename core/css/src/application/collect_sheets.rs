@@ -17,6 +17,7 @@ use core::fmt::Write;
 use crate::domain::declaration::DeclarationBlock;
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotNodeKind};
 use crate::domain::error::CssError;
+use crate::domain::input_type::InputType;
 use crate::domain::stylesheet_set::{Origin, StyleSheetSet};
 use crate::infrastructure::parser::{parse_inline_style_recording, parse_stylesheet};
 
@@ -51,12 +52,8 @@ fn collect_presentational_hints(
     node: NodeRef<'_>,
     sheets: &mut StyleSheetSet,
 ) -> Result<(), CssError> {
-    if node.tag() != Some(&html::TagName::Svg) {
-        return Ok(());
-    }
     let mut declarations = String::new();
-    append_hint_dimension(node.attribute("width"), "width", &mut declarations);
-    append_hint_dimension(node.attribute("height"), "height", &mut declarations);
+    append_tag_hints(node, &mut declarations);
     if declarations.is_empty() {
         return Ok(());
     }
@@ -65,6 +62,72 @@ fn collect_presentational_hints(
         sheets.push_presentational_hint(node.id(), block);
     }
     Ok(())
+}
+
+fn append_tag_hints(node: NodeRef<'_>, declarations: &mut String) {
+    if node.tag() == Some(&html::TagName::Svg) {
+        append_hint_dimension(node.attribute("width"), "width", declarations);
+        append_hint_dimension(node.attribute("height"), "height", declarations);
+        return;
+    }
+    if node.tag() == Some(&html::TagName::Input) {
+        append_input_size_hint(node, declarations);
+        return;
+    }
+    if node.tag() == Some(&html::TagName::Textarea) {
+        append_textarea_dimensions_hint(node, declarations);
+    }
+}
+
+fn append_input_size_hint(node: NodeRef<'_>, target: &mut String) {
+    let input_type = InputType::from_attribute(node.attribute("type"));
+    if !input_type.is_text_entry() {
+        return;
+    }
+    let Some(raw_size) = node.attribute("size") else {
+        return;
+    };
+    let Ok(size) = raw_size.trim().parse::<u32>() else {
+        return;
+    };
+    if size == 0 {
+        return;
+    }
+    let em_width = f64::from(size) * 0.6;
+    let _ = write!(target, "width: {em_width}em; ");
+}
+
+fn append_textarea_cols_hint(node: NodeRef<'_>, target: &mut String) {
+    let Some(raw_cols) = node.attribute("cols") else {
+        return;
+    };
+    let Ok(cols) = raw_cols.trim().parse::<u32>() else {
+        return;
+    };
+    if cols == 0 {
+        return;
+    }
+    let em_width = f64::from(cols) * 0.6;
+    let _ = write!(target, "width: {em_width}em; ");
+}
+
+fn append_textarea_rows_hint(node: NodeRef<'_>, target: &mut String) {
+    let Some(raw_rows) = node.attribute("rows") else {
+        return;
+    };
+    let Ok(rows) = raw_rows.trim().parse::<u32>() else {
+        return;
+    };
+    if rows == 0 {
+        return;
+    }
+    let em_height = f64::from(rows) * 1.2;
+    let _ = write!(target, "height: {em_height}em; ");
+}
+
+fn append_textarea_dimensions_hint(node: NodeRef<'_>, target: &mut String) {
+    append_textarea_cols_hint(node, target);
+    append_textarea_rows_hint(node, target);
 }
 
 fn append_hint_dimension(value: Option<&str>, property: &str, target: &mut String) {

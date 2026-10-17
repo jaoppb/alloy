@@ -239,13 +239,26 @@ fn test_syntax_rawtext_and_omissions() {
         "<script> rawtext must not parse inner markup as elements"
     );
 
-    // 2. p tag omission
+    // 2. textarea rcdata
+    let events = events_of("<textarea><b>bold</b> &amp; text</textarea>");
+    assert!(
+        elements_named(&events, "b").is_empty(),
+        "<textarea> rcdata must not parse inner markup as elements"
+    );
+    let textarea_texts = texts(&events);
+    assert_eq!(
+        textarea_texts.as_slice(),
+        &["<b>bold</b> & text"],
+        "<textarea> rcdata decodes character references and preserves markup as text"
+    );
+
+    // 3. p tag omission
     let events = events_of("<p>First<p>Second");
     let paragraphs = elements_named(&events, "p");
     assert_eq!(paragraphs.len(), 2);
     assert_ne!(parent_of(&events, paragraphs[1].0), Some(paragraphs[0].0));
 
-    // 3. li tag omission
+    // 4. li tag omission
     let events = events_of("<ul><li>One<li>Two</ul>");
     let items = elements_named(&events, "li");
     assert_eq!(items.len(), 2);

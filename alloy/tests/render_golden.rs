@@ -128,3 +128,89 @@ fn inline_svg_renders_byte_identical_to_inline_block_span() {
         "<svg width=\"20\" height=\"20\"><text>hello</text></svg> must render byte-identical to inline-block span"
     );
 }
+
+#[test]
+fn input_text_paints_value_inside_visible_border_in_golden_test() {
+    let options = RenderOptions::new(160, 60);
+    let html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><input type=\"text\" value=\"hi\"></body></html>";
+    let png_bytes = render_html_to_png(html, &options).expect("render succeeds");
+    let frame = decode_png(&png_bytes).expect("output must be a valid PNG");
+    assert_matches_golden(&frame, &golden_path("input_text.png"));
+}
+
+#[test]
+fn input_text_has_visible_border_and_text() {
+    let options = RenderOptions::new(160, 60);
+    let html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><input type=\"text\" value=\"hi\"></body></html>";
+    let png_bytes = render_html_to_png(html, &options).expect("render succeeds");
+    let frame = decode_png(&png_bytes).expect("output must be a valid PNG");
+
+    let black = graphics::Color::rgb(0x00, 0x00, 0x00);
+    assert_eq!(
+        frame.pixel(8, 8),
+        Some(black),
+        "<input> must paint top-left border"
+    );
+    assert_eq!(
+        frame.pixel(8, 15),
+        Some(black),
+        "<input> must paint left border"
+    );
+    let inner_has_black = (10..30).any(|x| (9..25).any(|y| frame.pixel(x, y) == Some(black)));
+    assert!(
+        inner_has_black,
+        "<input value=\"hi\"> must paint text inside border"
+    );
+}
+
+#[test]
+fn select_paints_only_selected_option() {
+    let options = RenderOptions::new(160, 60);
+    let selected_two_html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><select><option>one</option><option selected>two</option></select></body></html>";
+    let only_two_html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><select><option>two</option></select></body></html>";
+    let selected_longer_html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><select><option selected>longer</option><option>two</option></select></body></html>";
+
+    let two_bytes = render_html_to_png(selected_two_html, &options).expect("render selected two");
+    let baseline_two_bytes = render_html_to_png(only_two_html, &options).expect("render only two");
+    let longer_bytes =
+        render_html_to_png(selected_longer_html, &options).expect("render selected longer");
+
+    assert_eq!(
+        two_bytes, baseline_two_bytes,
+        "<select> with selected 'two' must paint identically to <select> having only 'two'"
+    );
+    assert_ne!(
+        two_bytes, longer_bytes,
+        "selected 'two' and selected 'longer' must produce different output"
+    );
+}
+
+#[test]
+fn textarea_yields_one_text_child_and_paints_it_literally() {
+    let html = "<textarea><b>x</b></textarea>";
+    let outcome = dom::parse(html).expect("parse succeeds");
+    let tree = outcome.into_tree();
+    let root = tree.document();
+    let textarea = tree
+        .descendants(root)
+        .find(|&node| tree.tag(node).is_ok_and(|t| t.as_str() == "textarea"))
+        .expect("textarea element");
+    let children: Vec<_> = tree.children(textarea).collect();
+    assert_eq!(children.len(), 1, "<textarea> must yield exactly one child");
+    let kind = tree.node_kind(children[0]).expect("child node kind");
+    let text = match kind {
+        dom::NodeKind::Text(content) => content.as_str(),
+        _ => panic!("child must be a text node"),
+    };
+    assert_eq!(text, "<b>x</b>", "content must be literal <b>x</b>");
+
+    let options = RenderOptions::new(160, 80);
+    let literal_html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><textarea><b>x</b></textarea></body></html>";
+    let escaped_html = "<!DOCTYPE html><html><body style=\"margin: 8px; background: #ffffff;\"><textarea>&lt;b&gt;x&lt;/b&gt;</textarea></body></html>";
+    let rendered = render_html_to_png(literal_html, &options).expect("render literal");
+    let escaped_rendered = render_html_to_png(escaped_html, &options).expect("render escaped");
+    assert_eq!(
+        rendered, escaped_rendered,
+        "<textarea><b>x</b></textarea> must paint literally, matching escaped markup"
+    );
+}

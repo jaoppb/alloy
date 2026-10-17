@@ -199,11 +199,12 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             });
         }
 
-        if tag_str == "script" {
-            return Ok(TokenSinkResult::SwitchToRawText(RawKind::Script));
-        }
-        if tag_str == "style" {
-            return Ok(TokenSinkResult::SwitchToRawText(RawKind::Style));
+        match tag.tag_name() {
+            TagName::Script => return Ok(TokenSinkResult::SwitchToRawText(RawKind::Script)),
+            TagName::Style => return Ok(TokenSinkResult::SwitchToRawText(RawKind::Style)),
+            TagName::Textarea => return Ok(TokenSinkResult::SwitchToRawText(RawKind::Textarea)),
+            TagName::Title => return Ok(TokenSinkResult::SwitchToRawText(RawKind::Title)),
+            _ => {}
         }
 
         Ok(TokenSinkResult::Continue)

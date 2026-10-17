@@ -80,6 +80,7 @@ Syntactic constructs handled by the HTML5 tokenizer state machine and tree build
 | `attr value &name= stays literal` | #31 | in an attribute value, a legacy name without `;` before `=` or alphanumeric is text |
 | `<script> rawtext`          | B5    | rawtext mode in `<script>`: inner markup is never parsed as HTML elements     |
 | `<style> rawtext`           | B5    | rawtext mode in `<style>`: inner CSS markup is never parsed as HTML elements  |
+| `<textarea> rcdata`         | #87   | rcdata mode in `<textarea>`: inner markup is text, entities are decoded       |
 | `p tag omission`            | B5    | open `<p>` is implicitly closed before opening another `<p>` or block element |
 | `li tag omission`           | B5    | open `<li>` is implicitly closed before opening another `<li>`                |
 | `void tags auto-close`      | B5    | void tags do not trap subsequent elements as children                         |

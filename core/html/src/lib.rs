@@ -23,8 +23,8 @@ pub mod infrastructure;
 /// Phase B5 shipped — see `docs/architecture/html-tree-sink-port-contract.md`. `2` = recoverable
 /// diagnostics (#36); `3` = the vocabulary is owned by `html` (#28); `4` = `HtmlEntity` becomes
 /// `NamedCharacterReference` over the full WHATWG table (#31); `5` = foreign content
-/// and `Namespace` support (#86).
-pub const PORT_SCHEMA_VERSION: u32 = 5;
+/// and `Namespace` support (#86); `6` = RCDATA element parsing for textarea and title (#87).
+pub const PORT_SCHEMA_VERSION: u32 = 6;
 
 pub use application::conformance::run_html_conformance;
 pub use application::ports::{RawKind, ScriptDescriptor, TokenSink, TokenSinkResult, TreeSink};
@@ -102,6 +102,7 @@ pub const SUPPORTED_SYNTAX: &[&str] = &[
     "attr value &name= stays literal",
     "<script> rawtext",
     "<style> rawtext",
+    "<textarea> rcdata",
     "p tag omission",
     "li tag omission",
     "void tags auto-close",
