@@ -4,7 +4,7 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
-use css::{EdgeSizes, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
+use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
 use graphics::{
     Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
     GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
@@ -46,6 +46,7 @@ fn paint_single_box<F: FontProvider>(
 
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
+    paint_outline(laid_out, styled_node, builder)?;
     paint_text(laid_out, styled_node, font_provider, builder)?;
     paint_image(laid_out, images, builder)
 }
@@ -85,6 +86,59 @@ fn paint_borders(
     }
 
     paint_border_sides(border_box, border, border_color, builder)
+}
+
+fn paint_outline(
+    laid_out: &LayoutBox,
+    styled_node: &StyledNode,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), GraphicsError> {
+    let outline = styled_node.style().outline();
+    if !outline.style().is_drawn() {
+        return Ok(());
+    }
+
+    let outline_color = outline.color().to_graphics();
+    if outline_color.is_transparent() {
+        return Ok(());
+    }
+
+    let border_box = laid_out.border_box();
+    if border_box.is_empty() {
+        return Ok(());
+    }
+
+    let font_size = styled_node.style().computed_font_size(INITIAL_FONT_SIZE);
+    let container_width = laid_out.content().size().width();
+
+    let Some(stroke_width) = outline.width().resolve_to_au(font_size, container_width) else {
+        return Ok(());
+    };
+    if stroke_width.is_zero() || stroke_width.is_negative() {
+        return Ok(());
+    }
+
+    let Some(outline_offset) = outline.offset().resolve_to_au(font_size, container_width) else {
+        return Ok(());
+    };
+
+    let offset_plus_width = outline_offset.saturating_add(stroke_width);
+    let double_expansion = offset_plus_width.saturating_add(offset_plus_width);
+
+    let outer_width = border_box.size().width().saturating_add(double_expansion);
+    let outer_height = border_box.size().height().saturating_add(double_expansion);
+    let Some(outer_size) = Size::new(outer_width, outer_height) else {
+        return Ok(());
+    };
+
+    let outer_origin = Point::new(
+        border_box.min_x().saturating_sub(offset_plus_width),
+        border_box.min_y().saturating_sub(offset_plus_width),
+    );
+    let outer_box = Rect::new(outer_origin, outer_size);
+    let edges = EdgeSizes::new(stroke_width, stroke_width, stroke_width, stroke_width);
+
+    paint_border_sides(outer_box, edges, outline_color, builder)
 }
 
 fn paint_border_sides(

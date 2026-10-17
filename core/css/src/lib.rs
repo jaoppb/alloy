@@ -105,7 +105,11 @@ pub mod infrastructure;
 /// `9` adds the inherited [`Visibility`] property (`visible`, `hidden`,
 /// `collapse` treated as `hidden` outside tables; CSS 2.2 §11.2), expanding
 /// [`SUPPORTED_PROPERTIES`] from 137 to 138 (issue #63).
-pub const PORT_SCHEMA_VERSION: u32 = 9;
+///
+/// `10` adds the outline properties (`outline`, `outline-offset`,
+/// `outline-color`, `outline-width`, `outline-style`; CSS UI 4 §3),
+/// expanding [`SUPPORTED_PROPERTIES`] from 138 to 143 (issue #64).
+pub const PORT_SCHEMA_VERSION: u32 = 10;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -120,9 +124,11 @@ pub const PORT_SCHEMA_VERSION: u32 = 9;
 /// "unstyled real sites" follow-up, 49 in v0.5 P1, 133 in v0.5 P2
 /// (visual, typography, grid, logical properties), 137 in the PR #19
 /// review round (the legacy aliases `word-wrap`, `grid-gap`, `grid-row-gap`
-/// and `grid-column-gap`, which real sites still write), and 138 in the
-/// issue #63 increment (`visibility`).
-pub const SUPPORTED_PROPERTIES: [&str; 138] = [
+/// and `grid-column-gap`, which real sites still write), 138 in the
+/// issue #63 increment (`visibility`), and 143 in the issue #64 increment
+/// (`outline`, `outline-offset`, `outline-color`, `outline-width`,
+/// `outline-style`).
+pub const SUPPORTED_PROPERTIES: [&str; 143] = [
     "display",
     "color",
     "background-color",
@@ -261,6 +267,11 @@ pub const SUPPORTED_PROPERTIES: [&str; 138] = [
     "inset-block-start",
     "inset-block-end",
     "visibility",
+    "outline",
+    "outline-offset",
+    "outline-color",
+    "outline-width",
+    "outline-style",
 ];
 
 /// The selector and `@media` forms this crate parses and matches against a
@@ -299,10 +310,12 @@ pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
 pub use application::snapshot::snapshot;
 pub use domain::color::{CssColor, ParseColorError};
 pub use domain::computed::display::ParseDisplayError;
+pub use domain::computed::outline::ParseOutlineStyleError;
+pub use domain::computed::style::INITIAL_FONT_SIZE;
 pub use domain::computed::{
     ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, LengthEdges,
-    Overflow, OverflowStyle, PositionStyle, PositionType, Sizing, SizingConstraints, Visibility,
-    ZIndex,
+    Outline, OutlineStyle, Overflow, OverflowStyle, PositionStyle, PositionType, Sizing,
+    SizingConstraints, Visibility, ZIndex,
 };
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{

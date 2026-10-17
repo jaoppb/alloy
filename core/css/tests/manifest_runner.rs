@@ -73,7 +73,7 @@ const SELECTOR_PROBES: [(&str, SelectorProbe); 19] = [
 /// One probe per `css::SUPPORTED_PROPERTIES` entry: a value inside the cut that
 /// is **different** from the value the UA sheet gives the fixture paragraph, so
 /// "the cascade honoured it" is observable rather than assumed.
-const PROPERTY_PROBES: [(&str, &str); 138] = [
+const PROPERTY_PROBES: [(&str, &str); 143] = [
     ("display", "inline"),
     ("color", "#ff0000"),
     ("background-color", "silver"),
@@ -212,6 +212,11 @@ const PROPERTY_PROBES: [(&str, &str); 138] = [
     ("inset-block-start", "35px"),
     ("inset-block-end", "45px"),
     ("visibility", "hidden"),
+    ("outline", "2px solid red"),
+    ("outline-offset", "4px"),
+    ("outline-color", "green"),
+    ("outline-width", "5px"),
+    ("outline-style", "dashed"),
 ];
 
 /// Forms the cut declares **out**. Each must leave zero rules and at least one

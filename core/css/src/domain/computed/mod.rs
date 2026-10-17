@@ -9,6 +9,7 @@ pub mod grid;
 pub mod inline_style;
 pub mod intrinsic;
 pub mod logical;
+pub mod outline;
 pub mod overflow;
 pub mod position;
 pub mod sizing;
@@ -36,6 +37,7 @@ pub use logical::{
     Direction, LogicalEdges, LogicalInsets, LogicalSizing, LogicalStyle, WritingContext,
     WritingMode,
 };
+pub use outline::{Outline, OutlineStyle, ParseOutlineStyleError};
 pub use overflow::{Overflow, OverflowStyle};
 pub use position::{PositionStyle, PositionType, ZIndex};
 pub use sizing::{BoxSizing, Sizing};

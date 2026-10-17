@@ -7,9 +7,10 @@
 
 use css::{
     Combinator, ComplexSelector, CompoundSelector, ComputedStyle, CssColor, CssError, CssStage,
-    DeclarationBlock, Display, EdgeSizes, Identifier, Length, LengthEdges, Origin,
-    PORT_SCHEMA_VERSION, SUPPORTED_PROPERTIES, SUPPORTED_SELECTORS, SelectorList, SelectorStep,
-    SourceSpan, StyleRule, StyleSheetSet, TypeSelector, ViewportConstraints, Visibility,
+    DeclarationBlock, Display, EdgeSizes, Identifier, Length, LengthEdges, Origin, Outline,
+    OutlineStyle, PORT_SCHEMA_VERSION, ParseOutlineStyleError, SUPPORTED_PROPERTIES,
+    SUPPORTED_SELECTORS, SelectorList, SelectorStep, SourceSpan, StyleRule, StyleSheetSet,
+    TypeSelector, ViewportConstraints, Visibility,
 };
 use css::{ComputedText, TextMetrics, TextRun};
 use graphics::{Au, Color};
@@ -271,10 +272,15 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 9,
-        "version 9 adds the inherited Visibility property (issue #63, ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 10,
+        "version 10 adds the outline properties (issue #64, ADR-0011 item 3)"
     );
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 138);
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 143);
+    assert!(SUPPORTED_PROPERTIES.contains(&"outline"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"outline-offset"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"outline-color"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"outline-width"));
+    assert!(SUPPORTED_PROPERTIES.contains(&"outline-style"));
     assert!(SUPPORTED_PROPERTIES.contains(&"visibility"));
     assert!(SUPPORTED_PROPERTIES.contains(&"grid-gap"));
     assert!(SUPPORTED_PROPERTIES.contains(&"word-wrap"));
@@ -385,4 +391,41 @@ fn sizing_constraints_defaults_and_builders() {
     assert_eq!(custom.max_width(), Sizing::Fixed(Length::pixels(800.0)));
     assert_eq!(custom.min_height(), Sizing::Fixed(Length::pixels(50.0)));
     assert_eq!(custom.max_height(), Sizing::Fixed(Length::pixels(400.0)));
+}
+
+// ---- Outline ----
+
+#[test]
+fn outline_values_and_classification() {
+    let initial = Outline::initial();
+    assert_eq!(initial.color(), CssColor::BLACK);
+    assert_eq!(initial.style(), OutlineStyle::None);
+    assert_eq!(initial.width(), Length::Pixels(3.0));
+    assert_eq!(initial.offset(), Length::ZERO);
+    assert!(!initial.style().is_drawn());
+
+    for style in [
+        OutlineStyle::None,
+        OutlineStyle::Auto,
+        OutlineStyle::Hidden,
+        OutlineStyle::Dotted,
+        OutlineStyle::Dashed,
+        OutlineStyle::Solid,
+        OutlineStyle::Double,
+        OutlineStyle::Groove,
+        OutlineStyle::Ridge,
+        OutlineStyle::Inset,
+        OutlineStyle::Outset,
+    ] {
+        assert_eq!(style.keyword().parse(), Ok(style));
+    }
+
+    assert_eq!(
+        "invalid".parse::<OutlineStyle>(),
+        Err(ParseOutlineStyleError("invalid".to_owned()))
+    );
+
+    assert!(OutlineStyle::Solid.is_drawn());
+    assert!(OutlineStyle::Auto.is_drawn());
+    assert!(!OutlineStyle::Hidden.is_drawn());
 }
