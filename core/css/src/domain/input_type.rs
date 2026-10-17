@@ -106,6 +106,26 @@ impl InputType {
         }
     }
 
+    /// Whether this state is a text-entry control (WHATWG HTML §4.10.5.1.2–§4.10.5.1.13).
+    #[must_use]
+    pub const fn is_text_entry(self) -> bool {
+        matches!(
+            self,
+            Self::Text
+                | Self::Search
+                | Self::Telephone
+                | Self::Url
+                | Self::Email
+                | Self::Password
+                | Self::Date
+                | Self::Month
+                | Self::Week
+                | Self::Time
+                | Self::LocalDateAndTime
+                | Self::Number
+        )
+    }
+
     /// The label a button-like control shows when its `value` attribute is
     /// absent (WHATWG HTML §4.10.5.1.18–20): an implementation-defined "Submit
     /// Query" / "Reset" for the submit and reset buttons, nothing for a plain
@@ -125,6 +145,9 @@ impl InputType {
     /// state that shows no label at all.
     #[must_use]
     pub fn label(self, value: Option<&str>) -> Option<&str> {
+        if self.is_text_entry() {
+            return value.filter(|text| !text.is_empty());
+        }
         let default = self.default_label()?;
         Some(value.unwrap_or(default))
     }
@@ -140,5 +163,20 @@ mod tests {
             let shouted = state.keyword().to_ascii_uppercase();
             assert_eq!(InputType::from_attribute(Some(&shouted)), state);
         }
+    }
+
+    #[test]
+    fn text_entry_shows_value_when_present() {
+        assert!(InputType::Text.is_text_entry());
+        assert_eq!(InputType::Text.label(Some("hi")), Some("hi"));
+        assert_eq!(InputType::Text.label(Some("")), None);
+        assert_eq!(InputType::Text.label(None), None);
+    }
+
+    #[test]
+    fn button_types_fallback_to_default_label() {
+        assert!(!InputType::SubmitButton.is_text_entry());
+        assert_eq!(InputType::SubmitButton.label(None), Some("Submit Query"));
+        assert_eq!(InputType::SubmitButton.label(Some("Go")), Some("Go"));
     }
 }

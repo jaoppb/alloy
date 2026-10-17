@@ -11,13 +11,17 @@ use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 use crate::domain::token::Token;
 
-/// Kind of raw text element requiring specialized tokenizer handling.
+/// Kind of raw text or RCDATA element requiring specialized tokenizer handling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RawKind {
     /// `<script>` script data mode.
     Script,
     /// `<style>` raw text mode.
     Style,
+    /// `<textarea>` RCDATA mode (WHATWG §13.2.5.2).
+    Textarea,
+    /// `<title>` RCDATA mode (WHATWG §13.2.5.2).
+    Title,
 }
 
 /// A descriptor for a script encountered by the tokenizer or tree sink.

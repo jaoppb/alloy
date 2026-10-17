@@ -110,8 +110,8 @@ fn two_submit_inputs_sit_side_by_side_on_one_line() {
     );
     assert_eq!(
         first_box.size().width(),
-        glyphs(12),
-        "shrink-to-fit: the input is exactly as wide as `Submit Query`"
+        glyphs(12).saturating_add(au(14)),
+        "shrink-to-fit: the input includes its synthesized label plus UA padding and border"
     );
 }
 
@@ -205,7 +205,7 @@ fn the_submit_label_is_laid_out_inside_the_inline_block_input() {
     assert_eq!(own.content().size().width(), glyphs(2));
     assert_eq!(
         own.border_box().size().width(),
-        glyphs(2).saturating_add(au(8))
+        glyphs(2).saturating_add(au(8)).saturating_add(au(2))
     );
     assert_eq!(
         label.content(),

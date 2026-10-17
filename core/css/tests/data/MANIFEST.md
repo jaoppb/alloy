@@ -230,6 +230,14 @@ that cannot be substituted (undefined without a fallback, a cycle, more than 64 
 invalid at computed-value time, i.e. `unset`. The full rules are in `docs/architecture/style-cascade-port-contract.md`
 ("Cascade semantics of schema 7"); the regression tests are `core/css/tests/cascade_semantics.rs`.
 
+### Form controls and fieldset/legend
+
+Form controls receive UA default styles according to WHATWG HTML §15.5 and §15.3.12 (issue #87).
+
+| gap                                                | behaviour instead                                                                        | tracked for |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------- |
+| `<fieldset>` / `<legend>` border-notch clipping    | `<fieldset>` renders standard rectangular borders; `<legend>` is rendered in normal flow | v0.7        |
+
 ## Selectors
 
 Written in the `E` / `F` element notation of the CSS specifications: one row is one grammatical form, not one example.

@@ -65,9 +65,11 @@ fn a_value_attribute_overrides_the_default_label() {
     assert_eq!(InputType::SubmitButton.label(None), Some("Submit Query"));
     assert_eq!(
         InputType::Text.label(Some("typed")),
-        None,
-        "a text field's value is not a painted label"
+        Some("typed"),
+        "a text field displays its value attribute when present"
     );
+    assert_eq!(InputType::Text.label(None), None);
+    assert_eq!(InputType::Text.label(Some("")), None);
 }
 
 // ---- synthesis in the styled tree --------------------------------------------
@@ -121,5 +123,48 @@ fn inputs_without_a_visible_label_synthesize_nothing() {
         synthesized_label("button", &[("type", "submit")]),
         None,
         "only an `<input>` element synthesizes a label"
+    );
+}
+
+#[test]
+fn text_inputs_synthesize_their_value_attribute() {
+    assert_eq!(
+        synthesized_label("input", &[("type", "text"), ("value", "hi")]),
+        Some("hi".to_owned())
+    );
+}
+
+#[test]
+fn select_elements_synthesize_selected_or_first_option() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let select = tree.create_element(html::TagName::new("select").unwrap());
+    tree.append_child(root, select).unwrap();
+
+    let opt1 = tree.create_element(html::TagName::new("option").unwrap());
+    tree.append_child(select, opt1).unwrap();
+    let txt1 = tree.create_text(dom::TextContent::new("one"));
+    tree.append_child(opt1, txt1).unwrap();
+
+    let opt2 = tree.create_element(html::TagName::new("option").unwrap());
+    tree.append_child(select, opt2).unwrap();
+    tree.set_attribute(
+        opt2,
+        html::AttributeName::new("selected").unwrap(),
+        html::AttributeValue::new(""),
+    )
+    .unwrap();
+    let txt2 = tree.create_text(dom::TextContent::new("two"));
+    tree.append_child(opt2, txt2).unwrap();
+
+    let dom = snapshot(&tree, root);
+    let select_id = dom.nodes_in_document_order().nth(1).expect("select id");
+    let styled = UaCascade::new()
+        .resolve(&dom, &StyleSheetSet::new())
+        .expect("the cascade resolves");
+    let select_styled = styled.node(select_id).expect("styled select");
+    assert_eq!(
+        select_styled.text().map(|run| run.as_str().to_owned()),
+        Some("two".to_owned())
     );
 }
