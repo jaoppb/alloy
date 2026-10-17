@@ -5,6 +5,7 @@ pub mod event_loop;
 pub mod html_parse;
 pub mod image_store;
 pub mod navigation;
+pub mod omnibox;
 pub mod paint;
 pub mod pipeline;
 pub mod runtime_font;
@@ -17,6 +18,7 @@ pub use event_loop::{
 };
 pub use image_store::ImageStore;
 pub use navigation::navigate;
+pub use omnibox::{CursorPosition, OmniboxBuffer, OmniboxState};
 pub use paint::paint_box_tree;
 pub use pipeline::{
     DEFAULT_FONT_SIZE, LinkTarget, RenderOptions, default_runtime_font_provider, render_dom,

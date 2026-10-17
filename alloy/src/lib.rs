@@ -13,6 +13,7 @@ pub mod logging;
 
 pub use application::browser_services::BrowserServices;
 pub use application::image_store::ImageStore;
+pub use application::omnibox::{CursorPosition, OmniboxBuffer, OmniboxState};
 pub use application::paint::paint_box_tree;
 pub use application::pipeline::{
     DEFAULT_FONT_SIZE, LinkTarget, RenderOptions, default_runtime_font_provider, render_dom,
