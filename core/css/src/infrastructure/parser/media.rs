@@ -79,15 +79,14 @@ fn parse_conditions_and_ensure_exhausted(tokens: &mut TokenStream) -> MediaQuery
 /// Parses the prelude between `@media` and its `{`, leaving the cursor on the
 /// `{`.
 pub(crate) fn parse_media_prelude(tokens: &mut TokenStream) -> Result<MediaQuery, CssError> {
-    let mut query = MediaQuery::always();
-    query.push(parse_condition(tokens)?);
+    let mut conditions = vec![parse_condition(tokens)?];
     tokens.skip_whitespace();
     while is_conjunction(tokens) {
         tokens.advance();
-        query.push(parse_condition(tokens)?);
+        conditions.push(parse_condition(tokens)?);
         tokens.skip_whitespace();
     }
-    Ok(query)
+    Ok(MediaQuery::Conditions(conditions))
 }
 
 /// Whether an `and` joins another condition to the ones already read. A pure

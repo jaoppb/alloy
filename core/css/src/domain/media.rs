@@ -10,7 +10,7 @@
 //! rule still carrying a condition — the safe default for a condition nobody
 //! evaluated.
 
-use core::fmt;
+use core::fmt::{self, Display};
 
 use graphics::Au;
 
@@ -97,41 +97,56 @@ impl fmt::Display for MediaCondition {
     }
 }
 
-/// The conditions a rule is gated on — a first-class collection, empty for a
-/// rule written outside any `@media` block.
+/// The conditions a rule is gated on.
+///
+/// An enum modeling the three mutually exclusive states:
+/// - [`MediaQuery::Always`]: unconditional rule outside every `@media` block, or `media="all"` / `media="screen"`.
+/// - [`MediaQuery::Never`]: query that never matches, such as `media="print"`, `media="speech"`, or unparseable queries.
+/// - [`MediaQuery::Conditions`]: rule gated on a sequence of conditions joined by `and`.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[non_exhaustive]
-pub struct MediaQuery {
-    conditions: Vec<MediaCondition>,
-    never: bool,
+pub enum MediaQuery {
+    /// The unconditional query: a rule outside every `@media` block.
+    #[default]
+    Always,
+    /// An impossible query that never matches: unparseable media expressions or
+    /// media types outside screen/all (e.g. `print`, `speech`).
+    Never,
+    /// The rule is gated on a sequence of conditions joined by `and`.
+    Conditions(Vec<MediaCondition>),
 }
 
 impl MediaQuery {
     /// The unconditional query: a rule outside every `@media` block.
     #[must_use]
     pub const fn always() -> Self {
-        Self {
-            conditions: Vec::new(),
-            never: false,
-        }
+        Self::Always
     }
 
     /// An impossible query that never matches: unparseable media expressions or
     /// media types outside screen/all (e.g. `print`, `speech`).
     #[must_use]
     pub const fn never() -> Self {
-        Self {
-            conditions: Vec::new(),
-            never: true,
-        }
+        Self::Never
     }
 
     pub fn push(&mut self, condition: MediaCondition) {
-        self.conditions.push(condition);
+        match self {
+            Self::Always => *self = Self::Conditions(vec![condition]),
+            Self::Conditions(conditions) => conditions.push(condition),
+            Self::Never => {}
+        }
+    }
+
+    const fn conditions_slice(&self) -> &[MediaCondition] {
+        match self {
+            Self::Conditions(conditions) => conditions.as_slice(),
+            Self::Always | Self::Never => &[],
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = MediaCondition> + '_ {
-        self.conditions.iter().copied()
+        self.conditions_slice().iter().copied()
     }
 
     /// How many conditions the query joins. Named for the conditions rather
@@ -139,61 +154,96 @@ impl MediaQuery {
     /// — [`MediaQuery::is_always`] is.
     #[must_use]
     pub const fn condition_count(&self) -> usize {
-        self.conditions.len()
+        match self {
+            Self::Conditions(conditions) => conditions.len(),
+            Self::Always | Self::Never => 0,
+        }
     }
 
     /// Whether the rule is unconditional. Named for what it means to the
     /// cascade, not for the emptiness of the vector behind it.
     #[must_use]
     pub const fn is_always(&self) -> bool {
-        !self.never && self.conditions.is_empty()
+        match self {
+            Self::Always => true,
+            Self::Conditions(conditions) => conditions.is_empty(),
+            Self::Never => false,
+        }
     }
 
     /// Whether the query never matches any environment.
     #[must_use]
     pub const fn is_never(&self) -> bool {
-        self.never
+        matches!(self, Self::Never)
     }
 
     /// Joins `other` with `self`. Both queries must hold for the combined query to match.
     #[must_use]
     pub fn and(&self, other: &Self) -> Self {
-        if self.never || other.never {
-            return Self::never();
-        }
-        let mut conditions = self.conditions.clone();
-        conditions.extend(other.conditions.iter().copied());
-        Self {
-            conditions,
-            never: false,
+        match (self, other) {
+            (Self::Never, _) | (_, Self::Never) => Self::Never,
+            (Self::Always, query) | (query, Self::Always) => query.clone(),
+            (Self::Conditions(first), Self::Conditions(second)) => {
+                combine_conditions(first, second)
+            }
         }
     }
 
     /// Whether **every** condition holds — `@media` joins them with `and`.
     #[must_use]
     pub fn matches(&self, constraints: &ViewportConstraints) -> bool {
-        if self.never {
-            return false;
+        match self {
+            Self::Always => true,
+            Self::Never => false,
+            Self::Conditions(conditions) => conditions_match(conditions, *constraints),
         }
-        self.conditions
-            .iter()
-            .all(|condition| condition.matches(constraints))
     }
+}
+
+fn combine_conditions(first: &[MediaCondition], second: &[MediaCondition]) -> MediaQuery {
+    if first.is_empty() && second.is_empty() {
+        return MediaQuery::Always;
+    }
+    if first.is_empty() {
+        return MediaQuery::Conditions(second.to_vec());
+    }
+    if second.is_empty() {
+        return MediaQuery::Conditions(first.to_vec());
+    }
+    let capacity = first.len().saturating_add(second.len());
+    let mut combined = Vec::with_capacity(capacity);
+    combined.extend_from_slice(first);
+    combined.extend_from_slice(second);
+    MediaQuery::Conditions(combined)
+}
+
+fn conditions_match(conditions: &[MediaCondition], constraints: ViewportConstraints) -> bool {
+    conditions
+        .iter()
+        .all(|condition| condition.matches(&constraints))
 }
 
 impl fmt::Display for MediaQuery {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.never {
-            return formatter.write_str("not all");
+        match self {
+            Self::Never => formatter.write_str("not all"),
+            Self::Always => Ok(()),
+            Self::Conditions(conditions) => format_conditions(formatter, conditions),
         }
-        let mut separator = "";
-        for condition in &self.conditions {
-            formatter.write_str(separator)?;
-            condition.fmt(formatter)?;
-            separator = " and ";
-        }
-        Ok(())
     }
+}
+
+fn format_conditions(
+    formatter: &mut fmt::Formatter<'_>,
+    conditions: &[MediaCondition],
+) -> fmt::Result {
+    let mut separator = "";
+    for condition in conditions {
+        formatter.write_str(separator)?;
+        condition.fmt(formatter)?;
+        separator = " and ";
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -213,10 +263,12 @@ mod tests {
         assert!(always.is_always());
         assert!(!always.is_never());
         assert!(always.matches(&constraints));
+        assert_eq!(always, MediaQuery::Always);
 
         assert!(!never.is_always());
         assert!(never.is_never());
         assert!(!never.matches(&constraints));
+        assert_eq!(never, MediaQuery::Never);
         assert_eq!(never.to_string(), "not all");
     }
 
@@ -246,5 +298,20 @@ mod tests {
         let constraints_out = ViewportConstraints::new(px(200), px(300));
         assert!(combined.matches(&constraints_in));
         assert!(!combined.matches(&constraints_out));
+    }
+
+    #[test]
+    fn enum_variants_and_iteration() {
+        assert_eq!(MediaQuery::default(), MediaQuery::Always);
+
+        let condition = MediaCondition::new(MediaFeature::MinWidth, Length::pixels(250.0));
+        let query = MediaQuery::Conditions(vec![condition]);
+        assert_eq!(query.condition_count(), 1);
+        let items: Vec<_> = query.iter().collect();
+        assert_eq!(items, vec![condition]);
+
+        let mut never = MediaQuery::never();
+        never.push(condition);
+        assert_eq!(never, MediaQuery::Never);
     }
 }
