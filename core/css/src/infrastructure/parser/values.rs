@@ -19,6 +19,7 @@ use crate::domain::computed::flex::{
 };
 use crate::domain::computed::font::{FamilyName, FontFamily, FontFamilyList, GenericFamily};
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
+use crate::domain::computed::outline::{Outline, OutlineStyle};
 use crate::domain::computed::overflow::Overflow;
 use crate::domain::computed::position::{PositionType, ZIndex};
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
@@ -374,6 +375,87 @@ pub(crate) fn parse_white_space(tokens: &[Token]) -> Option<WhiteSpace> {
 #[must_use]
 pub(crate) fn parse_visibility(tokens: &[Token]) -> Option<Visibility> {
     keyword(tokens).and_then(|name| name.parse().ok())
+}
+
+/// `outline-style` (CSS UI 4 §3.3).
+#[must_use]
+pub(crate) fn parse_outline_style(tokens: &[Token]) -> Option<OutlineStyle> {
+    keyword(tokens).and_then(|name| name.parse().ok())
+}
+
+/// `outline-width` (CSS UI 4 §3.2).
+#[must_use]
+pub(crate) fn parse_outline_width(tokens: &[Token]) -> Option<Length> {
+    if let Some(name) = keyword(tokens) {
+        return match name.as_str() {
+            "thin" => Some(Length::Pixels(1.0)),
+            "medium" => Some(Length::Pixels(3.0)),
+            "thick" => Some(Length::Pixels(5.0)),
+            _ => None,
+        };
+    }
+    parse_length(tokens)
+}
+
+fn classify_outline_component(
+    chunk: &[Token],
+    color: &mut Option<CssColor>,
+    style: &mut Option<OutlineStyle>,
+    width: &mut Option<Length>,
+) -> bool {
+    if let Some(c) = parse_color(chunk) {
+        if color.is_some() {
+            return false;
+        }
+        *color = Some(c);
+        return true;
+    }
+    if let Some(s) = parse_outline_style(chunk) {
+        if style.is_some() {
+            return false;
+        }
+        *style = Some(s);
+        return true;
+    }
+    if let Some(w) = parse_outline_width(chunk) {
+        if width.is_some() {
+            return false;
+        }
+        *width = Some(w);
+        return true;
+    }
+    false
+}
+
+/// `outline` shorthand (CSS UI 4 §3).
+#[must_use]
+pub(crate) fn parse_outline_shorthand(tokens: &[Token]) -> Option<Outline> {
+    let mut color = None;
+    let mut style = None;
+    let mut width = None;
+    let mut count: usize = 0;
+
+    for chunk in component_values(tokens) {
+        count = count.saturating_add(1);
+        if count > 3 || !classify_outline_component(chunk, &mut color, &mut style, &mut width) {
+            return None;
+        }
+    }
+
+    if count == 0 {
+        return None;
+    }
+
+    let initial = Outline::initial();
+    let initial_color = initial.color();
+    let initial_style = initial.style();
+    let initial_width = initial.width();
+    Some(Outline::new(
+        color.unwrap_or(initial_color),
+        style.unwrap_or(initial_style),
+        width.unwrap_or(initial_width),
+        initial.offset(),
+    ))
 }
 
 /// `flex-direction` (CSS Flexbox L1 §5.1).

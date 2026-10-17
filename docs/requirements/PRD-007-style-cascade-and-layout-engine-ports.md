@@ -192,3 +192,17 @@ The rest is additive or confined to the cascade helpers:
 - **Painting honors visibility without changing layout.** `alloy/src/application/paint.rs` skips painting backgrounds,
   borders, text, and images for non-visible boxes, while continuing to traverse descendants (allowing
   `visibility: visible` children of hidden boxes to paint).
+
+### `9 → 10` — Issue #64: `outline` and `outline-offset` property support
+
+- **`ComputedStyle` gains `outline` (`Outline`).** The CSS UI 4 §3 `outline` properties (`outline`, `outline-offset`,
+  `outline-color`, `outline-width`, `outline-style`) are now parsed and cascaded. They are non-inherited properties with
+  initial value `Outline::initial()` (black, none, 3px medium width, 0px offset). The `outline(&self)` getter and
+  `with_outline(self, Outline)` builder are added to `ComputedStyle`.
+- **`OutlineStyle` enum added.** Carries `None`, `Auto`, `Hidden`, `Dotted`, `Dashed`, `Solid`, `Double`, `Groove`,
+  `Ridge`, `Inset`, `Outset`. `OutlineStyle::is_drawn(&self) -> bool` returns true for visible outline styles.
+- **`SUPPORTED_PROPERTIES` is `[&str; 143]`** (was 138), adding `"outline"`, `"outline-offset"`, `"outline-color"`,
+  `"outline-width"`, `"outline-style"`.
+- **Painting honors outline without changing layout.** `alloy/src/application/paint.rs` draws outline rectangles
+  expanded by `outline-offset` outside the border box, using `paint_border_sides`, while leaving `LayoutBoxTree`
+  byte-identical.

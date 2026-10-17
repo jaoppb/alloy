@@ -12,6 +12,7 @@ pub mod flex_values;
 pub mod font_values;
 pub mod grid_values;
 pub mod logical_values;
+pub mod outline_values;
 pub mod overflow_values;
 pub mod position_values;
 pub mod sizing_constraints_values;
