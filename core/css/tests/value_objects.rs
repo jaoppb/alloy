@@ -9,7 +9,7 @@ use css::{
     Combinator, ComplexSelector, CompoundSelector, ComputedStyle, CssColor, CssError, CssStage,
     DeclarationBlock, Display, EdgeSizes, Identifier, Length, LengthEdges, Origin,
     PORT_SCHEMA_VERSION, SUPPORTED_PROPERTIES, SUPPORTED_SELECTORS, SelectorList, SelectorStep,
-    SourceSpan, StyleRule, StyleSheetSet, TypeSelector, ViewportConstraints,
+    SourceSpan, StyleRule, StyleSheetSet, TypeSelector, ViewportConstraints, Visibility,
 };
 use css::{ComputedText, TextMetrics, TextRun};
 use graphics::{Au, Color};
@@ -108,6 +108,7 @@ fn the_initial_computed_style_is_black_transparent_and_sixteen_pixels() {
     assert_eq!(initial.color(), CssColor::BLACK);
     assert_eq!(initial.background_color(), CssColor::TRANSPARENT);
     assert_eq!(initial.display(), Display::Block);
+    assert_eq!(initial.visibility(), Visibility::Visible);
     assert_eq!(initial.font_size_au(au(16)), Some(au(16)));
 }
 
@@ -116,6 +117,7 @@ fn inheriting_carries_colour_and_font_size_but_resets_the_rest() {
     let parent = ComputedStyle::initial()
         .with_color(CssColor::rgb(9, 9, 9))
         .with_font_size(Length::Pixels(20.0))
+        .with_visibility(Visibility::Hidden)
         .with_margin(LengthEdges::uniform(Length::Pixels(5.0)));
     let child = ComputedStyle::inheriting_from(&parent);
 
@@ -125,7 +127,26 @@ fn inheriting_carries_colour_and_font_size_but_resets_the_rest() {
         Some(au(20)),
         "font-size inherits"
     );
+    assert_eq!(
+        child.visibility(),
+        Visibility::Hidden,
+        "visibility inherits"
+    );
     assert_eq!(child.margin(), LengthEdges::ZERO, "margin does not inherit");
+}
+
+#[test]
+fn visibility_values_and_classification() {
+    assert_eq!(Visibility::Visible.keyword(), "visible");
+    assert_eq!(Visibility::Hidden.keyword(), "hidden");
+    assert_eq!(Visibility::Collapse.keyword(), "collapse");
+    assert_eq!(Visibility::default(), Visibility::Visible);
+    assert!(Visibility::Visible.is_visible());
+    assert!(!Visibility::Hidden.is_visible());
+    assert!(!Visibility::Collapse.is_visible());
+    assert_eq!("visible".parse(), Ok(Visibility::Visible));
+    assert_eq!("hidden".parse(), Ok(Visibility::Hidden));
+    assert_eq!("collapse".parse(), Ok(Visibility::Collapse));
 }
 
 #[test]
@@ -250,11 +271,11 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 8,
-        "version 8 settles the PR #19 review round: new Display / InputType values, \
-         fallible TrackList, ComputedStyle no longer Copy (ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 9,
+        "version 9 adds the inherited Visibility property (issue #63, ADR-0011 item 3)"
     );
-    assert_eq!(SUPPORTED_PROPERTIES.len(), 137);
+    assert_eq!(SUPPORTED_PROPERTIES.len(), 138);
+    assert!(SUPPORTED_PROPERTIES.contains(&"visibility"));
     assert!(SUPPORTED_PROPERTIES.contains(&"grid-gap"));
     assert!(SUPPORTED_PROPERTIES.contains(&"word-wrap"));
     assert!(SUPPORTED_PROPERTIES.contains(&"font-size"));

@@ -33,6 +33,7 @@ use crate::domain::computed::position::PositionStyle;
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
 use crate::domain::computed::sizing_constraints::SizingConstraints;
 use crate::domain::computed::text_advance::TextAdvanceStyle;
+use crate::domain::computed::visibility::Visibility;
 use crate::domain::computed::visual::VisualStyle;
 use crate::domain::length::Length;
 
@@ -71,6 +72,7 @@ pub struct ComputedStyle {
     box_sizing: BoxSizing,
     text_align: TextAlign,
     white_space: WhiteSpace,
+    visibility: Visibility,
     flex: FlexStyle,
     position: PositionStyle,
     constraints: SizingConstraints,
@@ -102,6 +104,7 @@ impl ComputedStyle {
             box_sizing: BoxSizing::ContentBox,
             text_align: TextAlign::Left,
             white_space: WhiteSpace::Normal,
+            visibility: Visibility::Visible,
             flex: FlexStyle::initial(),
             position: PositionStyle::initial(),
             constraints: SizingConstraints::initial(),
@@ -118,11 +121,12 @@ impl ComputedStyle {
     ///
     /// The inherited set is exactly CSS's: `color` and `font-size` /
     /// `font-family` (CSS Color L4 / CSS Fonts L4) plus `text-align` and
-    /// `white-space` (CSS Text L3 §7.3, §4.1.1), plus `writing-mode` and
-    /// `direction` (CSS Writing Modes L3 §3.1, §2.1) — the writing context.
-    /// Every box property is **not** inherited, which is why the box edges, the
-    /// two axes, the Flexbox group and the flow-relative margins, paddings,
-    /// borders, insets and sizes of [`LogicalStyle`] all reset here.
+    /// `white-space` (CSS Text L3 §7.3, §4.1.1), plus `visibility` (CSS 2.2 §11.2),
+    /// plus `writing-mode` and `direction` (CSS Writing Modes L3 §3.1, §2.1) —
+    /// the writing context. Every box property is **not** inherited, which is
+    /// why the box edges, the two axes, the Flexbox group and the
+    /// flow-relative margins, paddings, borders, insets and sizes of
+    /// [`LogicalStyle`] all reset here.
     #[must_use]
     pub fn inheriting_from(parent: &Self) -> Self {
         Self {
@@ -131,6 +135,7 @@ impl ComputedStyle {
             font_family: parent.font_family,
             text_align: parent.text_align,
             white_space: parent.white_space,
+            visibility: parent.visibility,
             text_advance: TextAdvanceStyle::inheriting_from(&parent.text_advance),
             logical: LogicalStyle::initial().with_context(parent.logical.context()),
             ..Self::initial()
@@ -209,6 +214,11 @@ impl ComputedStyle {
             white_space,
             ..self
         }
+    }
+
+    #[must_use]
+    pub fn with_visibility(self, visibility: Visibility) -> Self {
+        Self { visibility, ..self }
     }
 
     #[must_use]
@@ -326,6 +336,11 @@ impl ComputedStyle {
     #[must_use]
     pub const fn white_space(&self) -> WhiteSpace {
         self.white_space
+    }
+
+    #[must_use]
+    pub const fn visibility(&self) -> Visibility {
+        self.visibility
     }
 
     #[must_use]

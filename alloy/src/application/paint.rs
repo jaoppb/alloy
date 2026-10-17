@@ -40,6 +40,10 @@ fn paint_single_box<F: FontProvider>(
         return Ok(());
     };
 
+    if !styled_node.style().visibility().is_visible() {
+        return Ok(());
+    }
+
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
     paint_text(laid_out, styled_node, font_provider, builder)?;
