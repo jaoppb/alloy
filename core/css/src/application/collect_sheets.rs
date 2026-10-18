@@ -18,7 +18,9 @@ use crate::domain::declaration::DeclarationBlock;
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotNodeKind};
 use crate::domain::error::CssError;
 use crate::domain::stylesheet_set::{Origin, StyleSheetSet};
-use crate::infrastructure::parser::{parse_inline_style_recording, parse_stylesheet};
+use crate::infrastructure::parser::{
+    parse_inline_style_recording, parse_media_attribute, parse_stylesheet,
+};
 
 /// Every author rule and inline block the document carries, in document order.
 ///
@@ -101,7 +103,7 @@ fn push_inline_block(node: NodeRef<'_>, block: DeclarationBlock, sheets: &mut St
     sheets.push_inline(node.id(), block);
 }
 
-/// One `<style>` element's text content.
+/// One `<style>` element's text content, gated by its `media=` attribute if present.
 fn collect_style_element(
     snapshot: &DomSnapshot,
     node: NodeRef<'_>,
@@ -110,8 +112,11 @@ fn collect_style_element(
     if node.tag() != Some(&html::TagName::Style) {
         return Ok(());
     }
+    let media = parse_media_attribute(node.attribute(html::AttributeName::media().as_str()));
     let source = style_element_text(snapshot, node);
-    sheets.absorb(parse_stylesheet(&source, Origin::Author)?);
+    let mut parsed = parse_stylesheet(&source, Origin::Author)?;
+    parsed.apply_media(&media);
+    sheets.absorb(parsed);
     Ok(())
 }
 
