@@ -344,6 +344,7 @@ pub use infrastructure::font_backed_measurer::FontBackedMeasurer;
 pub use infrastructure::layout::BlockLayout;
 pub use infrastructure::mock::{MockCascadeResolver, MockLayoutEngine, MockTextMeasurer};
 pub use infrastructure::parser::{
-    SpannedToken, Token, TokenStream, parse_inline_style, parse_stylesheet, tokenize,
+    SpannedToken, Token, TokenStream, parse_inline_style, parse_media_attribute, parse_stylesheet,
+    tokenize,
 };
 pub use infrastructure::text_metrics::MonospaceMetrics;

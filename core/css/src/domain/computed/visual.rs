@@ -29,7 +29,7 @@ pub use background_image::{BackgroundImage, ImageSource};
 pub use background_position::BackgroundPosition;
 pub use background_repeat::BackgroundRepeat;
 pub use background_size::BackgroundSize;
-pub use border_color::BorderColorEdges;
+pub use border_color::{BorderColor, BorderColorEdges};
 pub use border_radius::BorderRadius;
 pub use border_style::BorderStyle;
 pub use border_style_edges::BorderStyleEdges;

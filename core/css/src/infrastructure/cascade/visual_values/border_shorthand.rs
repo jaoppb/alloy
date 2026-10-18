@@ -1,10 +1,98 @@
 //! Border shorthand parsers.
 
-use crate::domain::computed::visual::{BorderColorEdges, BorderRadius, BorderStyleEdges};
+use crate::domain::computed::visual::{
+    BorderColor, BorderColorEdges, BorderRadius, BorderStyle, BorderStyleEdges,
+};
+use crate::domain::length::Length;
 use crate::infrastructure::parser::token::Token;
-use crate::infrastructure::parser::values::component_values;
+use crate::infrastructure::parser::values::{component_values, parse_length};
 
 use super::border::{parse_border_color, parse_border_radius_corner, parse_border_style};
+
+/// The components of the `border` shorthand declaration.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct ParsedBorderShorthand {
+    pub width: Length,
+    pub style: BorderStyle,
+    pub color: BorderColor,
+}
+
+#[derive(Default)]
+struct BorderShorthandAccumulator {
+    width: Option<Length>,
+    style: Option<BorderStyle>,
+    color: Option<BorderColor>,
+}
+
+impl BorderShorthandAccumulator {
+    fn absorb(mut self, component: &[Token]) -> Option<Self> {
+        if let Some(style) = parse_border_style(component) {
+            if self.style.is_some() {
+                return None;
+            }
+            self.style = Some(style);
+            return Some(self);
+        }
+        if let Some(width) = parse_border_width_component(component) {
+            if self.width.is_some() {
+                return None;
+            }
+            self.width = Some(width);
+            return Some(self);
+        }
+        if let Some(color) = parse_border_color(component) {
+            if self.color.is_some() {
+                return None;
+            }
+            self.color = Some(color);
+            return Some(self);
+        }
+        None
+    }
+
+    fn build(self) -> Option<ParsedBorderShorthand> {
+        if self.width.is_none() && self.style.is_none() && self.color.is_none() {
+            return None;
+        }
+        let style = self.style.unwrap_or(BorderStyle::None);
+        let color = self.color.unwrap_or(BorderColor::CurrentColor);
+        let width = self.width.unwrap_or_else(|| {
+            if style.is_none_or_hidden() {
+                Length::ZERO
+            } else {
+                Length::Pixels(3.0)
+            }
+        });
+        Some(ParsedBorderShorthand {
+            width,
+            style,
+            color,
+        })
+    }
+}
+
+fn parse_border_width_component(tokens: &[Token]) -> Option<Length> {
+    match tokens {
+        [Token::Ident(name)] if name.eq_ignore_ascii_case("thin") => Some(Length::Pixels(1.0)),
+        [Token::Ident(name)] if name.eq_ignore_ascii_case("medium") => Some(Length::Pixels(3.0)),
+        [Token::Ident(name)] if name.eq_ignore_ascii_case("thick") => Some(Length::Pixels(5.0)),
+        _ => parse_length(tokens),
+    }
+}
+
+/// `border`: `<line-width> || <line-style> || <color>` (CSS Backgrounds & Borders L3 §4.3).
+#[must_use]
+pub fn parse_border_shorthand(tokens: &[Token]) -> Option<ParsedBorderShorthand> {
+    if tokens.is_empty() {
+        return None;
+    }
+    let accumulator = component_values(tokens).try_fold(
+        BorderShorthandAccumulator::default(),
+        BorderShorthandAccumulator::absorb,
+    )?;
+    accumulator.build()
+}
 
 /// `border-style` (CSS Backgrounds & Borders L3 §4.2): one to four styles.
 #[must_use]

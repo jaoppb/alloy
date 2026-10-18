@@ -39,6 +39,13 @@ impl AttributeName {
         Self("id".to_owned())
     }
 
+    /// The `media` attribute — says which media the styles or links apply to
+    /// (HTML §4.2.4, §4.2.6).
+    #[must_use]
+    pub fn media() -> Self {
+        Self("media".to_owned())
+    }
+
     /// Access attribute name as string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -304,5 +311,6 @@ mod tests {
         assert_eq!(AttributeName::new("STYLE"), Ok(AttributeName::style()));
         assert_eq!(AttributeName::new("class"), Ok(AttributeName::class()));
         assert_eq!(AttributeName::new("Id"), Ok(AttributeName::id()));
+        assert_eq!(AttributeName::new("MEDIA"), Ok(AttributeName::media()));
     }
 }

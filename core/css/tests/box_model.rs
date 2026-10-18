@@ -162,12 +162,14 @@ fn box_sizing_decides_whether_padding_and_border_grow_the_box_or_eat_the_content
         #content {
             width: 200px;
             padding: 10px;
+            border-style: solid;
             border-width: 5px;
             box-sizing: content-box;
         }
         #border {
             width: 200px;
             padding: 10px;
+            border-style: solid;
             border-width: 5px;
             box-sizing: border-box;
         }
@@ -186,6 +188,52 @@ fn box_sizing_decides_whether_padding_and_border_grow_the_box_or_eat_the_content
     // and border are taken out of it, leaving 170px of content.
     assert_eq!(border_box.content().size().width(), au(170));
     assert_eq!(border_box.border_box().size().width(), au(200));
+}
+
+/// CSS Backgrounds and Borders L3 §3.3: border-width computed value is zero
+/// if border-style is none or hidden.
+#[test]
+fn border_width_with_no_border_style_computes_zero_used_border_width() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    element(&mut tree, root, "a");
+
+    let source = "
+        #a {
+            width: 100px;
+            height: 50px;
+            border-width: 4px;
+        }
+    ";
+    let dom = snapshot(&tree, root);
+    let boxes = layout_boxes(&tree, root, source);
+    let a_box = box_of(&boxes, &dom, "a");
+
+    assert_eq!(
+        a_box.border().top(),
+        Au::ZERO,
+        "border-width: 4px with no border-style has used border width 0"
+    );
+    assert_eq!(
+        a_box.border().right(),
+        Au::ZERO,
+        "border-width: 4px with no border-style has used border width 0"
+    );
+    assert_eq!(
+        a_box.border().bottom(),
+        Au::ZERO,
+        "border-width: 4px with no border-style has used border width 0"
+    );
+    assert_eq!(
+        a_box.border().left(),
+        Au::ZERO,
+        "border-width: 4px with no border-style has used border width 0"
+    );
+    assert_eq!(
+        a_box.border_box().size().width(),
+        au(100),
+        "border-box width matches content width when border is zeroed"
+    );
 }
 
 // ---- position: relative -----------------------------------------------------

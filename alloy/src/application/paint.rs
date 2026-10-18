@@ -4,6 +4,8 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
+use css::domain::color::CssColor;
+use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
 use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
 use graphics::{
     Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
@@ -74,18 +76,18 @@ fn paint_borders(
     styled_node: &StyledNode,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    let border = laid_out.border();
-    let border_color = styled_node.style().color().to_graphics();
-    if border_color.is_transparent() {
-        return Ok(());
-    }
-
     let border_box = laid_out.border_box();
     if border_box.is_empty() {
         return Ok(());
     }
 
-    paint_border_sides(border_box, border, border_color, builder)
+    let border = laid_out.border();
+    let text_color = styled_node.style().color();
+    let visual = styled_node.style().visual();
+    let styles = visual.border_styles();
+    let colors = visual.border_colors();
+
+    paint_border_sides(border_box, border, styles, colors, text_color, builder)
 }
 
 fn paint_outline(
@@ -136,15 +138,76 @@ fn paint_outline(
         border_box.min_y().saturating_sub(offset_plus_width),
     );
     let outer_box = Rect::new(outer_origin, outer_size);
-    let edges = EdgeSizes::new(stroke_width, stroke_width, stroke_width, stroke_width);
 
-    paint_border_sides(outer_box, edges, outline_color, builder)
+    paint_outline_sides(outer_box, stroke_width, outline_color, builder)
+}
+
+fn paint_outline_sides(
+    outer_box: Rect,
+    stroke_width: Au,
+    outline_color: Color,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), GraphicsError> {
+    let min_x = outer_box.min_x();
+    let min_y = outer_box.min_y();
+    let box_width = outer_box.size().width();
+    let box_height = outer_box.size().height();
+    let max_x = outer_box.max_x();
+    let max_y = outer_box.max_y();
+
+    let top_origin = Point::new(min_x, min_y);
+    paint_horizontal_border(
+        builder,
+        top_origin,
+        box_width,
+        stroke_width,
+        BorderStyle::Solid,
+        outline_color,
+    )?;
+
+    let bottom_origin = Point::new(min_x, max_y.saturating_sub(stroke_width));
+    paint_horizontal_border(
+        builder,
+        bottom_origin,
+        box_width,
+        stroke_width,
+        BorderStyle::Solid,
+        outline_color,
+    )?;
+
+    let vert_h = box_height
+        .saturating_sub(stroke_width)
+        .saturating_sub(stroke_width);
+    let left_origin = Point::new(min_x, min_y.saturating_add(stroke_width));
+    paint_vertical_border(
+        builder,
+        left_origin,
+        stroke_width,
+        vert_h,
+        BorderStyle::Solid,
+        outline_color,
+    )?;
+
+    let right_origin = Point::new(
+        max_x.saturating_sub(stroke_width),
+        min_y.saturating_add(stroke_width),
+    );
+    paint_vertical_border(
+        builder,
+        right_origin,
+        stroke_width,
+        vert_h,
+        BorderStyle::Solid,
+        outline_color,
+    )
 }
 
 fn paint_border_sides(
     border_box: Rect,
     border: EdgeSizes,
-    color: Color,
+    styles: BorderStyleEdges,
+    colors: BorderColorEdges,
+    text_color: CssColor,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     let min_x = border_box.min_x();
@@ -160,46 +223,94 @@ fn paint_border_sides(
     let left_w = border.left();
 
     // Top border
-    if !top_w.is_zero()
-        && !box_width.is_zero()
-        && let Some(size) = Size::new(box_width, top_w)
-    {
-        let rect = Rect::new(Point::new(min_x, min_y), size);
-        builder.draw_rect(rect_to_px_rect(rect), color)?;
-    }
+    let top_origin = Point::new(min_x, min_y);
+    let top_color = colors.top().resolve(text_color).to_graphics();
+    paint_horizontal_border(
+        builder,
+        top_origin,
+        box_width,
+        top_w,
+        styles.top(),
+        top_color,
+    )?;
 
     // Bottom border
-    if !bottom_w.is_zero()
-        && !box_width.is_zero()
-        && let Some(size) = Size::new(box_width, bottom_w)
-    {
-        let origin = Point::new(min_x, max_y.saturating_sub(bottom_w));
-        let rect = Rect::new(origin, size);
-        builder.draw_rect(rect_to_px_rect(rect), color)?;
-    }
+    let bottom_origin = Point::new(min_x, max_y.saturating_sub(bottom_w));
+    let bottom_color = colors.bottom().resolve(text_color).to_graphics();
+    paint_horizontal_border(
+        builder,
+        bottom_origin,
+        box_width,
+        bottom_w,
+        styles.bottom(),
+        bottom_color,
+    )?;
 
     // Left border (between top and bottom to avoid corner overdraw)
     let vert_h = box_height.saturating_sub(top_w).saturating_sub(bottom_w);
-    if !left_w.is_zero()
-        && !vert_h.is_zero()
-        && let Some(size) = Size::new(left_w, vert_h)
-    {
-        let origin = Point::new(min_x, min_y.saturating_add(top_w));
-        let rect = Rect::new(origin, size);
-        builder.draw_rect(rect_to_px_rect(rect), color)?;
-    }
+    let left_origin = Point::new(min_x, min_y.saturating_add(top_w));
+    let left_color = colors.left().resolve(text_color).to_graphics();
+    paint_vertical_border(
+        builder,
+        left_origin,
+        left_w,
+        vert_h,
+        styles.left(),
+        left_color,
+    )?;
 
     // Right border (between top and bottom to avoid corner overdraw)
-    if !right_w.is_zero()
-        && !vert_h.is_zero()
-        && let Some(size) = Size::new(right_w, vert_h)
-    {
-        let origin = Point::new(max_x.saturating_sub(right_w), min_y.saturating_add(top_w));
-        let rect = Rect::new(origin, size);
-        builder.draw_rect(rect_to_px_rect(rect), color)?;
-    }
+    let right_origin = Point::new(max_x.saturating_sub(right_w), min_y.saturating_add(top_w));
+    let right_color = colors.right().resolve(text_color).to_graphics();
+    paint_vertical_border(
+        builder,
+        right_origin,
+        right_w,
+        vert_h,
+        styles.right(),
+        right_color,
+    )?;
 
     Ok(())
+}
+
+fn paint_horizontal_border(
+    builder: &mut DisplayListBuilder,
+    origin: Point,
+    width: Au,
+    thickness: Au,
+    style: BorderStyle,
+    color: Color,
+) -> Result<(), GraphicsError> {
+    if thickness.is_zero() || width.is_zero() || style.is_none_or_hidden() || color.is_transparent()
+    {
+        return Ok(());
+    }
+    let Some(size) = Size::new(width, thickness) else {
+        return Ok(());
+    };
+    builder.draw_rect(rect_to_px_rect(Rect::new(origin, size)), color)
+}
+
+fn paint_vertical_border(
+    builder: &mut DisplayListBuilder,
+    origin: Point,
+    thickness: Au,
+    height: Au,
+    style: BorderStyle,
+    color: Color,
+) -> Result<(), GraphicsError> {
+    if thickness.is_zero()
+        || height.is_zero()
+        || style.is_none_or_hidden()
+        || color.is_transparent()
+    {
+        return Ok(());
+    }
+    let Some(size) = Size::new(thickness, height) else {
+        return Ok(());
+    };
+    builder.draw_rect(rect_to_px_rect(Rect::new(origin, size)), color)
 }
 
 fn paint_image(

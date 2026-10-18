@@ -11,6 +11,7 @@ use graphics::Au;
 use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
 use crate::domain::computed::style::ComputedStyle;
+use crate::domain::computed::visual::{BorderStyle, BorderStyleEdges};
 use crate::domain::error::{CssError, CssStage};
 use crate::domain::layout_box_tree::{BoxEdges, EdgeSizes};
 
@@ -98,7 +99,8 @@ pub fn resolve(
     container_width: Au,
 ) -> Result<BoxMetrics, CssError> {
     let margin = edges_of(style.margin(), font_size, container_width, "margin")?;
-    let border = edges_of(style.border(), font_size, container_width, "border-width")?;
+    let raw_border = edges_of(style.border(), font_size, container_width, "border-width")?;
+    let border = apply_border_styles(raw_border, style.visual().border_styles());
     let padding = edges_of(style.padding(), font_size, container_width, "padding")?;
     let edges = BoxEdges::new(margin, border, padding);
     let declared_width = style.width().resolve(font_size, container_width);
@@ -108,6 +110,22 @@ pub fn resolve(
         width: declared_width.map(|width| content_from(style, width, edges, Axis::Horizontal)),
         height: declared_height.map(|height| content_from(style, height, edges, Axis::Vertical)),
     })
+}
+
+const fn used_border_width(width: Au, style: BorderStyle) -> Au {
+    if style.is_none_or_hidden() {
+        return Au::ZERO;
+    }
+    width
+}
+
+const fn apply_border_styles(raw: EdgeSizes, styles: BorderStyleEdges) -> EdgeSizes {
+    EdgeSizes::new(
+        used_border_width(raw.top(), styles.top()),
+        used_border_width(raw.right(), styles.right()),
+        used_border_width(raw.bottom(), styles.bottom()),
+        used_border_width(raw.left(), styles.left()),
+    )
 }
 
 /// Which axis a declared size lies on — the two `box-sizing` subtractions

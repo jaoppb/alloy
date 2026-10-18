@@ -411,7 +411,7 @@ fn pump_queued(session: &mut TestSession) {
 }
 
 fn late_stylesheet() -> LoopMessage {
-    LoopMessage::Stylesheet(Ok("p { color: red }".into()))
+    LoopMessage::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()))
 }
 
 #[test]
@@ -542,5 +542,24 @@ fn following_a_link_supersedes_the_navigation_in_flight() {
     assert!(
         before_click.send(late_stylesheet()).is_err(),
         "a click that navigates must cut off everything still in flight"
+    );
+}
+
+#[test]
+fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
+    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
+    let page = session.outbox_for_test();
+    page.send(LoopMessage::Stylesheet(
+        css::MediaQuery::never(),
+        Ok("body { background: red; }".into()),
+    ))
+    .unwrap();
+
+    pump_queued(&mut session);
+
+    let stats = session.stats();
+    assert_eq!(
+        stats.stylesheets_loaded, 0,
+        "print or non-matching stylesheet must not be absorbed"
     );
 }

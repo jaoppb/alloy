@@ -51,7 +51,7 @@ pub use text_advance::{
 pub use variables::{CustomPropertiesMap, VariableName, VariableValue};
 pub use visibility::Visibility;
 pub use visual::{
-    BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, BorderColorEdges,
-    BorderRadius, BorderStyle, BorderStyleEdges, BoxShadow, BoxShadowList, Opacity,
-    ShadowPlacement, VisualStyle,
+    BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, BorderColor,
+    BorderColorEdges, BorderRadius, BorderStyle, BorderStyleEdges, BoxShadow, BoxShadowList,
+    Opacity, ShadowPlacement, VisualStyle,
 };

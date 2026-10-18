@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::thread;
 
+use css::MediaQuery;
 use dom::DomTree;
 use graphics::{Framebuffer, ImageId};
 use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
@@ -15,7 +16,7 @@ use crate::error::AlloyError;
 /// What a background fetch produced, drained by the loop's own thread.
 pub enum LoopMessage {
     Navigation(Result<(DomTree, Url), AlloyError>),
-    Stylesheet(Result<String, AlloyError>),
+    Stylesheet(MediaQuery, Result<String, AlloyError>),
     Image(ImageId, Result<Framebuffer, AlloyError>),
 }
 
@@ -50,7 +51,8 @@ pub fn spawn_subresource_fetch<T: HttpTransport + 'static>(
 fn fetch_subresource<T: HttpTransport>(request: SubresourceRequest, transport: &T) -> LoopMessage {
     match request {
         SubresourceRequest::Stylesheet(stylesheet) => {
-            LoopMessage::Stylesheet(fetch_text(stylesheet.url(), transport))
+            let media = stylesheet.media().clone();
+            LoopMessage::Stylesheet(media, fetch_text(stylesheet.url(), transport))
         }
         SubresourceRequest::Image(image) => {
             LoopMessage::Image(image.id(), fetch_image(image.url(), transport))
