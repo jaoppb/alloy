@@ -386,6 +386,12 @@ impl<'snapshot> NodeRef<'snapshot> {
             .flat_map(|node| node.children.iter())
     }
 
+    /// Looks up a child node by its [`SnapshotId`].
+    #[must_use]
+    pub fn child_node(self, child_id: SnapshotId) -> Option<Self> {
+        self.snapshot.node(child_id)
+    }
+
     fn node(self) -> Option<&'snapshot SnapshotNode> {
         self.snapshot.raw(self.id)
     }

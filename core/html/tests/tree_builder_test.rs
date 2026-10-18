@@ -96,3 +96,57 @@ fn div_inside_li_does_not_prevent_omission() {
     assert_eq!(parent_of(&events, items[0]), Some(ul));
     assert_eq!(parent_of(&events, items[1]), Some(ul));
 }
+
+#[test]
+fn textarea_rcdata_yields_one_text_child_and_no_element_child() {
+    let events = events_of("<textarea><b>x</b></textarea>");
+    let textareas = elements_named(&events, "textarea");
+    assert_eq!(textareas.len(), 1, "must create one <textarea> element");
+
+    let bs = elements_named(&events, "b");
+    assert!(bs.is_empty(), "<b> must not be parsed as an element child");
+
+    let textarea_id = textareas[0];
+    let text_nodes: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateText { id, content } => Some((*id, content.as_str())),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(text_nodes.len(), 1, "must yield exactly one text node");
+    assert_eq!(text_nodes[0].1, "<b>x</b>");
+    assert_eq!(
+        parent_of(&events, text_nodes[0].0),
+        Some(textarea_id),
+        "text node must be a child of <textarea>"
+    );
+}
+
+#[test]
+fn title_rcdata_yields_one_text_child_and_no_element_child() {
+    let events = events_of("<title><b>x</b></title>");
+    let titles = elements_named(&events, "title");
+    assert_eq!(titles.len(), 1, "must create one <title> element");
+
+    let bs = elements_named(&events, "b");
+    assert!(bs.is_empty(), "<b> must not be parsed as an element child");
+
+    let title_id = titles[0];
+    let text_nodes: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateText { id, content } => Some((*id, content.as_str())),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(text_nodes.len(), 1, "must yield exactly one text node");
+    assert_eq!(text_nodes[0].1, "<b>x</b>");
+    assert_eq!(
+        parent_of(&events, text_nodes[0].0),
+        Some(title_id),
+        "text node must be a child of <title>"
+    );
+}

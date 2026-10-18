@@ -135,19 +135,79 @@ center {
 }
 
 /*
- * Form controls — Tier 3 (v0.6) placeholder (issues #2 and #3).
- *
- * A full form implementation (replaced element rasterization, focus,
- * constraint validation) is out of scope for v0.5. These UA rules give
- * `<input>` and `<button>` inline-block display so the author's own sizing CSS
- * (`width`, `height`, `border`) takes effect. Without them the controls fall
- * through to `display: block` (the ComputedStyle initial) and layout treats
- * them as anonymous block containers, which swallows the author's sizing.
+ * Form controls — styling according to WHATWG HTML §15.5 Widgets & §15.3.12 (issue #87).
  */
 input,
 button,
 select,
-textarea,
+textarea {
+	box-sizing: border-box;
+}
+
+button {
+	display: inline-block;
+	border: 1px solid #767676;
+	background-color: #efefef;
+	padding: 1px 6px;
+	text-align: center;
+}
+
+input {
+	display: inline-block;
+	border: 1px solid #767676;
+	background-color: #ffffff;
+	padding: 1px 2px;
+	width: 12em;
+}
+
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+	background-color: #efefef;
+	padding: 1px 6px;
+	text-align: center;
+	width: auto;
+}
+
+input[type="hidden"] {
+	display: none;
+}
+
+select {
+	display: inline-block;
+	border: 1px solid #767676;
+	background-color: #efefef;
+	padding: 1px 2px;
+}
+
+option {
+	display: none;
+}
+
+textarea {
+	display: inline-block;
+	border: 1px solid #767676;
+	background-color: #ffffff;
+	padding: 2px;
+	white-space: pre-wrap;
+	font-family: monospace;
+	width: 12em;
+	height: 2.4em;
+}
+
+fieldset {
+	display: block;
+	margin: 0 2px;
+	border: 2px solid #767676;
+	padding: 0.35em 0.75em 0.625em;
+}
+
+legend {
+	display: block;
+	padding-left: 2px;
+	padding-right: 2px;
+}
+
 svg {
 	display: inline-block;
 }

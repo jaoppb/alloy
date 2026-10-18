@@ -6,6 +6,7 @@ use crate::domain::tag::TagName;
 use crate::domain::text::Text;
 use crate::domain::token::{TagToken, Token};
 use crate::infrastructure::tokenizer::cursor::Cursor;
+use crate::infrastructure::tokenizer::entity::{ReferenceContext, consume_character_reference};
 use crate::infrastructure::tokenizer::state::State;
 
 /// Consumes raw text content until an appropriate closing tag is reached.
@@ -15,10 +16,14 @@ pub fn consume_rawtext(
     kind: RawKind,
     pending_token: &mut Option<Token>,
 ) -> Token {
-    let (tag_name_str, end_tag_name) = match kind {
-        RawKind::Script => ("script", TagName::Script),
-        RawKind::Style => ("style", TagName::Style),
+    let end_tag_name = match kind {
+        RawKind::Script => TagName::Script,
+        RawKind::Style => TagName::Style,
+        RawKind::Textarea => TagName::Textarea,
+        RawKind::Title => TagName::Title,
     };
+    let tag_name_str = end_tag_name.as_str();
+    let is_rcdata = end_tag_name.is_rcdata();
 
     let mut content = String::new();
 
@@ -31,6 +36,10 @@ pub fn consume_rawtext(
                 TagToken::new(end_tag_name, AttributeList::new(), false, end_tag_location);
             *pending_token = Some(Token::EndTag(end_tag));
             return Token::Character(Text::new(content));
+        }
+        if is_rcdata && character == '&' {
+            consume_character_reference(cursor, &mut content, ReferenceContext::Text);
+            continue;
         }
         content.push(character);
     }
@@ -91,5 +100,17 @@ mod tests {
     fn closes_on_exact_end_tag() {
         let cursor = Cursor::new("/script>test");
         assert!(is_appropriate_end_tag(&cursor, "script"));
+    }
+
+    #[test]
+    fn textarea_rcdata_preserves_inner_markup_and_decodes_entities() {
+        let mut cursor = Cursor::new("<b>bold</b> &amp; &lt;tag&gt;</textarea>after");
+        let mut state = State::RawText(RawKind::Textarea);
+        let mut pending = None;
+        let token = consume_rawtext(&mut cursor, &mut state, RawKind::Textarea, &mut pending);
+
+        assert_eq!(token, Token::Character(Text::new("<b>bold</b> & <tag>")));
+        assert!(matches!(pending, Some(Token::EndTag(_))));
+        assert_eq!(state, State::Data);
     }
 }

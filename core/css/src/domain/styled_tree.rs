@@ -149,12 +149,10 @@ impl StyledTree {
 /// For ordinary nodes only a `Text` node has any: a comment's character data
 /// is markup, never rendered content.
 ///
-/// For `<input>` elements the inline text is synthesized from the element's
-/// attributes rather than from a child text node — the element is a replaced
-/// control with no actual DOM children, but the layout engine needs a label to
-/// paint (issues #2 / #3). [`InputType::label`] carries the rule (WHATWG HTML
-/// §4.10.5.1.18–20): the `value` attribute, else the state's default label;
-/// states that are not buttons get no synthesized text.
+/// For `<input>` and `<select>` elements the inline text is synthesized from the
+/// element's attributes or selected `<option>` rather than from a child text node —
+/// the controls have no direct text children in the page flow, but layout needs
+/// a label/value to paint (issue #87).
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
     if node_ref.kind() == SnapshotNodeKind::Text {
         if node_ref.is_foreign_descendant() {
@@ -162,21 +160,70 @@ fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
         }
         return node_ref.text().map(TextRun::new);
     }
-    synthesized_input_text(node_ref)
+    synthesized_control_text(node_ref)
+}
+
+/// Returns a synthetic [`TextRun`] for form control elements that display
+/// synthesized text (e.g. `<input>` labels/values, `<select>` selected option),
+/// or `None` for every other element kind.
+fn synthesized_control_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    match node_ref.tag() {
+        Some(TagName::Input) => synthesized_input_text(node_ref),
+        Some(TagName::Select) => synthesized_select_text(node_ref),
+        _ => None,
+    }
 }
 
 /// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible
-/// label derived from their attributes, or `None` for every other element kind.
+/// label or value derived from their attributes, or `None` for every other state.
 fn synthesized_input_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
-    if node_ref.tag() != Some(&TagName::Input) {
-        return None;
-    }
     let input_type = InputType::from_attribute(node_ref.attribute("type"));
     let label = input_type.label(node_ref.attribute("value"))?;
     if label.is_empty() {
         return None;
     }
     Some(TextRun::new(label))
+}
+
+/// Returns a synthetic [`TextRun`] for a `<select>` element representing the
+/// selected (or first) `<option>` child.
+fn synthesized_select_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    let mut first_option_text: Option<String> = None;
+
+    for child_id in node_ref.children() {
+        let Some(child_ref) = node_ref.child_node(child_id) else {
+            continue;
+        };
+        if child_ref.tag() != Some(&TagName::Option) {
+            continue;
+        }
+        let text = extract_element_text(child_ref);
+        if child_ref.attribute("selected").is_some() {
+            return Some(TextRun::new(text));
+        }
+        if first_option_text.is_none() {
+            first_option_text = Some(text);
+        }
+    }
+
+    first_option_text.map(TextRun::new)
+}
+
+/// Concatenates direct text children of `element_ref`.
+fn extract_element_text(element_ref: NodeRef<'_>) -> String {
+    let mut content = String::new();
+    for child_id in element_ref.children() {
+        let Some(child_ref) = element_ref.child_node(child_id) else {
+            continue;
+        };
+        if child_ref.kind() != SnapshotNodeKind::Text {
+            continue;
+        }
+        if let Some(text) = child_ref.text() {
+            content.push_str(text);
+        }
+    }
+    content
 }
 
 /// The already-computed style of `node_ref`'s parent, looked up by index — safe

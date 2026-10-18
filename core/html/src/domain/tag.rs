@@ -331,6 +331,12 @@ impl TagName {
         matches!(self, Self::Script | Self::Style)
     }
 
+    /// Whether this tag is an RCDATA element (`<textarea>` or `<title>`, WHATWG §13.2.5.2).
+    #[must_use]
+    pub const fn is_rcdata(&self) -> bool {
+        matches!(self, Self::Textarea | Self::Title)
+    }
+
     /// Checks whether an open `<p>` tag should be automatically closed before inserting this tag
     /// (the block-level elements of the HTML content model, WHATWG §13.2.6.4.7).
     #[must_use]
@@ -625,6 +631,14 @@ mod tests {
         assert!(tag("script").is_rawtext());
         assert!(tag("STYLE").is_rawtext());
         assert!(!tag("p").is_rawtext());
+    }
+
+    #[test]
+    fn textarea_and_title_are_rcdata() {
+        assert!(tag("textarea").is_rcdata());
+        assert!(tag("TITLE").is_rcdata());
+        assert!(!tag("p").is_rcdata());
+        assert!(!tag("script").is_rcdata());
     }
 
     #[test]
