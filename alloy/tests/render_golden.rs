@@ -11,8 +11,13 @@
 use std::path::PathBuf;
 
 use alloy::{AlloyError, RenderOptions, render_html_to_png, run_render};
+use css::{
+    BlockLayout, CascadeResolver, FontBackedMeasurer, LayoutBoxTree, LayoutEngine, UaCascade,
+    ViewportConstraints, collect_style_sheets, snapshot,
+};
 use graphics::golden::assert_matches_golden;
 use graphics::png::decode as decode_png;
+use graphics::{Au, Color, SyntheticFontProvider};
 
 const TEST_HTML: &str = include_str!("fixtures/test_page.html");
 
@@ -322,5 +327,108 @@ fn textarea_yields_one_text_child_and_paints_it_literally() {
     assert_eq!(
         rendered, escaped_rendered,
         "<textarea><b>x</b></textarea> must paint literally, matching escaped markup"
+    );
+}
+
+fn layout_for_html(html: &str, width: i32, height: i32) -> LayoutBoxTree {
+    let dom_tree = alloy::application::html_parse::parse_html(html).expect("html parse succeeds");
+    let snapshot = snapshot(&dom_tree, dom_tree.document());
+    let sheets = collect_style_sheets(&snapshot).expect("collect sheets succeeds");
+    let constraints = ViewportConstraints::new(
+        Au::from_whole_px(width).expect("valid width Au"),
+        Au::from_whole_px(height).expect("valid height Au"),
+    );
+    let sheets = sheets.matching_viewport(&constraints);
+    let styled_tree = UaCascade::new()
+        .resolve(&snapshot, &sheets)
+        .expect("styled tree resolution succeeds");
+    let measurer = FontBackedMeasurer::new(
+        std::sync::Arc::new(SyntheticFontProvider::new()),
+        alloy::application::paint::DEFAULT_FONT,
+    );
+    BlockLayout::new(measurer)
+        .layout(&styled_tree, &constraints)
+        .expect("layout succeeds")
+}
+
+#[test]
+fn outline_paints_outside_border_box_and_leaves_layout_identical() {
+    let with_outline = "<!doctype html><html><head><style>\
+                        body{margin:0;background:#fff}\
+                        #box{margin:20px;width:100px;height:100px;border:2px solid #0000ff;\
+                        color:#0000ff;outline:3px solid #ff0000;outline-offset:2px}\
+                        </style></head>\
+                        <body><div id=\"box\"></div></body></html>";
+
+    let without_outline = "<!doctype html><html><head><style>\
+                           body{margin:0;background:#fff}\
+                           #box{margin:20px;width:100px;height:100px;border:2px solid #0000ff;\
+                           color:#0000ff}\
+                           </style></head>\
+                           <body><div id=\"box\"></div></body></html>";
+
+    let layout_with = layout_for_html(with_outline, 320, 240);
+    let layout_without = layout_for_html(without_outline, 320, 240);
+    assert_eq!(
+        layout_with, layout_without,
+        "outline and outline-offset must not alter layout box tree"
+    );
+
+    let options = RenderOptions::new(320, 240);
+    let bytes = render_html_to_png(with_outline, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    let red = Color::rgb(255, 0, 0);
+    let blue = Color::rgb(0, 0, 255);
+    let white = Color::WHITE;
+
+    // 2-5px outside border box (x/y: 15..18 and 126..129) must be red outline.
+    assert_eq!(
+        frame.pixel(16, 50),
+        Some(red),
+        "left outline must be red (4px outside border box)"
+    );
+    assert_eq!(
+        frame.pixel(50, 16),
+        Some(red),
+        "top outline must be red (4px outside border box)"
+    );
+    assert_eq!(
+        frame.pixel(127, 50),
+        Some(red),
+        "right outline must be red (3px outside border box)"
+    );
+    assert_eq!(
+        frame.pixel(50, 127),
+        Some(red),
+        "bottom outline must be red (3px outside border box)"
+    );
+
+    // Gap 0-2px outside border box (x/y: 18..20 and 124..126) must be white (background).
+    assert_eq!(
+        frame.pixel(19, 50),
+        Some(white),
+        "gap between border and outline must be white"
+    );
+    assert_eq!(frame.pixel(50, 19), Some(white), "top gap must be white");
+    assert_eq!(frame.pixel(125, 50), Some(white), "right gap must be white");
+    assert_eq!(
+        frame.pixel(50, 125),
+        Some(white),
+        "bottom gap must be white"
+    );
+
+    // Border box edges (x/y: 20..22 and 122..124) must be blue border.
+    assert_eq!(frame.pixel(21, 50), Some(blue), "left border must be blue");
+    assert_eq!(frame.pixel(50, 21), Some(blue), "top border must be blue");
+    assert_eq!(
+        frame.pixel(123, 50),
+        Some(blue),
+        "right border must be blue"
+    );
+    assert_eq!(
+        frame.pixel(50, 123),
+        Some(blue),
+        "bottom border must be blue"
     );
 }

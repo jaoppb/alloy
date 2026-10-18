@@ -18,46 +18,47 @@ the runner — all three, or CI is red.
 
 ## Tags
 
-The HTML elements the parser recognizes and constructs into DOM element nodes.
+The HTML elements the parser recognizes and constructs into DOM element nodes. Note that inclusion here proves parsing
+and tree construction into `dom::DomTree`, not necessarily visual styling or painting.
 
-| token        | since | notes                                                        |
-| ------------ | ----- | ------------------------------------------------------------ |
-| `a`          | B5    | inline hyperlink element                                     |
-| `article`    | B5    | block sectioning container                                   |
-| `blockquote` | B5    | block quotation container                                    |
-| `body`       | B5    | main document body container                                 |
-| `br`         | B5    | void line break element                                      |
-| `code`       | B5    | inline code span                                             |
-| `div`        | B5    | block division container                                     |
-| `em`         | B5    | inline emphasis element                                      |
-| `footer`     | B5    | block footer container                                       |
-| `h1`         | B5    | level 1 section heading                                      |
-| `h2`         | B5    | level 2 section heading                                      |
-| `h3`         | B5    | level 3 section heading                                      |
-| `h4`         | B5    | level 4 section heading                                      |
-| `h5`         | B5    | level 5 section heading                                      |
-| `h6`         | B5    | level 6 section heading                                      |
-| `head`       | B5    | document metadata container                                  |
-| `header`     | B5    | block header container                                       |
-| `hr`         | B5    | void thematic break element                                  |
-| `html`       | B5    | root document element                                        |
-| `img`        | B5    | void embedded image element                                  |
-| `li`         | B5    | list item element with auto-closing tag omission             |
-| `link`       | B5    | void document resource link metadata                         |
-| `main`       | B5    | block main content container                                 |
-| `meta`       | B5    | void document metadata element                               |
-| `nav`        | B5    | block navigation container                                   |
-| `noscript`   | B5    | alternate content container                                  |
-| `ol`         | B5    | ordered list block container                                 |
-| `p`          | B5    | paragraph block element with auto-closing tag omission       |
-| `pre`        | B5    | preformatted text container                                  |
-| `script`     | B5    | script element; content tokenized as RAWTEXT, not markup     |
-| `section`    | B5    | block generic section container                              |
-| `span`       | B5    | inline text container                                        |
-| `strong`     | B5    | inline strong importance element                             |
-| `style`      | B5    | stylesheet element; content tokenized as RAWTEXT, not markup |
-| `title`      | B5    | document title metadata element                              |
-| `ul`         | B5    | unordered list block container                               |
+| token        | status      | since | notes                                                                                    |
+| ------------ | ----------- | ----- | ---------------------------------------------------------------------------------------- |
+| `a`          | partial     | B5    | inline hyperlink element; blue link color and click target render, text underline is out |
+| `article`    | rendered    | B5    | block sectioning container                                                               |
+| `blockquote` | rendered    | B5    | block quotation container                                                                |
+| `body`       | rendered    | B5    | main document body container                                                             |
+| `br`         | parsed only | B5    | void line break element; treated as an empty block container, inline break pending (#82) |
+| `code`       | parsed only | B5    | inline code span; renders identical to span, monospace font style pending (#57/#81)      |
+| `div`        | rendered    | B5    | block division container                                                                 |
+| `em`         | parsed only | B5    | inline emphasis element; renders identical to span, italic font style pending (#57/#81)  |
+| `footer`     | rendered    | B5    | block footer container                                                                   |
+| `h1`         | partial     | B5    | level 1 section heading; font-size and margins render, font-weight bold pending (#57)    |
+| `h2`         | partial     | B5    | level 2 section heading; font-size and margins render, font-weight bold pending (#57)    |
+| `h3`         | partial     | B5    | level 3 section heading; font-size and margins render, font-weight bold pending (#57)    |
+| `h4`         | partial     | B5    | level 4 section heading; font-size and margins render, font-weight bold pending (#57)    |
+| `h5`         | partial     | B5    | level 5 section heading; font-size and margins render, font-weight bold pending (#57)    |
+| `h6`         | partial     | B5    | level 6 section heading; font-size and margins render, font-weight bold pending (#57)    |
+| `head`       | rendered    | B5    | document metadata container; hidden via display: none                                    |
+| `header`     | rendered    | B5    | block header container                                                                   |
+| `hr`         | parsed only | B5    | void thematic break element; no UA border style and paints nothing (#82)                |
+| `html`       | rendered    | B5    | root document element                                                                    |
+| `img`        | parsed only | B5    | void embedded image element; no intrinsic sizing or replaced layout (#83)                |
+| `li`         | partial     | B5    | list item element with auto-closing tag omission; indent renders, ::marker pending (#71) |
+| `link`       | rendered    | B5    | void document resource link metadata; hidden via display: none, stylesheets cascaded     |
+| `main`       | rendered    | B5    | block main content container                                                             |
+| `meta`       | rendered    | B5    | void document metadata element; hidden via display: none                                 |
+| `nav`        | rendered    | B5    | block navigation container                                                               |
+| `noscript`   | rendered    | B5    | alternate content container; hidden via display: none                                    |
+| `ol`         | rendered    | B5    | ordered list block container                                                             |
+| `p`          | rendered    | B5    | paragraph block element with auto-closing tag omission                                   |
+| `pre`        | rendered    | B5    | preformatted text container                                                              |
+| `script`     | rendered    | B5    | script element; content tokenized as RAWTEXT, not markup; hidden via display: none        |
+| `section`    | rendered    | B5    | block generic section container                                                          |
+| `span`       | rendered    | B5    | inline text container                                                                    |
+| `strong`     | parsed only | B5    | inline strong importance element; renders identical to span, font-weight bold pending    |
+| `style`      | rendered    | B5    | stylesheet element; content tokenized as RAWTEXT, not markup; hidden via display: none    |
+| `title`      | partial     | B5    | document title metadata; hidden via display: none, RCDATA mode and window title pending  |
+| `ul`         | rendered    | B5    | unordered list block container                                                           |
 
 ## Syntax
 

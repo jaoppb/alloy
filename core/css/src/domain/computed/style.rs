@@ -28,6 +28,7 @@ use crate::domain::computed::font::FontFamilyList;
 use crate::domain::computed::grid::GridStyle;
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use crate::domain::computed::logical::LogicalStyle;
+use crate::domain::computed::outline::Outline;
 use crate::domain::computed::overflow::OverflowStyle;
 use crate::domain::computed::position::PositionStyle;
 use crate::domain::computed::sizing::{BoxSizing, Sizing};
@@ -79,6 +80,7 @@ pub struct ComputedStyle {
     overflow: OverflowStyle,
     visual: VisualStyle,
     text_advance: TextAdvanceStyle,
+    outline: Outline,
     /// `None` while every grid property is `initial` — the invariant
     /// [`Self::with_grid`] keeps, so the derived `PartialEq` never has to
     /// tell a `None` from a `Some` holding the initial value.
@@ -111,6 +113,7 @@ impl ComputedStyle {
             overflow: OverflowStyle::initial(),
             visual: VisualStyle::initial(),
             text_advance: TextAdvanceStyle::initial(),
+            outline: Outline::initial(),
             grid: None,
             logical: LogicalStyle::initial(),
         }
@@ -250,6 +253,11 @@ impl ComputedStyle {
     }
 
     #[must_use]
+    pub fn with_outline(self, outline: Outline) -> Self {
+        Self { outline, ..self }
+    }
+
+    #[must_use]
     pub fn with_text_advance(self, text_advance: TextAdvanceStyle) -> Self {
         Self {
             text_advance,
@@ -366,6 +374,11 @@ impl ComputedStyle {
     #[must_use]
     pub const fn visual(&self) -> VisualStyle {
         self.visual
+    }
+
+    #[must_use]
+    pub const fn outline(&self) -> Outline {
+        self.outline
     }
 
     #[must_use]
