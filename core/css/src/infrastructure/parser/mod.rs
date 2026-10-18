@@ -26,6 +26,7 @@ pub mod token;
 pub mod tokenizer;
 pub mod values;
 
+pub use media::parse_media_attribute;
 pub use token::{SpannedToken, Token, TokenStream};
 pub use tokenizer::tokenize;
 

@@ -8,9 +8,9 @@ use css::domain::length::Length;
 use css::infrastructure::parser::tokenize;
 
 use css::domain::computed::visual::{
-    BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, BorderColorEdges,
-    BorderRadius, BorderStyle, BorderStyleEdges, BoxShadow, BoxShadowList, Opacity,
-    ShadowPlacement, VisualStyle,
+    BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, BorderColor,
+    BorderColorEdges, BorderRadius, BorderStyle, BorderStyleEdges, BoxShadow, BoxShadowList,
+    Opacity, ShadowPlacement, VisualStyle,
 };
 use css::infrastructure::cascade::visual_values::{
     apply_visual_property, inherit_visual_property, parse_background_image,
@@ -150,10 +150,10 @@ fn test_parse_border_style_shorthands() {
 #[test]
 fn test_border_color_initial_and_immutability() {
     let initial = BorderColorEdges::default();
-    assert_eq!(initial.top(), CssColor::BLACK);
-    assert_eq!(initial.right(), CssColor::BLACK);
-    assert_eq!(initial.bottom(), CssColor::BLACK);
-    assert_eq!(initial.left(), CssColor::BLACK);
+    assert_eq!(initial.top(), BorderColor::CurrentColor);
+    assert_eq!(initial.right(), BorderColor::CurrentColor);
+    assert_eq!(initial.bottom(), BorderColor::CurrentColor);
+    assert_eq!(initial.left(), BorderColor::CurrentColor);
 
     let red = CssColor::rgb(0xFF, 0x00, 0x00);
     let blue = CssColor::rgb(0x00, 0x00, 0xFF);
@@ -161,16 +161,16 @@ fn test_border_color_initial_and_immutability() {
     let white = CssColor::rgb(0xFF, 0xFF, 0xFF);
 
     let modified = initial
-        .with_top(red)
-        .with_right(blue)
-        .with_bottom(green)
-        .with_left(white);
+        .with_top(BorderColor::Color(red))
+        .with_right(BorderColor::Color(blue))
+        .with_bottom(BorderColor::Color(green))
+        .with_left(BorderColor::Color(white));
 
-    assert_eq!(initial.top(), CssColor::BLACK);
-    assert_eq!(modified.top(), red);
-    assert_eq!(modified.right(), blue);
-    assert_eq!(modified.bottom(), green);
-    assert_eq!(modified.left(), white);
+    assert_eq!(initial.top(), BorderColor::CurrentColor);
+    assert_eq!(modified.top(), BorderColor::Color(red));
+    assert_eq!(modified.right(), BorderColor::Color(blue));
+    assert_eq!(modified.bottom(), BorderColor::Color(green));
+    assert_eq!(modified.left(), BorderColor::Color(white));
 }
 
 #[test]
@@ -178,21 +178,53 @@ fn test_parse_border_color_formats() {
     let red = CssColor::rgb(0xFF, 0x00, 0x00);
     let blue = CssColor::rgb(0x00, 0x00, 0xFF);
 
-    assert_eq!(parse_border_color(&tokens_of("red")), Some(red));
-    assert_eq!(parse_border_color(&tokens_of("#f00")), Some(red));
-    assert_eq!(parse_border_color(&tokens_of("#ff0000")), Some(red));
-    assert_eq!(parse_border_color(&tokens_of("blue")), Some(blue));
+    assert_eq!(
+        parse_border_color(&tokens_of("red")),
+        Some(BorderColor::Color(red))
+    );
+    assert_eq!(
+        parse_border_color(&tokens_of("#f00")),
+        Some(BorderColor::Color(red))
+    );
+    assert_eq!(
+        parse_border_color(&tokens_of("#ff0000")),
+        Some(BorderColor::Color(red))
+    );
+    assert_eq!(
+        parse_border_color(&tokens_of("blue")),
+        Some(BorderColor::Color(blue))
+    );
     assert_eq!(
         parse_border_color(&tokens_of("transparent")),
-        Some(CssColor::TRANSPARENT)
+        Some(BorderColor::Color(CssColor::TRANSPARENT))
+    );
+    assert_eq!(
+        parse_border_color(&tokens_of("currentColor")),
+        Some(BorderColor::CurrentColor)
     );
     assert_eq!(parse_border_color(&tokens_of("unknowncolor")), None);
 
     let s1 = parse_border_color_shorthand(&tokens_of("red")).unwrap();
-    assert_eq!(s1, BorderColorEdges::uniform(red));
+    assert_eq!(s1, BorderColorEdges::uniform(BorderColor::Color(red)));
 
     let s2 = parse_border_color_shorthand(&tokens_of("red blue")).unwrap();
-    assert_eq!(s2, BorderColorEdges::new(red, blue, red, blue));
+    assert_eq!(
+        s2,
+        BorderColorEdges::new(
+            BorderColor::Color(red),
+            BorderColor::Color(blue),
+            BorderColor::Color(red),
+            BorderColor::Color(blue)
+        )
+    );
+}
+
+#[test]
+fn test_border_color_resolve_current_color() {
+    let text_color = CssColor::rgb(10, 20, 30);
+    assert_eq!(BorderColor::CurrentColor.resolve(text_color), text_color);
+    let custom = CssColor::rgb(255, 0, 0);
+    assert_eq!(BorderColor::Color(custom).resolve(text_color), custom);
 }
 
 // =========================================================================
@@ -460,7 +492,7 @@ fn test_background_repeat_and_keywords() {
 fn test_visual_style_aggregate_initial() {
     let style = VisualStyle::initial();
     assert_eq!(style.border_styles(), BorderStyleEdges::NONE);
-    assert_eq!(style.border_colors(), BorderColorEdges::BLACK);
+    assert_eq!(style.border_colors(), BorderColorEdges::CURRENT_COLOR);
     assert_eq!(style.border_radius(), BorderRadius::ZERO);
     assert!(style.box_shadow().is_none());
     assert_eq!(style.opacity(), Opacity::ONE);
@@ -477,7 +509,7 @@ fn test_visual_style_builders_immutability() {
 
     let modified = initial
         .with_border_styles(BorderStyleEdges::uniform(BorderStyle::Solid))
-        .with_border_colors(BorderColorEdges::uniform(red))
+        .with_border_colors(BorderColorEdges::uniform(BorderColor::Color(red)))
         .with_border_radius(BorderRadius::uniform(Length::Pixels(8.0)))
         .with_opacity(Opacity::clamped(0.5))
         .with_background_repeat(BackgroundRepeat::NoRepeat);
@@ -491,7 +523,10 @@ fn test_visual_style_builders_immutability() {
         modified.border_styles(),
         BorderStyleEdges::uniform(BorderStyle::Solid)
     );
-    assert_eq!(modified.border_colors(), BorderColorEdges::uniform(red));
+    assert_eq!(
+        modified.border_colors(),
+        BorderColorEdges::uniform(BorderColor::Color(red))
+    );
     assert_eq!(
         modified.border_radius(),
         BorderRadius::uniform(Length::Pixels(8.0))
@@ -530,19 +565,25 @@ fn test_apply_all_21_visual_properties() {
     let white = CssColor::rgb(0xFF, 0xFF, 0xFF);
 
     style = apply_visual_property(style, "border-color", &tokens_of("red")).unwrap();
-    assert_eq!(style.border_colors(), BorderColorEdges::uniform(red));
+    assert_eq!(
+        style.border_colors(),
+        BorderColorEdges::uniform(BorderColor::Color(red))
+    );
 
     style = apply_visual_property(style, "border-top-color", &tokens_of("blue")).unwrap();
-    assert_eq!(style.border_colors().top(), blue);
+    assert_eq!(style.border_colors().top(), BorderColor::Color(blue));
 
     style = apply_visual_property(style, "border-right-color", &tokens_of("green")).unwrap();
-    assert_eq!(style.border_colors().right(), green);
+    assert_eq!(style.border_colors().right(), BorderColor::Color(green));
 
     style = apply_visual_property(style, "border-bottom-color", &tokens_of("white")).unwrap();
-    assert_eq!(style.border_colors().bottom(), white);
+    assert_eq!(style.border_colors().bottom(), BorderColor::Color(white));
 
     style = apply_visual_property(style, "border-left-color", &tokens_of("black")).unwrap();
-    assert_eq!(style.border_colors().left(), CssColor::BLACK);
+    assert_eq!(
+        style.border_colors().left(),
+        BorderColor::Color(CssColor::BLACK)
+    );
 
     // 11-15: border radius
     style = apply_visual_property(style, "border-radius", &tokens_of("10px")).unwrap();
