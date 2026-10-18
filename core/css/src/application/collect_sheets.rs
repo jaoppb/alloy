@@ -67,17 +67,14 @@ fn collect_presentational_hints(
 }
 
 fn append_tag_hints(node: NodeRef<'_>, declarations: &mut String) {
-    if node.tag() == Some(&html::TagName::Svg) {
-        append_hint_dimension(node.attribute("width"), "width", declarations);
-        append_hint_dimension(node.attribute("height"), "height", declarations);
-        return;
-    }
-    if node.tag() == Some(&html::TagName::Input) {
-        append_input_size_hint(node, declarations);
-        return;
-    }
-    if node.tag() == Some(&html::TagName::Textarea) {
-        append_textarea_dimensions_hint(node, declarations);
+    match node.tag() {
+        Some(html::TagName::Svg) => {
+            append_hint_dimension(node.attribute("width"), "width", declarations);
+            append_hint_dimension(node.attribute("height"), "height", declarations);
+        }
+        Some(html::TagName::Input) => append_input_size_hint(node, declarations),
+        Some(html::TagName::Textarea) => append_textarea_dimensions_hint(node, declarations),
+        _ => {}
     }
 }
 

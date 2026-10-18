@@ -167,13 +167,11 @@ fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
 /// synthesized text (e.g. `<input>` labels/values, `<select>` selected option),
 /// or `None` for every other element kind.
 fn synthesized_control_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
-    if node_ref.tag() == Some(&TagName::Input) {
-        return synthesized_input_text(node_ref);
+    match node_ref.tag() {
+        Some(TagName::Input) => synthesized_input_text(node_ref),
+        Some(TagName::Select) => synthesized_select_text(node_ref),
+        _ => None,
     }
-    if node_ref.tag() == Some(&TagName::Select) {
-        return synthesized_select_text(node_ref);
-    }
-    None
 }
 
 /// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible
