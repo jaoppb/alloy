@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use css::domain::color::CssColor;
 use css::domain::computed::grid::{GridPlacement, GridStyle, TrackSize};
-use css::domain::computed::visual::{BoxShadowList, ShadowPlacement, VisualStyle};
+use css::domain::computed::visual::{BorderColor, BoxShadowList, ShadowPlacement, VisualStyle};
 use css::domain::length::Length;
 use css::infrastructure::cascade::grid_values::{self, tokenize_value};
 use css::infrastructure::cascade::visual_values::{
@@ -202,19 +202,19 @@ fn box_shadow_past_the_capacity_is_rejected_not_truncated() {
 
 #[test]
 fn border_color_accepts_functional_colours() {
-    let translucent = CssColor::rgba(0, 0, 0, 128);
+    let translucent = BorderColor::Color(CssColor::rgba(0, 0, 0, 128));
     let edges = parse_border_color_shorthand(&tokenize_value("rgba(0,0,0,.5)")).expect("rgba");
     assert_eq!(edges.top(), translucent);
     assert_eq!(edges.left(), translucent);
 
     let pair =
         parse_border_color_shorthand(&tokenize_value("red rgb(1, 2, 3)")).expect("two colours");
-    assert_eq!(pair.top(), CssColor::rgb(0xFF, 0, 0));
-    assert_eq!(pair.right(), CssColor::rgb(1, 2, 3));
-    assert_eq!(pair.bottom(), CssColor::rgb(0xFF, 0, 0));
+    assert_eq!(pair.top(), BorderColor::Color(CssColor::rgb(0xFF, 0, 0)));
+    assert_eq!(pair.right(), BorderColor::Color(CssColor::rgb(1, 2, 3)));
+    assert_eq!(pair.bottom(), BorderColor::Color(CssColor::rgb(0xFF, 0, 0)));
 
     let top = parse_border_color(&tokenize_value("rgb(1,2,3)"));
-    assert_eq!(top, Some(CssColor::rgb(1, 2, 3)));
+    assert_eq!(top, Some(BorderColor::Color(CssColor::rgb(1, 2, 3))));
 
     let style = apply_visual_property(
         VisualStyle::initial(),
@@ -222,5 +222,8 @@ fn border_color_accepts_functional_colours() {
         &tokenize_value("rgb(1,2,3)"),
     )
     .expect("border-top-color applies");
-    assert_eq!(style.border_colors().top(), CssColor::rgb(1, 2, 3));
+    assert_eq!(
+        style.border_colors().top(),
+        BorderColor::Color(CssColor::rgb(1, 2, 3))
+    );
 }

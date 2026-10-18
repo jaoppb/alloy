@@ -31,7 +31,7 @@ impl VisualStyle {
     pub const fn initial() -> Self {
         Self {
             border_styles: BorderStyleEdges::NONE,
-            border_colors: BorderColorEdges::BLACK,
+            border_colors: BorderColorEdges::CURRENT_COLOR,
             border_radius: BorderRadius::ZERO,
             box_shadow: BoxShadowList::none(),
             opacity: Opacity::ONE,
