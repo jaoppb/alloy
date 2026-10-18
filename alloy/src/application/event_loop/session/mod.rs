@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use css::StyleSheetSet;
 use dom::DomTree;
-use graphics::FontProvider;
+use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
 
@@ -19,9 +19,51 @@ use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
+use crate::application::omnibox::OmniboxState;
+use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
+
+/// Strongly-typed vertical height of the top chrome bar in pixels (ADR-0010).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ChromeHeight(u32);
+
+impl ChromeHeight {
+    /// Default chrome height (42 px).
+    pub const DEFAULT: Self = Self(42);
+
+    #[must_use]
+    pub const fn new(pixels: u32) -> Self {
+        Self(pixels)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl Default for ChromeHeight {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl From<u32> for ChromeHeight {
+    fn from(pixels: u32) -> Self {
+        Self(pixels)
+    }
+}
+
+impl From<ChromeHeight> for u32 {
+    fn from(height: ChromeHeight) -> Self {
+        height.0
+    }
+}
+
+/// The vertical height of the top chrome bar in pixels (Epic #43 / Issue #48).
+pub const CHROME_HEIGHT: u32 = ChromeHeight::DEFAULT.get();
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
 /// the arity limit: the accumulated document state, the current viewport, and
@@ -58,6 +100,7 @@ pub struct Session<F, T, P, D> {
     /// index reused by every document — naming an `<img>` of the new page.
     inbox: Receiver<LoopMessage>,
     outbox: Sender<LoopMessage>,
+    omnibox: OmniboxState,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -83,6 +126,7 @@ where
             stats: LoopStats::default(),
             inbox,
             outbox,
+            omnibox: OmniboxState::new(),
         }
     }
 
@@ -92,6 +136,13 @@ where
 
     pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
         self.pointer_position
+    }
+
+    /// Read-only access to the session's address bar state.
+    #[must_use]
+    #[cfg(test)]
+    pub const fn omnibox(&self) -> &OmniboxState {
+        &self.omnibox
     }
 
     /// Where the pointer was last seen — `None` until it first enters.
@@ -115,14 +166,20 @@ where
     /// reads any more.
     pub fn navigate(&mut self, url: Url) {
         self.open_channel();
+        self.omnibox.reset_to_url(&url);
         let transport = Arc::clone(self.services.transport());
         let policy = Arc::clone(self.services.policy());
         spawn_navigation(url, transport, policy, self.outbox.clone());
     }
 
     /// Navigates to the topmost link under `position`, resolved against the
-    /// document's base URL. An in-page `#anchor` is a no-op in v0.5.
+    /// document's base URL. Clicks within the top-bar chrome (`y < CHROME_HEIGHT`)
+    /// focus the omnibox instead of triggering link navigation.
     pub fn follow_link_at(&mut self, position: PhysicalPosition) {
+        if position.y() < f64::from(CHROME_HEIGHT) {
+            self.omnibox.focus();
+            return;
+        }
         let Some(href) = hit_test(&self.links, position) else {
             return;
         };
@@ -153,17 +210,26 @@ where
         let Some(dom_tree) = self.dom_tree.as_ref() else {
             return Ok(());
         };
-        let graphics_size =
-            graphics::SurfaceSize::new(self.viewport.width(), self.viewport.height())
-                .ok_or(AlloyError::InvalidDimensions)?;
-        let (framebuffer, links) = render_dom_with_links(
+        let content_height = self
+            .viewport
+            .height()
+            .checked_sub(CHROME_HEIGHT)
+            .ok_or(AlloyError::InvalidDimensions)?;
+        let graphics_size = graphics::SurfaceSize::new(self.viewport.width(), content_height)
+            .ok_or(AlloyError::InvalidDimensions)?;
+        let (content_framebuffer, links) = render_dom_with_links(
             dom_tree,
             self.extra_sheets.clone(),
             &self.images,
             graphics_size,
             Arc::clone(self.services.font_provider()),
         )?;
-        let frame = CachedFrame::capture(&framebuffer, self.viewport);
+        let chrome_framebuffer = render_chrome(
+            &self.omnibox,
+            self.viewport.width(),
+            Arc::clone(self.services.font_provider()),
+        )?;
+        let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
         frame.present(presenter)?;
         self.links = links;
         self.last_frame = Some(frame);
@@ -188,6 +254,138 @@ impl<F, T, P, D> Session<F, T, P, D> {
     fn open_channel(&mut self) {
         (self.outbox, self.inbox) = mpsc::channel();
     }
+}
+
+const CHROME_BG: graphics::Color = graphics::Color::rgb(0xF1, 0xF3, 0xF4);
+const INPUT_BG: graphics::Color = graphics::Color::WHITE;
+const TEXT_COLOR: graphics::Color = graphics::Color::rgb(0x20, 0x21, 0x24);
+const FOCUS_OUTLINE_COLOR: graphics::Color = graphics::Color::rgb(0x1A, 0x73, 0xE8);
+
+fn render_chrome<F: FontProvider + 'static>(
+    omnibox: &OmniboxState,
+    viewport_width: u32,
+    font_provider: Arc<F>,
+) -> Result<graphics::Framebuffer, AlloyError> {
+    let chrome_size = graphics::SurfaceSize::new(viewport_width, CHROME_HEIGHT)
+        .ok_or(AlloyError::InvalidDimensions)?;
+    let mut builder = DisplayListBuilder::new();
+    paint_chrome(
+        omnibox,
+        viewport_width,
+        font_provider.as_ref(),
+        &mut builder,
+    )?;
+    let display_list = builder.build()?;
+
+    let mut backend = SoftwareCpuBackend::with_font_provider(font_provider);
+    backend.begin_frame(chrome_size)?;
+    backend.submit(&display_list)?;
+    backend.end_frame()?;
+    let framebuffer = backend.read_back()?;
+    Ok(framebuffer)
+}
+
+const CHROME_HEIGHT_F32: f32 = 42.0;
+
+#[allow(clippy::as_conversions, clippy::cast_precision_loss)]
+const fn u32_to_f32(value: u32) -> f32 {
+    value as f32
+}
+
+fn paint_chrome<F: FontProvider>(
+    omnibox: &OmniboxState,
+    viewport_width: u32,
+    font_provider: &F,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), graphics::GraphicsError> {
+    let width_f32 = u32_to_f32(viewport_width);
+    let height_f32 = CHROME_HEIGHT_F32;
+
+    let chrome_area = graphics::PxRect::from_px(0.0, 0.0, width_f32, height_f32);
+    builder.draw_rect(chrome_area, CHROME_BG)?;
+
+    let margin_x = 8.0f32;
+    let box_height = 30.0f32;
+    let margin_y = ((height_f32 - box_height) / 2.0).max(0.0);
+    let box_width = (width_f32 - (margin_x + margin_x)).max(0.0);
+
+    paint_focus_ring(omnibox, margin_x, margin_y, box_width, box_height, builder)?;
+
+    let input_area = graphics::PxRect::from_px(margin_x, margin_y, box_width, box_height);
+    builder.draw_rounded_rect(input_area, INPUT_BG, graphics::Px::new(6.0))?;
+
+    paint_chrome_text(omnibox, font_provider, builder)?;
+    Ok(())
+}
+
+fn paint_focus_ring(
+    omnibox: &OmniboxState,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), graphics::GraphicsError> {
+    if !omnibox.is_focused() {
+        return Ok(());
+    }
+    let border_w = 1.0f32;
+    let outline_area = graphics::PxRect::from_px(
+        x - border_w,
+        y - border_w,
+        width + border_w + border_w,
+        height + border_w + border_w,
+    );
+    builder.draw_rounded_rect(outline_area, FOCUS_OUTLINE_COLOR, graphics::Px::new(7.0))
+}
+
+fn paint_chrome_text<F: FontProvider>(
+    omnibox: &OmniboxState,
+    font_provider: &F,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), graphics::GraphicsError> {
+    let text_cow = omnibox.text();
+    let active_url_text = omnibox.active_url().map(network::Url::to_text);
+    let display_text = select_display_text(&text_cow, active_url_text.as_deref());
+    if display_text.is_empty() {
+        return Ok(());
+    }
+
+    let metrics = font_provider.metrics(DEFAULT_FONT)?;
+    let start_x = graphics::Au::from_whole_px(18).unwrap_or(graphics::Au::ZERO);
+    let middle_y = graphics::Au::from_whole_px(21).unwrap_or(graphics::Au::ZERO);
+    let half_line = metrics.line_height().raw().checked_div(2).unwrap_or(0);
+    let top_y = graphics::Au::from_raw(middle_y.raw().saturating_sub(half_line));
+    let baseline_y = top_y.saturating_add(metrics.ascent());
+
+    let mut run = graphics::GlyphRun::new();
+    let mut pen_x = start_x;
+    for ch in display_text.chars() {
+        let glyph = font_provider.glyph_for_char(DEFAULT_FONT, ch)?;
+        if glyph != graphics::GlyphId::NOTDEF {
+            run.push(graphics::GlyphInstance::new(
+                glyph,
+                graphics::Point::new(pen_x, baseline_y),
+            ));
+        }
+        let advance = font_provider.advance(DEFAULT_FONT, glyph)?;
+        pen_x = pen_x.saturating_add(advance);
+    }
+
+    if !run.is_empty() {
+        builder.draw_text(run, TEXT_COLOR, DEFAULT_FONT)?;
+    }
+    Ok(())
+}
+
+const fn select_display_text<'a>(buffer_text: &'a str, active_url: Option<&'a str>) -> &'a str {
+    if !buffer_text.is_empty() {
+        return buffer_text;
+    }
+    let Some(url) = active_url else {
+        return "";
+    };
+    url
 }
 
 /// Read-only views the `pump_once` tests assert on.

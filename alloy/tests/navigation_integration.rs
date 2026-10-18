@@ -134,7 +134,7 @@ fn clicking_a_link_navigates_to_destination_page() {
         .with_response(url_b, text_response(page_b));
     let page_ready = Rc::new(Cell::new(false));
     let mut system =
-        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 20.0), Rc::clone(&page_ready));
+        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 62.0), Rc::clone(&page_ready));
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);
@@ -178,7 +178,7 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
         MockTransport::new().with_response(start_url.clone(), text_response(page_with_anchor));
     let page_ready = Rc::new(Cell::new(false));
     let mut system =
-        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 20.0), Rc::clone(&page_ready));
+        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 62.0), Rc::clone(&page_ready));
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);

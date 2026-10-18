@@ -298,10 +298,10 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
 
     assert!(session.has_links(), "link target must be collected");
 
-    // Move pointer over the link and click
+    // Move pointer over the link (at document y=20, so window y=42+20=62) and click
     let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 20.0),
+        position: window::PhysicalPosition::new(20.0, 62.0),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -356,7 +356,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     pump(&mut system, &mut presenter, &mut session);
     let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 20.0),
+        position: window::PhysicalPosition::new(20.0, 62.0),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -530,7 +530,7 @@ fn following_a_link_supersedes_the_navigation_in_flight() {
     pump(&mut system, &mut presenter, &mut session);
     let before_click = session.outbox_for_test();
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 20.0),
+        position: window::PhysicalPosition::new(20.0, 62.0),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -561,5 +561,89 @@ fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
     assert_eq!(
         stats.stylesheets_loaded, 0,
         "print or non-matching stylesheet must not be absorbed"
+    );
+}
+
+#[test]
+fn clicks_in_chrome_region_target_omnibox_and_do_not_trigger_links() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    load(
+        &mut session,
+        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
+        &page_url("index.html"),
+    );
+    pump(&mut system, &mut presenter, &mut session);
+    assert!(!session.omnibox().is_focused());
+    let navigations_before_click = session.stats().navigations;
+
+    // Click at y=20.0 (in the chrome area, y < CHROME_HEIGHT=42)
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(20.0, 20.0),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(
+        session.omnibox().is_focused(),
+        "clicking within the chrome bar must focus the omnibox"
+    );
+    assert_eq!(
+        session.stats().navigations,
+        navigations_before_click,
+        "clicking in the chrome area must not trigger links underneath in the document"
+    );
+}
+
+#[test]
+fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/target.html").unwrap();
+    let response = network::HttpResponse::new(
+        network::StatusCode::OK,
+        network::HeaderMap::new(),
+        network::Body::from_text("<html><body>target</body></html>"),
+    );
+    let mut session = session_over(
+        MockTransport::new().with_response(target.clone(), response),
+        attributes.initial_size(),
+    );
+    load(
+        &mut session,
+        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+    let navigations_before_click = session.stats().navigations;
+
+    // In window coordinates, the link (0..50 in document y) begins at CHROME_HEIGHT=42.
+    // y = 62.0 corresponds to document y = 20.0, which hits the link.
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(20.0, 62.0),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(
+        completed_navigation(
+            &mut system,
+            &mut presenter,
+            &mut session,
+            navigations_before_click
+        ),
+        target,
+        "clicking below chrome height must trigger the link with offset compensation"
     );
 }
