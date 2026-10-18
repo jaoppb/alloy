@@ -6,7 +6,7 @@
 
 use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
-use css::{EdgeSizes, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
+use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
 use graphics::{
     Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
     GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
@@ -48,6 +48,7 @@ fn paint_single_box<F: FontProvider>(
 
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
+    paint_outline(laid_out, styled_node, builder)?;
     paint_text(laid_out, styled_node, font_provider, builder)?;
     paint_image(laid_out, images, builder)
 }
@@ -87,6 +88,118 @@ fn paint_borders(
     let colors = visual.border_colors();
 
     paint_border_sides(border_box, border, styles, colors, text_color, builder)
+}
+
+fn paint_outline(
+    laid_out: &LayoutBox,
+    styled_node: &StyledNode,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), GraphicsError> {
+    let outline = styled_node.style().outline();
+    if !outline.style().is_drawn() {
+        return Ok(());
+    }
+
+    let outline_color = outline.color().to_graphics();
+    if outline_color.is_transparent() {
+        return Ok(());
+    }
+
+    let border_box = laid_out.border_box();
+    if border_box.is_empty() {
+        return Ok(());
+    }
+
+    let font_size = styled_node.style().computed_font_size(INITIAL_FONT_SIZE);
+    let container_width = laid_out.content().size().width();
+
+    let Some(stroke_width) = outline.width().resolve_to_au(font_size, container_width) else {
+        return Ok(());
+    };
+    if stroke_width.is_zero() || stroke_width.is_negative() {
+        return Ok(());
+    }
+
+    let Some(outline_offset) = outline.offset().resolve_to_au(font_size, container_width) else {
+        return Ok(());
+    };
+
+    let offset_plus_width = outline_offset.saturating_add(stroke_width);
+    let double_expansion = offset_plus_width.saturating_add(offset_plus_width);
+
+    let outer_width = border_box.size().width().saturating_add(double_expansion);
+    let outer_height = border_box.size().height().saturating_add(double_expansion);
+    let Some(outer_size) = Size::new(outer_width, outer_height) else {
+        return Ok(());
+    };
+
+    let outer_origin = Point::new(
+        border_box.min_x().saturating_sub(offset_plus_width),
+        border_box.min_y().saturating_sub(offset_plus_width),
+    );
+    let outer_box = Rect::new(outer_origin, outer_size);
+
+    paint_outline_sides(outer_box, stroke_width, outline_color, builder)
+}
+
+fn paint_outline_sides(
+    outer_box: Rect,
+    stroke_width: Au,
+    outline_color: Color,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), GraphicsError> {
+    let min_x = outer_box.min_x();
+    let min_y = outer_box.min_y();
+    let box_width = outer_box.size().width();
+    let box_height = outer_box.size().height();
+    let max_x = outer_box.max_x();
+    let max_y = outer_box.max_y();
+
+    let top_origin = Point::new(min_x, min_y);
+    paint_horizontal_border(
+        builder,
+        top_origin,
+        box_width,
+        stroke_width,
+        BorderStyle::Solid,
+        outline_color,
+    )?;
+
+    let bottom_origin = Point::new(min_x, max_y.saturating_sub(stroke_width));
+    paint_horizontal_border(
+        builder,
+        bottom_origin,
+        box_width,
+        stroke_width,
+        BorderStyle::Solid,
+        outline_color,
+    )?;
+
+    let vert_h = box_height
+        .saturating_sub(stroke_width)
+        .saturating_sub(stroke_width);
+    let left_origin = Point::new(min_x, min_y.saturating_add(stroke_width));
+    paint_vertical_border(
+        builder,
+        left_origin,
+        stroke_width,
+        vert_h,
+        BorderStyle::Solid,
+        outline_color,
+    )?;
+
+    let right_origin = Point::new(
+        max_x.saturating_sub(stroke_width),
+        min_y.saturating_add(stroke_width),
+    );
+    paint_vertical_border(
+        builder,
+        right_origin,
+        stroke_width,
+        vert_h,
+        BorderStyle::Solid,
+        outline_color,
+    )
 }
 
 fn paint_border_sides(

@@ -164,6 +164,11 @@ declaration naming anything else is dropped on its own, with a note, leaving the
 | `inset-block-start`          | P2    | logical inset                                                                                                                                                                              |
 | `inset-block-end`            | P2    | logical inset                                                                                                                                                                              |
 | `visibility`                 | ddg   | inherited; `visible` (initial) / `hidden` / `collapse` (treated as `hidden` outside tables; CSS 2.2 §11.2)                                                                                |
+| `outline`                    | ddg   | shorthand; `outline-color`, `outline-style`, `outline-width` (CSS UI 4 §3)                                                                                                                 |
+| `outline-offset`             | ddg   | non-inherited; `<length>` distance from border edge (CSS UI 4 §3.4)                                                                                                                        |
+| `outline-color`              | ddg   | non-inherited; `<color>` (CSS UI 4 §3.1)                                                                                                                                                   |
+| `outline-width`              | ddg   | non-inherited; `<length>` or `thin` / `medium` / `thick` (CSS UI 4 §3.2)                                                                                                                   |
+| `outline-style`              | ddg   | non-inherited; `none` (initial) / `auto` / `solid` / etc. (CSS UI 4 §3.3)                                                                                                                 |
 
 Every property above also accepts the CSS-wide keywords `initial` and `inherit` (B2, CSS Cascade L4 §7.1): `initial`
 resets to the value `ComputedStyle::initial()` gives it, `inherit` copies the parent's computed value even for a

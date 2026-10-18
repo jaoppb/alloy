@@ -22,8 +22,8 @@ use crate::domain::computed::visual::{BorderColorEdges, BorderStyleEdges};
 use crate::domain::declaration::{Declaration, DeclarationValue};
 use crate::domain::length::Length;
 use crate::infrastructure::cascade::{
-    flex_values, font_values, grid_values, logical_values, overflow_values, position_values,
-    sizing_constraints_values, text_values, visual_values,
+    flex_values, font_values, grid_values, logical_values, outline_values, overflow_values,
+    position_values, sizing_constraints_values, text_values, visual_values,
 };
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
@@ -196,6 +196,7 @@ fn apply_edge_or_flex(
             grid_values::apply(style.grid(), property, tokens)
                 .map(|value| style.clone().with_grid(value))
         })
+        .or_else(|| outline_values::apply(style, property, tokens))
         .or_else(|| apply_logical(style, property, tokens))
 }
 
@@ -386,6 +387,7 @@ fn reset_edge_or_flex(style: &ComputedStyle, property: &str) -> Option<ComputedS
         .or_else(|| {
             grid_values::reset(style.grid(), property).map(|value| style.clone().with_grid(value))
         })
+        .or_else(|| outline_values::reset(style, property))
         .or_else(|| logical_values::reset(style, property))
 }
 
@@ -472,6 +474,7 @@ fn copy_edge_or_flex(
             grid_values::inherit(style.grid(), parent.grid(), property)
                 .map(|value| style.clone().with_grid(value))
         })
+        .or_else(|| outline_values::inherit(style, parent, property))
         .or_else(|| logical_values::inherit(style, parent, property))
 }
 
