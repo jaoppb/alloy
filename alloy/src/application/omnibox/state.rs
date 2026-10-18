@@ -1,5 +1,7 @@
 //! Omnibox interactive state machine aggregate.
 
+use std::borrow::Cow;
+
 use network::Url;
 
 use super::buffer::{CursorPosition, OmniboxBuffer};
@@ -16,7 +18,7 @@ pub struct OmniboxState {
 impl OmniboxState {
     /// Create a new resting omnibox state.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             is_focused: false,
             is_all_selected: false,
@@ -63,7 +65,7 @@ impl OmniboxState {
 
     /// The current text in the buffer.
     #[must_use]
-    pub fn text(&self) -> &str {
+    pub fn text(&self) -> Cow<'_, str> {
         self.buffer.text()
     }
 
@@ -144,13 +146,13 @@ impl OmniboxState {
     }
 
     /// Move cursor to the start of the buffer.
-    pub const fn move_start(&mut self) {
+    pub fn move_start(&mut self) {
         self.is_all_selected = false;
         self.buffer.move_start();
     }
 
     /// Move cursor to the end of the buffer.
-    pub const fn move_end(&mut self) {
+    pub fn move_end(&mut self) {
         self.is_all_selected = false;
         self.buffer.move_end();
     }

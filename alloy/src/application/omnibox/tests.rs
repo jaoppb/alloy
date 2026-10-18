@@ -1,6 +1,7 @@
 use network::Url;
 
 use super::buffer::{CursorPosition, OmniboxBuffer};
+use super::gap_buffer::GapBuffer;
 use super::state::OmniboxState;
 
 #[test]
@@ -177,6 +178,43 @@ fn newline_sanitization_in_insertion() {
     buffer.insert_text("https://example.com\r\n/path\n");
     assert_eq!(buffer.text(), "https://example.com/path");
     assert_eq!(buffer.cursor_position(), CursorPosition::new(24));
+}
+
+#[test]
+fn gap_buffer_capacity_expansion_and_slice_integrity() {
+    let mut gap_buf = GapBuffer::new();
+    assert!(gap_buf.is_empty());
+    assert_eq!(gap_buf.len(), 0);
+
+    // Insert text larger than DEFAULT_GAP_CAPACITY (64 bytes) to trigger growth
+    let large_input = "a".repeat(100);
+    gap_buf.insert_text(&large_input);
+    assert_eq!(gap_buf.len(), 100);
+    assert_eq!(gap_buf.char_count(), 100);
+    assert_eq!(gap_buf.cursor_byte_offset(), 100);
+    assert_eq!(gap_buf.text_before_cursor(), large_input);
+    assert_eq!(gap_buf.text_after_cursor(), "");
+
+    gap_buf.move_left();
+    assert_eq!(gap_buf.cursor_byte_offset(), 99);
+    assert_eq!(gap_buf.text_before_cursor(), "a".repeat(99));
+    assert_eq!(gap_buf.text_after_cursor(), "a");
+    assert_eq!(gap_buf.text(), large_input);
+
+    gap_buf.insert_text("XYZ");
+    assert_eq!(gap_buf.len(), 103);
+    assert_eq!(gap_buf.cursor_byte_offset(), 102);
+    assert_eq!(gap_buf.text_after_cursor(), "a");
+
+    gap_buf.move_start();
+    assert_eq!(gap_buf.cursor_byte_offset(), 0);
+    assert_eq!(gap_buf.text_before_cursor(), "");
+    assert_eq!(gap_buf.text_after_cursor().len(), 103);
+
+    gap_buf.move_end();
+    assert_eq!(gap_buf.cursor_byte_offset(), 103);
+    assert_eq!(gap_buf.text_before_cursor().len(), 103);
+    assert_eq!(gap_buf.text_after_cursor(), "");
 }
 
 #[test]
