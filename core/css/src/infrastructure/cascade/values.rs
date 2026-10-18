@@ -18,6 +18,7 @@
 use crate::domain::computed::edges::LengthEdges;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::computed::text_advance::FontWeight;
+use crate::domain::computed::visual::{BorderColorEdges, BorderStyleEdges};
 use crate::domain::declaration::{Declaration, DeclarationValue};
 use crate::domain::length::Length;
 use crate::infrastructure::cascade::{
@@ -26,9 +27,9 @@ use crate::infrastructure::cascade::{
 };
 use crate::infrastructure::parser::token::Token;
 use crate::infrastructure::parser::values::{
-    parse_background_shorthand, parse_border_shorthand, parse_box_sizing, parse_color,
-    parse_display, parse_length, parse_length_edges, parse_sizing, parse_text_align,
-    parse_visibility, parse_white_space, value_tokens,
+    parse_background_shorthand, parse_box_sizing, parse_color, parse_display, parse_length,
+    parse_length_edges, parse_sizing, parse_text_align, parse_visibility, parse_white_space,
+    value_tokens,
 };
 
 /// Which box property a `-top` / `-right` / `-bottom` / `-left` longhand edits.
@@ -138,8 +139,7 @@ fn apply_property_value(
         "font-size" => parse_length(tokens).map(|value| style.clone().with_font_size(value)),
         "margin" => parse_length_edges(tokens).map(|value| style.clone().with_margin(value)),
         "border-width" => parse_length_edges(tokens).map(|value| style.clone().with_border(value)),
-        "border" => parse_border_shorthand(tokens)
-            .map(|value| style.clone().with_border(LengthEdges::uniform(value))),
+        "border" => apply_border_shorthand(style, tokens),
         "padding" => parse_length_edges(tokens).map(|value| style.clone().with_padding(value)),
         "width" => parse_sizing(tokens).map(|value| style.clone().with_width(value)),
         "height" => parse_sizing(tokens).map(|value| style.clone().with_height(value)),
@@ -151,6 +151,20 @@ fn apply_property_value(
         "visibility" => parse_visibility(tokens).map(|value| style.clone().with_visibility(value)),
         _ => apply_edge_or_flex(style, parent, property, tokens),
     }
+}
+
+fn apply_border_shorthand(style: &ComputedStyle, tokens: &[Token]) -> Option<ComputedStyle> {
+    let parsed = visual_values::parse_border_shorthand(tokens)?;
+    let visual = style
+        .visual()
+        .with_border_styles(BorderStyleEdges::uniform(parsed.style))
+        .with_border_colors(BorderColorEdges::uniform(parsed.color));
+    Some(
+        style
+            .clone()
+            .with_border(LengthEdges::uniform(parsed.width))
+            .with_visual(visual),
+    )
 }
 
 fn apply_edge_or_flex(
@@ -329,7 +343,19 @@ fn reset_to_initial(style: &ComputedStyle, property: &str) -> Option<ComputedSty
                 .with_background_color(initial.background_color()),
         ),
         "margin" => Some(style.clone().with_margin(initial.margin())),
-        "border-width" | "border" => Some(style.clone().with_border(initial.border())),
+        "border-width" => Some(style.clone().with_border(initial.border())),
+        "border" => {
+            let visual = style
+                .visual()
+                .with_border_styles(initial.visual().border_styles())
+                .with_border_colors(initial.visual().border_colors());
+            Some(
+                style
+                    .clone()
+                    .with_border(initial.border())
+                    .with_visual(visual),
+            )
+        }
         "padding" => Some(style.clone().with_padding(initial.padding())),
         "font-size" => Some(style.clone().with_font_size(initial.font_size())),
         "width" => Some(style.clone().with_width(initial.width())),
@@ -398,7 +424,19 @@ fn copy_property(
                 .with_background_color(parent.background_color()),
         ),
         "margin" => Some(style.clone().with_margin(parent.margin())),
-        "border-width" | "border" => Some(style.clone().with_border(parent.border())),
+        "border-width" => Some(style.clone().with_border(parent.border())),
+        "border" => {
+            let visual = style
+                .visual()
+                .with_border_styles(parent.visual().border_styles())
+                .with_border_colors(parent.visual().border_colors());
+            Some(
+                style
+                    .clone()
+                    .with_border(parent.border())
+                    .with_visual(visual),
+            )
+        }
         "padding" => Some(style.clone().with_padding(parent.padding())),
         "font-size" => Some(style.clone().with_font_size(parent.font_size())),
         "width" => Some(style.clone().with_width(parent.width())),

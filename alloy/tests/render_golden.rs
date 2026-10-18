@@ -128,6 +128,41 @@ fn inline_svg_renders_byte_identical_to_inline_block_span() {
         "<svg width=\"20\" height=\"20\"><text>hello</text></svg> must render byte-identical to inline-block span"
     );
 }
+const RED: graphics::Color = graphics::Color::rgb(0xFF, 0x00, 0x00);
+
+#[test]
+fn border_shorthand_sets_style_and_color_and_paints_correctly() {
+    let html = "<!doctype html><html><head><style>body{margin:0;background:#fff} #a{border:4px solid red;color:blue}</style></head>\
+                <body><div id=\"a\">Hello world text here</div></body></html>";
+    let options = RenderOptions::new(400, 200);
+    let bytes = render_html_to_png(html, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    // The top border row (y = 0..4, x = 0..400) must be red (255, 0, 0), not text color blue.
+    assert_eq!(
+        frame.pixel(10, 2),
+        Some(RED),
+        "top border pixels must be painted in red, not blue"
+    );
+}
+
+#[test]
+fn border_width_with_no_border_style_renders_same_as_no_border() {
+    let with_border_width = "<!doctype html><html><head><style>body{margin:0;background:#fff} #a{border-width:4px;color:blue}</style></head>\
+                             <body><div id=\"a\">Hello world text here</div></body></html>";
+    let without_border = "<!doctype html><html><head><style>body{margin:0;background:#fff} #a{color:blue}</style></head>\
+                          <body><div id=\"a\">Hello world text here</div></body></html>";
+    let options = RenderOptions::new(400, 200);
+    let bytes_with_width =
+        render_html_to_png(with_border_width, &options).expect("render with width succeeds");
+    let bytes_without =
+        render_html_to_png(without_border, &options).expect("render without border succeeds");
+
+    assert_eq!(
+        bytes_with_width, bytes_without,
+        "border-width alone with no border-style must render identically to no border"
+    );
+}
 
 #[test]
 fn visibility_hidden_renders_same_as_empty_box_while_preserving_sibling_layout() {
@@ -219,17 +254,18 @@ fn input_text_has_visible_border_and_text() {
     let png_bytes = render_html_to_png(html, &options).expect("render succeeds");
     let frame = decode_png(&png_bytes).expect("output must be a valid PNG");
 
-    let black = graphics::Color::rgb(0x00, 0x00, 0x00);
+    let border_gray = graphics::Color::rgb(0x76, 0x76, 0x76);
     assert_eq!(
         frame.pixel(8, 8),
-        Some(black),
+        Some(border_gray),
         "<input> must paint top-left border"
     );
     assert_eq!(
         frame.pixel(8, 15),
-        Some(black),
+        Some(border_gray),
         "<input> must paint left border"
     );
+    let black = graphics::Color::rgb(0x00, 0x00, 0x00);
     let inner_has_black = (10..30).any(|x| (9..25).any(|y| frame.pixel(x, y) == Some(black)));
     assert!(
         inner_has_black,

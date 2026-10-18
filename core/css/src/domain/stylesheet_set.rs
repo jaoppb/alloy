@@ -109,6 +109,11 @@ impl StyleRule {
         self
     }
 
+    /// Combines `media` into this rule's existing media conditions.
+    pub fn apply_media(&mut self, media: &MediaQuery) {
+        self.media = self.media.and(media);
+    }
+
     #[must_use]
     pub const fn selectors(&self) -> &SelectorList {
         &self.selectors
@@ -301,6 +306,16 @@ impl StyleSheetSet {
     pub const fn is_empty(&self) -> bool {
         self.rules.is_empty()
     }
+
+    /// Constrains every rule in the set by `media`.
+    pub fn apply_media(&mut self, media: &MediaQuery) {
+        if media.is_always() {
+            return;
+        }
+        for entry in &mut self.rules {
+            entry.rule.apply_media(media);
+        }
+    }
 }
 
 /// The same origin-tagged rule with its media conditions discharged.
@@ -311,5 +326,50 @@ fn unconditional(entry: &OriginRule) -> OriginRule {
             entry.rule.selectors.clone(),
             entry.rule.declarations.clone(),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::length::Length;
+    use crate::domain::media::{MediaCondition, MediaFeature};
+    use graphics::Au;
+
+    fn px(pixels: i32) -> Au {
+        Au::from_whole_px(pixels).unwrap()
+    }
+
+    #[test]
+    fn apply_media_filters_via_matching_viewport() {
+        let mut sheets = StyleSheetSet::new();
+        let rule = StyleRule::new(
+            crate::domain::selector::SelectorList::new(),
+            crate::domain::declaration::DeclarationBlock::new(),
+        );
+        sheets.push_rule(Origin::Author, rule);
+
+        let condition = MediaCondition::new(MediaFeature::MinWidth, Length::pixels(300.0));
+        let mut query = MediaQuery::always();
+        query.push(condition);
+
+        sheets.apply_media(&query);
+
+        let constraints_400 = ViewportConstraints::new(px(400), px(200));
+        let constraints_200 = ViewportConstraints::new(px(200), px(200));
+
+        assert_eq!(sheets.matching_viewport(&constraints_400).len(), 1);
+        assert_eq!(sheets.matching_viewport(&constraints_200).len(), 0);
+
+        let mut never_sheets = StyleSheetSet::new();
+        never_sheets.push_rule(
+            Origin::Author,
+            StyleRule::new(
+                crate::domain::selector::SelectorList::new(),
+                crate::domain::declaration::DeclarationBlock::new(),
+            ),
+        );
+        never_sheets.apply_media(&MediaQuery::never());
+        assert_eq!(never_sheets.matching_viewport(&constraints_400).len(), 0);
     }
 }

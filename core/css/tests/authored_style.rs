@@ -631,3 +631,31 @@ fn the_cascade_is_deterministic_across_repeated_resolutions() {
         assert_eq!(again, first, "the sort key is total (PRD-007:100)");
     }
 }
+
+#[test]
+fn style_element_media_attribute_is_attached_to_rules() {
+    let mut tree = dom::DomTree::new();
+    let root = tree.document();
+    let html_node = child(&mut tree, root, "html");
+    let body = child(&mut tree, html_node, "body");
+
+    let style_print = child(&mut tree, body, "style");
+    attribute_of(&mut tree, style_print, "media", "print");
+    text(&mut tree, style_print, "body { color: #ff0000; }");
+
+    let style_screen = child(&mut tree, body, "style");
+    attribute_of(&mut tree, style_screen, "media", "(min-width: 300px)");
+    text(&mut tree, style_screen, "p { color: #0000ff; }");
+
+    let dom = snapshot(&tree, root);
+    let sheets = collect_style_sheets(&dom).expect("readable");
+
+    let constraints_400 = css::ViewportConstraints::new(whole_px(400), whole_px(200));
+    let constraints_200 = css::ViewportConstraints::new(whole_px(200), whole_px(200));
+
+    let matching_400 = sheets.matching_viewport(&constraints_400);
+    let matching_200 = sheets.matching_viewport(&constraints_200);
+
+    assert_eq!(matching_400.len(), 1);
+    assert_eq!(matching_200.len(), 0);
+}
