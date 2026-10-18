@@ -181,6 +181,17 @@ fn newline_sanitization_in_insertion() {
 }
 
 #[test]
+fn single_line_sanitization_in_constructor_and_set_text() {
+    let mut buffer = OmniboxBuffer::from_text("https://example.com\r\n/path\n");
+    assert_eq!(buffer.text(), "https://example.com/path");
+    assert_eq!(buffer.cursor_position(), CursorPosition::new(24));
+
+    buffer.set_text("first\r\nsecond\nthird");
+    assert_eq!(buffer.text(), "firstsecondthird");
+    assert_eq!(buffer.cursor_position(), CursorPosition::new(16));
+}
+
+#[test]
 fn gap_buffer_capacity_expansion_and_slice_integrity() {
     let mut gap_buf = GapBuffer::new();
     assert!(gap_buf.is_empty());

@@ -53,10 +53,13 @@ impl OmniboxBuffer {
     }
 
     /// Create a buffer populated with initial text, placing the cursor at the end.
+    ///
+    /// Strips carriage returns and line feeds to enforce single-line invariant.
     #[must_use]
     pub fn from_text(initial_text: &str) -> Self {
+        let sanitized = sanitize_single_line(initial_text);
         Self {
-            gap_buffer: GapBuffer::from_text(initial_text),
+            gap_buffer: GapBuffer::from_text(&sanitized),
         }
     }
 
@@ -152,8 +155,11 @@ impl OmniboxBuffer {
     }
 
     /// Replace buffer content and position cursor at the end.
+    ///
+    /// Strips carriage returns and line feeds to enforce single-line invariant.
     pub fn set_text(&mut self, new_text: &str) {
-        self.gap_buffer.set_text(new_text);
+        let sanitized = sanitize_single_line(new_text);
+        self.gap_buffer.set_text(&sanitized);
     }
 }
 
