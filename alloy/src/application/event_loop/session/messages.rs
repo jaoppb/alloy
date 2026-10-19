@@ -65,6 +65,7 @@ where
     /// Installs a freshly navigated document under its effective base URL
     /// (`<base href>` applied) and starts fetching what it references.
     fn load_document(&mut self, dom_tree: DomTree, navigation_url: &Url) {
+        self.omnibox.reset_to_url(navigation_url);
         let snapshot = css::snapshot(&dom_tree, dom_tree.document());
         let base_url = document_base_url(&snapshot, navigation_url);
         tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");

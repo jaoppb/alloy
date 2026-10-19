@@ -15,10 +15,12 @@ mod messages;
 
 use super::frame::CachedFrame;
 use super::hit_test::hit_test;
+use super::modifiers::ModifiersState;
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
+use crate::application::omnibox::OmniboxState;
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
@@ -50,6 +52,8 @@ pub struct Session<F, T, P, D> {
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
     stats: LoopStats,
+    omnibox: OmniboxState,
+    modifiers: ModifiersState,
     /// Where the workers of the current navigation report. A worker cannot be
     /// cancelled, so [`Session::open_channel`] replaces both ends on every
     /// navigation: dropping the old `inbox` discards what its workers already
@@ -81,6 +85,8 @@ where
             viewport,
             last_frame: None,
             stats: LoopStats::default(),
+            omnibox: OmniboxState::new(),
+            modifiers: ModifiersState::new(),
             inbox,
             outbox,
         }
@@ -88,6 +94,83 @@ where
 
     pub const fn stats(&self) -> LoopStats {
         self.stats
+    }
+
+    /// Current active keyboard modifier state.
+    #[must_use]
+    pub const fn modifiers(&self) -> ModifiersState {
+        self.modifiers
+    }
+
+    /// Update tracked keyboard modifiers across pump cycles.
+    pub const fn track_modifiers(&mut self, modifiers: ModifiersState) {
+        self.modifiers = modifiers;
+    }
+
+    /// Focuses the address bar and selects all existing text.
+    pub const fn focus_omnibox(&mut self) {
+        self.omnibox.focus();
+        self.omnibox.select_all();
+    }
+
+    /// Inserts typed text into the omnibox when focused.
+    ///
+    /// Returns `true` if the omnibox buffer was modified.
+    pub fn handle_text_input(&mut self, text: &str) -> bool {
+        if !self.omnibox.is_focused() {
+            return false;
+        }
+        self.omnibox.insert_text(text);
+        true
+    }
+
+    /// Cancels editing in the omnibox, reverts to active URL, and unfocuses.
+    ///
+    /// Returns `true` if the omnibox was focused and canceled.
+    pub fn handle_escape(&mut self) -> bool {
+        if !self.omnibox.is_focused() {
+            return false;
+        }
+        self.omnibox.cancel_editing();
+        true
+    }
+
+    /// Submits the current omnibox input, classifying it into a URL or search query.
+    ///
+    /// Returns `true` if the omnibox was focused and submitted.
+    pub fn handle_enter(&mut self) -> bool {
+        if !self.omnibox.is_focused() {
+            return false;
+        }
+        self.omnibox.blur();
+        let text = self.omnibox.text().to_string();
+        let classifier = network::OmniboxClassifier::default();
+        let Ok(destination) = classifier.classify(&text) else {
+            return true;
+        };
+        self.navigate(destination.into_url());
+        true
+    }
+
+    /// Routes logical control key navigation/editing to the omnibox when active.
+    ///
+    /// Returns `true` if the key was consumed by the omnibox.
+    pub fn handle_control_key(&mut self, key: window::LogicalKey) -> bool {
+        if !self.omnibox.is_focused() {
+            return false;
+        }
+        match key {
+            window::LogicalKey::Enter => return self.handle_enter(),
+            window::LogicalKey::Escape => return self.handle_escape(),
+            window::LogicalKey::Backspace => self.omnibox.backspace(),
+            window::LogicalKey::Delete => self.omnibox.delete(),
+            window::LogicalKey::ArrowLeft => self.omnibox.move_left(),
+            window::LogicalKey::ArrowRight => self.omnibox.move_right(),
+            window::LogicalKey::Home => self.omnibox.move_start(),
+            window::LogicalKey::End => self.omnibox.move_end(),
+            _ => return false,
+        }
+        true
     }
 
     pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
@@ -193,6 +276,10 @@ impl<F, T, P, D> Session<F, T, P, D> {
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P, D> Session<F, T, P, D> {
+    pub const fn omnibox(&self) -> &OmniboxState {
+        &self.omnibox
+    }
+
     /// A clone of the sender the current page's workers hold.
     pub fn outbox_for_test(&self) -> Sender<LoopMessage> {
         self.outbox.clone()

@@ -13,6 +13,7 @@
 
 mod frame;
 mod hit_test;
+mod modifiers;
 mod pixel;
 mod session;
 mod stats;
@@ -26,10 +27,11 @@ use std::thread;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
-    PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
-    WindowEvent, WindowSystem, WindowTitle,
+    KeyCode, LogicalKey, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize,
+    WindowAttributes, WindowEvent, WindowSystem, WindowTitle,
 };
 
+pub use self::modifiers::ModifiersState;
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
@@ -193,15 +195,21 @@ where
     P: RequestPolicy + 'static,
     D: SubresourceDiscoverer,
 {
-    let mut events = PumpEvents::starting_at(session.pointer_position());
+    let mut events = PumpEvents::starting_at(session.pointer_position(), session.modifiers());
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
     session.track_pointer(events.pointer_position);
+    session.track_modifiers(events.modifiers);
 
     if let Some(viewport) = events.latest_resize {
         session.resize(viewport);
     }
     if let Some(position) = events.clicked_at {
         session.follow_link_at(position);
+    }
+
+    let omnibox_modified = dispatch_keyboard_actions(session, &events.keyboard_actions);
+    if omnibox_modified {
+        system.request_redraw();
     }
 
     let saw_message = session.drain_messages();
@@ -222,6 +230,53 @@ where
     Ok((events.status(window_status), did_work))
 }
 
+fn dispatch_keyboard_actions<F, T, P, D>(
+    session: &mut Session<F, T, P, D>,
+    actions: &[KeyboardAction],
+) -> bool
+where
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    let mut modified = false;
+    for action in actions {
+        modified |= dispatch_keyboard_action(session, action);
+    }
+    modified
+}
+
+fn dispatch_keyboard_action<F, T, P, D>(
+    session: &mut Session<F, T, P, D>,
+    action: &KeyboardAction,
+) -> bool
+where
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    match action {
+        KeyboardAction::FocusOmnibox => {
+            session.focus_omnibox();
+            true
+        }
+        KeyboardAction::TextInput(text) => session.handle_text_input(text),
+        KeyboardAction::ControlKey(key) => session.handle_control_key(*key),
+        KeyboardAction::Enter => session.handle_enter(),
+        KeyboardAction::Escape => session.handle_escape(),
+    }
+}
+
+enum KeyboardAction {
+    FocusOmnibox,
+    TextInput(String),
+    ControlKey(LogicalKey),
+    Enter,
+    Escape,
+}
+
 /// What one `pump_events` drain observed, folded so `pump_once` decides once
 /// per cycle: only the *last* resize counts, any number of redraw requests
 /// cost one repaint, and a click lands wherever the pointer was at that
@@ -234,12 +289,15 @@ struct PumpEvents {
     needs_repaint: bool,
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
+    modifiers: ModifiersState,
+    keyboard_actions: Vec<KeyboardAction>,
 }
 
 impl PumpEvents {
-    fn starting_at(pointer_position: Option<PhysicalPosition>) -> Self {
+    fn starting_at(pointer_position: Option<PhysicalPosition>, modifiers: ModifiersState) -> Self {
         Self {
             pointer_position,
+            modifiers,
             ..Self::default()
         }
     }
@@ -255,7 +313,34 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
+            WindowEvent::Key { code, pressed } => {
+                self.modifiers.update(*code, *pressed);
+                if *pressed {
+                    self.observe_key_press(*code);
+                }
+            }
+            WindowEvent::TextInput { text } => {
+                self.keyboard_actions
+                    .push(KeyboardAction::TextInput(text.clone()));
+            }
+            WindowEvent::ControlKey { key, state } if state.is_pressed() => {
+                self.keyboard_actions.push(KeyboardAction::ControlKey(*key));
+            }
             _ => {}
+        }
+    }
+
+    fn observe_key_press(&mut self, code: KeyCode) {
+        if self.modifiers.is_focus_omnibox_shortcut(code) {
+            self.keyboard_actions.push(KeyboardAction::FocusOmnibox);
+            return;
+        }
+        if code == KeyCode::ENTER {
+            self.keyboard_actions.push(KeyboardAction::Enter);
+            return;
+        }
+        if code == KeyCode::ESCAPE {
+            self.keyboard_actions.push(KeyboardAction::Escape);
         }
     }
 
