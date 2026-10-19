@@ -27,7 +27,8 @@ use alloy::application::omnibox::{
     CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, ChromeHeight, DEFAULT_CHROME_HEIGHT,
     FOCUS_BORDER_COLOR, FOCUS_BORDER_WIDTH, FOCUS_INNER_RADIUS, INPUT_BACKGROUND_COLOR,
     INPUT_BOX_HEIGHT, INPUT_BOX_MARGIN_X, INPUT_BOX_RADIUS, OmniboxPainter, OmniboxState,
-    TEXT_COLOR, compute_cursor_offset, paint_omnibox,
+    OmniboxTheme, TEXT_COLOR, Theme, compute_cursor_offset, paint_omnibox,
+    paint_omnibox_with_theme,
 };
 use alloy::application::paint::DEFAULT_FONT;
 use alloy::application::pipeline::DEFAULT_FONT_SIZE;
@@ -408,4 +409,73 @@ fn omnibox_renders_to_golden_reference() {
     let focused_frame =
         rasterize_omnibox(&focused_state, 640, Arc::clone(&provider)).expect("render focused");
     assert_matches_golden(&focused_frame, &golden_path("omnibox_focused.png"));
+}
+
+#[test]
+fn custom_theme_styling_and_dynamic_colors_rendered_into_display_list() {
+    let custom_bg = graphics::Color::rgb(30, 30, 30);
+    let custom_input_bg = graphics::Color::rgb(50, 50, 50);
+    let custom_focus_border = graphics::Color::rgb(255, 100, 0);
+    let custom_text_color = graphics::Color::rgb(240, 240, 240);
+    let custom_caret_color = graphics::Color::rgb(255, 200, 0);
+
+    let theme = OmniboxTheme::new()
+        .with_chrome_background_color(custom_bg)
+        .with_input_background_color(custom_input_bg)
+        .with_focus_border_color(custom_focus_border)
+        .with_text_color(custom_text_color)
+        .with_caret_color(custom_caret_color);
+
+    let url = Url::parse("https://example.com/").expect("valid url");
+    let mut state = OmniboxState::with_url(url);
+    state.focus();
+
+    let provider = deterministic_font_provider();
+    let mut builder = DisplayListBuilder::new();
+
+    paint_omnibox_with_theme(&state, Px::new(800.0), &provider, theme, &mut builder)
+        .expect("painting with theme succeeds");
+    let display_list = builder.build().expect("build succeeds");
+
+    let commands: Vec<_> = display_list.iter().collect();
+    assert_eq!(commands.len(), 5);
+
+    // Command 0: custom chrome background
+    match commands[0] {
+        DisplayCommand::DrawRect { color, .. } => assert_eq!(*color, custom_bg),
+        other => panic!("expected DrawRect for background, got {other:?}"),
+    }
+
+    // Command 1: custom focus border
+    match commands[1] {
+        DisplayCommand::DrawRect { color, .. } => assert_eq!(*color, custom_focus_border),
+        other => panic!("expected DrawRect for focus border, got {other:?}"),
+    }
+
+    // Command 2: custom inner input background
+    match commands[2] {
+        DisplayCommand::DrawRect { color, .. } => assert_eq!(*color, custom_input_bg),
+        other => panic!("expected DrawRect for inner input, got {other:?}"),
+    }
+
+    // Command 3: custom text color
+    match commands[3] {
+        DisplayCommand::DrawText { color, .. } => assert_eq!(*color, custom_text_color),
+        other => panic!("expected DrawText for text, got {other:?}"),
+    }
+
+    // Command 4: custom caret color
+    match commands[4] {
+        DisplayCommand::DrawRect { color, .. } => assert_eq!(*color, custom_caret_color),
+        other => panic!("expected DrawRect for caret, got {other:?}"),
+    }
+
+    // Verify painter struct debug format and copy/clone
+    let painter = OmniboxPainter::new(&provider).with_theme(theme);
+    let painter_copy = painter;
+    let debug_repr = format!("{painter_copy:?}");
+    assert!(debug_repr.contains("OmniboxPainter"));
+
+    let root_theme = Theme::new().with_omnibox(theme);
+    assert_eq!(*root_theme.omnibox(), theme);
 }

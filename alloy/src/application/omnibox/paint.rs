@@ -5,97 +5,41 @@
 //! (ADR-0010) without third-party GUI dependencies.
 
 use graphics::{
-    Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
-    GlyphRun, GraphicsError, Point, Px, PxRect, Rect, Size,
+    Au, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance, GlyphRun,
+    GraphicsError, Point, Px, PxRect, Rect, Size,
 };
 
 use super::state::OmniboxState;
 use crate::application::paint::DEFAULT_FONT;
-
-/// Default vertical height of the chrome navigation bar in app units (42 px).
-pub const DEFAULT_CHROME_HEIGHT: Au = Au::from_raw(42 * graphics::AU_PER_PX);
-
-/// Default height of the omnibox input box in app units (28 px).
-pub const INPUT_BOX_HEIGHT: Au = Au::from_raw(28 * graphics::AU_PER_PX);
-
-/// Horizontal margin on left and right sides of the input box in app units (12 px).
-pub const INPUT_BOX_MARGIN_X: Au = Au::from_raw(12 * graphics::AU_PER_PX);
-
-/// Corner radius of the input box (6 px), per specification.
-pub const INPUT_BOX_RADIUS: Px = Px::new(6.0);
-
-/// Thickness of the active focus border in app units (2 px).
-pub const FOCUS_BORDER_WIDTH: Au = Au::from_raw(2 * graphics::AU_PER_PX);
-
-/// Inner corner radius when focused (4 px = 6 px - 2 px).
-pub const FOCUS_INNER_RADIUS: Px = Px::new(4.0);
-
-/// Horizontal padding inside the input box before text begins in app units (10 px).
-pub const TEXT_PADDING_X: Au = Au::from_raw(10 * graphics::AU_PER_PX);
-
-/// Width of the vertical cursor caret in app units (2 px).
-pub const CARET_WIDTH: Au = Au::from_raw(2 * graphics::AU_PER_PX);
-
-/// Background color of the chrome top bar (#F3F4F6).
-pub const CHROME_BACKGROUND_COLOR: Color = Color::rgb(243, 244, 246);
-
-/// Background color of the omnibox input field (white).
-pub const INPUT_BACKGROUND_COLOR: Color = Color::WHITE;
-
-/// Active focus border ring color (#3B82F6).
-pub const FOCUS_BORDER_COLOR: Color = Color::rgb(59, 130, 246);
-
-/// Primary text color for typed input or active URL (#111827).
-pub const TEXT_COLOR: Color = Color::rgb(17, 24, 39);
-
-/// Color of the vertical insertion caret.
-pub const CARET_COLOR: Color = Color::rgb(17, 24, 39);
-
-/// Strongly-typed height of the browser chrome bar at the top of the window.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ChromeHeight(Au);
-
-impl ChromeHeight {
-    /// Default chrome height (42 px).
-    pub const DEFAULT: Self = Self(DEFAULT_CHROME_HEIGHT);
-
-    /// Create a new chrome height from app units.
-    #[must_use]
-    pub const fn from_au(height: Au) -> Self {
-        Self(height)
-    }
-
-    /// Create a new chrome height from pixels.
-    #[must_use]
-    pub fn from_px(height: Px) -> Self {
-        Self(Au::from_px(height).unwrap_or(DEFAULT_CHROME_HEIGHT))
-    }
-
-    /// The chrome height in app units.
-    #[must_use]
-    pub const fn to_au(self) -> Au {
-        self.0
-    }
-
-    /// The chrome height in pixels.
-    #[must_use]
-    pub fn to_px(self) -> Px {
-        self.0.to_px()
-    }
-}
-
-impl Default for ChromeHeight {
-    fn default() -> Self {
-        Self::DEFAULT
-    }
-}
+pub use crate::application::theme::{
+    CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, ChromeHeight, DEFAULT_CHROME_HEIGHT,
+    FOCUS_BORDER_COLOR, FOCUS_BORDER_WIDTH, FOCUS_INNER_RADIUS, INPUT_BACKGROUND_COLOR,
+    INPUT_BOX_HEIGHT, INPUT_BOX_MARGIN_X, INPUT_BOX_RADIUS, OmniboxTheme, TEXT_COLOR,
+    TEXT_PADDING_X, Theme,
+};
 
 /// Declarative painter for the browser omnibox navigation chrome.
-#[derive(Clone, Copy, Debug)]
-pub struct OmniboxPainter<'a, F> {
+pub struct OmniboxPainter<'a, F: FontProvider> {
     font_provider: &'a F,
     font: FontId,
-    chrome_height: ChromeHeight,
+    theme: OmniboxTheme,
+}
+
+impl<F: FontProvider> Clone for OmniboxPainter<'_, F> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<F: FontProvider> Copy for OmniboxPainter<'_, F> {}
+
+impl<F: FontProvider> std::fmt::Debug for OmniboxPainter<'_, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OmniboxPainter")
+            .field("font", &self.font)
+            .field("theme", &self.theme)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
@@ -105,14 +49,21 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         Self {
             font_provider,
             font: DEFAULT_FONT,
-            chrome_height: ChromeHeight::DEFAULT,
+            theme: OmniboxTheme::DEFAULT,
         }
+    }
+
+    /// Set a custom omnibox styling theme.
+    #[must_use]
+    pub const fn with_theme(mut self, theme: OmniboxTheme) -> Self {
+        self.theme = theme;
+        self
     }
 
     /// Set a custom chrome height.
     #[must_use]
     pub const fn with_chrome_height(mut self, height: ChromeHeight) -> Self {
-        self.chrome_height = height;
+        self.theme = self.theme.with_chrome_height(height);
         self
     }
 
@@ -123,10 +74,16 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         self
     }
 
+    /// Access the registered styling theme.
+    #[must_use]
+    pub const fn theme(&self) -> &OmniboxTheme {
+        &self.theme
+    }
+
     /// Access the registered chrome height.
     #[must_use]
     pub const fn chrome_height(&self) -> ChromeHeight {
-        self.chrome_height
+        self.theme.chrome_height()
     }
 
     /// Access the active font identifier.
@@ -169,22 +126,23 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         let Some(bounds) = self.calculate_input_bounds(width) else {
             return Ok(());
         };
-        paint_input_chrome(state, bounds, builder)?;
+        paint_input_chrome(state, bounds, &self.theme, builder)?;
         self.paint_content(state, bounds, builder)
     }
 
     fn calculate_input_bounds(&self, width: Au) -> Option<Rect> {
-        let double_margin = INPUT_BOX_MARGIN_X.saturating_add(INPUT_BOX_MARGIN_X);
+        let margin_x = self.theme.input_box_margin_x();
+        let double_margin = margin_x.saturating_add(margin_x);
         let input_width = width.saturating_sub(double_margin);
         if input_width.is_zero() {
             return None;
         }
-        let input_size = Size::new(input_width, INPUT_BOX_HEIGHT)?;
-        let chrome_height_au = self.chrome_height.to_au();
-        let vertical_space = chrome_height_au.saturating_sub(INPUT_BOX_HEIGHT);
+        let input_size = Size::new(input_width, self.theme.input_box_height())?;
+        let chrome_height_au = self.chrome_height().to_au();
+        let vertical_space = chrome_height_au.saturating_sub(self.theme.input_box_height());
         let half_vertical_space = vertical_space.raw().checked_div(2).unwrap_or(0);
         let vertical_offset = Au::from_raw(half_vertical_space);
-        let origin = Point::new(INPUT_BOX_MARGIN_X, vertical_offset);
+        let origin = Point::new(margin_x, vertical_offset);
         Some(Rect::new(origin, input_size))
     }
 
@@ -193,12 +151,15 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         width: Au,
         builder: &mut DisplayListBuilder,
     ) -> Result<(), GraphicsError> {
-        let chrome_height_au = self.chrome_height.to_au();
+        let chrome_height_au = self.chrome_height().to_au();
         let Some(size) = Size::new(width, chrome_height_au) else {
             return Ok(());
         };
         let chrome_rect = Rect::new(Point::ORIGIN, size);
-        builder.draw_rect(rect_to_px_rect(chrome_rect), CHROME_BACKGROUND_COLOR)
+        builder.draw_rect(
+            rect_to_px_rect(chrome_rect),
+            self.theme.chrome_background_color(),
+        )
     }
 
     fn paint_content(
@@ -209,7 +170,7 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
     ) -> Result<(), GraphicsError> {
         let metrics = self.font_provider.metrics(self.font)?;
         let baseline_y = calculate_baseline_y(bounds, metrics);
-        let start_x = bounds.min_x().saturating_add(TEXT_PADDING_X);
+        let start_x = bounds.min_x().saturating_add(self.theme.text_padding_x());
         self.paint_text(state, start_x, baseline_y, builder)?;
         self.paint_caret_if_focused(state, start_x, baseline_y, metrics, builder)
     }
@@ -229,7 +190,7 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         if run.is_empty() {
             return Ok(());
         }
-        builder.draw_text(run, TEXT_COLOR, self.font)
+        builder.draw_text(run, self.theme.text_color(), self.font)
     }
 
     fn build_glyph_run(
@@ -276,52 +237,55 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         let caret_x = start_x.saturating_add(cursor_offset);
         let caret_y = baseline_y.saturating_sub(metrics.ascent());
         let caret_height = metrics.ascent().saturating_add(metrics.descent());
-        let Some(caret_size) = Size::new(CARET_WIDTH, caret_height) else {
+        let Some(caret_size) = Size::new(self.theme.caret_width(), caret_height) else {
             return Ok(());
         };
         let caret_rect = Rect::new(Point::new(caret_x, caret_y), caret_size);
-        builder.draw_rect(rect_to_px_rect(caret_rect), CARET_COLOR)
+        builder.draw_rect(rect_to_px_rect(caret_rect), self.theme.caret_color())
     }
 }
 
 fn paint_input_chrome(
     state: &OmniboxState,
     bounds: Rect,
+    theme: &OmniboxTheme,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     if state.is_focused() {
-        return paint_focused_borders(bounds, builder);
+        return paint_focused_borders(bounds, theme, builder);
     }
-    paint_unfocused_border(bounds, builder)
+    paint_unfocused_border(bounds, theme, builder)
 }
 
 fn paint_focused_borders(
     bounds: Rect,
+    theme: &OmniboxTheme,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     builder.draw_rounded_rect(
         rect_to_px_rect(bounds),
-        FOCUS_BORDER_COLOR,
-        INPUT_BOX_RADIUS,
+        theme.focus_border_color(),
+        theme.input_box_radius(),
     )?;
-    let Some(inner_bounds) = inset_rect(bounds, FOCUS_BORDER_WIDTH) else {
+    let Some(inner_bounds) = inset_rect(bounds, theme.focus_border_width()) else {
         return Ok(());
     };
     builder.draw_rounded_rect(
         rect_to_px_rect(inner_bounds),
-        INPUT_BACKGROUND_COLOR,
-        FOCUS_INNER_RADIUS,
+        theme.input_background_color(),
+        theme.focus_inner_radius(),
     )
 }
 
 fn paint_unfocused_border(
     bounds: Rect,
+    theme: &OmniboxTheme,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     builder.draw_rounded_rect(
         rect_to_px_rect(bounds),
-        INPUT_BACKGROUND_COLOR,
-        INPUT_BOX_RADIUS,
+        theme.input_background_color(),
+        theme.input_box_radius(),
     )
 }
 
@@ -333,6 +297,19 @@ pub fn paint_omnibox<F: FontProvider>(
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     OmniboxPainter::new(font_provider).paint(state, width, builder)
+}
+
+/// Paints the browser omnibox chrome bar using a custom [`OmniboxTheme`].
+pub fn paint_omnibox_with_theme<F: FontProvider>(
+    state: &OmniboxState,
+    width: Px,
+    font_provider: &F,
+    theme: OmniboxTheme,
+    builder: &mut DisplayListBuilder,
+) -> Result<(), GraphicsError> {
+    OmniboxPainter::new(font_provider)
+        .with_theme(theme)
+        .paint(state, width, builder)
 }
 
 /// Computes the horizontal advance in [`Au`] from the start of the text to the cursor.

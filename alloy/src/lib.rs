@@ -14,8 +14,8 @@ pub mod logging;
 pub use application::browser_services::BrowserServices;
 pub use application::image_store::ImageStore;
 pub use application::omnibox::{
-    ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxPainter, OmniboxState,
-    compute_cursor_offset, paint_omnibox,
+    ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
+    compute_cursor_offset, paint_omnibox, paint_omnibox_with_theme,
 };
 pub use application::paint::paint_box_tree;
 pub use application::pipeline::{
@@ -24,6 +24,7 @@ pub use application::pipeline::{
     render_html_with_font_provider, run_render,
 };
 pub use application::runtime_font::RuntimeFontProvider;
+pub use application::theme;
 pub use application::{
     ImageRequest, MarkupDiscoverer, StylesheetRequest, SubresourceDiscoverer, SubresourceRequest,
     Subresources, document_base_url,
