@@ -5,11 +5,11 @@
 //! within the window surface. Provides unified hit-testing without ad-hoc
 //! coordinate offsets or brittle coordinate checks.
 
-use graphics::{Au, Point, Rect, Size};
+use graphics::{AU_PER_PX, Au, Point, Rect, Size};
 use window::{PhysicalPosition, SurfaceSize};
 
 use super::hit_test::{contains, raw_edge, snapped_raw_au};
-use crate::application::pipeline::LinkTarget;
+use crate::application::pipeline::{LinkTarget, surface_length_to_au};
 use crate::error::AlloyError;
 
 pub use crate::application::theme::ChromeHeight;
@@ -198,14 +198,8 @@ impl UiRenderTree {
         links: &[LinkTarget],
     ) -> Result<Self, AlloyError> {
         let chrome_height = theme.chrome_height();
-        let width_px =
-            i32::try_from(viewport.width()).map_err(|_| AlloyError::InvalidDimensions)?;
-        let height_px =
-            i32::try_from(viewport.height()).map_err(|_| AlloyError::InvalidDimensions)?;
-        let width_in_app_units =
-            Au::from_whole_px(width_px).ok_or(AlloyError::InvalidDimensions)?;
-        let height_in_app_units =
-            Au::from_whole_px(height_px).ok_or(AlloyError::InvalidDimensions)?;
+        let width_in_app_units = surface_length_to_au(viewport.width())?;
+        let height_in_app_units = surface_length_to_au(viewport.height())?;
         let chrome_height_au = chrome_height.to_au();
 
         if height_in_app_units <= chrome_height_au {
@@ -262,7 +256,7 @@ impl UiRenderTree {
     ///
     /// Returns [`AlloyError::InvalidDimensions`] if the chrome height is zero.
     pub fn chrome_size(&self) -> Result<graphics::SurfaceSize, AlloyError> {
-        graphics::SurfaceSize::new(self.viewport.width(), self.chrome_height.to_pixels())
+        graphics::SurfaceSize::new(self.viewport.width(), self.chrome_rows()?)
             .ok_or(AlloyError::InvalidDimensions)
     }
 
@@ -275,10 +269,22 @@ impl UiRenderTree {
         let content_height = self
             .viewport
             .height()
-            .checked_sub(self.chrome_height.to_pixels())
+            .checked_sub(self.chrome_rows()?)
             .ok_or(AlloyError::InvalidDimensions)?;
         graphics::SurfaceSize::new(self.viewport.width(), content_height)
             .ok_or(AlloyError::InvalidDimensions)
+    }
+
+    /// The whole pixel rows the chrome bar covers. Content takes the rows
+    /// left over, so the two surfaces always stack to the full viewport.
+    fn chrome_rows(&self) -> Result<u32, AlloyError> {
+        let whole_pixels = self
+            .chrome_height
+            .to_au()
+            .raw()
+            .checked_div(AU_PER_PX)
+            .ok_or(AlloyError::InvalidDimensions)?;
+        u32::try_from(whole_pixels).map_err(|_| AlloyError::InvalidDimensions)
     }
 
     /// A safe fallback UI tree when viewport dimensions cannot be converted.

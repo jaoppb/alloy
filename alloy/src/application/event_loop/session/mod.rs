@@ -21,7 +21,7 @@ use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
 use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
-use crate::application::pipeline::{LinkTarget, render_dom_with_links};
+use crate::application::pipeline::{LinkTarget, render_dom_with_links, surface_length_to_au};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::application::theme::{OmniboxTheme, Theme};
 use crate::error::AlloyError;
@@ -276,7 +276,7 @@ fn render_chrome<F: FontProvider + 'static>(
     let painter = OmniboxPainter::new(font_provider.as_ref()).with_theme(*theme);
     painter.paint(
         omnibox,
-        graphics::Px::new(u32_to_f32(chrome_size.width())),
+        surface_length_to_au(chrome_size.width())?.to_px(),
         &mut builder,
     )?;
     let display_list = builder.build()?;
@@ -287,11 +287,6 @@ fn render_chrome<F: FontProvider + 'static>(
     backend.end_frame()?;
     let framebuffer = backend.read_back()?;
     Ok(framebuffer)
-}
-
-#[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-const fn u32_to_f32(value: u32) -> f32 {
-    value as f32
 }
 
 /// Read-only views the `pump_once` tests assert on.

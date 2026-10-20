@@ -26,14 +26,6 @@ impl ChromeHeight {
         Self(Au::from_px(height).unwrap_or(DEFAULT_CHROME_HEIGHT))
     }
 
-    /// Create a new chrome height from whole pixel count.
-    #[must_use]
-    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-    pub fn from_pixels(pixels: u32) -> Self {
-        let px = Px::new(pixels as f32);
-        Self::from_px(px)
-    }
-
     /// The chrome height in app units.
     #[must_use]
     pub const fn to_au(self) -> Au {
@@ -44,17 +36,6 @@ impl ChromeHeight {
     #[must_use]
     pub fn to_px(self) -> Px {
         self.0.to_px()
-    }
-
-    /// The chrome height in whole pixels.
-    #[must_use]
-    #[allow(
-        clippy::as_conversions,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
-    )]
-    pub fn to_pixels(self) -> u32 {
-        self.to_px().get().max(0.0) as u32
     }
 }
 
@@ -67,18 +48,6 @@ impl Default for ChromeHeight {
 impl std::fmt::Display for ChromeHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:.0}px", self.to_px().get())
-    }
-}
-
-impl From<u32> for ChromeHeight {
-    fn from(pixels: u32) -> Self {
-        Self::from_pixels(pixels)
-    }
-}
-
-impl From<ChromeHeight> for u32 {
-    fn from(height: ChromeHeight) -> Self {
-        height.to_pixels()
     }
 }
 

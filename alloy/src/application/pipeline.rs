@@ -265,11 +265,14 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
 }
 
 fn make_constraints(surface_size: SurfaceSize) -> Result<ViewportConstraints, AlloyError> {
-    let width_px =
-        i32::try_from(surface_size.width()).map_err(|_| AlloyError::InvalidDimensions)?;
-    let height_px =
-        i32::try_from(surface_size.height()).map_err(|_| AlloyError::InvalidDimensions)?;
-    let width_au = Au::from_whole_px(width_px).ok_or(AlloyError::InvalidDimensions)?;
-    let height_au = Au::from_whole_px(height_px).ok_or(AlloyError::InvalidDimensions)?;
+    let width_au = surface_length_to_au(surface_size.width())?;
+    let height_au = surface_length_to_au(surface_size.height())?;
     Ok(ViewportConstraints::new(width_au, height_au))
+}
+
+/// A surface edge in whole pixels as app units, or
+/// [`AlloyError::InvalidDimensions`] when it overflows the `Au` envelope.
+pub(crate) fn surface_length_to_au(pixels: u32) -> Result<Au, AlloyError> {
+    let pixels = i32::try_from(pixels).map_err(|_| AlloyError::InvalidDimensions)?;
+    Au::from_whole_px(pixels).ok_or(AlloyError::InvalidDimensions)
 }
