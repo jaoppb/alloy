@@ -35,8 +35,7 @@ use window::{
 pub use self::hit_test::hit_test;
 pub use self::modifiers::ModifiersState;
 pub use self::render_tree::{
-    CHROME_HEIGHT, ChromeHeight, OMNIBOX_HEIGHT_PX, OMNIBOX_HORIZONTAL_MARGIN_PX, UiHitTarget,
-    UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
+    ChromeHeight, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
 };
 use self::session::Session;
 pub use self::stats::LoopStats;

@@ -15,7 +15,7 @@ mod messages;
 
 use super::frame::CachedFrame;
 use super::modifiers::ModifiersState;
-use super::render_tree::{CHROME_HEIGHT, ChromeHeight, UiHitTarget, UiRenderTree};
+use super::render_tree::{UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
@@ -23,6 +23,7 @@ use crate::application::image_store::ImageStore;
 use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
+use crate::application::theme::{OmniboxTheme, Theme};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
@@ -62,6 +63,9 @@ pub struct Session<F, T, P, D> {
     /// index reused by every document — naming an `<img>` of the new page.
     inbox: Receiver<LoopMessage>,
     outbox: Sender<LoopMessage>,
+    /// The one source of chrome geometry: the chrome is painted with it and
+    /// `ui_tree` is laid out from it, so clicks land where pixels are drawn.
+    theme: Theme,
     ui_tree: UiRenderTree,
 }
 
@@ -74,8 +78,9 @@ where
 {
     pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
         let (outbox, inbox) = mpsc::channel();
-        let ui_tree = UiRenderTree::build(viewport, ChromeHeight::DEFAULT, &[])
-            .unwrap_or_else(|_| UiRenderTree::fallback(viewport));
+        let theme = Theme::DEFAULT;
+        let ui_tree = UiRenderTree::build(viewport, theme.omnibox(), &[])
+            .unwrap_or_else(|_| UiRenderTree::fallback(viewport, theme.omnibox()));
         Self {
             services,
             dom_tree: None,
@@ -92,6 +97,7 @@ where
             modifiers: ModifiersState::new(),
             inbox,
             outbox,
+            theme,
             ui_tree,
         }
     }
@@ -149,8 +155,8 @@ where
     /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
     pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
-        self.ui_tree = UiRenderTree::build(viewport, ChromeHeight::DEFAULT, &self.links)
-            .unwrap_or_else(|_| UiRenderTree::fallback(viewport));
+        self.ui_tree = UiRenderTree::build(viewport, self.theme.omnibox(), &self.links)
+            .unwrap_or_else(|_| UiRenderTree::fallback(viewport, self.theme.omnibox()));
         self.dirty = true;
     }
 
@@ -228,12 +234,13 @@ where
         )?;
         let chrome_framebuffer = render_chrome(
             self.omnibox.state(),
-            self.viewport.width(),
+            self.theme.omnibox(),
+            self.ui_tree.chrome_size()?,
             Arc::clone(self.services.font_provider()),
         )?;
         let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
         frame.present(presenter)?;
-        self.ui_tree = UiRenderTree::build(self.viewport, ChromeHeight::DEFAULT, &links)?;
+        self.ui_tree = UiRenderTree::build(self.viewport, self.theme.omnibox(), &links)?;
         self.links = links;
         self.last_frame = Some(frame);
         self.stats.relayouts = self.stats.relayouts.saturating_add(1);
@@ -261,16 +268,15 @@ impl<F, T, P, D> Session<F, T, P, D> {
 
 fn render_chrome<F: FontProvider + 'static>(
     omnibox: &OmniboxState,
-    viewport_width: u32,
+    theme: &OmniboxTheme,
+    chrome_size: graphics::SurfaceSize,
     font_provider: Arc<F>,
 ) -> Result<graphics::Framebuffer, AlloyError> {
-    let chrome_size = graphics::SurfaceSize::new(viewport_width, CHROME_HEIGHT)
-        .ok_or(AlloyError::InvalidDimensions)?;
     let mut builder = DisplayListBuilder::new();
-    let painter = OmniboxPainter::new(font_provider.as_ref());
+    let painter = OmniboxPainter::new(font_provider.as_ref()).with_theme(*theme);
     painter.paint(
         omnibox,
-        graphics::Px::new(u32_to_f32(viewport_width)),
+        graphics::Px::new(u32_to_f32(chrome_size.width())),
         &mut builder,
     )?;
     let display_list = builder.build()?;

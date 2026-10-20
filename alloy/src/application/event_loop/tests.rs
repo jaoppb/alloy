@@ -26,6 +26,7 @@ use crate::application::browser_services::BrowserServices;
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
 use crate::application::subresource::{MarkupDiscoverer, placeholder_framebuffer};
+use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
 #[test]
@@ -299,10 +300,10 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
 
     assert!(session.has_links(), "link target must be collected");
 
-    // Move pointer over the link (at document y=20, so window y=42+20=62) and click
+    // Move pointer over the link and click
     let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 62.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -357,7 +358,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     pump(&mut system, &mut presenter, &mut session);
     let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 62.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -397,6 +398,12 @@ fn a_resize_before_any_document_counts_no_relayout() {
         !session.needs_relayout(),
         "the dropped request is not retried"
     );
+}
+
+/// Where a point `document_y` pixels into the page sits in the window: the
+/// page starts below the default theme's chrome bar.
+fn window_y(document_y: f64) -> f64 {
+    f64::from(OmniboxTheme::DEFAULT.chrome_height().to_px().get()) + document_y
 }
 
 fn page_url(path: &str) -> String {
@@ -531,7 +538,7 @@ fn following_a_link_supersedes_the_navigation_in_flight() {
     pump(&mut system, &mut presenter, &mut session);
     let before_click = session.outbox_for_test();
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 62.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -900,7 +907,7 @@ fn clicks_in_chrome_region_target_omnibox_and_do_not_trigger_links() {
     assert!(!session.omnibox().is_focused());
     let navigations_before_click = session.stats().navigations;
 
-    // Click at y=20.0 (in the chrome area, y < CHROME_HEIGHT=42)
+    // y = 20 is inside the chrome bar, above the link at the top of the page.
     system.schedule(WindowEvent::PointerMoved {
         position: window::PhysicalPosition::new(20.0, 20.0),
     });
@@ -945,10 +952,8 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
     pump(&mut system, &mut presenter, &mut session);
     let navigations_before_click = session.stats().navigations;
 
-    // In window coordinates, the link (0..50 in document y) begins at CHROME_HEIGHT=42.
-    // y = 62.0 corresponds to document y = 20.0, which hits the link.
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 62.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,

@@ -13,15 +13,7 @@ use crate::application::pipeline::LinkTarget;
 use crate::error::AlloyError;
 
 pub use crate::application::theme::ChromeHeight;
-
-/// The default vertical height of the top chrome bar in pixels (Epic #43 / Issue #48).
-pub const CHROME_HEIGHT: u32 = 42;
-
-/// Horizontal margin in pixels around the omnibox input area within the chrome bar.
-pub const OMNIBOX_HORIZONTAL_MARGIN_PX: u32 = 12;
-
-/// Height in pixels of the omnibox input field within the chrome bar.
-pub const OMNIBOX_HEIGHT_PX: u32 = 28;
+use crate::application::theme::OmniboxTheme;
 
 /// The role and identity of a node in the UI render tree.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -192,8 +184,9 @@ pub struct UiRenderTree {
 }
 
 impl UiRenderTree {
-    /// Builds a new UI render tree for the specified window viewport, chrome height,
-    /// and document link targets.
+    /// Builds a new UI render tree for the specified window viewport and
+    /// document link targets, with the chrome laid out by the same `theme`
+    /// the omnibox painter draws it with.
     ///
     /// # Errors
     ///
@@ -201,9 +194,10 @@ impl UiRenderTree {
     /// or equal to the chrome height, or if dimensions cannot be converted to app units.
     pub fn build(
         viewport: SurfaceSize,
-        chrome_height: ChromeHeight,
+        theme: &OmniboxTheme,
         links: &[LinkTarget],
     ) -> Result<Self, AlloyError> {
+        let chrome_height = theme.chrome_height();
         let width_px =
             i32::try_from(viewport.width()).map_err(|_| AlloyError::InvalidDimensions)?;
         let height_px =
@@ -227,7 +221,7 @@ impl UiRenderTree {
             .ok_or(AlloyError::InvalidDimensions)?;
         let window_bounds = Rect::new(Point::new(Au::ZERO, Au::ZERO), window_size);
 
-        let chrome_node = build_chrome_node(width_in_app_units, chrome_height_au)?;
+        let chrome_node = build_chrome_node(width_in_app_units, theme)?;
         let content_node = build_content_node(
             width_in_app_units,
             chrome_height_au,
@@ -262,6 +256,16 @@ impl UiRenderTree {
         &self.root
     }
 
+    /// The surface size the chrome bar is rasterized into.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AlloyError::InvalidDimensions`] if the chrome height is zero.
+    pub fn chrome_size(&self) -> Result<graphics::SurfaceSize, AlloyError> {
+        graphics::SurfaceSize::new(self.viewport.width(), self.chrome_height.to_pixels())
+            .ok_or(AlloyError::InvalidDimensions)
+    }
+
     /// The surface size available for laying out web content.
     ///
     /// # Errors
@@ -279,10 +283,10 @@ impl UiRenderTree {
 
     /// A safe fallback UI tree when viewport dimensions cannot be converted.
     #[must_use]
-    pub fn fallback(viewport: SurfaceSize) -> Self {
+    pub fn fallback(viewport: SurfaceSize, theme: &OmniboxTheme) -> Self {
         Self {
             viewport,
-            chrome_height: ChromeHeight::DEFAULT,
+            chrome_height: theme.chrome_height(),
             root: UiNode::new(UiNodeKind::Window, Rect::default()),
         }
     }
@@ -296,26 +300,15 @@ impl UiRenderTree {
     }
 }
 
-fn build_chrome_node(width_in_app_units: Au, chrome_height: Au) -> Result<UiNode, AlloyError> {
-    let chrome_size =
-        Size::new(width_in_app_units, chrome_height).ok_or(AlloyError::InvalidDimensions)?;
+fn build_chrome_node(width_in_app_units: Au, theme: &OmniboxTheme) -> Result<UiNode, AlloyError> {
+    let chrome_size = Size::new(width_in_app_units, theme.chrome_height().to_au())
+        .ok_or(AlloyError::InvalidDimensions)?;
     let chrome_bounds = Rect::new(Point::new(Au::ZERO, Au::ZERO), chrome_size);
-
-    let horizontal_margin = crate::application::theme::INPUT_BOX_MARGIN_X;
-    let box_height = crate::application::theme::INPUT_BOX_HEIGHT;
-
-    let vertical_margin_raw = chrome_height.raw().saturating_sub(box_height.raw()) / 2;
-    let margin_y = Au::from_raw(vertical_margin_raw.max(0));
-    let horizontal_padding = horizontal_margin.raw().saturating_mul(2);
-    let box_width_raw = width_in_app_units.raw().saturating_sub(horizontal_padding);
-    let box_width = Au::from_raw(box_width_raw.max(0));
-
-    let box_size = Size::new(box_width, box_height).ok_or(AlloyError::InvalidDimensions)?;
-    let omnibox_bounds = Rect::new(Point::new(horizontal_margin, margin_y), box_size);
-    let omnibox_node = UiNode::new(UiNodeKind::Omnibox, omnibox_bounds);
-
-    let mut children = UiNodeChildren::new();
-    children.push(omnibox_node);
+    let children = theme
+        .input_box_bounds(width_in_app_units)
+        .map(|omnibox_bounds| UiNode::new(UiNodeKind::Omnibox, omnibox_bounds))
+        .into_iter()
+        .collect();
     Ok(UiNode::with_children(
         UiNodeKind::Chrome,
         chrome_bounds,
@@ -351,6 +344,7 @@ mod tests {
 
     use super::{ChromeHeight, UiHitTarget, UiNodeKind, UiRenderTree};
     use crate::application::pipeline::LinkTarget;
+    use crate::application::theme::OmniboxTheme;
 
     fn link(href: &str, left: i32, top: i32, width: i32, height: i32) -> LinkTarget {
         let au = |pixels| Au::from_whole_px(pixels).expect("fits the Au envelope");
@@ -363,9 +357,15 @@ mod tests {
         }
     }
 
+    /// The window `y` of a point `document_y` pixels into the page, which
+    /// starts where the theme's chrome bar ends.
+    fn window_y(document_y: f64) -> f64 {
+        f64::from(OmniboxTheme::DEFAULT.chrome_height().to_px().get()) + document_y
+    }
+
     fn sample_tree(links: &[LinkTarget]) -> UiRenderTree {
         let size = SurfaceSize::new(800, 600).expect("valid size");
-        UiRenderTree::build(size, ChromeHeight::DEFAULT, links).expect("valid tree")
+        UiRenderTree::build(size, &OmniboxTheme::DEFAULT, links).expect("valid tree")
     }
 
     #[test]
@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn click_in_chrome_margin_returns_chrome_target() {
         let tree = sample_tree(&[]);
-        // Omnibox margin_x = 8.0, so x = 4.0 is in the chrome margin outside omnibox
+        // x = 4 lies in the chrome's left margin, before the omnibox input box begins
         let hit = tree.hit_test(PhysicalPosition::new(4.0, 20.0));
         assert_eq!(hit, Some(UiHitTarget::Chrome));
     }
@@ -411,8 +411,7 @@ mod tests {
         let links = [link("/destination", 10, 10, 20, 20)];
         let tree = sample_tree(&links);
 
-        // Document y = 20 corresponds to window y = 42 + 20 = 62
-        let hit = tree.hit_test(PhysicalPosition::new(20.0, 62.0));
+        let hit = tree.hit_test(PhysicalPosition::new(20.0, window_y(20.0)));
         assert_eq!(hit, Some(UiHitTarget::PageLink("/destination")));
     }
 
@@ -445,16 +444,48 @@ mod tests {
         let links = [link("/below", 0, 0, 50, 50), link("/above", 10, 10, 10, 10)];
         let tree = sample_tree(&links);
 
-        // Inside overlapping area: document (15, 15) -> window (15, 57)
+        // Inside the overlapping area, at document (15, 15).
         assert_eq!(
-            tree.hit_test(PhysicalPosition::new(15.0, 57.0)),
+            tree.hit_test(PhysicalPosition::new(15.0, window_y(15.0))),
             Some(UiHitTarget::PageLink("/above"))
         );
 
-        // Outside top link, inside bottom link: document (40, 40) -> window (40, 82)
+        // Outside the top link, inside the bottom one, at document (40, 40).
         assert_eq!(
-            tree.hit_test(PhysicalPosition::new(40.0, 82.0)),
+            tree.hit_test(PhysicalPosition::new(40.0, window_y(40.0))),
             Some(UiHitTarget::PageLink("/below"))
+        );
+    }
+
+    #[test]
+    fn chrome_geometry_follows_the_theme_it_is_built_with() {
+        let tall_chrome = OmniboxTheme::DEFAULT.with_chrome_height(ChromeHeight::from_au(
+            Au::from_whole_px(60).expect("fits the Au envelope"),
+        ));
+        let links = [link("/top", 0, 0, 100, 50)];
+        let size = SurfaceSize::new(800, 600).expect("valid size");
+        let tree = UiRenderTree::build(size, &tall_chrome, &links).expect("valid tree");
+
+        assert_eq!(
+            tree.hit_test(PhysicalPosition::new(4.0, 50.0)),
+            Some(UiHitTarget::Chrome),
+            "a 60 px chrome bar must still cover y = 50"
+        );
+        assert_eq!(
+            tree.hit_test(PhysicalPosition::new(20.0, 65.0)),
+            Some(UiHitTarget::PageLink("/top")),
+            "the page must start where the themed chrome bar ends"
+        );
+        let omnibox_bounds = tall_chrome.input_box_bounds(Au::from_whole_px(800).expect("fits"));
+        let omnibox_node = tree
+            .root()
+            .children()
+            .iter()
+            .next()
+            .and_then(|chrome| chrome.children().iter().next().map(super::UiNode::bounds));
+        assert_eq!(
+            omnibox_node, omnibox_bounds,
+            "the hit-tested omnibox must be the box the painter draws"
         );
     }
 
@@ -508,8 +539,8 @@ mod tests {
     fn narrow_viewport_handles_zero_box_width_without_panic() {
         let narrow_size = SurfaceSize::new(10, 100).expect("positive surface size");
         let tree =
-            UiRenderTree::build(narrow_size, ChromeHeight::DEFAULT, &[]).expect("valid tree");
-        // Within chrome bounds (10 x 42): click at (5, 20) hits Chrome
+            UiRenderTree::build(narrow_size, &OmniboxTheme::DEFAULT, &[]).expect("valid tree");
+        // Too narrow for the input box, so (5, 20) hits the bare chrome bar.
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(5.0, 20.0)),
             Some(UiHitTarget::Chrome)
@@ -519,7 +550,7 @@ mod tests {
     #[test]
     fn fallback_tree_returns_none_for_all_positions() {
         let size = SurfaceSize::new(800, 30).expect("positive size");
-        let fallback = UiRenderTree::fallback(size);
+        let fallback = UiRenderTree::fallback(size, &OmniboxTheme::DEFAULT);
         assert_eq!(fallback.viewport(), size);
         assert_eq!(fallback.hit_test(PhysicalPosition::new(20.0, 20.0)), None);
     }
