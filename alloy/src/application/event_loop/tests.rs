@@ -656,3 +656,32 @@ fn session_maintains_ui_render_tree_hierarchy() {
     assert_eq!(tree.root().kind(), &super::UiNodeKind::Window);
     assert_eq!(tree.chrome_height(), super::ChromeHeight::DEFAULT);
 }
+
+#[test]
+fn resizing_below_chrome_height_updates_ui_tree_to_fallback() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    let small_size = SurfaceSize::new(800, 30).unwrap();
+    session.resize(small_size);
+
+    assert_eq!(session.ui_tree().viewport(), small_size);
+    assert!(session.ui_tree().content_size().is_err());
+    assert_eq!(
+        session
+            .ui_tree()
+            .hit_test(window::PhysicalPosition::new(20.0, 20.0)),
+        None
+    );
+
+    // Resizing back to a valid viewport restores the full hierarchy
+    let normal_size = SurfaceSize::new(800, 600).unwrap();
+    session.resize(normal_size);
+    assert_eq!(session.ui_tree().viewport(), normal_size);
+    assert!(session.ui_tree().content_size().is_ok());
+    assert_eq!(
+        session
+            .ui_tree()
+            .hit_test(window::PhysicalPosition::new(20.0, 20.0)),
+        Some(super::UiHitTarget::Omnibox)
+    );
+}

@@ -14,7 +14,10 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 mod messages;
 
 use super::frame::CachedFrame;
-pub use super::render_tree::{CHROME_HEIGHT, ChromeHeight, UiHitTarget, UiRenderTree};
+pub use super::render_tree::{
+    CHROME_HEIGHT, ChromeHeight, OMNIBOX_HEIGHT_PX, OMNIBOX_HORIZONTAL_MARGIN_PX, UiHitTarget,
+    UiRenderTree,
+};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
@@ -124,9 +127,8 @@ where
     /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
     pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
-        if let Ok(tree) = UiRenderTree::build(viewport, ChromeHeight::DEFAULT, &self.links) {
-            self.ui_tree = tree;
-        }
+        self.ui_tree = UiRenderTree::build(viewport, ChromeHeight::DEFAULT, &self.links)
+            .unwrap_or_else(|_| UiRenderTree::fallback(viewport));
         self.dirty = true;
     }
 
@@ -264,8 +266,6 @@ fn render_chrome<F: FontProvider + 'static>(
     Ok(framebuffer)
 }
 
-const CHROME_HEIGHT_F32: f32 = 42.0;
-
 #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
 const fn u32_to_f32(value: u32) -> f32 {
     value as f32
@@ -278,13 +278,13 @@ fn paint_chrome<F: FontProvider>(
     builder: &mut DisplayListBuilder,
 ) -> Result<(), graphics::GraphicsError> {
     let width_f32 = u32_to_f32(viewport_width);
-    let height_f32 = CHROME_HEIGHT_F32;
+    let height_f32 = u32_to_f32(CHROME_HEIGHT);
 
     let chrome_area = graphics::PxRect::from_px(0.0, 0.0, width_f32, height_f32);
     builder.draw_rect(chrome_area, CHROME_BG)?;
 
-    let margin_x = 8.0f32;
-    let box_height = 30.0f32;
+    let margin_x = u32_to_f32(OMNIBOX_HORIZONTAL_MARGIN_PX);
+    let box_height = u32_to_f32(OMNIBOX_HEIGHT_PX);
     let margin_y = ((height_f32 - box_height) / 2.0).max(0.0);
     let box_width = (width_f32 - (margin_x + margin_x)).max(0.0);
 

@@ -43,6 +43,12 @@ impl Default for ChromeHeight {
     }
 }
 
+impl std::fmt::Display for ChromeHeight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}px", self.0)
+    }
+}
+
 impl From<u32> for ChromeHeight {
     fn from(pixels: u32) -> Self {
         Self(pixels)
@@ -55,7 +61,14 @@ impl From<ChromeHeight> for u32 {
     }
 }
 
+/// The default vertical height of the top chrome bar in pixels (Epic #43 / Issue #48).
 pub const CHROME_HEIGHT: u32 = ChromeHeight::DEFAULT.get();
+
+/// Horizontal margin in pixels around the omnibox input area within the chrome bar.
+pub const OMNIBOX_HORIZONTAL_MARGIN_PX: u32 = 8;
+
+/// Height in pixels of the omnibox input field within the chrome bar.
+pub const OMNIBOX_HEIGHT_PX: u32 = 30;
 
 /// The role and identity of a node in the UI render tree.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -103,7 +116,7 @@ impl UiNodeChildren {
         self.0.iter()
     }
 
-    pub fn rev_iter(&self) -> std::iter::Rev<std::slice::Iter<'_, UiNode>> {
+    pub fn reverse_iter(&self) -> std::iter::Rev<std::slice::Iter<'_, UiNode>> {
         self.0.iter().rev()
     }
 
@@ -118,12 +131,27 @@ impl UiNodeChildren {
     }
 }
 
+impl FromIterator<UiNode> for UiNodeChildren {
+    fn from_iter<T: IntoIterator<Item = UiNode>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl<'a> IntoIterator for &'a UiNodeChildren {
     type Item = &'a UiNode;
     type IntoIter = std::slice::Iter<'a, UiNode>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+impl IntoIterator for UiNodeChildren {
+    type Item = UiNode;
+    type IntoIter = std::vec::IntoIter<UiNode>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -142,6 +170,15 @@ impl UiNode {
             kind,
             bounds,
             children: UiNodeChildren::new(),
+        }
+    }
+
+    #[must_use]
+    pub const fn with_children(kind: UiNodeKind, bounds: Rect, children: UiNodeChildren) -> Self {
+        Self {
+            kind,
+            bounds,
+            children,
         }
     }
 
@@ -172,12 +209,14 @@ impl UiNode {
         }
         let local_x = x - raw_edge(self.bounds.min_x());
         let local_y = y - raw_edge(self.bounds.min_y());
-        for child in self.children.rev_iter() {
-            if let Some(target) = child.hit_test(local_x, local_y) {
-                return Some(target);
-            }
-        }
-        self.as_target()
+        self.hit_test_children(local_x, local_y)
+            .or_else(|| self.as_target())
+    }
+
+    fn hit_test_children(&self, local_x: f64, local_y: f64) -> Option<UiHitTarget<'_>> {
+        self.children
+            .reverse_iter()
+            .find_map(|child| child.hit_test(local_x, local_y))
     }
 
     const fn as_target(&self) -> Option<UiHitTarget<'_>> {
@@ -216,24 +255,37 @@ impl UiRenderTree {
             i32::try_from(viewport.width()).map_err(|_| AlloyError::InvalidDimensions)?;
         let height_px =
             i32::try_from(viewport.height()).map_err(|_| AlloyError::InvalidDimensions)?;
-        let width_au = Au::from_whole_px(width_px).ok_or(AlloyError::InvalidDimensions)?;
-        let height_au = Au::from_whole_px(height_px).ok_or(AlloyError::InvalidDimensions)?;
-        let chrome_h = chrome_height.to_au().ok_or(AlloyError::InvalidDimensions)?;
+        let width_in_app_units =
+            Au::from_whole_px(width_px).ok_or(AlloyError::InvalidDimensions)?;
+        let height_in_app_units =
+            Au::from_whole_px(height_px).ok_or(AlloyError::InvalidDimensions)?;
+        let chrome_height_au = chrome_height.to_au().ok_or(AlloyError::InvalidDimensions)?;
 
-        if height_au <= chrome_h {
+        if height_in_app_units <= chrome_height_au {
             return Err(AlloyError::InvalidDimensions);
         }
 
-        let content_h = Au::from_raw(height_au.raw().saturating_sub(chrome_h.raw()));
-        let window_size = Size::new(width_au, height_au).ok_or(AlloyError::InvalidDimensions)?;
+        let content_height_au = Au::from_raw(
+            height_in_app_units
+                .raw()
+                .saturating_sub(chrome_height_au.raw()),
+        );
+        let window_size = Size::new(width_in_app_units, height_in_app_units)
+            .ok_or(AlloyError::InvalidDimensions)?;
         let window_bounds = Rect::new(Point::new(Au::ZERO, Au::ZERO), window_size);
-        let mut window_node = UiNode::new(UiNodeKind::Window, window_bounds);
 
-        let chrome_node = build_chrome_node(width_au, chrome_h)?;
-        let content_node = build_content_node(width_au, chrome_h, content_h, links)?;
+        let chrome_node = build_chrome_node(width_in_app_units, chrome_height_au)?;
+        let content_node = build_content_node(
+            width_in_app_units,
+            chrome_height_au,
+            content_height_au,
+            links,
+        )?;
 
-        window_node.add_child(chrome_node);
-        window_node.add_child(content_node);
+        let mut children = UiNodeChildren::new();
+        children.push(chrome_node);
+        children.push(content_node);
+        let window_node = UiNode::with_children(UiNodeKind::Window, window_bounds, children);
 
         Ok(Self {
             viewport,
@@ -291,42 +343,56 @@ impl UiRenderTree {
     }
 }
 
-fn build_chrome_node(width_au: Au, chrome_h: Au) -> Result<UiNode, AlloyError> {
-    let chrome_size = Size::new(width_au, chrome_h).ok_or(AlloyError::InvalidDimensions)?;
+fn build_chrome_node(width_in_app_units: Au, chrome_height: Au) -> Result<UiNode, AlloyError> {
+    let chrome_size =
+        Size::new(width_in_app_units, chrome_height).ok_or(AlloyError::InvalidDimensions)?;
     let chrome_bounds = Rect::new(Point::new(Au::ZERO, Au::ZERO), chrome_size);
-    let mut chrome_node = UiNode::new(UiNodeKind::Chrome, chrome_bounds);
 
-    let margin_x = Au::from_whole_px(8).ok_or(AlloyError::InvalidDimensions)?;
-    let box_h = Au::from_whole_px(30).ok_or(AlloyError::InvalidDimensions)?;
-    let margin_y_raw = chrome_h.raw().saturating_sub(box_h.raw()) / 2;
-    let margin_y = Au::from_raw(margin_y_raw.max(0));
-    let margin_double = margin_x.raw().saturating_mul(2);
-    let box_w_raw = width_au.raw().saturating_sub(margin_double);
-    let box_w = Au::from_raw(box_w_raw.max(0));
+    let margin_x_px =
+        i32::try_from(OMNIBOX_HORIZONTAL_MARGIN_PX).map_err(|_| AlloyError::InvalidDimensions)?;
+    let box_height_px =
+        i32::try_from(OMNIBOX_HEIGHT_PX).map_err(|_| AlloyError::InvalidDimensions)?;
+    let horizontal_margin = Au::from_whole_px(margin_x_px).ok_or(AlloyError::InvalidDimensions)?;
+    let box_height = Au::from_whole_px(box_height_px).ok_or(AlloyError::InvalidDimensions)?;
 
-    let box_size = Size::new(box_w, box_h).ok_or(AlloyError::InvalidDimensions)?;
-    let omnibox_bounds = Rect::new(Point::new(margin_x, margin_y), box_size);
+    let vertical_margin_raw = chrome_height.raw().saturating_sub(box_height.raw()) / 2;
+    let margin_y = Au::from_raw(vertical_margin_raw.max(0));
+    let horizontal_padding = horizontal_margin.raw().saturating_mul(2);
+    let box_width_raw = width_in_app_units.raw().saturating_sub(horizontal_padding);
+    let box_width = Au::from_raw(box_width_raw.max(0));
+
+    let box_size = Size::new(box_width, box_height).ok_or(AlloyError::InvalidDimensions)?;
+    let omnibox_bounds = Rect::new(Point::new(horizontal_margin, margin_y), box_size);
     let omnibox_node = UiNode::new(UiNodeKind::Omnibox, omnibox_bounds);
-    chrome_node.add_child(omnibox_node);
-    Ok(chrome_node)
+
+    let mut children = UiNodeChildren::new();
+    children.push(omnibox_node);
+    Ok(UiNode::with_children(
+        UiNodeKind::Chrome,
+        chrome_bounds,
+        children,
+    ))
 }
 
 fn build_content_node(
-    width_au: Au,
-    chrome_h: Au,
-    content_h: Au,
+    width_in_app_units: Au,
+    chrome_height: Au,
+    content_height: Au,
     links: &[LinkTarget],
 ) -> Result<UiNode, AlloyError> {
-    let content_origin = Point::new(Au::ZERO, chrome_h);
-    let content_size = Size::new(width_au, content_h).ok_or(AlloyError::InvalidDimensions)?;
+    let content_origin = Point::new(Au::ZERO, chrome_height);
+    let content_size =
+        Size::new(width_in_app_units, content_height).ok_or(AlloyError::InvalidDimensions)?;
     let content_bounds = Rect::new(content_origin, content_size);
-    let mut content_node = UiNode::new(UiNodeKind::Content, content_bounds);
-
-    for link in links {
-        let link_node = UiNode::new(UiNodeKind::Link(link.href.clone()), link.area);
-        content_node.add_child(link_node);
-    }
-    Ok(content_node)
+    let children = links
+        .iter()
+        .map(|link| UiNode::new(UiNodeKind::Link(link.href.clone()), link.area))
+        .collect();
+    Ok(UiNode::with_children(
+        UiNodeKind::Content,
+        content_bounds,
+        children,
+    ))
 }
 
 #[cfg(test)]
@@ -466,5 +532,46 @@ mod tests {
         assert_eq!(tree.hit_test(PhysicalPosition::new(-5.0, 20.0)), None);
         assert_eq!(tree.hit_test(PhysicalPosition::new(850.0, 20.0)), None);
         assert_eq!(tree.hit_test(PhysicalPosition::new(20.0, 650.0)), None);
+    }
+
+    #[test]
+    fn chrome_height_display_formats_with_pixels_unit() {
+        let default_height = ChromeHeight::DEFAULT;
+        let formatted = format!("{default_height}");
+        assert_eq!(formatted, "42px");
+    }
+
+    #[test]
+    fn ui_node_children_from_iter_and_reverse_iteration() {
+        let bounds = Rect::default();
+        let first = super::UiNode::new(UiNodeKind::Window, bounds);
+        let second = super::UiNode::new(UiNodeKind::Chrome, bounds);
+        let children: super::UiNodeChildren = [first, second].into_iter().collect();
+
+        assert_eq!(children.len(), 2);
+        assert!(!children.is_empty());
+
+        let last_kind = children.reverse_iter().next().map(super::UiNode::kind);
+        assert_eq!(last_kind, Some(&UiNodeKind::Chrome));
+    }
+
+    #[test]
+    fn narrow_viewport_handles_zero_box_width_without_panic() {
+        let narrow_size = SurfaceSize::new(10, 100).expect("positive surface size");
+        let tree =
+            UiRenderTree::build(narrow_size, ChromeHeight::DEFAULT, &[]).expect("valid tree");
+        // Within chrome bounds (10 x 42): click at (5, 20) hits Chrome
+        assert_eq!(
+            tree.hit_test(PhysicalPosition::new(5.0, 20.0)),
+            Some(UiHitTarget::Chrome)
+        );
+    }
+
+    #[test]
+    fn fallback_tree_returns_none_for_all_positions() {
+        let size = SurfaceSize::new(800, 30).expect("positive size");
+        let fallback = UiRenderTree::fallback(size);
+        assert_eq!(fallback.viewport(), size);
+        assert_eq!(fallback.hit_test(PhysicalPosition::new(20.0, 20.0)), None);
     }
 }
