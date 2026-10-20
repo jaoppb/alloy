@@ -13,7 +13,8 @@ pub mod subresource;
 
 pub use browser_services::BrowserServices;
 pub use event_loop::{
-    LoopStats, initial_window_attributes, run_browser, run_browser_until,
+    CHROME_HEIGHT, ChromeHeight, LoopStats, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind,
+    UiRenderTree, initial_window_attributes, run_browser, run_browser_until,
     run_browser_until_first_frame,
 };
 pub use image_store::ImageStore;

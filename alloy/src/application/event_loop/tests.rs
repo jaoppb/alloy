@@ -647,3 +647,12 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
         "clicking below chrome height must trigger the link with offset compensation"
     );
 }
+
+#[test]
+fn session_maintains_ui_render_tree_hierarchy() {
+    let attributes = initial_window_attributes().unwrap();
+    let session = session_over(MockTransport::new(), attributes.initial_size());
+    let tree = session.ui_tree();
+    assert_eq!(tree.root().kind(), &super::UiNodeKind::Window);
+    assert_eq!(tree.chrome_height(), super::ChromeHeight::DEFAULT);
+}

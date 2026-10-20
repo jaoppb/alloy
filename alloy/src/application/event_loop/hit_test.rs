@@ -3,7 +3,6 @@
 use graphics::{AU_PER_PX, Au, Rect};
 use window::PhysicalPosition;
 
-use super::session::CHROME_HEIGHT;
 use crate::application::pipeline::LinkTarget;
 
 /// The topmost link whose area contains `position`, snapped to the nearest
@@ -13,19 +12,10 @@ use crate::application::pipeline::LinkTarget;
 /// times [`AU_PER_PX`], and every edge widened from its `i32` raw value — both
 /// exact in `f64`, so this is the integer `Au` comparison, without a lossy
 /// `f32` (`Au::to_px`) or a float-to-integer cast on the way.
-///
-/// Clicks within the top-bar chrome (`y < CHROME_HEIGHT`) never trigger links
-/// and return `None`. Clicks below the chrome (`y >= CHROME_HEIGHT`) have their
-/// vertical coordinate compensated by subtracting `CHROME_HEIGHT` before
-/// matching against the document's link targets (Epic #43 / Issue #48).
 #[must_use]
 pub fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str> {
-    let raw_y = position.y();
-    if !raw_y.is_finite() || raw_y < f64::from(CHROME_HEIGHT) {
-        return None;
-    }
     let x = snapped_raw_au(position.x())?;
-    let y = snapped_raw_au(raw_y - f64::from(CHROME_HEIGHT))?;
+    let y = snapped_raw_au(position.y())?;
     links
         .iter()
         .rev()
@@ -35,18 +25,21 @@ pub fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str
 
 /// A pointer coordinate in whole pixels, as raw `Au` — `None` when it is not
 /// finite and so lies inside no area.
-fn snapped_raw_au(pixels: f64) -> Option<f64> {
+#[must_use]
+pub fn snapped_raw_au(pixels: f64) -> Option<f64> {
     pixels
         .is_finite()
         .then(|| pixels.round() * f64::from(AU_PER_PX))
 }
 
-fn contains(area: Rect, x: f64, y: f64) -> bool {
+#[must_use]
+pub fn contains(area: Rect, x: f64, y: f64) -> bool {
     (raw_edge(area.min_x())..raw_edge(area.max_x())).contains(&x)
         && (raw_edge(area.min_y())..raw_edge(area.max_y())).contains(&y)
 }
 
-fn raw_edge(edge: Au) -> f64 {
+#[must_use]
+pub fn raw_edge(edge: Au) -> f64 {
     f64::from(edge.raw())
 }
 
@@ -56,7 +49,6 @@ mod tests {
     use window::PhysicalPosition;
 
     use super::hit_test;
-    use crate::application::event_loop::session::CHROME_HEIGHT;
     use crate::application::pipeline::LinkTarget;
 
     fn link(href: &str, left: i32, top: i32, width: i32, height: i32) -> LinkTarget {
@@ -85,35 +77,30 @@ mod tests {
         PhysicalPosition::new(x, y)
     }
 
-    fn window_at(x: f64, doc_y: f64) -> PhysicalPosition {
-        PhysicalPosition::new(x, f64::from(CHROME_HEIGHT) + doc_y)
-    }
-
     #[test]
     fn a_link_area_includes_its_top_left_pixel_and_excludes_its_far_edge() {
         let links = [link("/a", 10, 10, 20, 20)];
 
-        assert_eq!(hit_test(&links, window_at(10.0, 10.0)), Some("/a"));
-        assert_eq!(hit_test(&links, window_at(29.0, 29.0)), Some("/a"));
-        assert_eq!(hit_test(&links, window_at(30.0, 20.0)), None);
-        assert_eq!(hit_test(&links, window_at(20.0, 30.0)), None);
+        assert_eq!(hit_test(&links, at(10.0, 10.0)), Some("/a"));
+        assert_eq!(hit_test(&links, at(29.0, 29.0)), Some("/a"));
+        assert_eq!(hit_test(&links, at(30.0, 20.0)), None);
+        assert_eq!(hit_test(&links, at(20.0, 30.0)), None);
     }
 
     #[test]
     fn the_later_painted_link_wins_where_two_overlap() {
         let links = [link("/below", 0, 0, 50, 50), link("/above", 10, 10, 10, 10)];
 
-        assert_eq!(hit_test(&links, window_at(15.0, 15.0)), Some("/above"));
-        assert_eq!(hit_test(&links, window_at(40.0, 40.0)), Some("/below"));
+        assert_eq!(hit_test(&links, at(15.0, 15.0)), Some("/above"));
+        assert_eq!(hit_test(&links, at(40.0, 40.0)), Some("/below"));
     }
 
     #[test]
     fn a_non_finite_pointer_position_hits_nothing() {
         let links = [link("/a", 0, 0, 50, 50)];
 
-        assert_eq!(hit_test(&links, at(f64::NAN, 50.0)), None);
+        assert_eq!(hit_test(&links, at(f64::NAN, 5.0)), None);
         assert_eq!(hit_test(&links, at(5.0, f64::INFINITY)), None);
-        assert_eq!(hit_test(&links, at(5.0, f64::NAN)), None);
     }
 
     #[test]
@@ -121,22 +108,18 @@ mod tests {
         let links = [link("/a", 10, 10, 20, 20)];
 
         assert_eq!(
-            hit_test(&links, window_at(9.6, 9.6)),
+            hit_test(&links, at(9.6, 9.6)),
             Some("/a"),
             "9.6 snaps to 10"
         );
+        assert_eq!(hit_test(&links, at(9.4, 15.0)), None, "9.4 snaps to 9");
         assert_eq!(
-            hit_test(&links, window_at(9.4, 15.0)),
-            None,
-            "9.4 snaps to 9"
-        );
-        assert_eq!(
-            hit_test(&links, window_at(29.4, 29.4)),
+            hit_test(&links, at(29.4, 29.4)),
             Some("/a"),
             "29.4 snaps to 29"
         );
         assert_eq!(
-            hit_test(&links, window_at(29.6, 15.0)),
+            hit_test(&links, at(29.6, 15.0)),
             None,
             "29.6 snaps to 30, the far edge"
         );
@@ -147,22 +130,14 @@ mod tests {
         // min at 10.25px (raw 656), max at 20.75px (raw 1328).
         let links = [raw_link("/a", 656, 656, 672, 672)];
 
+        assert_eq!(hit_test(&links, at(10.0, 15.0)), None, "raw 640 < 656");
+        assert_eq!(hit_test(&links, at(11.0, 15.0)), Some("/a"));
         assert_eq!(
-            hit_test(&links, window_at(10.0, 15.0)),
-            None,
-            "raw 640 < 656"
-        );
-        assert_eq!(hit_test(&links, window_at(11.0, 15.0)), Some("/a"));
-        assert_eq!(
-            hit_test(&links, window_at(20.0, 15.0)),
+            hit_test(&links, at(20.0, 15.0)),
             Some("/a"),
             "raw 1280 < 1328"
         );
-        assert_eq!(
-            hit_test(&links, window_at(21.0, 15.0)),
-            None,
-            "raw 1344 >= 1328"
-        );
+        assert_eq!(hit_test(&links, at(21.0, 15.0)), None, "raw 1344 >= 1328");
     }
 
     #[test]
@@ -172,29 +147,10 @@ mod tests {
         let links = [raw_link("/far", 16_777_217, 0, 640, 64)];
 
         assert_eq!(
-            hit_test(&links, window_at(262_144.0, 0.0)),
+            hit_test(&links, at(262_144.0, 0.0)),
             None,
             "raw 2^24 < edge"
         );
-        assert_eq!(hit_test(&links, window_at(262_145.0, 0.0)), Some("/far"));
-    }
-
-    #[test]
-    fn clicks_in_chrome_region_hit_nothing_even_if_link_is_at_y_zero() {
-        let links = [link("/top", 0, 0, 100, 50)];
-
-        assert_eq!(hit_test(&links, at(10.0, 0.0)), None);
-        assert_eq!(hit_test(&links, at(10.0, 20.0)), None);
-        assert_eq!(hit_test(&links, at(10.0, 41.9)), None);
-    }
-
-    #[test]
-    fn clicks_at_or_below_chrome_height_are_offset_by_chrome_height() {
-        let links = [link("/top", 0, 0, 100, 50)];
-
-        assert_eq!(hit_test(&links, at(10.0, 42.0)), Some("/top"));
-        assert_eq!(hit_test(&links, at(10.0, 91.4)), Some("/top"));
-        assert_eq!(hit_test(&links, at(10.0, 91.6)), None);
-        assert_eq!(hit_test(&links, at(10.0, 92.0)), None);
+        assert_eq!(hit_test(&links, at(262_145.0, 0.0)), Some("/far"));
     }
 }

@@ -14,7 +14,7 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 mod messages;
 
 use super::frame::CachedFrame;
-use super::hit_test::hit_test;
+pub use super::render_tree::{CHROME_HEIGHT, ChromeHeight, UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
@@ -24,46 +24,6 @@ use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
-
-/// Strongly-typed vertical height of the top chrome bar in pixels (ADR-0010).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ChromeHeight(u32);
-
-impl ChromeHeight {
-    /// Default chrome height (42 px).
-    pub const DEFAULT: Self = Self(42);
-
-    #[must_use]
-    pub const fn new(pixels: u32) -> Self {
-        Self(pixels)
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
-impl Default for ChromeHeight {
-    fn default() -> Self {
-        Self::DEFAULT
-    }
-}
-
-impl From<u32> for ChromeHeight {
-    fn from(pixels: u32) -> Self {
-        Self(pixels)
-    }
-}
-
-impl From<ChromeHeight> for u32 {
-    fn from(height: ChromeHeight) -> Self {
-        height.0
-    }
-}
-
-/// The vertical height of the top chrome bar in pixels (Epic #43 / Issue #48).
-pub const CHROME_HEIGHT: u32 = ChromeHeight::DEFAULT.get();
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
 /// the arity limit: the accumulated document state, the current viewport, and
@@ -101,6 +61,7 @@ pub struct Session<F, T, P, D> {
     inbox: Receiver<LoopMessage>,
     outbox: Sender<LoopMessage>,
     omnibox: OmniboxState,
+    ui_tree: UiRenderTree,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -112,6 +73,8 @@ where
 {
     pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
         let (outbox, inbox) = mpsc::channel();
+        let ui_tree = UiRenderTree::build(viewport, ChromeHeight::DEFAULT, &[])
+            .unwrap_or_else(|_| UiRenderTree::fallback(viewport));
         Self {
             services,
             dom_tree: None,
@@ -127,6 +90,7 @@ where
             inbox,
             outbox,
             omnibox: OmniboxState::new(),
+            ui_tree,
         }
     }
 
@@ -145,14 +109,24 @@ where
         &self.omnibox
     }
 
+    /// Read-only access to the session's UI render tree.
+    #[must_use]
+    #[cfg(test)]
+    pub const fn ui_tree(&self) -> &UiRenderTree {
+        &self.ui_tree
+    }
+
     /// Where the pointer was last seen — `None` until it first enters.
     pub const fn track_pointer(&mut self, position: Option<PhysicalPosition>) {
         self.pointer_position = position;
     }
 
     /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
-    pub const fn resize(&mut self, viewport: SurfaceSize) {
+    pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
+        if let Ok(tree) = UiRenderTree::build(viewport, ChromeHeight::DEFAULT, &self.links) {
+            self.ui_tree = tree;
+        }
         self.dirty = true;
     }
 
@@ -172,17 +146,27 @@ where
         spawn_navigation(url, transport, policy, self.outbox.clone());
     }
 
-    /// Navigates to the topmost link under `position`, resolved against the
-    /// document's base URL. Clicks within the top-bar chrome (`y < CHROME_HEIGHT`)
-    /// focus the omnibox instead of triggering link navigation.
+    /// Dispatches a pointer click at `position` through the UI render tree:
+    /// - Clicks on the omnibox or chrome top bar focus the omnibox.
+    /// - Clicks on a hyperlink navigate to the resolved destination.
+    /// - Clicks on empty page content do nothing.
     pub fn follow_link_at(&mut self, position: PhysicalPosition) {
-        if position.y() < f64::from(CHROME_HEIGHT) {
-            self.omnibox.focus();
-            return;
-        }
-        let Some(href) = hit_test(&self.links, position) else {
+        let Some(target) = self.ui_tree.hit_test(position) else {
             return;
         };
+        match target {
+            UiHitTarget::Omnibox | UiHitTarget::Chrome => {
+                self.omnibox.focus();
+            }
+            UiHitTarget::PageLink(href) => {
+                let href = href.to_owned();
+                self.follow_link(&href);
+            }
+            UiHitTarget::PageContent => {}
+        }
+    }
+
+    fn follow_link(&mut self, href: &str) {
         let Some(base_url) = self.base_url.as_ref() else {
             return;
         };
@@ -210,13 +194,7 @@ where
         let Some(dom_tree) = self.dom_tree.as_ref() else {
             return Ok(());
         };
-        let content_height = self
-            .viewport
-            .height()
-            .checked_sub(CHROME_HEIGHT)
-            .ok_or(AlloyError::InvalidDimensions)?;
-        let graphics_size = graphics::SurfaceSize::new(self.viewport.width(), content_height)
-            .ok_or(AlloyError::InvalidDimensions)?;
+        let graphics_size = self.ui_tree.content_size()?;
         let (content_framebuffer, links) = render_dom_with_links(
             dom_tree,
             self.extra_sheets.clone(),
@@ -231,6 +209,7 @@ where
         )?;
         let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
         frame.present(presenter)?;
+        self.ui_tree = UiRenderTree::build(self.viewport, ChromeHeight::DEFAULT, &links)?;
         self.links = links;
         self.last_frame = Some(frame);
         self.stats.relayouts = self.stats.relayouts.saturating_add(1);
