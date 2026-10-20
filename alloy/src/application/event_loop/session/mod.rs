@@ -15,10 +15,12 @@ mod messages;
 
 use super::frame::CachedFrame;
 use super::hit_test::hit_test;
+use super::modifiers::ModifiersState;
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
+use crate::application::omnibox::{OmniboxController, OmniboxEffect};
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
@@ -50,6 +52,8 @@ pub struct Session<F, T, P, D> {
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
     stats: LoopStats,
+    omnibox: OmniboxController,
+    modifiers: ModifiersState,
     /// Where the workers of the current navigation report. A worker cannot be
     /// cancelled, so [`Session::open_channel`] replaces both ends on every
     /// navigation: dropping the old `inbox` discards what its workers already
@@ -81,6 +85,8 @@ where
             viewport,
             last_frame: None,
             stats: LoopStats::default(),
+            omnibox: OmniboxController::new(),
+            modifiers: ModifiersState::new(),
             inbox,
             outbox,
         }
@@ -88,6 +94,36 @@ where
 
     pub const fn stats(&self) -> LoopStats {
         self.stats
+    }
+
+    /// Current active keyboard modifier state.
+    #[must_use]
+    pub const fn modifiers(&self) -> ModifiersState {
+        self.modifiers
+    }
+
+    /// Update tracked keyboard modifiers across pump cycles.
+    pub const fn track_modifiers(&mut self, modifiers: ModifiersState) {
+        self.modifiers = modifiers;
+    }
+
+    /// Mutable access to the session's omnibox controller.
+    pub const fn omnibox_mut(&mut self) -> &mut OmniboxController {
+        &mut self.omnibox
+    }
+
+    /// Executes an effect emitted by the omnibox controller.
+    ///
+    /// Returns `true` if a platform redraw is requested.
+    pub fn execute_omnibox_effect(&mut self, effect: OmniboxEffect) -> bool {
+        match effect {
+            OmniboxEffect::None => false,
+            OmniboxEffect::Redraw => true,
+            OmniboxEffect::Navigate(url) => {
+                self.navigate(url);
+                true
+            }
+        }
     }
 
     pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
@@ -193,6 +229,10 @@ impl<F, T, P, D> Session<F, T, P, D> {
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P, D> Session<F, T, P, D> {
+    pub const fn omnibox(&self) -> &OmniboxController {
+        &self.omnibox
+    }
+
     /// A clone of the sender the current page's workers hold.
     pub fn outbox_for_test(&self) -> Sender<LoopMessage> {
         self.outbox.clone()
