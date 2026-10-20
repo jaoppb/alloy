@@ -96,7 +96,7 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
     #[must_use]
     pub fn input_box_bounds(&self, width: Px) -> Option<PxRect> {
         let width_au = Au::from_px(width)?;
-        let bounds = self.calculate_input_bounds(width_au)?;
+        let bounds = self.theme.input_box_bounds(width_au)?;
         Some(rect_to_px_rect(bounds))
     }
 
@@ -123,27 +123,11 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
         builder: &mut DisplayListBuilder,
     ) -> Result<(), GraphicsError> {
         self.paint_background(width, builder)?;
-        let Some(bounds) = self.calculate_input_bounds(width) else {
+        let Some(bounds) = self.theme.input_box_bounds(width) else {
             return Ok(());
         };
         paint_input_chrome(state, bounds, &self.theme, builder)?;
         self.paint_content(state, bounds, builder)
-    }
-
-    fn calculate_input_bounds(&self, width: Au) -> Option<Rect> {
-        let margin_x = self.theme.input_box_margin_x();
-        let double_margin = margin_x.saturating_add(margin_x);
-        let input_width = width.saturating_sub(double_margin);
-        if input_width.is_zero() {
-            return None;
-        }
-        let input_size = Size::new(input_width, self.theme.input_box_height())?;
-        let chrome_height_au = self.chrome_height().to_au();
-        let vertical_space = chrome_height_au.saturating_sub(self.theme.input_box_height());
-        let half_vertical_space = vertical_space.raw().checked_div(2).unwrap_or(0);
-        let vertical_offset = Au::from_raw(half_vertical_space);
-        let origin = Point::new(margin_x, vertical_offset);
-        Some(Rect::new(origin, input_size))
     }
 
     fn paint_background(

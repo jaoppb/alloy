@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
+use alloy::theme::OmniboxTheme;
 use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
 use graphics::SyntheticFontProvider;
 use network::{
@@ -35,6 +36,13 @@ fn services(
         Arc::new(transport),
         Arc::new(AllowAllPolicy::new()),
     )
+}
+
+/// 20 px into the page, which starts below the default theme's chrome bar —
+/// inside the `display: block` link both click tests put at the top.
+fn link_position() -> PhysicalPosition {
+    let chrome_height = f64::from(OmniboxTheme::DEFAULT.chrome_height().to_px().get());
+    PhysicalPosition::new(20.0, chrome_height + 20.0)
 }
 
 fn text_response(body: &str) -> HttpResponse {
@@ -133,8 +141,7 @@ fn clicking_a_link_navigates_to_destination_page() {
         .with_response(url_a.clone(), text_response(page_a))
         .with_response(url_b, text_response(page_b));
     let page_ready = Rc::new(Cell::new(false));
-    let mut system =
-        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 20.0), Rc::clone(&page_ready));
+    let mut system = ClickWhenReadyWindowSystem::new(link_position(), Rc::clone(&page_ready));
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);
@@ -177,8 +184,7 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
     let transport =
         MockTransport::new().with_response(start_url.clone(), text_response(page_with_anchor));
     let page_ready = Rc::new(Cell::new(false));
-    let mut system =
-        ClickWhenReadyWindowSystem::new(PhysicalPosition::new(20.0, 20.0), Rc::clone(&page_ready));
+    let mut system = ClickWhenReadyWindowSystem::new(link_position(), Rc::clone(&page_ready));
     let mut presenter = RecordingPresenter::new();
     let size = window::SurfaceSize::new(200, 150).unwrap();
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);

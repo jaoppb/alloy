@@ -4,7 +4,7 @@
 //! (such as the omnibox navigation chrome), allowing dynamic styling and future
 //! theme customization (e.g. dark mode, user themes).
 
-use graphics::{Au, Color, Px};
+use graphics::{Au, Color, Point, Px, Rect, Size};
 
 /// Strongly-typed height of the browser chrome bar at the top of the window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -42,6 +42,12 @@ impl ChromeHeight {
 impl Default for ChromeHeight {
     fn default() -> Self {
         Self::DEFAULT
+    }
+}
+
+impl std::fmt::Display for ChromeHeight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.0}px", self.to_px().get())
     }
 }
 
@@ -293,6 +299,26 @@ impl OmniboxTheme {
     #[must_use]
     pub const fn caret_color(&self) -> Color {
         self.caret_color
+    }
+
+    /// Where the input box sits inside a chrome bar `chrome_width` wide, or
+    /// `None` when the margins leave no room for it. The painter draws the box
+    /// here and the UI render tree hit-tests it here, so the two cannot drift.
+    #[must_use]
+    pub fn input_box_bounds(&self, chrome_width: Au) -> Option<Rect> {
+        let margin_x = self.input_box_margin_x;
+        let double_margin = margin_x.saturating_add(margin_x);
+        let input_width = chrome_width.saturating_sub(double_margin);
+        if input_width.is_zero() {
+            return None;
+        }
+        let input_size = Size::new(input_width, self.input_box_height)?;
+        let chrome_height_au = self.chrome_height.to_au();
+        let vertical_space = chrome_height_au.saturating_sub(self.input_box_height);
+        let half_vertical_space = vertical_space.raw().checked_div(2).unwrap_or(0);
+        let vertical_offset = Au::from_raw(half_vertical_space);
+        let origin = Point::new(margin_x, vertical_offset);
+        Some(Rect::new(origin, input_size))
     }
 }
 

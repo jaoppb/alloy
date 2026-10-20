@@ -25,18 +25,21 @@ pub fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str
 
 /// A pointer coordinate in whole pixels, as raw `Au` — `None` when it is not
 /// finite and so lies inside no area.
-fn snapped_raw_au(pixels: f64) -> Option<f64> {
+#[must_use]
+pub fn snapped_raw_au(pixels: f64) -> Option<f64> {
     pixels
         .is_finite()
         .then(|| pixels.round() * f64::from(AU_PER_PX))
 }
 
-fn contains(area: Rect, x: f64, y: f64) -> bool {
+#[must_use]
+pub fn contains(area: Rect, x: f64, y: f64) -> bool {
     (raw_edge(area.min_x())..raw_edge(area.max_x())).contains(&x)
         && (raw_edge(area.min_y())..raw_edge(area.max_y())).contains(&y)
 }
 
-fn raw_edge(edge: Au) -> f64 {
+#[must_use]
+pub fn raw_edge(edge: Au) -> f64 {
     f64::from(edge.raw())
 }
 

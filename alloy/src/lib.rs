@@ -31,7 +31,8 @@ pub use application::{
     Subresources, document_base_url,
 };
 pub use application::{
-    LoopStats, initial_window_attributes, navigate, run_browser, run_browser_until,
+    LoopStats, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
+    initial_window_attributes, navigate, run_browser, run_browser_until,
     run_browser_until_first_frame,
 };
 pub use error::AlloyError;

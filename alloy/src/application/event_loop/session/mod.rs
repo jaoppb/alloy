@@ -7,22 +7,23 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use css::StyleSheetSet;
 use dom::DomTree;
-use graphics::FontProvider;
+use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
 
 mod messages;
 
 use super::frame::CachedFrame;
-use super::hit_test::hit_test;
 use super::modifiers::ModifiersState;
+use super::render_tree::{UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
-use crate::application::omnibox::{OmniboxController, OmniboxEffect};
-use crate::application::pipeline::{LinkTarget, render_dom_with_links};
+use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
+use crate::application::pipeline::{LinkTarget, render_dom_with_links, surface_length_to_au};
 use crate::application::subresource::SubresourceDiscoverer;
+use crate::application::theme::{OmniboxTheme, Theme};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
@@ -62,6 +63,10 @@ pub struct Session<F, T, P, D> {
     /// index reused by every document — naming an `<img>` of the new page.
     inbox: Receiver<LoopMessage>,
     outbox: Sender<LoopMessage>,
+    /// The one source of chrome geometry: the chrome is painted with it and
+    /// `ui_tree` is laid out from it, so clicks land where pixels are drawn.
+    theme: Theme,
+    ui_tree: UiRenderTree,
 }
 
 impl<F, T, P, D> Session<F, T, P, D>
@@ -73,6 +78,9 @@ where
 {
     pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
         let (outbox, inbox) = mpsc::channel();
+        let theme = Theme::DEFAULT;
+        let ui_tree = UiRenderTree::build(viewport, theme.omnibox(), &[])
+            .unwrap_or_else(|_| UiRenderTree::fallback(viewport, theme.omnibox()));
         Self {
             services,
             dom_tree: None,
@@ -89,6 +97,8 @@ where
             modifiers: ModifiersState::new(),
             inbox,
             outbox,
+            theme,
+            ui_tree,
         }
     }
 
@@ -130,14 +140,23 @@ where
         self.pointer_position
     }
 
+    /// Read-only access to the session's UI render tree.
+    #[must_use]
+    #[cfg(test)]
+    pub const fn ui_tree(&self) -> &UiRenderTree {
+        &self.ui_tree
+    }
+
     /// Where the pointer was last seen — `None` until it first enters.
     pub const fn track_pointer(&mut self, position: Option<PhysicalPosition>) {
         self.pointer_position = position;
     }
 
     /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
-    pub const fn resize(&mut self, viewport: SurfaceSize) {
+    pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
+        self.ui_tree = UiRenderTree::build(viewport, self.theme.omnibox(), &self.links)
+            .unwrap_or_else(|_| UiRenderTree::fallback(viewport, self.theme.omnibox()));
         self.dirty = true;
     }
 
@@ -151,17 +170,33 @@ where
     /// reads any more.
     pub fn navigate(&mut self, url: Url) {
         self.open_channel();
+        self.omnibox.reset_to_url(&url);
         let transport = Arc::clone(self.services.transport());
         let policy = Arc::clone(self.services.policy());
         spawn_navigation(url, transport, policy, self.outbox.clone());
     }
 
-    /// Navigates to the topmost link under `position`, resolved against the
-    /// document's base URL. An in-page `#anchor` is a no-op in v0.5.
+    /// Dispatches a pointer click at `position` through the UI render tree:
+    /// - Clicks on the omnibox or chrome top bar focus the omnibox.
+    /// - Clicks on a hyperlink navigate to the resolved destination.
+    /// - Clicks on empty page content do nothing.
     pub fn follow_link_at(&mut self, position: PhysicalPosition) {
-        let Some(href) = hit_test(&self.links, position) else {
+        let Some(target) = self.ui_tree.hit_test(position) else {
             return;
         };
+        match target {
+            UiHitTarget::Omnibox | UiHitTarget::Chrome => {
+                self.omnibox.focus();
+            }
+            UiHitTarget::PageLink(href) => {
+                let href = href.to_owned();
+                self.follow_link(&href);
+            }
+            UiHitTarget::PageContent => {}
+        }
+    }
+
+    fn follow_link(&mut self, href: &str) {
         let Some(base_url) = self.base_url.as_ref() else {
             return;
         };
@@ -189,18 +224,23 @@ where
         let Some(dom_tree) = self.dom_tree.as_ref() else {
             return Ok(());
         };
-        let graphics_size =
-            graphics::SurfaceSize::new(self.viewport.width(), self.viewport.height())
-                .ok_or(AlloyError::InvalidDimensions)?;
-        let (framebuffer, links) = render_dom_with_links(
+        let graphics_size = self.ui_tree.content_size()?;
+        let (content_framebuffer, links) = render_dom_with_links(
             dom_tree,
             self.extra_sheets.clone(),
             &self.images,
             graphics_size,
             Arc::clone(self.services.font_provider()),
         )?;
-        let frame = CachedFrame::capture(&framebuffer, self.viewport);
+        let chrome_framebuffer = render_chrome(
+            self.omnibox.state(),
+            self.theme.omnibox(),
+            self.ui_tree.chrome_size()?,
+            Arc::clone(self.services.font_provider()),
+        )?;
+        let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
         frame.present(presenter)?;
+        self.ui_tree = UiRenderTree::build(self.viewport, self.theme.omnibox(), &links)?;
         self.links = links;
         self.last_frame = Some(frame);
         self.stats.relayouts = self.stats.relayouts.saturating_add(1);
@@ -224,6 +264,29 @@ impl<F, T, P, D> Session<F, T, P, D> {
     fn open_channel(&mut self) {
         (self.outbox, self.inbox) = mpsc::channel();
     }
+}
+
+fn render_chrome<F: FontProvider + 'static>(
+    omnibox: &OmniboxState,
+    theme: &OmniboxTheme,
+    chrome_size: graphics::SurfaceSize,
+    font_provider: Arc<F>,
+) -> Result<graphics::Framebuffer, AlloyError> {
+    let mut builder = DisplayListBuilder::new();
+    let painter = OmniboxPainter::new(font_provider.as_ref()).with_theme(*theme);
+    painter.paint(
+        omnibox,
+        surface_length_to_au(chrome_size.width())?.to_px(),
+        &mut builder,
+    )?;
+    let display_list = builder.build()?;
+
+    let mut backend = SoftwareCpuBackend::with_font_provider(font_provider);
+    backend.begin_frame(chrome_size)?;
+    backend.submit(&display_list)?;
+    backend.end_frame()?;
+    let framebuffer = backend.read_back()?;
+    Ok(framebuffer)
 }
 
 /// Read-only views the `pump_once` tests assert on.

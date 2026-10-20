@@ -15,6 +15,7 @@ mod frame;
 mod hit_test;
 mod modifiers;
 mod pixel;
+mod render_tree;
 mod session;
 mod stats;
 mod worker;
@@ -31,7 +32,11 @@ use window::{
     WindowEvent, WindowSystem, WindowTitle,
 };
 
+pub use self::hit_test::hit_test;
 pub use self::modifiers::ModifiersState;
+pub use self::render_tree::{
+    ChromeHeight, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
+};
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;

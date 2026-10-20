@@ -26,6 +26,7 @@ use crate::application::browser_services::BrowserServices;
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
 use crate::application::subresource::{MarkupDiscoverer, placeholder_framebuffer};
+use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
 #[test]
@@ -302,7 +303,7 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
     // Move pointer over the link and click
     let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 20.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -357,7 +358,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     pump(&mut system, &mut presenter, &mut session);
     let navigations_before_click = session.stats().navigations;
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 20.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -397,6 +398,12 @@ fn a_resize_before_any_document_counts_no_relayout() {
         !session.needs_relayout(),
         "the dropped request is not retried"
     );
+}
+
+/// Where a point `document_y` pixels into the page sits in the window: the
+/// page starts below the default theme's chrome bar.
+fn window_y(document_y: f64) -> f64 {
+    f64::from(OmniboxTheme::DEFAULT.chrome_height().to_px().get()) + document_y
 }
 
 fn page_url(path: &str) -> String {
@@ -531,7 +538,7 @@ fn following_a_link_supersedes_the_navigation_in_flight() {
     pump(&mut system, &mut presenter, &mut session);
     let before_click = session.outbox_for_test();
     system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, 20.0),
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
     });
     system.schedule(WindowEvent::PointerButton {
         button: window::PointerButton::Left,
@@ -882,4 +889,124 @@ fn control_keys_backspace_and_arrows_operate_on_focused_omnibox() {
     });
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "coa");
+}
+
+#[test]
+fn clicks_in_chrome_region_target_omnibox_and_do_not_trigger_links() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    load(
+        &mut session,
+        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
+        &page_url("index.html"),
+    );
+    pump(&mut system, &mut presenter, &mut session);
+    assert!(!session.omnibox().is_focused());
+    let navigations_before_click = session.stats().navigations;
+
+    // y = 20 is inside the chrome bar, above the link at the top of the page.
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(20.0, 20.0),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(
+        session.omnibox().is_focused(),
+        "clicking within the chrome bar must focus the omnibox"
+    );
+    assert_eq!(
+        session.stats().navigations,
+        navigations_before_click,
+        "clicking in the chrome area must not trigger links underneath in the document"
+    );
+}
+
+#[test]
+fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/target.html").unwrap();
+    let response = network::HttpResponse::new(
+        network::StatusCode::OK,
+        network::HeaderMap::new(),
+        network::Body::from_text("<html><body>target</body></html>"),
+    );
+    let mut session = session_over(
+        MockTransport::new().with_response(target.clone(), response),
+        attributes.initial_size(),
+    );
+    load(
+        &mut session,
+        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+    let navigations_before_click = session.stats().navigations;
+
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(
+        completed_navigation(
+            &mut system,
+            &mut presenter,
+            &mut session,
+            navigations_before_click
+        ),
+        target,
+        "clicking below chrome height must trigger the link with offset compensation"
+    );
+}
+
+#[test]
+fn session_maintains_ui_render_tree_hierarchy() {
+    let attributes = initial_window_attributes().unwrap();
+    let session = session_over(MockTransport::new(), attributes.initial_size());
+    let tree = session.ui_tree();
+    assert_eq!(tree.root().kind(), &super::UiNodeKind::Window);
+    assert_eq!(tree.chrome_height(), super::ChromeHeight::DEFAULT);
+}
+
+#[test]
+fn resizing_below_chrome_height_updates_ui_tree_to_fallback() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    let small_size = SurfaceSize::new(800, 30).unwrap();
+    session.resize(small_size);
+
+    assert_eq!(session.ui_tree().viewport(), small_size);
+    assert!(session.ui_tree().content_size().is_err());
+    assert_eq!(
+        session
+            .ui_tree()
+            .hit_test(window::PhysicalPosition::new(20.0, 20.0)),
+        None
+    );
+
+    // Resizing back to a valid viewport restores the full hierarchy
+    let normal_size = SurfaceSize::new(800, 600).unwrap();
+    session.resize(normal_size);
+    assert_eq!(session.ui_tree().viewport(), normal_size);
+    assert!(session.ui_tree().content_size().is_ok());
+    assert_eq!(
+        session
+            .ui_tree()
+            .hit_test(window::PhysicalPosition::new(20.0, 20.0)),
+        Some(super::UiHitTarget::Omnibox)
+    );
 }

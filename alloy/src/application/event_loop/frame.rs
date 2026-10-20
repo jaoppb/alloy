@@ -18,14 +18,39 @@ pub struct CachedFrame {
 }
 
 impl CachedFrame {
-    /// Converts a framebuffer rendered at `viewport` into the presenter's
-    /// premultiplied pixel format.
-    pub fn capture(framebuffer: &Framebuffer, viewport: SurfaceSize) -> Self {
-        Self {
+    /// Composes the chrome top-bar framebuffer and the web content framebuffer
+    /// into a single presented frame matching `viewport` dimensions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AlloyError::InvalidDimensions`] if the total combined pixel count
+    /// does not match `viewport.width() * viewport.height()`.
+    pub fn compose(
+        chrome: &Framebuffer,
+        content: &Framebuffer,
+        viewport: SurfaceSize,
+    ) -> Result<Self, AlloyError> {
+        let chrome_pixels = frame_pixels(chrome);
+        let content_pixels = frame_pixels(content);
+        let mut pixels =
+            Vec::with_capacity(chrome_pixels.len().saturating_add(content_pixels.len()));
+        pixels.extend(chrome_pixels);
+        pixels.extend(content_pixels);
+
+        let width_usize =
+            usize::try_from(viewport.width()).map_err(|_| AlloyError::InvalidDimensions)?;
+        let height_usize =
+            usize::try_from(viewport.height()).map_err(|_| AlloyError::InvalidDimensions)?;
+        let expected_len = width_usize.saturating_mul(height_usize);
+        if pixels.len() != expected_len {
+            return Err(AlloyError::InvalidDimensions);
+        }
+
+        Ok(Self {
             width: viewport.width(),
             height: viewport.height(),
-            pixels: frame_pixels(framebuffer),
-        }
+            pixels,
+        })
     }
 
     pub fn present<R: Presenter>(&self, presenter: &mut R) -> Result<(), AlloyError> {
