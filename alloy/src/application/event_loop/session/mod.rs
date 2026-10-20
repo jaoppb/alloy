@@ -14,12 +14,13 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 mod messages;
 
 use super::frame::CachedFrame;
+use super::modifiers::ModifiersState;
 use super::render_tree::{CHROME_HEIGHT, ChromeHeight, UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
-use crate::application::omnibox::{OmniboxPainter, OmniboxState};
+use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
@@ -51,6 +52,8 @@ pub struct Session<F, T, P, D> {
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
     stats: LoopStats,
+    omnibox: OmniboxController,
+    modifiers: ModifiersState,
     /// Where the workers of the current navigation report. A worker cannot be
     /// cancelled, so [`Session::open_channel`] replaces both ends on every
     /// navigation: dropping the old `inbox` discards what its workers already
@@ -59,7 +62,6 @@ pub struct Session<F, T, P, D> {
     /// index reused by every document — naming an `<img>` of the new page.
     inbox: Receiver<LoopMessage>,
     outbox: Sender<LoopMessage>,
-    omnibox: OmniboxState,
     ui_tree: UiRenderTree,
 }
 
@@ -86,9 +88,10 @@ where
             viewport,
             last_frame: None,
             stats: LoopStats::default(),
+            omnibox: OmniboxController::new(),
+            modifiers: ModifiersState::new(),
             inbox,
             outbox,
-            omnibox: OmniboxState::new(),
             ui_tree,
         }
     }
@@ -97,15 +100,38 @@ where
         self.stats
     }
 
-    pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
-        self.pointer_position
+    /// Current active keyboard modifier state.
+    #[must_use]
+    pub const fn modifiers(&self) -> ModifiersState {
+        self.modifiers
     }
 
-    /// Read-only access to the session's address bar state.
-    #[must_use]
-    #[cfg(test)]
-    pub const fn omnibox(&self) -> &OmniboxState {
-        &self.omnibox
+    /// Update tracked keyboard modifiers across pump cycles.
+    pub const fn track_modifiers(&mut self, modifiers: ModifiersState) {
+        self.modifiers = modifiers;
+    }
+
+    /// Mutable access to the session's omnibox controller.
+    pub const fn omnibox_mut(&mut self) -> &mut OmniboxController {
+        &mut self.omnibox
+    }
+
+    /// Executes an effect emitted by the omnibox controller.
+    ///
+    /// Returns `true` if a platform redraw is requested.
+    pub fn execute_omnibox_effect(&mut self, effect: OmniboxEffect) -> bool {
+        match effect {
+            OmniboxEffect::None => false,
+            OmniboxEffect::Redraw => true,
+            OmniboxEffect::Navigate(url) => {
+                self.navigate(url);
+                true
+            }
+        }
+    }
+
+    pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
+        self.pointer_position
     }
 
     /// Read-only access to the session's UI render tree.
@@ -201,7 +227,7 @@ where
             Arc::clone(self.services.font_provider()),
         )?;
         let chrome_framebuffer = render_chrome(
-            &self.omnibox,
+            self.omnibox.state(),
             self.viewport.width(),
             Arc::clone(self.services.font_provider()),
         )?;
@@ -265,6 +291,10 @@ const fn u32_to_f32(value: u32) -> f32 {
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P, D> Session<F, T, P, D> {
+    pub const fn omnibox(&self) -> &OmniboxController {
+        &self.omnibox
+    }
+
     /// A clone of the sender the current page's workers hold.
     pub fn outbox_for_test(&self) -> Sender<LoopMessage> {
         self.outbox.clone()

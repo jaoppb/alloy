@@ -1,6 +1,7 @@
 //! Omnibox editing state machine and text buffer.
 
 mod buffer;
+pub mod controller;
 mod gap_buffer;
 pub mod paint;
 mod state;
@@ -10,6 +11,7 @@ mod tests;
 
 pub use crate::application::theme;
 pub use buffer::{CursorPosition, OmniboxBuffer};
+pub use controller::{OmniboxController, OmniboxEffect, OmniboxInput};
 pub use gap_buffer::GapBuffer;
 pub use paint::{
     CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, ChromeHeight, DEFAULT_CHROME_HEIGHT,

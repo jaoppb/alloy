@@ -15,7 +15,8 @@ use std::sync::Arc;
 use graphics::{ImageId, SyntheticFontProvider};
 use network::{AllowAllPolicy, MockTransport};
 use window::{
-    HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
+    HeadlessWindowSystem, KeyCode, KeyState, LogicalKey, RecordingPresenter, SurfaceSize,
+    WindowEvent, WindowSystem as _,
 };
 
 use super::session::Session;
@@ -562,6 +563,325 @@ fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
         stats.stylesheets_loaded, 0,
         "print or non-matching stylesheet must not be absorbed"
     );
+}
+
+#[test]
+fn ctrl_l_shortcut_focuses_omnibox_and_selects_all_text() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+
+    pump(&mut system, &mut presenter, &mut session);
+    assert!(!session.omnibox().is_focused());
+    assert!(!session.omnibox().is_all_selected());
+
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::CONTROL_LEFT,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_L,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_L,
+        pressed: false,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::CONTROL_LEFT,
+        pressed: false,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(
+        session.omnibox().is_focused(),
+        "Ctrl+L must grant focus to the omnibox"
+    );
+    assert!(
+        session.omnibox().is_all_selected(),
+        "Ctrl+L must select existing omnibox text"
+    );
+}
+
+#[test]
+fn alt_d_shortcut_focuses_omnibox_and_selects_all_text() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+
+    pump(&mut system, &mut presenter, &mut session);
+    assert!(!session.omnibox().is_focused());
+
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::ALT_LEFT,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_D,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_D,
+        pressed: false,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::ALT_LEFT,
+        pressed: false,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(
+        session.omnibox().is_focused(),
+        "Alt+D must grant focus to the omnibox"
+    );
+    assert!(
+        session.omnibox().is_all_selected(),
+        "Alt+D must select existing omnibox text"
+    );
+}
+
+#[test]
+fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+
+    // Initial pump: document relayouts once.
+    pump(&mut system, &mut presenter, &mut session);
+    let relayouts_before = session.stats().relayouts;
+    assert_eq!(relayouts_before, 1);
+
+    // Focus omnibox via Ctrl+L.
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::CONTROL_LEFT,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_L,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert!(session.omnibox().is_focused());
+    assert_eq!(
+        session.stats().relayouts,
+        relayouts_before,
+        "focusing omnibox must not trigger a DOM relayout"
+    );
+
+    // First character replaces selected text.
+    system.schedule(WindowEvent::TextInput {
+        text: "h".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "h");
+    assert_eq!(
+        session.stats().relayouts,
+        relayouts_before,
+        "typing in omnibox must strictly leave stats.relayouts unchanged"
+    );
+
+    // Subsequent characters append to the buffer.
+    system.schedule(WindowEvent::TextInput {
+        text: "ello".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "hello");
+    assert_eq!(
+        session.stats().relayouts,
+        relayouts_before,
+        "typing in omnibox must strictly leave stats.relayouts unchanged"
+    );
+}
+
+#[test]
+fn typing_when_unfocused_is_ignored() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+
+    pump(&mut system, &mut presenter, &mut session);
+    let initial_text = session.omnibox().text().to_string();
+
+    system.schedule(WindowEvent::TextInput {
+        text: "ignored".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(
+        session.omnibox().text(),
+        initial_text.as_str(),
+        "typing without omnibox focus must not mutate the buffer"
+    );
+}
+
+#[test]
+fn escape_cancels_editing_reverts_to_active_url_and_unfocuses() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+
+    pump(&mut system, &mut presenter, &mut session);
+    let original_url_text = session.omnibox().text().to_string();
+
+    // Focus and type.
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::CONTROL_LEFT,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_L,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    system.schedule(WindowEvent::TextInput {
+        text: "draft query".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "draft query");
+    assert!(session.omnibox().is_focused());
+
+    // Press Escape.
+    system.schedule(WindowEvent::ControlKey {
+        key: LogicalKey::Escape,
+        state: KeyState::Pressed,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(
+        !session.omnibox().is_focused(),
+        "Escape must release omnibox focus"
+    );
+    assert_eq!(
+        session.omnibox().text(),
+        original_url_text.as_str(),
+        "Escape must revert omnibox text to active page URL"
+    );
+}
+
+#[test]
+fn end_to_end_shortcut_typing_and_navigation_dispatch() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+
+    let target = network::Url::parse("https://rust-lang.org/").unwrap();
+    let response = network::HttpResponse::new(
+        network::StatusCode::OK,
+        network::HeaderMap::new(),
+        network::Body::from_text("<html><body>Rust</body></html>"),
+    );
+    let mut session = session_over(
+        MockTransport::new().with_response(target.clone(), response),
+        attributes.initial_size(),
+    );
+    load(
+        &mut session,
+        "<html><body>Initial page</body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+    let navigations_before = session.stats().navigations;
+
+    // 1. Press Ctrl+L to focus omnibox.
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::CONTROL_LEFT,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_L,
+        pressed: true,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert!(session.omnibox().is_focused());
+
+    // 2. Type "rust-lang.org" (without scheme).
+    system.schedule(WindowEvent::TextInput {
+        text: "rust-lang.org".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "rust-lang.org");
+
+    // 3. Press Enter.
+    system.schedule(WindowEvent::ControlKey {
+        key: LogicalKey::Enter,
+        state: KeyState::Pressed,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+
+    // Focus must be released immediately.
+    assert!(
+        !session.omnibox().is_focused(),
+        "pressing Enter must release omnibox focus"
+    );
+
+    // Navigation must be classified as https://rust-lang.org/ and completed.
+    assert_eq!(
+        completed_navigation(
+            &mut system,
+            &mut presenter,
+            &mut session,
+            navigations_before
+        ),
+        target,
+        "Enter must classify input and dispatch navigation to classified destination"
+    );
+}
+
+#[test]
+fn control_keys_backspace_and_arrows_operate_on_focused_omnibox() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+
+    pump(&mut system, &mut presenter, &mut session);
+
+    // Focus via Ctrl+L and type "cat"
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::CONTROL_LEFT,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::Key {
+        code: KeyCode::KEY_L,
+        pressed: true,
+    });
+    system.schedule(WindowEvent::TextInput {
+        text: "cat".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "cat");
+
+    // Backspace removes 't' -> "ca"
+    system.schedule(WindowEvent::ControlKey {
+        key: LogicalKey::Backspace,
+        state: KeyState::Pressed,
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "ca");
+
+    // ArrowLeft moves cursor between 'c' and 'a', then type 'o' -> "coa"
+    system.schedule(WindowEvent::ControlKey {
+        key: LogicalKey::ArrowLeft,
+        state: KeyState::Pressed,
+    });
+    system.schedule(WindowEvent::TextInput {
+        text: "o".to_string(),
+    });
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "coa");
 }
 
 #[test]

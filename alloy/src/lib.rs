@@ -14,8 +14,9 @@ pub mod logging;
 pub use application::browser_services::BrowserServices;
 pub use application::image_store::ImageStore;
 pub use application::omnibox::{
-    ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
-    compute_cursor_offset, paint_omnibox, paint_omnibox_with_theme,
+    ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxController, OmniboxEffect, OmniboxInput,
+    OmniboxPainter, OmniboxState, OmniboxTheme, Theme, compute_cursor_offset, paint_omnibox,
+    paint_omnibox_with_theme,
 };
 pub use application::paint::paint_box_tree;
 pub use application::pipeline::{

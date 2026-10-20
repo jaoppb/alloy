@@ -21,8 +21,8 @@ pub use event_loop::{
 pub use image_store::ImageStore;
 pub use navigation::navigate;
 pub use omnibox::{
-    CursorPosition, OmniboxBuffer, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
-    compute_cursor_offset, paint_omnibox,
+    CursorPosition, OmniboxBuffer, OmniboxController, OmniboxEffect, OmniboxInput, OmniboxPainter,
+    OmniboxState, OmniboxTheme, Theme, compute_cursor_offset, paint_omnibox,
 };
 pub use paint::paint_box_tree;
 pub use pipeline::{

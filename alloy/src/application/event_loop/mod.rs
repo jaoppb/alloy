@@ -13,6 +13,7 @@
 
 mod frame;
 mod hit_test;
+mod modifiers;
 mod pixel;
 mod render_tree;
 mod session;
@@ -27,11 +28,12 @@ use std::thread;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
-    PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
+    KeyCode, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
 };
 
 pub use self::hit_test::hit_test;
+pub use self::modifiers::ModifiersState;
 pub use self::render_tree::{
     CHROME_HEIGHT, ChromeHeight, OMNIBOX_HEIGHT_PX, OMNIBOX_HORIZONTAL_MARGIN_PX, UiHitTarget,
     UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
@@ -39,6 +41,7 @@ pub use self::render_tree::{
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
+use crate::application::omnibox::OmniboxInput;
 use crate::application::pipeline::RenderOptions;
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
@@ -199,15 +202,21 @@ where
     P: RequestPolicy + 'static,
     D: SubresourceDiscoverer,
 {
-    let mut events = PumpEvents::starting_at(session.pointer_position());
+    let mut events = PumpEvents::starting_at(session.pointer_position(), session.modifiers());
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
     session.track_pointer(events.pointer_position);
+    session.track_modifiers(events.modifiers);
 
     if let Some(viewport) = events.latest_resize {
         session.resize(viewport);
     }
     if let Some(position) = events.clicked_at {
         session.follow_link_at(position);
+    }
+
+    let omnibox_modified = dispatch_omnibox_inputs(session, &events.omnibox_inputs);
+    if omnibox_modified {
+        system.request_redraw();
     }
 
     let saw_message = session.drain_messages();
@@ -228,6 +237,24 @@ where
     Ok((events.status(window_status), did_work))
 }
 
+fn dispatch_omnibox_inputs<F, T, P, D>(
+    session: &mut Session<F, T, P, D>,
+    inputs: &[OmniboxInput],
+) -> bool
+where
+    F: FontProvider + 'static,
+    T: HttpTransport + 'static,
+    P: RequestPolicy + 'static,
+    D: SubresourceDiscoverer,
+{
+    let mut modified = false;
+    for input in inputs {
+        let effect = session.omnibox_mut().handle_input(input);
+        modified |= session.execute_omnibox_effect(effect);
+    }
+    modified
+}
+
 /// What one `pump_events` drain observed, folded so `pump_once` decides once
 /// per cycle: only the *last* resize counts, any number of redraw requests
 /// cost one repaint, and a click lands wherever the pointer was at that
@@ -240,12 +267,15 @@ struct PumpEvents {
     needs_repaint: bool,
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
+    modifiers: ModifiersState,
+    omnibox_inputs: Vec<OmniboxInput>,
 }
 
 impl PumpEvents {
-    fn starting_at(pointer_position: Option<PhysicalPosition>) -> Self {
+    fn starting_at(pointer_position: Option<PhysicalPosition>, modifiers: ModifiersState) -> Self {
         Self {
             pointer_position,
+            modifiers,
             ..Self::default()
         }
     }
@@ -261,7 +291,34 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
+            WindowEvent::Key { code, pressed } => {
+                self.modifiers.update(*code, *pressed);
+                if *pressed {
+                    self.observe_key_press(*code);
+                }
+            }
+            WindowEvent::TextInput { text } => {
+                self.omnibox_inputs
+                    .push(OmniboxInput::TextInput(text.clone()));
+            }
+            WindowEvent::ControlKey { key, state } if state.is_pressed() => {
+                self.omnibox_inputs.push(OmniboxInput::ControlKey(*key));
+            }
             _ => {}
+        }
+    }
+
+    fn observe_key_press(&mut self, code: KeyCode) {
+        if self.modifiers.is_focus_omnibox_shortcut(code) {
+            self.omnibox_inputs.push(OmniboxInput::Focus);
+            return;
+        }
+        if code == KeyCode::ENTER {
+            self.omnibox_inputs.push(OmniboxInput::Enter);
+            return;
+        }
+        if code == KeyCode::ESCAPE {
+            self.omnibox_inputs.push(OmniboxInput::Escape);
         }
     }
 
