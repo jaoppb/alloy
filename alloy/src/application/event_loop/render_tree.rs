@@ -12,63 +12,16 @@ use super::hit_test::{contains, raw_edge, snapped_raw_au};
 use crate::application::pipeline::LinkTarget;
 use crate::error::AlloyError;
 
-/// Strongly-typed vertical height of the top chrome bar in pixels (ADR-0010).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ChromeHeight(u32);
-
-impl ChromeHeight {
-    /// Default chrome height (42 px).
-    pub const DEFAULT: Self = Self(42);
-
-    #[must_use]
-    pub const fn new(pixels: u32) -> Self {
-        Self(pixels)
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-
-    #[must_use]
-    pub fn to_au(self) -> Option<Au> {
-        let pixels = i32::try_from(self.0).ok()?;
-        Au::from_whole_px(pixels)
-    }
-}
-
-impl Default for ChromeHeight {
-    fn default() -> Self {
-        Self::DEFAULT
-    }
-}
-
-impl std::fmt::Display for ChromeHeight {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}px", self.0)
-    }
-}
-
-impl From<u32> for ChromeHeight {
-    fn from(pixels: u32) -> Self {
-        Self(pixels)
-    }
-}
-
-impl From<ChromeHeight> for u32 {
-    fn from(height: ChromeHeight) -> Self {
-        height.get()
-    }
-}
+pub use crate::application::theme::ChromeHeight;
 
 /// The default vertical height of the top chrome bar in pixels (Epic #43 / Issue #48).
-pub const CHROME_HEIGHT: u32 = ChromeHeight::DEFAULT.get();
+pub const CHROME_HEIGHT: u32 = 42;
 
 /// Horizontal margin in pixels around the omnibox input area within the chrome bar.
-pub const OMNIBOX_HORIZONTAL_MARGIN_PX: u32 = 8;
+pub const OMNIBOX_HORIZONTAL_MARGIN_PX: u32 = 12;
 
 /// Height in pixels of the omnibox input field within the chrome bar.
-pub const OMNIBOX_HEIGHT_PX: u32 = 30;
+pub const OMNIBOX_HEIGHT_PX: u32 = 28;
 
 /// The role and identity of a node in the UI render tree.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -259,7 +212,7 @@ impl UiRenderTree {
             Au::from_whole_px(width_px).ok_or(AlloyError::InvalidDimensions)?;
         let height_in_app_units =
             Au::from_whole_px(height_px).ok_or(AlloyError::InvalidDimensions)?;
-        let chrome_height_au = chrome_height.to_au().ok_or(AlloyError::InvalidDimensions)?;
+        let chrome_height_au = chrome_height.to_au();
 
         if height_in_app_units <= chrome_height_au {
             return Err(AlloyError::InvalidDimensions);
@@ -318,7 +271,7 @@ impl UiRenderTree {
         let content_height = self
             .viewport
             .height()
-            .checked_sub(self.chrome_height.get())
+            .checked_sub(self.chrome_height.to_pixels())
             .ok_or(AlloyError::InvalidDimensions)?;
         graphics::SurfaceSize::new(self.viewport.width(), content_height)
             .ok_or(AlloyError::InvalidDimensions)
@@ -348,12 +301,8 @@ fn build_chrome_node(width_in_app_units: Au, chrome_height: Au) -> Result<UiNode
         Size::new(width_in_app_units, chrome_height).ok_or(AlloyError::InvalidDimensions)?;
     let chrome_bounds = Rect::new(Point::new(Au::ZERO, Au::ZERO), chrome_size);
 
-    let margin_x_px =
-        i32::try_from(OMNIBOX_HORIZONTAL_MARGIN_PX).map_err(|_| AlloyError::InvalidDimensions)?;
-    let box_height_px =
-        i32::try_from(OMNIBOX_HEIGHT_PX).map_err(|_| AlloyError::InvalidDimensions)?;
-    let horizontal_margin = Au::from_whole_px(margin_x_px).ok_or(AlloyError::InvalidDimensions)?;
-    let box_height = Au::from_whole_px(box_height_px).ok_or(AlloyError::InvalidDimensions)?;
+    let horizontal_margin = crate::application::theme::INPUT_BOX_MARGIN_X;
+    let box_height = crate::application::theme::INPUT_BOX_HEIGHT;
 
     let vertical_margin_raw = chrome_height.raw().saturating_sub(box_height.raw()) / 2;
     let margin_y = Au::from_raw(vertical_margin_raw.max(0));

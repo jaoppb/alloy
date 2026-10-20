@@ -26,9 +26,9 @@ pub use application::pipeline::{
 pub use application::runtime_font::RuntimeFontProvider;
 pub use application::theme;
 pub use application::{
-    CHROME_HEIGHT, ChromeHeight, LoopStats, OMNIBOX_HEIGHT_PX, OMNIBOX_HORIZONTAL_MARGIN_PX,
-    UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree, initial_window_attributes,
-    navigate, run_browser, run_browser_until, run_browser_until_first_frame,
+    CHROME_HEIGHT, LoopStats, OMNIBOX_HEIGHT_PX, OMNIBOX_HORIZONTAL_MARGIN_PX, UiHitTarget, UiNode,
+    UiNodeChildren, UiNodeKind, UiRenderTree, initial_window_attributes, navigate, run_browser,
+    run_browser_until, run_browser_until_first_frame,
 };
 pub use application::{
     ImageRequest, MarkupDiscoverer, StylesheetRequest, SubresourceDiscoverer, SubresourceRequest,

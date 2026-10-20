@@ -14,16 +14,12 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 mod messages;
 
 use super::frame::CachedFrame;
-pub use super::render_tree::{
-    CHROME_HEIGHT, ChromeHeight, OMNIBOX_HEIGHT_PX, OMNIBOX_HORIZONTAL_MARGIN_PX, UiHitTarget,
-    UiRenderTree,
-};
+use super::render_tree::{CHROME_HEIGHT, ChromeHeight, UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
 use crate::application::image_store::ImageStore;
-use crate::application::omnibox::OmniboxState;
-use crate::application::paint::DEFAULT_FONT;
+use crate::application::omnibox::{OmniboxPainter, OmniboxState};
 use crate::application::pipeline::{LinkTarget, render_dom_with_links};
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
@@ -237,11 +233,6 @@ impl<F, T, P, D> Session<F, T, P, D> {
     }
 }
 
-const CHROME_BG: graphics::Color = graphics::Color::rgb(0xF1, 0xF3, 0xF4);
-const INPUT_BG: graphics::Color = graphics::Color::WHITE;
-const TEXT_COLOR: graphics::Color = graphics::Color::rgb(0x20, 0x21, 0x24);
-const FOCUS_OUTLINE_COLOR: graphics::Color = graphics::Color::rgb(0x1A, 0x73, 0xE8);
-
 fn render_chrome<F: FontProvider + 'static>(
     omnibox: &OmniboxState,
     viewport_width: u32,
@@ -250,10 +241,10 @@ fn render_chrome<F: FontProvider + 'static>(
     let chrome_size = graphics::SurfaceSize::new(viewport_width, CHROME_HEIGHT)
         .ok_or(AlloyError::InvalidDimensions)?;
     let mut builder = DisplayListBuilder::new();
-    paint_chrome(
+    let painter = OmniboxPainter::new(font_provider.as_ref());
+    painter.paint(
         omnibox,
-        viewport_width,
-        font_provider.as_ref(),
+        graphics::Px::new(u32_to_f32(viewport_width)),
         &mut builder,
     )?;
     let display_list = builder.build()?;
@@ -269,102 +260,6 @@ fn render_chrome<F: FontProvider + 'static>(
 #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
 const fn u32_to_f32(value: u32) -> f32 {
     value as f32
-}
-
-fn paint_chrome<F: FontProvider>(
-    omnibox: &OmniboxState,
-    viewport_width: u32,
-    font_provider: &F,
-    builder: &mut DisplayListBuilder,
-) -> Result<(), graphics::GraphicsError> {
-    let width_f32 = u32_to_f32(viewport_width);
-    let height_f32 = u32_to_f32(CHROME_HEIGHT);
-
-    let chrome_area = graphics::PxRect::from_px(0.0, 0.0, width_f32, height_f32);
-    builder.draw_rect(chrome_area, CHROME_BG)?;
-
-    let margin_x = u32_to_f32(OMNIBOX_HORIZONTAL_MARGIN_PX);
-    let box_height = u32_to_f32(OMNIBOX_HEIGHT_PX);
-    let margin_y = ((height_f32 - box_height) / 2.0).max(0.0);
-    let box_width = (width_f32 - (margin_x + margin_x)).max(0.0);
-
-    paint_focus_ring(omnibox, margin_x, margin_y, box_width, box_height, builder)?;
-
-    let input_area = graphics::PxRect::from_px(margin_x, margin_y, box_width, box_height);
-    builder.draw_rounded_rect(input_area, INPUT_BG, graphics::Px::new(6.0))?;
-
-    paint_chrome_text(omnibox, font_provider, builder)?;
-    Ok(())
-}
-
-fn paint_focus_ring(
-    omnibox: &OmniboxState,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    builder: &mut DisplayListBuilder,
-) -> Result<(), graphics::GraphicsError> {
-    if !omnibox.is_focused() {
-        return Ok(());
-    }
-    let border_w = 1.0f32;
-    let outline_area = graphics::PxRect::from_px(
-        x - border_w,
-        y - border_w,
-        width + border_w + border_w,
-        height + border_w + border_w,
-    );
-    builder.draw_rounded_rect(outline_area, FOCUS_OUTLINE_COLOR, graphics::Px::new(7.0))
-}
-
-fn paint_chrome_text<F: FontProvider>(
-    omnibox: &OmniboxState,
-    font_provider: &F,
-    builder: &mut DisplayListBuilder,
-) -> Result<(), graphics::GraphicsError> {
-    let text_cow = omnibox.text();
-    let active_url_text = omnibox.active_url().map(network::Url::to_text);
-    let display_text = select_display_text(&text_cow, active_url_text.as_deref());
-    if display_text.is_empty() {
-        return Ok(());
-    }
-
-    let metrics = font_provider.metrics(DEFAULT_FONT)?;
-    let start_x = graphics::Au::from_whole_px(18).unwrap_or(graphics::Au::ZERO);
-    let middle_y = graphics::Au::from_whole_px(21).unwrap_or(graphics::Au::ZERO);
-    let half_line = metrics.line_height().raw().checked_div(2).unwrap_or(0);
-    let top_y = graphics::Au::from_raw(middle_y.raw().saturating_sub(half_line));
-    let baseline_y = top_y.saturating_add(metrics.ascent());
-
-    let mut run = graphics::GlyphRun::new();
-    let mut pen_x = start_x;
-    for ch in display_text.chars() {
-        let glyph = font_provider.glyph_for_char(DEFAULT_FONT, ch)?;
-        if glyph != graphics::GlyphId::NOTDEF {
-            run.push(graphics::GlyphInstance::new(
-                glyph,
-                graphics::Point::new(pen_x, baseline_y),
-            ));
-        }
-        let advance = font_provider.advance(DEFAULT_FONT, glyph)?;
-        pen_x = pen_x.saturating_add(advance);
-    }
-
-    if !run.is_empty() {
-        builder.draw_text(run, TEXT_COLOR, DEFAULT_FONT)?;
-    }
-    Ok(())
-}
-
-const fn select_display_text<'a>(buffer_text: &'a str, active_url: Option<&'a str>) -> &'a str {
-    if !buffer_text.is_empty() {
-        return buffer_text;
-    }
-    let Some(url) = active_url else {
-        return "";
-    };
-    url
 }
 
 /// Read-only views the `pump_once` tests assert on.
