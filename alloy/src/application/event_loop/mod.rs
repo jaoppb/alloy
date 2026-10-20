@@ -27,14 +27,15 @@ use std::thread;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
-    KeyCode, LogicalKey, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize,
-    WindowAttributes, WindowEvent, WindowSystem, WindowTitle,
+    KeyCode, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
+    WindowEvent, WindowSystem, WindowTitle,
 };
 
 pub use self::modifiers::ModifiersState;
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
+use crate::application::omnibox::OmniboxInput;
 use crate::application::pipeline::RenderOptions;
 use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
@@ -207,7 +208,7 @@ where
         session.follow_link_at(position);
     }
 
-    let omnibox_modified = dispatch_keyboard_actions(session, &events.keyboard_actions);
+    let omnibox_modified = dispatch_omnibox_inputs(session, &events.omnibox_inputs);
     if omnibox_modified {
         system.request_redraw();
     }
@@ -230,9 +231,9 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-fn dispatch_keyboard_actions<F, T, P, D>(
+fn dispatch_omnibox_inputs<F, T, P, D>(
     session: &mut Session<F, T, P, D>,
-    actions: &[KeyboardAction],
+    inputs: &[OmniboxInput],
 ) -> bool
 where
     F: FontProvider + 'static,
@@ -241,40 +242,11 @@ where
     D: SubresourceDiscoverer,
 {
     let mut modified = false;
-    for action in actions {
-        modified |= dispatch_keyboard_action(session, action);
+    for input in inputs {
+        let effect = session.omnibox_mut().handle_input(input);
+        modified |= session.execute_omnibox_effect(effect);
     }
     modified
-}
-
-fn dispatch_keyboard_action<F, T, P, D>(
-    session: &mut Session<F, T, P, D>,
-    action: &KeyboardAction,
-) -> bool
-where
-    F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
-{
-    match action {
-        KeyboardAction::FocusOmnibox => {
-            session.focus_omnibox();
-            true
-        }
-        KeyboardAction::TextInput(text) => session.handle_text_input(text),
-        KeyboardAction::ControlKey(key) => session.handle_control_key(*key),
-        KeyboardAction::Enter => session.handle_enter(),
-        KeyboardAction::Escape => session.handle_escape(),
-    }
-}
-
-enum KeyboardAction {
-    FocusOmnibox,
-    TextInput(String),
-    ControlKey(LogicalKey),
-    Enter,
-    Escape,
 }
 
 /// What one `pump_events` drain observed, folded so `pump_once` decides once
@@ -290,7 +262,7 @@ struct PumpEvents {
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
     modifiers: ModifiersState,
-    keyboard_actions: Vec<KeyboardAction>,
+    omnibox_inputs: Vec<OmniboxInput>,
 }
 
 impl PumpEvents {
@@ -320,11 +292,11 @@ impl PumpEvents {
                 }
             }
             WindowEvent::TextInput { text } => {
-                self.keyboard_actions
-                    .push(KeyboardAction::TextInput(text.clone()));
+                self.omnibox_inputs
+                    .push(OmniboxInput::TextInput(text.clone()));
             }
             WindowEvent::ControlKey { key, state } if state.is_pressed() => {
-                self.keyboard_actions.push(KeyboardAction::ControlKey(*key));
+                self.omnibox_inputs.push(OmniboxInput::ControlKey(*key));
             }
             _ => {}
         }
@@ -332,15 +304,15 @@ impl PumpEvents {
 
     fn observe_key_press(&mut self, code: KeyCode) {
         if self.modifiers.is_focus_omnibox_shortcut(code) {
-            self.keyboard_actions.push(KeyboardAction::FocusOmnibox);
+            self.omnibox_inputs.push(OmniboxInput::Focus);
             return;
         }
         if code == KeyCode::ENTER {
-            self.keyboard_actions.push(KeyboardAction::Enter);
+            self.omnibox_inputs.push(OmniboxInput::Enter);
             return;
         }
         if code == KeyCode::ESCAPE {
-            self.keyboard_actions.push(KeyboardAction::Escape);
+            self.omnibox_inputs.push(OmniboxInput::Escape);
         }
     }
 
