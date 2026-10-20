@@ -10,6 +10,7 @@ pub mod paint;
 pub mod pipeline;
 pub mod runtime_font;
 pub mod subresource;
+pub mod theme;
 
 pub use browser_services::BrowserServices;
 pub use event_loop::{
@@ -18,7 +19,10 @@ pub use event_loop::{
 };
 pub use image_store::ImageStore;
 pub use navigation::navigate;
-pub use omnibox::{CursorPosition, OmniboxBuffer, OmniboxState};
+pub use omnibox::{
+    ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
+    compute_cursor_offset, paint_omnibox,
+};
 pub use paint::paint_box_tree;
 pub use pipeline::{
     DEFAULT_FONT_SIZE, LinkTarget, RenderOptions, default_runtime_font_provider, render_dom,
