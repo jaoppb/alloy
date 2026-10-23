@@ -5,6 +5,7 @@
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use browser::{ImageStore, SubresourceDiscoverer};
 use css::StyleSheetSet;
 use dom::DomTree;
 use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
@@ -18,10 +19,8 @@ use super::render_tree::{UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
 use crate::application::browser_services::BrowserServices;
-use crate::application::image_store::ImageStore;
 use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
 use crate::application::pipeline::{LinkTarget, render_dom_with_links, surface_length_to_au};
-use crate::application::subresource::SubresourceDiscoverer;
 use crate::application::theme::{OmniboxTheme, Theme};
 use crate::error::AlloyError;
 

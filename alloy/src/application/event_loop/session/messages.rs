@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use browser::{SubresourceDiscoverer, SubresourceRequest, document_base_url};
 use css::{Origin, StyleSheetSet};
 use dom::DomTree;
 use graphics::FontProvider;
@@ -9,9 +10,6 @@ use network::{HttpTransport, RequestPolicy, Url};
 
 use super::Session;
 use crate::application::event_loop::worker::{LoopMessage, spawn_subresource_fetch};
-use crate::application::subresource::{
-    SubresourceDiscoverer, SubresourceRequest, document_base_url,
-};
 use crate::error::AlloyError;
 
 impl<F, T, P, D> Session<F, T, P, D>

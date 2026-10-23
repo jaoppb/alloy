@@ -4,6 +4,7 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
+use browser::ImageStore;
 use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
 use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
@@ -11,8 +12,6 @@ use graphics::{
     Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
     GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
 };
-
-use crate::application::image_store::ImageStore;
 
 /// Default font identifier used for text painting in the headless pipeline.
 pub const DEFAULT_FONT: FontId = FontId::new(1);

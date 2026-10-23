@@ -1,124 +1,14 @@
-//! Subresource discovery (v0.5 Phase I4).
-//!
-//! What a document references is a *closed* set of typed requests
-//! ([`SubresourceRequest`]); *how* they are found is the open extension point
-//! ([`SubresourceDiscoverer`]). Fetching and coalescing live in
-//! [`crate::application::event_loop`] — this module only answers "what does
-//! this document reference", a pure function of a [`DomSnapshot`].
+//! The tag-based [`SubresourceDiscoverer`]: `<link rel="stylesheet">` and
+//! `<img>`, the two subresource-bearing tags v0.5 understands.
 
-use css::{DomSnapshot, MediaQuery, NodeRef, SnapshotId};
-use graphics::{Color, Framebuffer, ImageId, SurfaceSize};
+use css::{DomSnapshot, NodeRef, SnapshotId};
+use graphics::ImageId;
 use network::Url;
 
-/// A `<link rel="stylesheet" href>` target, already resolved against the
-/// document's base URL ([`document_base_url`]), gated by its `media=` attribute.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StylesheetRequest {
-    url: Url,
-    media: MediaQuery,
-}
+use crate::application::SubresourceDiscoverer;
+use crate::domain::{ImageRequest, StylesheetRequest, SubresourceRequest, Subresources};
 
-impl StylesheetRequest {
-    /// A request for the stylesheet at `url` with `media` constraints.
-    #[must_use]
-    pub const fn new(url: Url, media: MediaQuery) -> Self {
-        Self { url, media }
-    }
-
-    /// Where to fetch the stylesheet from.
-    #[must_use]
-    pub const fn url(&self) -> &Url {
-        &self.url
-    }
-
-    /// Which media the stylesheet applies to.
-    #[must_use]
-    pub const fn media(&self) -> &MediaQuery {
-        &self.media
-    }
-}
-
-/// An `<img src>` target, tagged with the [`ImageId`] `paint_box_tree`
-/// (`crate::application::paint`) will look up for that same node.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ImageRequest {
-    id: ImageId,
-    url: Url,
-}
-
-impl ImageRequest {
-    /// A request for the image at `url`, painted for the node `id`.
-    #[must_use]
-    pub const fn new(id: ImageId, url: Url) -> Self {
-        Self { id, url }
-    }
-
-    /// The identity the painter looks this image up by.
-    #[must_use]
-    pub const fn id(&self) -> ImageId {
-        self.id
-    }
-
-    /// Where to fetch the image from.
-    #[must_use]
-    pub const fn url(&self) -> &Url {
-        &self.url
-    }
-}
-
-/// Everything a page can ask to have fetched — closed on purpose: a new kind
-/// of subresource is a new variant the fetch loop must then handle.
-#[derive(Clone, Debug, PartialEq)]
-pub enum SubresourceRequest {
-    /// An external stylesheet.
-    Stylesheet(StylesheetRequest),
-    /// A decodable image.
-    Image(ImageRequest),
-}
-
-/// One page's discovered subresources, in document order.
-///
-/// A reference that fails to resolve (a relative URL with no scheme, an
-/// unsupported one) is silently dropped — a broken subresource link must
-/// never abort navigation.
-#[derive(Clone, Debug, Default)]
-pub struct Subresources {
-    requests: Vec<SubresourceRequest>,
-}
-
-impl Subresources {
-    /// Appends `request`.
-    pub fn push(&mut self, request: SubresourceRequest) {
-        self.requests.push(request);
-    }
-}
-
-impl IntoIterator for Subresources {
-    type Item = SubresourceRequest;
-    type IntoIter = std::vec::IntoIter<SubresourceRequest>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.requests.into_iter()
-    }
-}
-
-/// Finds the subresources a document references.
-///
-/// The event loop is generic over this port, so where references come from
-/// (tags today; CSS `url()`, scripts later) can grow without touching the
-/// fetch machinery, while [`SubresourceRequest`] keeps the fetchable kinds
-/// closed.
-pub trait SubresourceDiscoverer: Send + Sync {
-    /// Walks `snapshot` and resolves every reference against `base` — the
-    /// document's effective base URL, which the caller computes once per
-    /// navigation with [`document_base_url`] so subresources and link clicks
-    /// agree on it. An implementation must not re-apply `<base href>`: a
-    /// relative one (`<base href="app/">`) would then be joined twice.
-    fn discover(&self, snapshot: &DomSnapshot, base: &Url) -> Subresources;
-}
-
-/// Discovers `<link rel="stylesheet">` and `<img>` — the two
-/// subresource-bearing tags v0.5 understands.
+/// Discovers `<link rel="stylesheet">` and `<img>` from the markup.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MarkupDiscoverer;
 
@@ -136,25 +26,6 @@ impl SubresourceDiscoverer for MarkupDiscoverer {
         }
         found
     }
-}
-
-/// The URL every relative reference of the document resolves against.
-///
-/// Subresources and link targets alike use it: the first `<base href>` in
-/// document order resolved against the navigation URL (WHATWG HTML §4.2.3),
-/// or the navigation URL itself when there is none. Performance-tuned sites
-/// point `<base>` at a CDN, so ignoring it fetches every subresource (and
-/// follows every relative link) from the wrong origin.
-#[must_use]
-pub fn document_base_url(snapshot: &DomSnapshot, navigation_url: &Url) -> Url {
-    let declared_href = snapshot
-        .nodes_in_document_order()
-        .filter_map(|id| snapshot.node(id))
-        .filter(|node| node.tag_str() == Some("base"))
-        .find_map(|node| node.attribute("href"));
-    declared_href
-        .and_then(|href| navigation_url.join(href).ok())
-        .unwrap_or_else(|| navigation_url.clone())
 }
 
 fn request_for(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<SubresourceRequest> {
@@ -193,33 +64,13 @@ fn image_request(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<ImageR
     let image_id = ImageId::new(u32::try_from(id.index()).unwrap_or(u32::MAX));
     Some(ImageRequest::new(image_id, url))
 }
-/// A 1×1, fully transparent placeholder.
-///
-/// `core/css` marks every replaced-element box (`<img>` included)
-/// [`css::IntrinsicSize::Pending`] the moment it sees the tag — regardless of
-/// whether the resource has loaded (`core/css/src/domain/computed/intrinsic.rs`)
-/// — and `paint_box_tree` (`crate::application::paint`) always emits a
-/// `DrawImage` command for a pending box. Every id [`discover`] finds must
-/// therefore resolve to *something* from the very first paint, or rendering
-/// fails outright before a single fetch has had a chance to complete.
-// "genuinely impossible state" `.expect()` carve-out CLAUDE.md documents:
-// 1x1 is a compile-time-known-valid, non-zero surface size (same pattern as
-// core/css/src/infrastructure/ua_sheet.rs). `pub(crate)`, not `pub`: an
-// impossible-state `.expect()` is only a defensible carve-out for a crate's
-// own internal callers, never for an external API `missing_panics_doc` would
-// otherwise rightly ask to document.
-#[allow(clippy::expect_used)]
-#[must_use]
-pub(crate) fn placeholder_framebuffer() -> Framebuffer {
-    let size = SurfaceSize::new(1, 1).expect("1×1 is always a valid, non-zero surface size");
-    Framebuffer::filled(size, Color::TRANSPARENT)
-        .expect("a freshly built 1×1 framebuffer always fits its own pixel buffer")
-}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest, document_base_url};
+    use super::MarkupDiscoverer;
+    use crate::application::{SubresourceDiscoverer, document_base_url};
+    use crate::domain::SubresourceRequest;
     use network::Url;
 
     fn discover_from(markup: &str, navigation_url: &str) -> Vec<SubresourceRequest> {

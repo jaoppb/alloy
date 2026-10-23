@@ -29,6 +29,7 @@ mod tests;
 
 use std::thread;
 
+use browser::SubresourceDiscoverer;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
@@ -46,7 +47,6 @@ pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
 use crate::application::omnibox::OmniboxInput;
 use crate::application::pipeline::RenderOptions;
-use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
 
 /// The window `alloy <url>` and the e2e golden test both open.

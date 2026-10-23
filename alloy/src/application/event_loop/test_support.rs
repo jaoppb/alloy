@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use browser::MarkupDiscoverer;
 use graphics::SyntheticFontProvider;
 use network::{AllowAllPolicy, MockTransport};
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
@@ -14,7 +15,6 @@ use super::{initial_window_attributes, pump_once};
 use crate::application::browser_services::BrowserServices;
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
-use crate::application::subresource::MarkupDiscoverer;
 
 pub(super) type TestSession =
     Session<SyntheticFontProvider, MockTransport, AllowAllPolicy, MarkupDiscoverer>;

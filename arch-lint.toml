@@ -151,6 +151,20 @@ paths = ["core/html/src/application/**"]
 
 # Host-OS knowledge (ADR-0022): every `target_os` branch lives here, behind the
 # `FontLocator` port; any crate may depend on it, it depends on none.
+# The browsing context (#111, ADR-0026): a pure, thread-free state machine and a
+# sibling of `core/ui` — neither depends on the other.
+[[scopes]]
+name = "browser-domain"
+paths = ["core/browser/src/domain/**"]
+
+[[scopes]]
+name = "browser-application"
+paths = ["core/browser/src/application/**"]
+
+[[scopes]]
+name = "browser"
+paths = ["core/browser/**"]
+
 [[scopes]]
 name = "platform-domain"
 paths = ["core/platform/src/domain/**"]
@@ -231,6 +245,20 @@ message = "core/css must not depend on engine, concrete script runtimes, the bin
 from = "network-domain"
 to = ["network-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
 message = "Network domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+
+# Browser domain layer must not depend on the application layer or any adapter crate.
+[[deny-scope-dep]]
+from = "browser-domain"
+to = ["browser-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
+message = "Browser domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+
+# core/browser owns the document and says *what* to fetch; `alloy` does the fetching. It may
+# depend on dom, html, css, network (domain types) and graphics (domain types) — never on the
+# engine, a script runtime, the bindings crate, the CLI, or the window system.
+[[deny-scope-dep]]
+from = "browser"
+to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
+message = "core/browser must not depend on engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
 
 # core/network is a pure transport-and-policy domain: no engine, no runtime, no
 # other subsystem. The scriptable RequestPolicy of Phase M lives in
@@ -377,6 +405,30 @@ name = "window-isolated"
 scope = "window"
 deny = ["engine::*", "dom::*", "css::*", "graphics::*", "network::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
 message = "core/window must not import the engine, another subsystem, or a script runtime — FrameView keeps the graphics edge from existing (PRD-010, ADR-0019)."
+
+# #110 decision 4 / #111: the browsing context is pure. It never spawns a thread, never owns a
+# channel, and never executes a request — `HttpTransport` / `RequestPolicy` are the only way to
+# call `execute` / `decide`, so denying their import denies the call. The `ui` ↔ `browser`
+# sibling rule (ADR-0026) is the `ui::*` / `window::*` entries here; `core/ui` adds the converse.
+[[restrict-use]]
+name = "browser-pure"
+scope = "browser"
+deny = [
+    "std::thread",
+    "std::thread::*",
+    "std::sync::mpsc",
+    "std::sync::mpsc::*",
+    "network::HttpTransport",
+    "network::RequestPolicy",
+    "network::MockTransport",
+]
+message = "core/browser is a pure state machine: no thread, no channel, no HttpTransport call — it returns BrowserEffect::Fetch for alloy to execute (#110 decision 4, ADR-0019 amendment)."
+
+[[restrict-use]]
+name = "browser-isolated"
+scope = "browser"
+deny = ["engine::*", "ui::*", "window::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+message = "core/browser must not import the engine, a script runtime, core/ui, or the window system — alloy's executor mediates between the sibling effect enums (ADR-0026)."
 
 [[restrict-use]]
 name = "platform-isolated"

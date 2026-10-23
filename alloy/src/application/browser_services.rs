@@ -5,7 +5,7 @@ use std::sync::Arc;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy};
 
-use crate::application::subresource::{MarkupDiscoverer, SubresourceDiscoverer};
+use browser::{MarkupDiscoverer, SubresourceDiscoverer};
 
 /// Font, network and discovery collaborators of one browser session.
 ///

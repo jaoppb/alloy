@@ -3,13 +3,11 @@
 pub mod browser_services;
 pub mod event_loop;
 pub mod html_parse;
-pub mod image_store;
 pub mod navigation;
 pub mod omnibox;
 pub mod paint;
 pub mod pipeline;
 pub mod runtime_font;
-pub mod subresource;
 pub mod theme;
 
 pub use browser_services::BrowserServices;
@@ -17,7 +15,6 @@ pub use event_loop::{
     ChromeHeight, LoopStats, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
     initial_window_attributes, run_browser, run_browser_until, run_browser_until_first_frame,
 };
-pub use image_store::ImageStore;
 pub use navigation::navigate;
 pub use omnibox::{
     CursorPosition, OmniboxBuffer, OmniboxController, OmniboxEffect, OmniboxInput, OmniboxPainter,
@@ -30,7 +27,3 @@ pub use pipeline::{
     render_html_with_font_provider, run_render,
 };
 pub use runtime_font::RuntimeFontProvider;
-pub use subresource::{
-    ImageRequest, MarkupDiscoverer, StylesheetRequest, SubresourceDiscoverer, SubresourceRequest,
-    Subresources, document_base_url,
-};

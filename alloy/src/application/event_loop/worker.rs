@@ -4,13 +4,13 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::thread;
 
+use browser::SubresourceRequest;
 use css::MediaQuery;
 use dom::DomTree;
 use graphics::{Framebuffer, ImageId};
 use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
 
 use crate::application::navigation;
-use crate::application::subresource::SubresourceRequest;
 use crate::error::AlloyError;
 
 /// What a background fetch produced, drained by the loop's own thread.

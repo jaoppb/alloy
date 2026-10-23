@@ -10,7 +10,7 @@
 //! threads would make the proof racy for no added coverage.
 #![allow(clippy::unwrap_used)]
 
-use graphics::ImageId;
+use graphics::{Color, Framebuffer, ImageId};
 use network::MockTransport;
 use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
@@ -22,7 +22,6 @@ use super::test_support::{
     session_over,
 };
 use super::worker::{LoopMessage, fetch_text};
-use crate::application::subresource::placeholder_framebuffer;
 use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
@@ -42,6 +41,11 @@ fn a_non_2xx_stylesheet_status_is_a_typed_error_not_an_empty_body() {
         matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
         "a 404 error page must not reach the CSS parser as a stylesheet"
     );
+}
+
+fn placeholder_framebuffer() -> Framebuffer {
+    let size = graphics::SurfaceSize::new(1, 1).unwrap();
+    Framebuffer::filled(size, Color::TRANSPARENT).unwrap()
 }
 
 #[test]

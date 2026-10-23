@@ -1,0 +1,26 @@
+[package]
+name = "browser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "The browsing context: a pure, thread-free state machine that owns a document and emits BrowserEffects (#111, ADR-0026, ADR-0019)."
+
+# Sibling of `core/ui` (ADR-0026): neither depends on the other, and `alloy`'s
+# executor mediates between their effect enums. It names no `window` type, no
+# `engine`, and — enforced by `arch-lint.toml` — no thread, channel or
+# `HttpTransport`: fetching is `alloy`'s job, this crate only says *what* to fetch.
+[dependencies]
+css = { path = "../css" }
+dom = { path = "../dom" }
+html = { path = "../html" }
+# Domain types only (`Framebuffer`, `ImageId`, `Rect`, `Au`); the rasterizer stays off.
+graphics = { path = "../graphics", default-features = false }
+# `Url`, `HttpRequest`-side vocabulary; the sockets and TLS stay off.
+network = { path = "../network", default-features = false }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

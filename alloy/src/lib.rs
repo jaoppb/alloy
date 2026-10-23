@@ -12,7 +12,6 @@ pub mod error;
 pub mod logging;
 
 pub use application::browser_services::BrowserServices;
-pub use application::image_store::ImageStore;
 pub use application::omnibox::{
     ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxController, OmniboxEffect, OmniboxInput,
     OmniboxPainter, OmniboxState, OmniboxTheme, Theme, compute_cursor_offset, paint_omnibox,
@@ -26,10 +25,6 @@ pub use application::pipeline::{
 };
 pub use application::runtime_font::RuntimeFontProvider;
 pub use application::theme;
-pub use application::{
-    ImageRequest, MarkupDiscoverer, StylesheetRequest, SubresourceDiscoverer, SubresourceRequest,
-    Subresources, document_base_url,
-};
 pub use application::{
     LoopStats, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
     initial_window_attributes, navigate, run_browser, run_browser_until,

@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use browser::ImageStore;
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
     StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
@@ -18,7 +19,6 @@ use graphics::{
     SurfaceSize, SyntheticFontProvider,
 };
 
-use crate::application::image_store::ImageStore;
 use crate::application::paint::{DEFAULT_FONT, paint_box_tree};
 use crate::application::runtime_font::RuntimeFontProvider;
 use crate::error::AlloyError;
