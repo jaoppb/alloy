@@ -8,6 +8,7 @@ mod fetch;
 mod image_store;
 mod link;
 mod navigation;
+mod region;
 mod regions;
 mod stats;
 mod subresource;
@@ -19,6 +20,7 @@ pub use fetch::{FetchFailure, FetchPayload, FetchRequest, FetchResult, LoadedDoc
 pub use image_store::{ImageStore, StoreSnapshot};
 pub use link::LinkDestination;
 pub use navigation::{NavigationId, Navigations};
-pub use regions::{ContentRegion, ContentRegions, LayoutEpoch, LinkTarget, RegionError, RegionId};
+pub use region::{ContentRegion, LayoutEpoch, LinkTarget, RegionId};
+pub use regions::{ContentRegions, RegionError};
 pub use stats::ContextStats;
 pub use subresource::{ImageRequest, StylesheetRequest, SubresourceRequest, Subresources};
