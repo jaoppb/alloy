@@ -21,6 +21,8 @@ mod stats;
 mod worker;
 
 #[cfg(test)]
+mod keyboard_tests;
+#[cfg(test)]
 mod tests;
 
 use std::thread;
