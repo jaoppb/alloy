@@ -14,7 +14,6 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 mod messages;
 
 use super::frame::CachedFrame;
-use super::modifiers::ModifiersState;
 use super::render_tree::{UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::{LoopMessage, spawn_navigation};
@@ -54,7 +53,6 @@ pub struct Session<F, T, P, D> {
     last_frame: Option<CachedFrame>,
     stats: LoopStats,
     omnibox: OmniboxController,
-    modifiers: ModifiersState,
     /// Where the workers of the current navigation report. A worker cannot be
     /// cancelled, so [`Session::open_channel`] replaces both ends on every
     /// navigation: dropping the old `inbox` discards what its workers already
@@ -94,7 +92,6 @@ where
             last_frame: None,
             stats: LoopStats::default(),
             omnibox: OmniboxController::new(),
-            modifiers: ModifiersState::new(),
             inbox,
             outbox,
             theme,
@@ -104,17 +101,6 @@ where
 
     pub const fn stats(&self) -> LoopStats {
         self.stats
-    }
-
-    /// Current active keyboard modifier state.
-    #[must_use]
-    pub const fn modifiers(&self) -> ModifiersState {
-        self.modifiers
-    }
-
-    /// Update tracked keyboard modifiers across pump cycles.
-    pub const fn track_modifiers(&mut self, modifiers: ModifiersState) {
-        self.modifiers = modifiers;
     }
 
     /// Mutable access to the session's omnibox controller.

@@ -20,8 +20,9 @@ use network::{
     Url,
 };
 use window::{
-    HeadlessWindowSystem, PhysicalPosition, PointerButton, PumpStatus, RecordingPresenter,
-    WindowAttributes, WindowError, WindowEvent, WindowId, WindowSystem, WindowTitle,
+    CursorIcon, HeadlessWindowSystem, PhysicalPosition, PointerButton, PumpStatus,
+    RecordingPresenter, WindowAttributes, WindowError, WindowEvent, WindowId, WindowSystem,
+    WindowTitle,
 };
 
 /// The deterministic synthetic font keeps these tests independent of the
@@ -101,6 +102,14 @@ impl WindowSystem for ClickWhenReadyWindowSystem {
 
     fn request_redraw(&mut self) {
         self.inner.request_redraw();
+    }
+
+    fn set_title(&mut self, title: WindowTitle) {
+        self.inner.set_title(title);
+    }
+
+    fn set_cursor(&mut self, icon: CursorIcon) {
+        self.inner.set_cursor(icon);
     }
 }
 

@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use network::{OmniboxClassifier, Url};
-use window::LogicalKey;
+use window::{InputText, LogicalKey};
 
 use super::state::OmniboxState;
 
@@ -19,18 +19,18 @@ pub enum OmniboxEffect {
 }
 
 /// An input event targeted at the omnibox.
+///
+/// The interim shape of `core/ui`'s `UiInput` (epic #110): the event loop's
+/// key mapping produces these until the router and keymap land (#113).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OmniboxInput {
     /// User triggered the focus address bar shortcut (e.g. Ctrl+L or Alt+D).
     Focus,
-    /// Text typed or pasted into the address bar.
-    TextInput(String),
-    /// Control key pressed (e.g. Backspace, Delete, Arrows, Home, End).
-    ControlKey(LogicalKey),
-    /// Enter key pressed to submit input.
-    Enter,
-    /// Escape key pressed to cancel editing.
-    Escape,
+    /// Text typed, pasted or committed by an input method.
+    Insert(InputText),
+    /// Editing, navigation, submit or cancel key (Backspace, Delete, Arrows,
+    /// Home, End, Enter, Escape).
+    Edit(LogicalKey),
 }
 
 /// Coordinates omnibox state mutations and translates inputs into high-level effects.
@@ -92,10 +92,8 @@ impl OmniboxController {
     pub fn handle_input(&mut self, input: &OmniboxInput) -> OmniboxEffect {
         match input {
             OmniboxInput::Focus => self.focus(),
-            OmniboxInput::TextInput(text) => self.handle_text_input(text),
-            OmniboxInput::ControlKey(key) => self.handle_control_key(*key),
-            OmniboxInput::Enter => self.handle_enter(),
-            OmniboxInput::Escape => self.handle_escape(),
+            OmniboxInput::Insert(text) => self.handle_text_input(text.as_str()),
+            OmniboxInput::Edit(key) => self.handle_edit_key(key),
         }
     }
 
@@ -137,8 +135,8 @@ impl OmniboxController {
         OmniboxEffect::Navigate(destination.into_url())
     }
 
-    /// Routes logical control key navigation/editing to the omnibox when active.
-    pub fn handle_control_key(&mut self, key: LogicalKey) -> OmniboxEffect {
+    /// Routes logical editing/navigation keys to the omnibox when active.
+    pub fn handle_edit_key(&mut self, key: &LogicalKey) -> OmniboxEffect {
         if !self.state.is_focused() {
             return OmniboxEffect::None;
         }

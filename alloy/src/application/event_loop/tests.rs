@@ -15,8 +15,8 @@ use std::sync::Arc;
 use graphics::{ImageId, SyntheticFontProvider};
 use network::{AllowAllPolicy, MockTransport};
 use window::{
-    HeadlessWindowSystem, KeyCode, KeyState, LogicalKey, RecordingPresenter, SurfaceSize,
-    WindowEvent, WindowSystem as _,
+    HeadlessWindowSystem, InputText, KeyCode, KeyEvent, KeyState, LogicalKey, Modifiers,
+    RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
 
 use super::session::Session;
@@ -572,6 +572,59 @@ fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
     );
 }
 
+// ---- keyboard fixtures ----
+//
+// Events are shaped the way `winit` really delivers them on Linux (#117):
+// `KeyEvent::text` ignores Ctrl, so Ctrl+L arrives as logical `l` + text
+// `"l"` + the Control modifier, and Alt+D as text `"d"` + the Alt modifier.
+
+fn input_text(value: &str) -> InputText {
+    InputText::new(value).unwrap()
+}
+
+/// A letter pressed with `modifiers` held, carrying the text `winit` reports.
+fn chord(system: &mut HeadlessWindowSystem, modifiers: Modifiers, physical: KeyCode, letter: &str) {
+    for state in [KeyState::Pressed, KeyState::Released] {
+        let event = KeyEvent::new(LogicalKey::Character(input_text(letter)), physical, state)
+            .with_modifiers(modifiers);
+        let event = match state {
+            KeyState::Released => event,
+            _ => event.with_text(input_text(letter)),
+        };
+        system.schedule(WindowEvent::Key(event));
+    }
+}
+
+fn ctrl_l(system: &mut HeadlessWindowSystem) {
+    chord(system, Modifiers::NONE.with_control(), KeyCode::KEY_L, "l");
+}
+
+fn alt_d(system: &mut HeadlessWindowSystem) {
+    chord(system, Modifiers::NONE.with_alt(), KeyCode::KEY_D, "d");
+}
+
+/// Plain typing: one unmodified key press per character.
+fn type_text(system: &mut HeadlessWindowSystem, text: &str) {
+    for character in text.chars() {
+        let character = character.to_string();
+        let event = KeyEvent::new(
+            LogicalKey::Character(input_text(&character)),
+            KeyCode::UNIDENTIFIED,
+            KeyState::Pressed,
+        )
+        .with_text(input_text(&character));
+        system.schedule(WindowEvent::Key(event));
+    }
+}
+
+fn press_named(system: &mut HeadlessWindowSystem, logical: LogicalKey, physical: KeyCode) {
+    system.schedule(WindowEvent::Key(KeyEvent::new(
+        logical,
+        physical,
+        KeyState::Pressed,
+    )));
+}
+
 #[test]
 fn ctrl_l_shortcut_focuses_omnibox_and_selects_all_text() {
     let attributes = initial_window_attributes().unwrap();
@@ -584,22 +637,7 @@ fn ctrl_l_shortcut_focuses_omnibox_and_selects_all_text() {
     assert!(!session.omnibox().is_focused());
     assert!(!session.omnibox().is_all_selected());
 
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: false,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: false,
-    });
+    ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut session);
 
     assert!(
@@ -623,22 +661,7 @@ fn alt_d_shortcut_focuses_omnibox_and_selects_all_text() {
     pump(&mut system, &mut presenter, &mut session);
     assert!(!session.omnibox().is_focused());
 
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::ALT_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_D,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_D,
-        pressed: false,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::ALT_LEFT,
-        pressed: false,
-    });
+    alt_d(&mut system);
     pump(&mut system, &mut presenter, &mut session);
 
     assert!(
@@ -665,14 +688,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
     assert_eq!(relayouts_before, 1);
 
     // Focus omnibox via Ctrl+L.
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
+    ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut session);
     assert!(session.omnibox().is_focused());
     assert_eq!(
@@ -682,9 +698,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
     );
 
     // First character replaces selected text.
-    system.schedule(WindowEvent::TextInput {
-        text: "h".to_string(),
-    });
+    type_text(&mut system, "h");
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "h");
     assert_eq!(
@@ -694,9 +708,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
     );
 
     // Subsequent characters append to the buffer.
-    system.schedule(WindowEvent::TextInput {
-        text: "ello".to_string(),
-    });
+    type_text(&mut system, "ello");
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "hello");
     assert_eq!(
@@ -717,9 +729,7 @@ fn typing_when_unfocused_is_ignored() {
     pump(&mut system, &mut presenter, &mut session);
     let initial_text = session.omnibox().text().to_string();
 
-    system.schedule(WindowEvent::TextInput {
-        text: "ignored".to_string(),
-    });
+    type_text(&mut system, "ignored");
     pump(&mut system, &mut presenter, &mut session);
 
     assert_eq!(
@@ -727,6 +737,163 @@ fn typing_when_unfocused_is_ignored() {
         initial_text.as_str(),
         "typing without omnibox focus must not mutate the buffer"
     );
+}
+
+/// A loaded page whose omnibox is focused and holds `"abc"`, reached with the
+/// Ctrl+L `winit` really sends.
+fn focused_omnibox_holding_abc() -> (HeadlessWindowSystem, RecordingPresenter, TestSession) {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+    pump(&mut system, &mut presenter, &mut session);
+    ctrl_l(&mut system);
+    type_text(&mut system, "abc");
+    pump(&mut system, &mut presenter, &mut session);
+    assert_eq!(session.omnibox().text(), "abc");
+    (system, presenter, session)
+}
+
+#[test]
+fn an_unbound_ctrl_chord_inserts_nothing_even_though_winit_reports_its_letter_as_text() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    chord(
+        &mut system,
+        Modifiers::NONE.with_control(),
+        KeyCode::KEY_K,
+        "k",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(
+        session.omnibox().text(),
+        "abc",
+        "Ctrl+K carries text \"k\" on Linux; it must not be typed"
+    );
+}
+
+#[test]
+fn alt_d_refocuses_and_selects_instead_of_typing_its_letter() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    alt_d(&mut system);
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abc");
+    assert!(session.omnibox().is_all_selected());
+}
+
+#[test]
+fn super_l_focuses_the_omnibox_like_ctrl_l() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+    pump(&mut system, &mut presenter, &mut session);
+
+    chord(
+        &mut system,
+        Modifiers::NONE.with_super_key(),
+        KeyCode::KEY_L,
+        "l",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(session.omnibox().is_focused());
+}
+
+#[test]
+fn a_plain_l_types_a_letter_and_is_not_a_shortcut() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    chord(&mut system, Modifiers::NONE, KeyCode::KEY_L, "l");
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abcl");
+}
+
+#[test]
+fn shift_does_not_stop_a_letter_from_typing() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    chord(
+        &mut system,
+        Modifiers::NONE.with_shift(),
+        KeyCode::KEY_D,
+        "D",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abcD");
+}
+
+#[test]
+fn altgr_q_on_a_german_layout_types_the_at_sign() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    chord(
+        &mut system,
+        Modifiers::NONE.with_alt_graph(),
+        KeyCode::KEY_Q,
+        "@",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abc@");
+}
+
+#[test]
+fn text_committed_by_an_input_method_is_inserted_into_the_focused_omnibox() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    system.schedule(WindowEvent::TextCommitted(input_text("日本語")));
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abc日本語");
+}
+
+#[test]
+fn a_held_backspace_keeps_deleting_but_its_release_does_nothing() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+    let backspace = |state| {
+        WindowEvent::Key(KeyEvent::new(
+            LogicalKey::Backspace,
+            KeyCode::BACKSPACE,
+            state,
+        ))
+    };
+
+    system.schedule(backspace(KeyState::Pressed));
+    system.schedule(backspace(KeyState::Repeated));
+    system.schedule(backspace(KeyState::Released));
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "a");
+}
+
+#[test]
+fn a_shortcut_fires_on_the_press_not_on_every_auto_repeat() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut session = loaded_session(attributes.initial_size());
+    pump(&mut system, &mut presenter, &mut session);
+    let repeated_ctrl_l = KeyEvent::new(
+        LogicalKey::Character(input_text("l")),
+        KeyCode::KEY_L,
+        KeyState::Repeated,
+    )
+    .with_modifiers(Modifiers::NONE.with_control())
+    .with_text(input_text("l"));
+
+    system.schedule(WindowEvent::Key(repeated_ctrl_l));
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert!(!session.omnibox().is_focused());
 }
 
 #[test]
@@ -741,28 +908,16 @@ fn escape_cancels_editing_reverts_to_active_url_and_unfocuses() {
     let original_url_text = session.omnibox().text().to_string();
 
     // Focus and type.
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
+    ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut session);
 
-    system.schedule(WindowEvent::TextInput {
-        text: "draft query".to_string(),
-    });
+    type_text(&mut system, "draft query");
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "draft query");
     assert!(session.omnibox().is_focused());
 
     // Press Escape.
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Escape,
-        state: KeyState::Pressed,
-    });
+    press_named(&mut system, LogicalKey::Escape, KeyCode::ESCAPE);
     pump(&mut system, &mut presenter, &mut session);
 
     assert!(
@@ -802,29 +957,17 @@ fn end_to_end_shortcut_typing_and_navigation_dispatch() {
     let navigations_before = session.stats().navigations;
 
     // 1. Press Ctrl+L to focus omnibox.
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
+    ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut session);
     assert!(session.omnibox().is_focused());
 
     // 2. Type "rust-lang.org" (without scheme).
-    system.schedule(WindowEvent::TextInput {
-        text: "rust-lang.org".to_string(),
-    });
+    type_text(&mut system, "rust-lang.org");
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "rust-lang.org");
 
     // 3. Press Enter.
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Enter,
-        state: KeyState::Pressed,
-    });
+    press_named(&mut system, LogicalKey::Enter, KeyCode::ENTER);
     pump(&mut system, &mut presenter, &mut session);
 
     // Focus must be released immediately.
@@ -857,36 +1000,19 @@ fn control_keys_backspace_and_arrows_operate_on_focused_omnibox() {
     pump(&mut system, &mut presenter, &mut session);
 
     // Focus via Ctrl+L and type "cat"
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::TextInput {
-        text: "cat".to_string(),
-    });
+    ctrl_l(&mut system);
+    type_text(&mut system, "cat");
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "cat");
 
     // Backspace removes 't' -> "ca"
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Backspace,
-        state: KeyState::Pressed,
-    });
+    press_named(&mut system, LogicalKey::Backspace, KeyCode::BACKSPACE);
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "ca");
 
     // ArrowLeft moves cursor between 'c' and 'a', then type 'o' -> "coa"
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::ArrowLeft,
-        state: KeyState::Pressed,
-    });
-    system.schedule(WindowEvent::TextInput {
-        text: "o".to_string(),
-    });
+    press_named(&mut system, LogicalKey::ArrowLeft, KeyCode::ARROW_LEFT);
+    type_text(&mut system, "o");
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(session.omnibox().text(), "coa");
 }

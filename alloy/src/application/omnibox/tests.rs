@@ -1,5 +1,5 @@
 use network::Url;
-use window::LogicalKey;
+use window::{InputText, LogicalKey};
 
 use super::buffer::{CursorPosition, OmniboxBuffer};
 use super::controller::{OmniboxController, OmniboxEffect, OmniboxInput};
@@ -384,32 +384,32 @@ fn controller_enter_classifies_and_navigates() {
 fn controller_control_key_handling() {
     let mut controller = OmniboxController::new();
 
-    let effect = controller.handle_control_key(LogicalKey::Backspace);
+    let effect = controller.handle_edit_key(&LogicalKey::Backspace);
     assert_eq!(effect, OmniboxEffect::None);
 
     controller.focus();
     controller.handle_text_input("cat");
     assert_eq!(controller.text(), "cat");
 
-    let effect = controller.handle_control_key(LogicalKey::Backspace);
+    let effect = controller.handle_edit_key(&LogicalKey::Backspace);
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert_eq!(controller.text(), "ca");
 
-    let effect = controller.handle_control_key(LogicalKey::ArrowLeft);
+    let effect = controller.handle_edit_key(&LogicalKey::ArrowLeft);
     assert_eq!(effect, OmniboxEffect::Redraw);
 
     controller.handle_text_input("o");
     assert_eq!(controller.text(), "coa");
 
-    let effect = controller.handle_control_key(LogicalKey::Home);
+    let effect = controller.handle_edit_key(&LogicalKey::Home);
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert_eq!(controller.state().cursor_position(), CursorPosition::ZERO);
 
-    let effect = controller.handle_control_key(LogicalKey::End);
+    let effect = controller.handle_edit_key(&LogicalKey::End);
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert_eq!(controller.state().cursor_position(), CursorPosition::new(3));
 
-    let effect = controller.handle_control_key(LogicalKey::Delete);
+    let effect = controller.handle_edit_key(&LogicalKey::Delete);
     assert_eq!(effect, OmniboxEffect::Redraw);
 }
 
@@ -421,20 +421,20 @@ fn controller_handle_input_routes_all_variants() {
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert!(controller.is_focused());
 
-    let effect = controller.handle_input(&OmniboxInput::TextInput("query".into()));
+    let effect = controller.handle_input(&OmniboxInput::Insert(InputText::new("query").unwrap()));
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert_eq!(controller.text(), "query");
 
-    let effect = controller.handle_input(&OmniboxInput::ControlKey(LogicalKey::Backspace));
+    let effect = controller.handle_input(&OmniboxInput::Edit(LogicalKey::Backspace));
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert_eq!(controller.text(), "quer");
 
-    let effect = controller.handle_input(&OmniboxInput::Escape);
+    let effect = controller.handle_input(&OmniboxInput::Edit(LogicalKey::Escape));
     assert_eq!(effect, OmniboxEffect::Redraw);
     assert!(!controller.is_focused());
 
     controller.handle_input(&OmniboxInput::Focus);
-    let effect = controller.handle_input(&OmniboxInput::Enter);
+    let effect = controller.handle_input(&OmniboxInput::Edit(LogicalKey::Enter));
     let expected_url =
         Url::parse("https://duckduckgo.com/?q=quer").expect("valid search destination url");
     assert_eq!(effect, OmniboxEffect::Navigate(expected_url));
