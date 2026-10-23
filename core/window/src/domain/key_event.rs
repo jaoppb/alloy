@@ -9,6 +9,7 @@ use crate::domain::text::InputText;
 
 /// Where in its life a key press is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum KeyState {
     /// The key went down. A held key yields exactly one `Pressed`.
     Pressed,
@@ -103,7 +104,9 @@ impl KeyEvent {
         self.text.as_ref()
     }
 
-    /// The modifiers held when this press happened.
+    /// The modifiers held when this press happened. A modifier key's own
+    /// events follow the DOM convention: its press reports it held, its
+    /// release reports it released.
     #[must_use]
     pub const fn modifiers(&self) -> Modifiers {
         self.modifiers

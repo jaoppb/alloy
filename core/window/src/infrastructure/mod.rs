@@ -4,9 +4,10 @@
 //!
 //! [`headless`] is always compiled — it is the `no-window` build's only
 //! adapter, and the one CI exercises. [`winit_system`],
-//! [`softbuffer_presenter`], [`event_map`], [`keyboard`] and [`physical_key`] compile only under the
-//! `winit-system` feature (the default): they are the only modules in this
-//! crate that name `winit` or `softbuffer` (`ADR-0011` item 2).
+//! [`softbuffer_presenter`], [`event_map`], [`keyboard`] and [`physical_key`]
+//! compile only under the `winit-system` feature (the default): they are the
+//! only modules in this crate that name `winit` or `softbuffer` (`ADR-0011`
+//! item 2).
 
 pub mod headless;
 

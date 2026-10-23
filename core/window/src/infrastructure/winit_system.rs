@@ -194,8 +194,7 @@ impl ApplicationHandler for Handler {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        self.keyboard.observe(&event);
-        let Some(mapped) = map_window_event(event, &self.keyboard) else {
+        let Some(mapped) = map_window_event(event, &mut self.keyboard) else {
             return;
         };
         if matches!(mapped, WindowEvent::CloseRequested) {

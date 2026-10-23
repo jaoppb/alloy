@@ -7,8 +7,10 @@
 //! [`KeyEvent`]. The adapter reports; it never decides whether a press is a
 //! shortcut or typing — that belongs to the consumer's keymap.
 //!
-//! Command–Query Separation: [`KeyboardState::observe`] is the one command
-//! that updates the state, [`KeyboardState::translate`] a pure query over it.
+//! Command–Query Separation: [`KeyboardState::observe`] and
+//! [`KeyboardState::observe_key`] update the state, [`KeyboardState::translate`]
+//! is a pure query over it. The order — observe, then translate — is owned in
+//! one place, `event_map::map_key_input`, so no caller can get it wrong.
 //!
 //! `winit::event::KeyEvent` has no public constructor, so the translation
 //! takes a [`KeyInput`] — the fields of it this adapter reads — which a test
@@ -93,9 +95,6 @@ pub const fn map_key_state(state: ElementState, repetition: Repetition) -> KeySt
     }
 }
 
-/// Adds one modifier to a set — the shape of `Modifiers::with_shift` and kin.
-type AddModifier = fn(Modifiers) -> Modifiers;
-
 /// Folds `winit`'s modifier reports and `AltGr` key presses into the
 /// [`Modifiers`] stamped on each [`KeyEvent`].
 #[derive(Clone, Copy, Debug, Default)]
@@ -105,16 +104,13 @@ pub struct KeyboardState {
 }
 
 impl KeyboardState {
-    /// Updates the state from one `winit` window event: the modifiers it
-    /// reports, an `AltGr` press or release, or the window losing focus. Every
-    /// other event leaves it alone. Call it before mapping `event`.
+    /// Updates the state from a window-level event: the modifiers `winit`
+    /// reports (`ModifiersChanged`) or the window losing focus. Every other
+    /// event leaves it alone; key presses go through [`Self::observe_key`].
     pub fn observe(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::ModifiersChanged(modifiers) => self.held = modifiers.state(),
             WindowEvent::Focused(false) => self.focus_lost(),
-            WindowEvent::KeyboardInput { event, .. } => {
-                self.observe_key(&KeyInput::from_winit(event));
-            }
             _ => {}
         }
     }
@@ -123,7 +119,7 @@ impl KeyboardState {
     /// bit, so the key's own press and release are the only signal (Linux).
     /// macOS reports Option as Alt, so there `alt()` is set instead and the
     /// consumer owns the rule (`ADR-0027`).
-    pub const fn observe_key(&mut self, input: &KeyInput) {
+    pub(super) const fn observe_key(&mut self, input: &KeyInput) {
         if matches!(input.logical_key, Key::Named(NamedKey::AltGraph)) {
             self.alt_graph = !input.state.is_released();
         }
@@ -138,7 +134,7 @@ impl KeyboardState {
 
     /// The [`KeyEvent`] for `input`, stamped with the modifiers held now.
     #[must_use]
-    pub fn translate(&self, input: &KeyInput) -> KeyEvent {
+    pub(super) fn translate(self, input: &KeyInput) -> KeyEvent {
         let event = KeyEvent::new(
             map_logical_key(&input.logical_key),
             map_physical_key(input.physical_key),
@@ -152,19 +148,30 @@ impl KeyboardState {
     }
 
     fn modifiers(self) -> Modifiers {
-        let held = self.held;
-        let flags: [(bool, AddModifier); 5] = [
-            (held.shift_key(), Modifiers::with_shift),
-            (held.control_key(), Modifiers::with_control),
-            (held.alt_key(), Modifiers::with_alt),
-            (held.super_key(), Modifiers::with_super_key),
-            (self.alt_graph, Modifiers::with_alt_graph),
-        ];
-        flags
-            .into_iter()
-            .filter(|(is_held, _)| *is_held)
-            .fold(Modifiers::NONE, |modifiers, (_, with)| with(modifiers))
+        let held = held_modifiers(self.held);
+        if self.alt_graph {
+            return held.with_alt_graph();
+        }
+        held
     }
+}
+
+/// The modifiers `winit` reports as held — everything but `AltGr`.
+fn held_modifiers(held: ModifiersState) -> Modifiers {
+    let mut modifiers = Modifiers::NONE;
+    if held.shift_key() {
+        modifiers = modifiers.with_shift();
+    }
+    if held.control_key() {
+        modifiers = modifiers.with_control();
+    }
+    if held.alt_key() {
+        modifiers = modifiers.with_alt();
+    }
+    if held.super_key() {
+        modifiers = modifiers.with_super_key();
+    }
+    modifiers
 }
 
 /// A press's text, if it has any printable: a release inserts nothing, and a

@@ -14,12 +14,13 @@
 //! `#[non_exhaustive]` (see [`physical_key`](crate::infrastructure::physical_key)),
 //! so that inner mapping keeps one documented wildcard arm.
 //!
-//! The mapping is a pure function of the event and the [`KeyboardState`] it is
-//! given: updating that state from `ModifiersChanged`, `Focused` and key
-//! presses is [`KeyboardState::observe`], called before the mapping.
+//! The mapping carries the adapter's [`KeyboardState`]: [`map_window_event`]
+//! updates it from `ModifiersChanged`, `Focused` and key presses and stamps
+//! each key press from it, in that order, in one place ([`map_key_input`]).
 
 use crate::domain::cursor::CursorIcon;
 use crate::domain::event::{PointerButton, WindowEvent};
+use crate::domain::key_event::KeyEvent;
 use crate::domain::surface::{PhysicalPosition, SurfaceSize};
 use crate::domain::text::InputText;
 use crate::infrastructure::keyboard::{KeyInput, KeyboardState};
@@ -27,13 +28,14 @@ use crate::infrastructure::keyboard::{KeyInput, KeyboardState};
 /// Maps one `winit` window event to this port's vocabulary, or `None` when
 /// the event has no representation in it yet.
 ///
-/// `keyboard` must already have [`observe`](KeyboardState::observe)d `event`:
-/// a key press is stamped with the modifiers it holds.
+/// `keyboard` is the adapter's modifier memory: the event updates it first, so
+/// a key press is stamped with the modifiers held at that moment.
 #[must_use]
 pub fn map_window_event(
     event: winit::event::WindowEvent,
-    keyboard: &KeyboardState,
+    keyboard: &mut KeyboardState,
 ) -> Option<WindowEvent> {
+    keyboard.observe(&event);
     match event {
         winit::event::WindowEvent::Resized(size) => {
             SurfaceSize::new(size.width, size.height).map(WindowEvent::Resized)
@@ -51,7 +53,7 @@ pub fn map_window_event(
             })
         }
         winit::event::WindowEvent::KeyboardInput { event, .. } => Some(WindowEvent::Key(
-            keyboard.translate(&KeyInput::from_winit(&event)),
+            map_key_input(keyboard, &KeyInput::from_winit(&event)),
         )),
         winit::event::WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
             InputText::new(text).map(WindowEvent::TextCommitted)
@@ -88,6 +90,16 @@ pub fn map_window_event(
         | winit::event::WindowEvent::ThemeChanged(_)
         | winit::event::WindowEvent::Occluded(_) => None,
     }
+}
+
+/// The [`KeyEvent`] for one key press.
+///
+/// The press is observed first (an `AltGr` press counts as held from its own
+/// event on, a release as released — the DOM convention), then translated with
+/// the modifiers held.
+pub fn map_key_input(keyboard: &mut KeyboardState, input: &KeyInput) -> KeyEvent {
+    keyboard.observe_key(input);
+    keyboard.translate(input)
 }
 
 /// Maps a port [`CursorIcon`] to the `winit` cursor it names.
