@@ -9,7 +9,9 @@ use window::{
 };
 
 use super::initial_window_attributes;
-use super::tests::{TestSession, completed_navigation, load, loaded_session, pump, session_over};
+use super::test_support::{
+    TestSession, completed_navigation, load, loaded_window, pump, session_over,
+};
 
 // ---- keyboard fixtures ----
 //
@@ -63,62 +65,46 @@ fn press_named(system: &mut HeadlessWindowSystem, logical: LogicalKey, physical:
     )));
 }
 
-#[test]
-fn ctrl_l_shortcut_focuses_omnibox_and_selects_all_text() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+/// Presses one keyboard shortcut on the window.
+type Shortcut = fn(&mut HeadlessWindowSystem);
 
-    pump(&mut system, &mut presenter, &mut session);
-    assert!(!session.omnibox().is_focused());
-    assert!(!session.omnibox().is_all_selected());
-
-    ctrl_l(&mut system);
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(
-        session.omnibox().is_focused(),
-        "Ctrl+L must grant focus to the omnibox"
-    );
-    assert!(
-        session.omnibox().is_all_selected(),
-        "Ctrl+L must select existing omnibox text"
+fn super_l(system: &mut HeadlessWindowSystem) {
+    chord(
+        system,
+        Modifiers::NONE.with_super_key(),
+        KeyCode::KEY_L,
+        "l",
     );
 }
 
 #[test]
-fn alt_d_shortcut_focuses_omnibox_and_selects_all_text() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+fn focus_shortcuts_focus_the_omnibox_and_select_all_text() {
+    let shortcuts: [(&str, Shortcut); 3] =
+        [("Ctrl+L", ctrl_l), ("Alt+D", alt_d), ("Super+L", super_l)];
 
-    pump(&mut system, &mut presenter, &mut session);
-    assert!(!session.omnibox().is_focused());
+    for (name, press) in shortcuts {
+        let (mut system, mut presenter, mut session) = loaded_window();
+        pump(&mut system, &mut presenter, &mut session);
+        assert!(!session.omnibox().is_focused());
+        assert!(!session.omnibox().is_all_selected());
 
-    alt_d(&mut system);
-    pump(&mut system, &mut presenter, &mut session);
+        press(&mut system);
+        pump(&mut system, &mut presenter, &mut session);
 
-    assert!(
-        session.omnibox().is_focused(),
-        "Alt+D must grant focus to the omnibox"
-    );
-    assert!(
-        session.omnibox().is_all_selected(),
-        "Alt+D must select existing omnibox text"
-    );
+        assert!(
+            session.omnibox().is_focused(),
+            "{name} must focus the omnibox"
+        );
+        assert!(
+            session.omnibox().is_all_selected(),
+            "{name} must select existing omnibox text"
+        );
+    }
 }
 
 #[test]
 fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     // Initial pump: document relayouts once.
     pump(&mut system, &mut presenter, &mut session);
@@ -158,11 +144,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
 
 #[test]
 fn typing_when_unfocused_is_ignored() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
     let initial_text = session.omnibox().text().to_string();
@@ -180,11 +162,7 @@ fn typing_when_unfocused_is_ignored() {
 /// A loaded page whose omnibox is focused and holds `"abc"`, reached with the
 /// Ctrl+L `winit` really sends.
 fn focused_omnibox_holding_abc() -> (HeadlessWindowSystem, RecordingPresenter, TestSession) {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
     pump(&mut system, &mut presenter, &mut session);
     ctrl_l(&mut system);
     type_text(&mut system, "abc");
@@ -243,26 +221,6 @@ fn alt_d_refocuses_and_selects_instead_of_typing_its_letter() {
 
     assert_eq!(session.omnibox().text(), "abc");
     assert!(session.omnibox().is_all_selected());
-}
-
-#[test]
-fn super_l_focuses_the_omnibox_like_ctrl_l() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-    pump(&mut system, &mut presenter, &mut session);
-
-    chord(
-        &mut system,
-        Modifiers::NONE.with_super_key(),
-        KeyCode::KEY_L,
-        "l",
-    );
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(session.omnibox().is_focused());
 }
 
 #[test]
@@ -336,11 +294,7 @@ fn a_held_backspace_keeps_deleting_but_its_release_does_nothing() {
 
 #[test]
 fn a_shortcut_fires_on_the_press_not_on_every_auto_repeat() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
     pump(&mut system, &mut presenter, &mut session);
     let repeated_ctrl_l = KeyEvent::new(
         LogicalKey::Character(input_text("l")),
@@ -358,11 +312,7 @@ fn a_shortcut_fires_on_the_press_not_on_every_auto_repeat() {
 
 #[test]
 fn escape_cancels_editing_reverts_to_active_url_and_unfocuses() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
     let original_url_text = session.omnibox().text().to_string();
@@ -451,11 +401,7 @@ fn end_to_end_shortcut_typing_and_navigation_dispatch() {
 
 #[test]
 fn control_keys_backspace_and_arrows_operate_on_focused_omnibox() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
 

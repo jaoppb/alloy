@@ -10,21 +10,19 @@
 //! threads would make the proof racy for no added coverage.
 #![allow(clippy::unwrap_used)]
 
-use std::sync::Arc;
-
-use graphics::{ImageId, SyntheticFontProvider};
-use network::{AllowAllPolicy, MockTransport};
+use graphics::ImageId;
+use network::MockTransport;
 use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
 
-use super::session::Session;
+use super::initial_window_attributes;
+use super::test_support::{
+    TestSession, completed_navigation, load, loaded_session, loaded_window, navigation_to, pump,
+    session_over,
+};
 use super::worker::{LoopMessage, fetch_text};
-use super::{initial_window_attributes, pump_once};
-use crate::application::browser_services::BrowserServices;
-use crate::application::paint::DEFAULT_FONT;
-use crate::application::pipeline::DEFAULT_FONT_SIZE;
-use crate::application::subresource::{MarkupDiscoverer, placeholder_framebuffer};
+use crate::application::subresource::placeholder_framebuffer;
 use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
@@ -44,71 +42,6 @@ fn a_non_2xx_stylesheet_status_is_a_typed_error_not_an_empty_body() {
         matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
         "a 404 error page must not reach the CSS parser as a stylesheet"
     );
-}
-
-pub(super) type TestSession =
-    Session<SyntheticFontProvider, MockTransport, AllowAllPolicy, MarkupDiscoverer>;
-
-pub(super) fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
-    let font_provider =
-        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let services = BrowserServices::new(
-        font_provider,
-        Arc::new(transport),
-        Arc::new(AllowAllPolicy::new()),
-    );
-    Session::new(viewport, services)
-}
-
-/// The URL a link click navigated to: keeps pumping until the click's
-/// navigation — the first one past `navigations_before_click` — has been
-/// applied, so the outcome does not depend on how fast its thread runs.
-pub(super) fn completed_navigation(
-    system: &mut HeadlessWindowSystem,
-    presenter: &mut RecordingPresenter,
-    session: &mut TestSession,
-    navigations_before_click: usize,
-) -> network::Url {
-    for _ in 0..5000 {
-        if session.stats().navigations > navigations_before_click {
-            break;
-        }
-        pump(system, presenter, session);
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-    assert!(
-        session.stats().navigations > navigations_before_click,
-        "the click's navigation never arrived"
-    );
-    session
-        .base_url()
-        .cloned()
-        .expect("an applied navigation sets the document base")
-}
-
-fn navigation_to(markup: &str, url: &str) -> LoopMessage {
-    let document = dom::parse(markup).unwrap().into_tree();
-    LoopMessage::Navigation(Ok((document, network::Url::parse(url).unwrap())))
-}
-
-/// Installs `markup` as a navigated document at `url`, the same way a
-/// finished navigation thread does.
-pub(super) fn load(session: &mut TestSession, markup: &str, url: &str) {
-    session
-        .outbox_for_test()
-        .send(navigation_to(markup, url))
-        .unwrap();
-    session.drain_messages();
-}
-
-pub(super) fn loaded_session(viewport: SurfaceSize) -> TestSession {
-    let mut session = session_over(MockTransport::new(), viewport);
-    load(
-        &mut session,
-        "<html><body>hi</body></html>",
-        "http://example.com/",
-    );
-    session
 }
 
 #[test]
@@ -165,21 +98,9 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     );
 }
 
-pub(super) fn pump(
-    system: &mut HeadlessWindowSystem,
-    presenter: &mut RecordingPresenter,
-    session: &mut TestSession,
-) {
-    pump_once(system, presenter, session).unwrap();
-}
-
 #[test]
 fn a_redraw_request_repaints_the_cached_frame_without_a_relayout() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     // First pump: the auto-seeded Resized lays out and presents once.
     pump(&mut system, &mut presenter, &mut session);
@@ -223,11 +144,7 @@ fn a_redraw_request_before_the_first_frame_is_a_silent_noop() {
 
 #[test]
 fn a_relayout_arms_a_following_repaint() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(presenter.present_count(), 1);
@@ -250,11 +167,7 @@ fn a_relayout_arms_a_following_repaint() {
 
 #[test]
 fn many_redraw_requests_in_one_pump_coalesce_to_one_repaint() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
     let presents_after_load = presenter.present_count();

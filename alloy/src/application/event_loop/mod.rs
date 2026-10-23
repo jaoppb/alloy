@@ -23,6 +23,8 @@ mod worker;
 #[cfg(test)]
 mod keyboard_tests;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod tests;
 
 use std::thread;
