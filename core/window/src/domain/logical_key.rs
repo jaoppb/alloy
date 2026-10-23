@@ -2,6 +2,7 @@
 
 use core::fmt;
 
+use crate::domain::function_key::FunctionKey;
 use crate::domain::text::InputText;
 
 /// The meaning of a key press under the active layout, as opposed to
@@ -34,18 +35,8 @@ pub enum LogicalKey {
     End,
     PageUp,
     PageDown,
-    F1,
-    F2,
-    F3,
-    F4,
-    F5,
-    F6,
-    F7,
-    F8,
-    F9,
-    F10,
-    F11,
-    F12,
+    /// F1 through F12.
+    Function(FunctionKey),
     Shift,
     Control,
     Alt,
@@ -57,9 +48,15 @@ pub enum LogicalKey {
     CapsLock,
     /// A dead key waiting for the next press to compose with.
     Dead,
-    /// A named key this port has no variant for.
+    /// A named key this port has no variant for (media keys, `Copy`,
+    /// `BrowserBack`, …). Use the physical position to bind it.
     Other,
-    /// A key the backend could not name at all.
+    /// A key the backend could not name at all, or one whose character is not
+    /// printable: a `Character` key holding a control character or nothing has
+    /// no meaning to route on, and [`InputText`] cannot hold it. The
+    /// [`KeyEvent::physical`] position is still reported.
+    ///
+    /// [`KeyEvent::physical`]: crate::domain::key_event::KeyEvent::physical
     Unidentified,
 }
 
@@ -67,6 +64,7 @@ impl fmt::Display for LogicalKey {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             Self::Character(text) => return fmt::Display::fmt(text, formatter),
+            Self::Function(key) => return fmt::Display::fmt(key, formatter),
             Self::Enter => "Enter",
             Self::Tab => "Tab",
             Self::Space => "Space",
@@ -82,18 +80,6 @@ impl fmt::Display for LogicalKey {
             Self::End => "End",
             Self::PageUp => "PageUp",
             Self::PageDown => "PageDown",
-            Self::F1 => "F1",
-            Self::F2 => "F2",
-            Self::F3 => "F3",
-            Self::F4 => "F4",
-            Self::F5 => "F5",
-            Self::F6 => "F6",
-            Self::F7 => "F7",
-            Self::F8 => "F8",
-            Self::F9 => "F9",
-            Self::F10 => "F10",
-            Self::F11 => "F11",
-            Self::F12 => "F12",
             Self::Shift => "Shift",
             Self::Control => "Control",
             Self::Alt => "Alt",

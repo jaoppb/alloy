@@ -97,6 +97,7 @@ pub use domain::cursor::CursorIcon;
 pub use domain::error::{WindowError, WindowOperation};
 pub use domain::event::{PointerButton, WindowEvent};
 pub use domain::frame::FrameView;
+pub use domain::function_key::FunctionKey;
 pub use domain::key::KeyCode;
 pub use domain::key_event::{KeyEvent, KeyState};
 pub use domain::logical_key::LogicalKey;

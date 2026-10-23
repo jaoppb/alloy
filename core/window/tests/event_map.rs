@@ -10,7 +10,7 @@
 //! crate (`platform_specific` is `pub(crate)`), so a `KeyboardInput` event
 //! cannot be built here. The adapter therefore splits the mapping at a
 //! `KeyInput` — the five `KeyEvent` fields it reads, constructible in a test —
-//! and these tests drive [`KeyboardState::translate`] through it, with the
+//! and these tests drive [`KeyboardState::observe_key`] and [`KeyboardState::translate`] through it, with the
 //! values `winit` 0.30 reports on Linux (`xkb/mod.rs:317-319`: `text` ignores
 //! Ctrl). The one line left uncovered is `KeyInput::from_winit`, a field copy.
 
@@ -18,9 +18,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
 use window::infrastructure::event_map::{map_cursor_icon, map_window_event};
-use window::infrastructure::keyboard::{KeyInput, KeyboardState};
+use window::infrastructure::keyboard::{KeyInput, KeyboardState, Repetition, map_key_state};
 use window::{
-    CursorIcon, InputText, KeyCode, KeyState, LogicalKey, PointerButton, SurfaceSize, WindowEvent,
+    CursorIcon, FunctionKey, InputText, KeyCode, KeyState, LogicalKey, PointerButton, SurfaceSize,
+    WindowEvent,
 };
 use winit::event::ElementState;
 use winit::keyboard::{Key, ModifiersState, NamedKey, PhysicalKey};
@@ -30,7 +31,7 @@ fn resized_maps_to_the_same_dimensions() {
     let event = winit::event::WindowEvent::Resized(winit::dpi::PhysicalSize::new(800, 600));
 
     let mapped =
-        map_window_event(event, &mut KeyboardState::default()).expect("Resized must map to Some");
+        map_window_event(event, &KeyboardState::default()).expect("Resized must map to Some");
 
     assert_eq!(
         mapped,
@@ -43,7 +44,7 @@ fn a_zero_sized_resize_is_dropped_rather_than_producing_an_invalid_surface_size(
     let event = winit::event::WindowEvent::Resized(winit::dpi::PhysicalSize::new(0, 0));
 
     assert_eq!(
-        map_window_event(event, &mut KeyboardState::default()),
+        map_window_event(event, &KeyboardState::default()),
         None,
         "a 0x0 surface has no SurfaceSize reading, so this must not fabricate one"
     );
@@ -53,7 +54,7 @@ fn a_zero_sized_resize_is_dropped_rather_than_producing_an_invalid_surface_size(
 fn close_requested_maps_directly() {
     let event = winit::event::WindowEvent::CloseRequested;
     assert_eq!(
-        map_window_event(event, &mut KeyboardState::default()),
+        map_window_event(event, &KeyboardState::default()),
         Some(WindowEvent::CloseRequested)
     );
 }
@@ -62,7 +63,7 @@ fn close_requested_maps_directly() {
 fn redraw_requested_maps_directly() {
     let event = winit::event::WindowEvent::RedrawRequested;
     assert_eq!(
-        map_window_event(event, &mut KeyboardState::default()),
+        map_window_event(event, &KeyboardState::default()),
         Some(WindowEvent::RedrawRequested)
     );
 }
@@ -74,8 +75,8 @@ fn cursor_moved_maps_to_pointer_moved_with_the_same_coordinates() {
         position: winit::dpi::PhysicalPosition::new(12.5, 7.0),
     };
 
-    let mapped = map_window_event(event, &mut KeyboardState::default())
-        .expect("CursorMoved must map to Some");
+    let mapped =
+        map_window_event(event, &KeyboardState::default()).expect("CursorMoved must map to Some");
 
     let WindowEvent::PointerMoved { position } = mapped else {
         panic!("expected PointerMoved, got {mapped:?}");
@@ -92,8 +93,8 @@ fn mouse_input_maps_button_and_pressed_state() {
         button: winit::event::MouseButton::Right,
     };
 
-    let mapped = map_window_event(event, &mut KeyboardState::default())
-        .expect("MouseInput must map to Some");
+    let mapped =
+        map_window_event(event, &KeyboardState::default()).expect("MouseInput must map to Some");
 
     assert_eq!(
         mapped,
@@ -112,8 +113,8 @@ fn mouse_wheel_line_delta_maps_to_scroll() {
         phase: winit::event::TouchPhase::Moved,
     };
 
-    let mapped = map_window_event(event, &mut KeyboardState::default())
-        .expect("MouseWheel must map to Some");
+    let mapped =
+        map_window_event(event, &KeyboardState::default()).expect("MouseWheel must map to Some");
 
     let WindowEvent::Scroll { delta_x, delta_y } = mapped else {
         panic!("expected Scroll, got {mapped:?}");
@@ -132,8 +133,8 @@ fn mouse_wheel_pixel_delta_maps_to_scroll() {
         phase: winit::event::TouchPhase::Moved,
     };
 
-    let mapped = map_window_event(event, &mut KeyboardState::default())
-        .expect("MouseWheel must map to Some");
+    let mapped =
+        map_window_event(event, &KeyboardState::default()).expect("MouseWheel must map to Some");
 
     let WindowEvent::Scroll { delta_x, delta_y } = mapped else {
         panic!("expected Scroll, got {mapped:?}");
@@ -163,7 +164,7 @@ fn variants_not_yet_represented_in_the_domain_vocabulary_map_to_none() {
 
     for event in dropped {
         assert_eq!(
-            map_window_event(event.clone(), &mut KeyboardState::default()),
+            map_window_event(event.clone(), &KeyboardState::default()),
             None,
             "{event:?} is a deliberate, reviewed drop — it must map to None, not panic or map to Some"
         );
@@ -173,8 +174,8 @@ fn variants_not_yet_represented_in_the_domain_vocabulary_map_to_none() {
 #[test]
 fn ime_commit_maps_to_text_committed() {
     let event = winit::event::WindowEvent::Ime(winit::event::Ime::Commit(String::from("Alloy")));
-    let mapped = map_window_event(event, &mut KeyboardState::default())
-        .expect("Ime::Commit must map to Some");
+    let mapped =
+        map_window_event(event, &KeyboardState::default()).expect("Ime::Commit must map to Some");
 
     assert_eq!(
         mapped,
@@ -188,7 +189,7 @@ fn an_ime_commit_with_nothing_printable_is_dropped() {
         let event = winit::event::WindowEvent::Ime(winit::event::Ime::Commit(hostile.into()));
 
         assert_eq!(
-            map_window_event(event, &mut KeyboardState::default()),
+            map_window_event(event, &KeyboardState::default()),
             None,
             "{hostile:?} is not committable text"
         );
@@ -208,7 +209,7 @@ fn ime_non_commit_variants_map_to_none() {
 
     for event in dropped_ime {
         assert_eq!(
-            map_window_event(event, &mut KeyboardState::default()),
+            map_window_event(event, &KeyboardState::default()),
             None,
             "non-commit IME events must map to None"
         );
@@ -226,7 +227,7 @@ fn character(value: &str) -> Key {
 }
 
 fn input(physical: PhysicalKey, logical: Key, text: Option<&str>) -> KeyInput {
-    KeyInput::new(physical, logical, text, ElementState::Pressed, false)
+    KeyInput::new(physical, logical, text, KeyState::Pressed)
 }
 
 fn modifiers_changed(state: ModifiersState) -> winit::event::WindowEvent {
@@ -234,11 +235,29 @@ fn modifiers_changed(state: ModifiersState) -> winit::event::WindowEvent {
 }
 
 fn hold(keyboard: &mut KeyboardState, state: ModifiersState) {
+    let event = modifiers_changed(state);
+    keyboard.observe(&event);
     assert_eq!(
-        map_window_event(modifiers_changed(state), keyboard),
+        map_window_event(event, keyboard),
         None,
         "ModifiersChanged updates the stamp and is not itself an event"
     );
+}
+
+/// What the handler does for a key press: observe it, then translate it.
+fn feed(keyboard: &mut KeyboardState, input: &KeyInput) -> window::KeyEvent {
+    keyboard.observe_key(input);
+    keyboard.translate(input)
+}
+
+fn lose_focus(keyboard: &mut KeyboardState) {
+    let event = winit::event::WindowEvent::Focused(false);
+    keyboard.observe(&event);
+    assert_eq!(map_window_event(event, keyboard), None);
+}
+
+const fn function(number: u8) -> LogicalKey {
+    LogicalKey::Function(FunctionKey::new(number).unwrap())
 }
 
 fn text(value: &str) -> InputText {
@@ -250,11 +269,14 @@ fn alt_d_yields_one_key_event_carrying_alt_and_the_text_d() {
     let mut keyboard = KeyboardState::default();
     hold(&mut keyboard, ModifiersState::ALT);
 
-    let event = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::KeyD),
-        character("d"),
-        Some("d"),
-    ));
+    let event = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyD),
+            character("d"),
+            Some("d"),
+        ),
+    );
 
     assert!(event.modifiers().alt());
     assert!(!event.modifiers().control());
@@ -271,11 +293,14 @@ fn ctrl_l_carries_the_text_l_as_winit_reports_it_on_linux() {
     let mut keyboard = KeyboardState::default();
     hold(&mut keyboard, ModifiersState::CONTROL);
 
-    let event = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::KeyL),
-        character("l"),
-        Some("l"),
-    ));
+    let event = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyL),
+            character("l"),
+            Some("l"),
+        ),
+    );
 
     assert!(event.modifiers().control());
     assert_eq!(event.text(), Some(&text("l")));
@@ -294,9 +319,9 @@ fn modifiers_stamp_every_following_press_until_they_change_again() {
     };
 
     hold(&mut keyboard, ModifiersState::SHIFT | ModifiersState::SUPER);
-    let held = keyboard.translate(&letter());
+    let held = feed(&mut keyboard, &letter());
     hold(&mut keyboard, ModifiersState::empty());
-    let released = keyboard.translate(&letter());
+    let released = feed(&mut keyboard, &letter());
 
     assert!(held.modifiers().shift() && held.modifiers().super_key());
     assert!(released.modifiers().is_empty());
@@ -310,11 +335,14 @@ fn a_modifier_pressed_before_the_window_had_focus_still_stamps_the_first_press()
     let mut keyboard = KeyboardState::default();
     hold(&mut keyboard, ModifiersState::CONTROL);
 
-    let event = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::KeyL),
-        character("l"),
-        Some("l"),
-    ));
+    let event = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyL),
+            character("l"),
+            Some("l"),
+        ),
+    );
 
     assert!(event.modifiers().control());
 }
@@ -322,17 +350,23 @@ fn a_modifier_pressed_before_the_window_had_focus_still_stamps_the_first_press()
 #[test]
 fn altgr_q_on_a_german_layout_yields_alt_graph_and_the_text_at_sign() {
     let mut keyboard = KeyboardState::default();
-    let altgr = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::AltRight),
-        Key::Named(NamedKey::AltGraph),
-        None,
-    ));
+    let altgr = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::AltRight),
+            Key::Named(NamedKey::AltGraph),
+            None,
+        ),
+    );
 
-    let at_sign = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::KeyQ),
-        character("@"),
-        Some("@"),
-    ));
+    let at_sign = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyQ),
+            character("@"),
+            Some("@"),
+        ),
+    );
 
     assert_eq!(altgr.logical(), &LogicalKey::AltGraph);
     assert!(at_sign.modifiers().alt_graph());
@@ -353,17 +387,19 @@ fn releasing_altgr_stops_stamping_alt_graph() {
             Key::Named(NamedKey::AltGraph),
             None,
             state,
-            false,
         )
     };
-    keyboard.translate(&altgr(ElementState::Pressed));
-    keyboard.translate(&altgr(ElementState::Released));
+    feed(&mut keyboard, &altgr(KeyState::Pressed));
+    feed(&mut keyboard, &altgr(KeyState::Released));
 
-    let after = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::KeyQ),
-        character("q"),
-        Some("q"),
-    ));
+    let after = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyQ),
+            character("q"),
+            Some("q"),
+        ),
+    );
 
     assert!(!after.modifiers().alt_graph());
 }
@@ -372,43 +408,69 @@ fn releasing_altgr_stops_stamping_alt_graph() {
 fn losing_focus_forgets_a_held_altgr() {
     // The release happens while another window has focus and never arrives.
     let mut keyboard = KeyboardState::default();
-    keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::AltRight),
-        Key::Named(NamedKey::AltGraph),
-        None,
-    ));
+    feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::AltRight),
+            Key::Named(NamedKey::AltGraph),
+            None,
+        ),
+    );
 
-    let lost_focus = winit::event::WindowEvent::Focused(false);
-    assert_eq!(map_window_event(lost_focus, &mut keyboard), None);
+    lose_focus(&mut keyboard);
 
-    let after = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::KeyQ),
-        character("q"),
-        Some("q"),
-    ));
+    let after = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyQ),
+            character("q"),
+            Some("q"),
+        ),
+    );
     assert!(!after.modifiers().alt_graph());
+}
+
+#[test]
+fn losing_focus_forgets_every_held_modifier_not_only_altgr() {
+    // winit may not send ModifiersChanged(empty) when focus leaves; a Ctrl
+    // released elsewhere must not stay stamped on later presses.
+    let mut keyboard = KeyboardState::default();
+    hold(&mut keyboard, ModifiersState::CONTROL | ModifiersState::ALT);
+    lose_focus(&mut keyboard);
+
+    let after = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::KeyA),
+            character("a"),
+            Some("a"),
+        ),
+    );
+
+    assert!(after.modifiers().is_empty());
 }
 
 #[test]
 fn a_held_key_yields_pressed_then_repeated_not_repeated_pressed() {
     let mut keyboard = KeyboardState::default();
-    let step = |keyboard: &mut KeyboardState, state, repeat| {
-        keyboard
-            .translate(&KeyInput::new(
+    let step = |keyboard: &mut KeyboardState, state, repetition| {
+        feed(
+            keyboard,
+            &KeyInput::new(
                 code(winit::keyboard::KeyCode::KeyA),
                 character("a"),
                 Some("a"),
-                state,
-                repeat,
-            ))
-            .state()
+                map_key_state(state, repetition),
+            ),
+        )
+        .state()
     };
 
     let states = [
-        step(&mut keyboard, ElementState::Pressed, false),
-        step(&mut keyboard, ElementState::Pressed, true),
-        step(&mut keyboard, ElementState::Pressed, true),
-        step(&mut keyboard, ElementState::Released, false),
+        step(&mut keyboard, ElementState::Pressed, Repetition::First),
+        step(&mut keyboard, ElementState::Pressed, Repetition::AutoRepeat),
+        step(&mut keyboard, ElementState::Pressed, Repetition::AutoRepeat),
+        step(&mut keyboard, ElementState::Released, Repetition::First),
     ];
 
     assert_eq!(
@@ -426,13 +488,15 @@ fn a_held_key_yields_pressed_then_repeated_not_repeated_pressed() {
 fn a_release_carries_no_text() {
     let mut keyboard = KeyboardState::default();
 
-    let event = keyboard.translate(&KeyInput::new(
-        code(winit::keyboard::KeyCode::KeyA),
-        character("a"),
-        Some("a"),
-        ElementState::Released,
-        false,
-    ));
+    let event = feed(
+        &mut keyboard,
+        &KeyInput::new(
+            code(winit::keyboard::KeyCode::KeyA),
+            character("a"),
+            Some("a"),
+            KeyState::Released,
+        ),
+    );
 
     assert_eq!(event.text(), None);
 }
@@ -441,16 +505,22 @@ fn a_release_carries_no_text() {
 fn control_characters_in_the_text_are_dropped_but_the_key_is_kept() {
     let mut keyboard = KeyboardState::default();
 
-    let enter = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::Enter),
-        Key::Named(NamedKey::Enter),
-        Some("\r"),
-    ));
-    let backspace = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::Backspace),
-        Key::Named(NamedKey::Backspace),
-        Some("\x08"),
-    ));
+    let enter = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::Enter),
+            Key::Named(NamedKey::Enter),
+            Some("\r"),
+        ),
+    );
+    let backspace = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::Backspace),
+            Key::Named(NamedKey::Backspace),
+            Some("\x08"),
+        ),
+    );
 
     assert_eq!((enter.text(), enter.logical()), (None, &LogicalKey::Enter));
     assert_eq!(
@@ -463,11 +533,14 @@ fn control_characters_in_the_text_are_dropped_but_the_key_is_kept() {
 fn space_carries_its_text() {
     let mut keyboard = KeyboardState::default();
 
-    let event = keyboard.translate(&input(
-        code(winit::keyboard::KeyCode::Space),
-        Key::Named(NamedKey::Space),
-        Some(" "),
-    ));
+    let event = feed(
+        &mut keyboard,
+        &input(
+            code(winit::keyboard::KeyCode::Space),
+            Key::Named(NamedKey::Space),
+            Some(" "),
+        ),
+    );
 
     assert_eq!(event.logical(), &LogicalKey::Space);
     assert_eq!(event.text(), Some(&text(" ")));
@@ -491,9 +564,9 @@ fn named_keys_map_to_their_logical_key() {
         (NamedKey::End, LogicalKey::End),
         (NamedKey::PageUp, LogicalKey::PageUp),
         (NamedKey::PageDown, LogicalKey::PageDown),
-        (NamedKey::F1, LogicalKey::F1),
-        (NamedKey::F5, LogicalKey::F5),
-        (NamedKey::F12, LogicalKey::F12),
+        (NamedKey::F1, function(1)),
+        (NamedKey::F5, function(5)),
+        (NamedKey::F12, function(12)),
         (NamedKey::Shift, LogicalKey::Shift),
         (NamedKey::Control, LogicalKey::Control),
         (NamedKey::Alt, LogicalKey::Alt),
@@ -505,11 +578,14 @@ fn named_keys_map_to_their_logical_key() {
 
     for (named, expected) in cases {
         let mut keyboard = KeyboardState::default();
-        let event = keyboard.translate(&input(
-            PhysicalKey::Code(winit::keyboard::KeyCode::KeyA),
-            Key::Named(named),
-            None,
-        ));
+        let event = feed(
+            &mut keyboard,
+            &input(
+                PhysicalKey::Code(winit::keyboard::KeyCode::KeyA),
+                Key::Named(named),
+                None,
+            ),
+        );
         assert_eq!(event.logical(), &expected, "{named:?}");
     }
 }
@@ -518,10 +594,12 @@ fn named_keys_map_to_their_logical_key() {
 fn character_dead_and_unidentified_keys_map_to_their_logical_key() {
     let mut keyboard = KeyboardState::default();
     let logical_of = |keyboard: &mut KeyboardState, key| {
-        keyboard
-            .translate(&input(code(winit::keyboard::KeyCode::KeyA), key, None))
-            .logical()
-            .clone()
+        feed(
+            keyboard,
+            &input(code(winit::keyboard::KeyCode::KeyA), key, None),
+        )
+        .logical()
+        .clone()
     };
 
     assert_eq!(
@@ -550,11 +628,14 @@ fn character_dead_and_unidentified_keys_map_to_their_logical_key() {
 fn an_unidentified_physical_key_maps_to_the_unidentified_key_code() {
     let mut keyboard = KeyboardState::default();
 
-    let event = keyboard.translate(&input(
-        PhysicalKey::Unidentified(winit::keyboard::NativeKeyCode::Unidentified),
-        character("a"),
-        Some("a"),
-    ));
+    let event = feed(
+        &mut keyboard,
+        &input(
+            PhysicalKey::Unidentified(winit::keyboard::NativeKeyCode::Unidentified),
+            character("a"),
+            Some("a"),
+        ),
+    );
 
     assert_eq!(event.physical(), KeyCode::UNIDENTIFIED);
 }

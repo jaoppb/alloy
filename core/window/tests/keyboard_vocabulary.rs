@@ -6,7 +6,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use window::{
-    CursorIcon, InputText, KeyCode, KeyEvent, KeyState, LogicalKey, Modifiers, WindowEvent,
+    CursorIcon, FunctionKey, InputText, KeyCode, KeyEvent, KeyState, LogicalKey, Modifiers,
+    WindowEvent,
 };
 
 fn text(value: &str) -> InputText {
@@ -103,6 +104,25 @@ fn key_state_prints_a_lowercase_name() {
     assert_eq!(KeyState::Released.to_string(), "released");
 }
 
+const fn function(number: u8) -> LogicalKey {
+    LogicalKey::Function(FunctionKey::new(number).expect("F1..=F12 are valid function keys"))
+}
+
+// ---- FunctionKey ----
+
+#[test]
+fn a_function_key_is_one_of_f1_to_f12() {
+    for number in 1..=12 {
+        assert_eq!(FunctionKey::new(number).unwrap().number(), number);
+    }
+}
+
+#[test]
+fn a_function_key_outside_f1_to_f12_has_no_reading() {
+    assert_eq!(FunctionKey::new(0), None);
+    assert_eq!(FunctionKey::new(13), None);
+}
+
 // ---- LogicalKey ----
 
 #[test]
@@ -135,7 +155,8 @@ fn logical_key_display_matches_name() {
     assert_eq!(LogicalKey::PageUp.to_string(), "PageUp");
     assert_eq!(LogicalKey::PageDown.to_string(), "PageDown");
     assert_eq!(LogicalKey::AltGraph.to_string(), "AltGraph");
-    assert_eq!(LogicalKey::F5.to_string(), "F5");
+    assert_eq!(function(5).to_string(), "F5");
+    assert_eq!(function(12).to_string(), "F12");
     assert_eq!(LogicalKey::Character(text("é")).to_string(), "é");
 }
 

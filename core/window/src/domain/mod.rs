@@ -9,6 +9,7 @@ pub mod cursor;
 pub mod error;
 pub mod event;
 pub mod frame;
+pub mod function_key;
 pub mod key;
 pub mod key_event;
 pub mod logical_key;
