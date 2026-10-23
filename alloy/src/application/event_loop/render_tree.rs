@@ -5,11 +5,12 @@
 //! within the window surface. Provides unified hit-testing without ad-hoc
 //! coordinate offsets or brittle coordinate checks.
 
+use browser::{ContentRegion, RegionId};
 use graphics::{AU_PER_PX, Au, Point, Rect, Size};
 use window::{PhysicalPosition, SurfaceSize};
 
 use super::hit_test::{contains, raw_edge, snapped_raw_au};
-use crate::application::pipeline::{LinkTarget, surface_length_to_au};
+use crate::application::pipeline::surface_length_to_au;
 use crate::error::AlloyError;
 
 pub use crate::application::theme::ChromeHeight;
@@ -26,19 +27,20 @@ pub enum UiNodeKind {
     Omnibox,
     /// The web document content area below the chrome.
     Content,
-    /// A hyperlink within the web document content.
-    Link(String),
+    /// A hyperlink within the web document content, by the id the browsing
+    /// context minted for it — `core/ui` never sees an `href` (#110 decision 12).
+    Link(RegionId),
 }
 
 /// The interactive target hit by a pointer event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UiHitTarget<'a> {
+pub enum UiHitTarget {
     /// The omnibox input field was clicked.
     Omnibox,
     /// The chrome top bar background was clicked.
     Chrome,
     /// A hyperlink within the web page was clicked.
-    PageLink(&'a str),
+    PageLink(RegionId),
     /// The page content area (outside of links) was clicked.
     PageContent,
 }
@@ -148,7 +150,7 @@ impl UiNode {
 
     /// Recursively hit-tests this node and its children in local coordinate space.
     #[must_use]
-    pub fn hit_test(&self, x: f64, y: f64) -> Option<UiHitTarget<'_>> {
+    pub fn hit_test(&self, x: f64, y: f64) -> Option<UiHitTarget> {
         if !contains(self.bounds, x, y) {
             return None;
         }
@@ -158,17 +160,17 @@ impl UiNode {
             .or_else(|| self.as_target())
     }
 
-    fn hit_test_children(&self, local_x: f64, local_y: f64) -> Option<UiHitTarget<'_>> {
+    fn hit_test_children(&self, local_x: f64, local_y: f64) -> Option<UiHitTarget> {
         self.children
             .reverse_iter()
             .find_map(|child| child.hit_test(local_x, local_y))
     }
 
-    const fn as_target(&self) -> Option<UiHitTarget<'_>> {
+    const fn as_target(&self) -> Option<UiHitTarget> {
         match &self.kind {
             UiNodeKind::Omnibox => Some(UiHitTarget::Omnibox),
             UiNodeKind::Chrome => Some(UiHitTarget::Chrome),
-            UiNodeKind::Link(href) => Some(UiHitTarget::PageLink(href.as_str())),
+            UiNodeKind::Link(region) => Some(UiHitTarget::PageLink(*region)),
             UiNodeKind::Content => Some(UiHitTarget::PageContent),
             UiNodeKind::Window => None,
         }
@@ -185,7 +187,7 @@ pub struct UiRenderTree {
 
 impl UiRenderTree {
     /// Builds a new UI render tree for the specified window viewport and
-    /// document link targets, with the chrome laid out by the same `theme`
+    /// content link regions, with the chrome laid out by the same `theme`
     /// the omnibox painter draws it with.
     ///
     /// # Errors
@@ -195,7 +197,7 @@ impl UiRenderTree {
     pub fn build(
         viewport: SurfaceSize,
         theme: &OmniboxTheme,
-        links: &[LinkTarget],
+        regions: &[ContentRegion],
     ) -> Result<Self, AlloyError> {
         let chrome_height = theme.chrome_height();
         let width_in_app_units = surface_length_to_au(viewport.width())?;
@@ -220,7 +222,7 @@ impl UiRenderTree {
             width_in_app_units,
             chrome_height_au,
             content_height_au,
-            links,
+            regions,
         )?;
 
         let mut children = UiNodeChildren::new();
@@ -299,7 +301,7 @@ impl UiRenderTree {
 
     /// Hit-tests a pointer position in window physical coordinates against the UI tree.
     #[must_use]
-    pub fn hit_test(&self, position: PhysicalPosition) -> Option<UiHitTarget<'_>> {
+    pub fn hit_test(&self, position: PhysicalPosition) -> Option<UiHitTarget> {
         let x = snapped_raw_au(position.x())?;
         let y = snapped_raw_au(position.y())?;
         self.root.hit_test(x, y)
@@ -326,15 +328,15 @@ fn build_content_node(
     width_in_app_units: Au,
     chrome_height: Au,
     content_height: Au,
-    links: &[LinkTarget],
+    regions: &[ContentRegion],
 ) -> Result<UiNode, AlloyError> {
     let content_origin = Point::new(Au::ZERO, chrome_height);
     let content_size =
         Size::new(width_in_app_units, content_height).ok_or(AlloyError::InvalidDimensions)?;
     let content_bounds = Rect::new(content_origin, content_size);
-    let children = links
+    let children = regions
         .iter()
-        .map(|link| UiNode::new(UiNodeKind::Link(link.href.clone()), link.area))
+        .map(|region| UiNode::new(UiNodeKind::Link(region.id()), region.bounds()))
         .collect();
     Ok(UiNode::with_children(
         UiNodeKind::Content,
@@ -345,22 +347,31 @@ fn build_content_node(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use browser::{BrowsingContext, ContentRegion, LinkTarget, MarkupDiscoverer};
     use graphics::{Au, Point, Rect, Size};
     use window::{PhysicalPosition, SurfaceSize};
 
     use super::{ChromeHeight, UiHitTarget, UiNodeKind, UiRenderTree};
-    use crate::application::pipeline::LinkTarget;
     use crate::application::theme::OmniboxTheme;
 
     fn link(href: &str, left: i32, top: i32, width: i32, height: i32) -> LinkTarget {
         let au = |pixels| Au::from_whole_px(pixels).expect("fits the Au envelope");
-        LinkTarget {
-            area: Rect::new(
+        LinkTarget::new(
+            Rect::new(
                 Point::new(au(left), au(top)),
                 Size::new(au(width), au(height)).expect("non-negative size"),
             ),
-            href: href.to_owned(),
-        }
+            href,
+        )
+    }
+
+    /// The regions a browsing context mints for `links`, in paint order.
+    fn minted(links: Vec<LinkTarget>) -> Vec<ContentRegion> {
+        let mut context = BrowsingContext::new(Arc::new(MarkupDiscoverer));
+        context.layout_completed(links);
+        context.content_regions().collect()
     }
 
     /// The window `y` of a point `document_y` pixels into the page, which
@@ -369,15 +380,15 @@ mod tests {
         f64::from(OmniboxTheme::DEFAULT.chrome_height().to_px().get()) + document_y
     }
 
-    fn sample_tree(links: &[LinkTarget]) -> UiRenderTree {
+    fn sample_tree(regions: &[ContentRegion]) -> UiRenderTree {
         let size = SurfaceSize::new(800, 600).expect("valid size");
-        UiRenderTree::build(size, &OmniboxTheme::DEFAULT, links).expect("valid tree")
+        UiRenderTree::build(size, &OmniboxTheme::DEFAULT, regions).expect("valid tree")
     }
 
     #[test]
     fn tree_construction_sets_correct_bounds_for_all_elements() {
-        let links = [link("/a", 10, 10, 20, 20)];
-        let tree = sample_tree(&links);
+        let regions = minted(vec![link("/a", 10, 10, 20, 20)]);
+        let tree = sample_tree(&regions);
 
         assert_eq!(tree.root().kind(), &UiNodeKind::Window);
         assert_eq!(tree.root().children().len(), 2);
@@ -394,7 +405,7 @@ mod tests {
         assert_eq!(content.children().len(), 1);
 
         let link_node = &content.children().iter().next().unwrap();
-        assert_eq!(link_node.kind(), &UiNodeKind::Link("/a".to_owned()));
+        assert_eq!(link_node.kind(), &UiNodeKind::Link(regions[0].id()));
     }
 
     #[test]
@@ -414,17 +425,17 @@ mod tests {
 
     #[test]
     fn click_in_content_link_returns_link_target() {
-        let links = [link("/destination", 10, 10, 20, 20)];
-        let tree = sample_tree(&links);
+        let regions = minted(vec![link("/destination", 10, 10, 20, 20)]);
+        let tree = sample_tree(&regions);
 
         let hit = tree.hit_test(PhysicalPosition::new(20.0, window_y(20.0)));
-        assert_eq!(hit, Some(UiHitTarget::PageLink("/destination")));
+        assert_eq!(hit, Some(UiHitTarget::PageLink(regions[0].id())));
     }
 
     #[test]
     fn click_in_content_outside_links_returns_content_target() {
-        let links = [link("/destination", 10, 10, 20, 20)];
-        let tree = sample_tree(&links);
+        let regions = minted(vec![link("/destination", 10, 10, 20, 20)]);
+        let tree = sample_tree(&regions);
 
         // Click outside the link area
         let hit = tree.hit_test(PhysicalPosition::new(100.0, 200.0));
@@ -433,8 +444,8 @@ mod tests {
 
     #[test]
     fn click_in_chrome_does_not_hit_link_positioned_at_document_y_zero() {
-        let links = [link("/top", 0, 0, 100, 50)];
-        let tree = sample_tree(&links);
+        let regions = minted(vec![link("/top", 0, 0, 100, 50)]);
+        let tree = sample_tree(&regions);
 
         // Click at window y = 20.0 (in chrome)
         let hit = tree.hit_test(PhysicalPosition::new(20.0, 20.0));
@@ -447,19 +458,22 @@ mod tests {
 
     #[test]
     fn later_painted_overlapping_link_wins() {
-        let links = [link("/below", 0, 0, 50, 50), link("/above", 10, 10, 10, 10)];
-        let tree = sample_tree(&links);
+        let regions = minted(vec![
+            link("/below", 0, 0, 50, 50),
+            link("/above", 10, 10, 10, 10),
+        ]);
+        let tree = sample_tree(&regions);
 
         // Inside the overlapping area, at document (15, 15).
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(15.0, window_y(15.0))),
-            Some(UiHitTarget::PageLink("/above"))
+            Some(UiHitTarget::PageLink(regions[1].id()))
         );
 
         // Outside the top link, inside the bottom one, at document (40, 40).
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(40.0, window_y(40.0))),
-            Some(UiHitTarget::PageLink("/below"))
+            Some(UiHitTarget::PageLink(regions[0].id()))
         );
     }
 
@@ -468,9 +482,9 @@ mod tests {
         let tall_chrome = OmniboxTheme::DEFAULT.with_chrome_height(ChromeHeight::from_au(
             Au::from_whole_px(60).expect("fits the Au envelope"),
         ));
-        let links = [link("/top", 0, 0, 100, 50)];
+        let regions = minted(vec![link("/top", 0, 0, 100, 50)]);
         let size = SurfaceSize::new(800, 600).expect("valid size");
-        let tree = UiRenderTree::build(size, &tall_chrome, &links).expect("valid tree");
+        let tree = UiRenderTree::build(size, &tall_chrome, &regions).expect("valid tree");
 
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(4.0, 50.0)),
@@ -479,7 +493,7 @@ mod tests {
         );
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(20.0, 65.0)),
-            Some(UiHitTarget::PageLink("/top")),
+            Some(UiHitTarget::PageLink(regions[0].id())),
             "the page must start where the themed chrome bar ends"
         );
         let omnibox_bounds = tall_chrome.input_box_bounds(Au::from_whole_px(800).expect("fits"));
@@ -497,8 +511,8 @@ mod tests {
 
     #[test]
     fn non_finite_coordinates_return_none() {
-        let links = [link("/a", 0, 0, 50, 50)];
-        let tree = sample_tree(&links);
+        let regions = minted(vec![link("/a", 0, 0, 50, 50)]);
+        let tree = sample_tree(&regions);
 
         assert_eq!(tree.hit_test(PhysicalPosition::new(f64::NAN, 50.0)), None);
         assert_eq!(

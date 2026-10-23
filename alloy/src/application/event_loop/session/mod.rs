@@ -1,65 +1,53 @@
-//! Session state: the live document, its subresources, and the frame last
-//! presented from them. How background-fetch results change that state lives
-//! in [`messages`].
+//! Session state: the browsing context, the chrome around it, and the frame
+//! last presented from them. The document itself — and the rules for which
+//! fetch results may change it — live in `core/browser`; this type executes the
+//! [`BrowserEffect`]s it returns.
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use browser::{ImageStore, SubresourceDiscoverer};
-use css::StyleSheetSet;
-use dom::DomTree;
+use browser::{BrowserEffect, BrowsingContext, ContentRegion, FetchResult, SubresourceDiscoverer};
 use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
 
-mod messages;
-
 use super::frame::CachedFrame;
 use super::render_tree::{UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
-use super::worker::{LoopMessage, spawn_navigation};
+use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
 use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
-use crate::application::pipeline::{LinkTarget, render_dom_with_links, surface_length_to_au};
+use crate::application::pipeline::{render_dom_with_links, surface_length_to_au};
 use crate::application::theme::{OmniboxTheme, Theme};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
-/// the arity limit: the accumulated document state, the current viewport, and
-/// the running relayout count.
+/// the arity limit: the browsing context, the current viewport, and the
+/// running relayout count.
 ///
-/// Rebuilding a fresh display list from `dom_tree`/`extra_sheets`/`images` on
-/// every relayout is the same "immutable snapshot in, immutable snapshot out"
+/// Rebuilding a fresh display list from the context's document on every
+/// relayout is the same "immutable snapshot in, immutable snapshot out"
 /// discipline the render pipeline itself uses (`ADR-0010:114-117`), applied
 /// to the state a live session must keep between frames.
 ///
-/// Every field is private: `dirty` → [`Session::relayout`] → clean, and
-/// `links` always describing `last_frame`, are invariants only this type's
-/// methods may move.
+/// Every field is private: `dirty` → [`Session::relayout`] → clean, and the
+/// context's link regions always describing `last_frame`, are invariants only
+/// this type's methods may move.
 pub struct Session<F, T, P, D> {
     services: BrowserServices<F, T, P, D>,
-    dom_tree: Option<DomTree>,
-    /// The document's effective base URL — `<base href>` already applied —
-    /// that both subresource discovery and link clicks resolve against.
-    base_url: Option<Url>,
-    extra_sheets: StyleSheetSet,
-    images: ImageStore,
-    /// The link areas of `last_frame`, in paint order.
-    links: Vec<LinkTarget>,
+    browsing: BrowsingContext<D>,
     pointer_position: Option<PhysicalPosition>,
     dirty: bool,
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
-    stats: LoopStats,
+    relayouts: usize,
     omnibox: OmniboxController,
-    /// Where the workers of the current navigation report. A worker cannot be
-    /// cancelled, so [`Session::open_channel`] replaces both ends on every
-    /// navigation: dropping the old `inbox` discards what its workers already
-    /// queued and makes their later `send` fail, so a result from a page the
-    /// user left has no way back in. That includes an `ImageId` — a DOM node
-    /// index reused by every document — naming an `<img>` of the new page.
-    inbox: Receiver<LoopMessage>,
-    outbox: Sender<LoopMessage>,
+    /// Where the fetch workers report. One channel for the session's life: a
+    /// result from a page the user left is not cut off here but dropped by the
+    /// browsing context, because it is stamped with a superseded
+    /// `NavigationId` (ADR-0019 amendment).
+    inbox: Receiver<FetchResult>,
+    outbox: Sender<FetchResult>,
     /// The one source of chrome geometry: the chrome is painted with it and
     /// `ui_tree` is laid out from it, so clicks land where pixels are drawn.
     theme: Theme,
@@ -78,18 +66,15 @@ where
         let theme = Theme::DEFAULT;
         let ui_tree = UiRenderTree::build(viewport, theme.omnibox(), &[])
             .unwrap_or_else(|_| UiRenderTree::fallback(viewport, theme.omnibox()));
+        let browsing = BrowsingContext::new(Arc::clone(services.discoverer()));
         Self {
             services,
-            dom_tree: None,
-            base_url: None,
-            extra_sheets: StyleSheetSet::new(),
-            images: ImageStore::new(),
-            links: Vec::new(),
+            browsing,
             pointer_position: None,
             dirty: false,
             viewport,
             last_frame: None,
-            stats: LoopStats::default(),
+            relayouts: 0,
             omnibox: OmniboxController::new(),
             inbox,
             outbox,
@@ -99,7 +84,14 @@ where
     }
 
     pub const fn stats(&self) -> LoopStats {
-        self.stats
+        let browsed = self.browsing.stats();
+        LoopStats {
+            relayouts: self.relayouts,
+            navigations: browsed.navigations(),
+            navigation_errors: browsed.navigation_errors(),
+            stylesheets_loaded: browsed.stylesheets_loaded(),
+            images_loaded: browsed.images_loaded(),
+        }
     }
 
     /// Mutable access to the session's omnibox controller.
@@ -140,7 +132,7 @@ where
     /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
     pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
-        self.ui_tree = UiRenderTree::build(viewport, self.theme.omnibox(), &self.links)
+        self.ui_tree = UiRenderTree::build(viewport, self.theme.omnibox(), &self.content_regions())
             .unwrap_or_else(|_| UiRenderTree::fallback(viewport, self.theme.omnibox()));
         self.dirty = true;
     }
@@ -149,16 +141,47 @@ where
         self.dirty
     }
 
-    /// Starts fetching `url` on a worker thread; the result arrives as a
-    /// [`LoopMessage::Navigation`]. Supersedes every navigation and
-    /// subresource fetch still in flight: they report on a channel nobody
-    /// reads any more.
+    /// Starts navigating to `url`; the document arrives later as a
+    /// [`FetchResult`]. Supersedes every navigation and subresource fetch still
+    /// in flight: their results are dropped by the browsing context.
     pub fn navigate(&mut self, url: Url) {
-        self.open_channel();
-        self.omnibox.reset_to_url(&url);
-        let transport = Arc::clone(self.services.transport());
-        let policy = Arc::clone(self.services.policy());
-        spawn_navigation(url, transport, policy, self.outbox.clone());
+        let effects = self.browsing.navigate(url);
+        self.execute_browser_effects(effects);
+    }
+
+    /// Applies every fetch result waiting now; tells the caller whether there
+    /// were any.
+    pub fn drain_messages(&mut self) -> bool {
+        let mut saw_message = false;
+        while let Ok(result) = self.inbox.try_recv() {
+            saw_message = true;
+            let effects = self.browsing.complete(result);
+            self.execute_browser_effects(effects);
+        }
+        saw_message
+    }
+
+    /// Carries out what the browsing context asked for: fetches run on worker
+    /// threads, the omnibox follows the URL, damage schedules a relayout.
+    fn execute_browser_effects(&mut self, effects: Vec<BrowserEffect>) {
+        for effect in effects {
+            match effect {
+                BrowserEffect::NavigationStarted(_, url)
+                | BrowserEffect::DocumentLoaded(_, url) => {
+                    self.omnibox.reset_to_url(&url);
+                }
+                BrowserEffect::Fetch(request, navigation) => {
+                    let transport = Arc::clone(self.services.transport());
+                    let policy = Arc::clone(self.services.policy());
+                    spawn_fetch(request, navigation, transport, policy, self.outbox.clone());
+                }
+                BrowserEffect::ContentDamaged(_) => self.dirty = true,
+            }
+        }
+    }
+
+    fn content_regions(&self) -> Vec<ContentRegion> {
+        self.browsing.content_regions().collect()
     }
 
     /// Dispatches a pointer click at `position` through the UI render tree:
@@ -173,28 +196,11 @@ where
             UiHitTarget::Omnibox | UiHitTarget::Chrome => {
                 self.omnibox.focus();
             }
-            UiHitTarget::PageLink(href) => {
-                let href = href.to_owned();
-                self.follow_link(&href);
+            UiHitTarget::PageLink(region) => {
+                let effects = self.browsing.follow_link(region);
+                self.execute_browser_effects(effects);
             }
             UiHitTarget::PageContent => {}
-        }
-    }
-
-    fn follow_link(&mut self, href: &str) {
-        let Some(base_url) = self.base_url.as_ref() else {
-            return;
-        };
-        if href.starts_with('#') {
-            tracing::info!(anchor = href, "in-page anchor clicked (no-op in v0.5)");
-            return;
-        }
-        match base_url.join(href) {
-            Ok(target_url) => {
-                tracing::info!(url = %target_url, "link clicked, navigating");
-                self.navigate(target_url);
-            }
-            Err(error) => tracing::warn!(href, %error, "failed to resolve link target"),
         }
     }
 
@@ -206,14 +212,14 @@ where
     /// document yet there is nothing to lay out, and the request is dropped.
     pub fn relayout<R: Presenter>(&mut self, presenter: &mut R) -> Result<(), AlloyError> {
         self.dirty = false;
-        let Some(dom_tree) = self.dom_tree.as_ref() else {
+        let Some(document) = self.browsing.document() else {
             return Ok(());
         };
         let graphics_size = self.ui_tree.content_size()?;
         let (content_framebuffer, links) = render_dom_with_links(
-            dom_tree,
-            self.extra_sheets.clone(),
-            &self.images,
+            document.tree(),
+            document.sheets().clone(),
+            document.images(),
             graphics_size,
             Arc::clone(self.services.font_provider()),
         )?;
@@ -225,10 +231,11 @@ where
         )?;
         let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
         frame.present(presenter)?;
-        self.ui_tree = UiRenderTree::build(self.viewport, self.theme.omnibox(), &links)?;
-        self.links = links;
+        self.browsing.layout_completed(links);
+        self.ui_tree =
+            UiRenderTree::build(self.viewport, self.theme.omnibox(), &self.content_regions())?;
         self.last_frame = Some(frame);
-        self.stats.relayouts = self.stats.relayouts.saturating_add(1);
+        self.relayouts = self.relayouts.saturating_add(1);
         Ok(())
     }
 
@@ -242,12 +249,6 @@ where
             return Ok(());
         };
         frame.present(presenter)
-    }
-}
-
-impl<F, T, P, D> Session<F, T, P, D> {
-    fn open_channel(&mut self) {
-        (self.outbox, self.inbox) = mpsc::channel();
     }
 }
 
@@ -281,30 +282,31 @@ impl<F, T, P, D> Session<F, T, P, D> {
         &self.omnibox
     }
 
-    /// A clone of the sender the current page's workers hold.
-    pub fn outbox_for_test(&self) -> Sender<LoopMessage> {
+    /// A clone of the sender the fetch workers hold.
+    pub fn outbox_for_test(&self) -> Sender<FetchResult> {
         self.outbox.clone()
     }
 
-    /// Supersedes the current page the way [`Session::navigate`] does, without
-    /// spawning a fetch.
-    pub fn begin_navigation_for_test(&mut self) {
-        self.open_channel();
+    /// The navigation results are accepted under right now.
+    pub const fn current_navigation_for_test(&self) -> browser::NavigationId {
+        self.browsing.current_navigation()
     }
 
     pub const fn viewport(&self) -> SurfaceSize {
         self.viewport
     }
 
-    pub const fn base_url(&self) -> Option<&Url> {
-        self.base_url.as_ref()
+    pub fn base_url(&self) -> Option<&Url> {
+        self.browsing
+            .document()
+            .and_then(browser::Document::base_url)
     }
 
     pub const fn has_frame(&self) -> bool {
         self.last_frame.is_some()
     }
 
-    pub const fn has_links(&self) -> bool {
-        !self.links.is_empty()
+    pub fn has_links(&self) -> bool {
+        self.browsing.content_regions().next().is_some()
     }
 }

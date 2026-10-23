@@ -9,13 +9,13 @@
 
 use std::sync::Arc;
 
-use browser::ImageStore;
+use browser::{ImageStore, LinkTarget};
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
     StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
 };
 use graphics::{
-    Au, DisplayListBuilder, FontProvider, Framebuffer, Rect, RenderBackend, SoftwareCpuBackend,
+    Au, DisplayListBuilder, FontProvider, Framebuffer, RenderBackend, SoftwareCpuBackend,
     SurfaceSize, SyntheticFontProvider,
 };
 
@@ -105,15 +105,6 @@ pub fn render_html_with_font_provider<F: FontProvider + 'static>(
 pub fn run_render(source_html: &str, width: u32, height: u32) -> Result<Vec<u8>, AlloyError> {
     let options = RenderOptions::new(width, height);
     render_html_to_png(source_html, &options)
-}
-
-/// A clickable link region within the rendered document.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LinkTarget {
-    /// Bounding rectangle in document space (`Au`).
-    pub area: Rect,
-    /// The link destination (`href`).
-    pub href: String,
 }
 
 /// Renders an already-parsed document using the deterministic [`SyntheticFontProvider`].
@@ -252,10 +243,7 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
             if node.tag_str() == Some("a")
                 && let Some(href) = node.attribute("href")
             {
-                targets.push(LinkTarget {
-                    area: border_box,
-                    href: href.to_string(),
-                });
+                targets.push(LinkTarget::new(border_box, href));
                 break;
             }
             current_id = node.parent();

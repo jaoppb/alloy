@@ -1,9 +1,8 @@
 //! Geometric hit-testing of link targets against pointer positions.
 
+use browser::LinkTarget;
 use graphics::{AU_PER_PX, Au, Rect};
 use window::PhysicalPosition;
-
-use crate::application::pipeline::LinkTarget;
 
 /// The topmost link whose area contains `position`, snapped to the nearest
 /// whole pixel.
@@ -19,8 +18,8 @@ pub fn hit_test(links: &[LinkTarget], position: PhysicalPosition) -> Option<&str
     links
         .iter()
         .rev()
-        .find(|target| contains(target.area, x, y))
-        .map(|target| target.href.as_str())
+        .find(|target| contains(target.area(), x, y))
+        .map(LinkTarget::href)
 }
 
 /// A pointer coordinate in whole pixels, as raw `Au` — `None` when it is not
@@ -48,18 +47,19 @@ mod tests {
     use graphics::{Au, Point, Rect, Size};
     use window::PhysicalPosition;
 
+    use browser::LinkTarget;
+
     use super::hit_test;
-    use crate::application::pipeline::LinkTarget;
 
     fn link(href: &str, left: i32, top: i32, width: i32, height: i32) -> LinkTarget {
         let au = |pixels| Au::from_whole_px(pixels).expect("fits the Au envelope");
-        LinkTarget {
-            area: Rect::new(
+        LinkTarget::new(
+            Rect::new(
                 Point::new(au(left), au(top)),
                 Size::new(au(width), au(height)).expect("non-negative size"),
             ),
-            href: href.to_owned(),
-        }
+            href,
+        )
     }
 
     /// A link whose geometry is given in raw `Au`, for edges that do not
@@ -67,10 +67,7 @@ mod tests {
     fn raw_link(href: &str, left: i32, top: i32, width: i32, height: i32) -> LinkTarget {
         let origin = Point::new(Au::from_raw(left), Au::from_raw(top));
         let extent = Size::new(Au::from_raw(width), Au::from_raw(height));
-        LinkTarget {
-            area: Rect::new(origin, extent.expect("non-negative size")),
-            href: href.to_owned(),
-        }
+        LinkTarget::new(Rect::new(origin, extent.expect("non-negative size")), href)
     }
 
     fn at(x: f64, y: f64) -> PhysicalPosition {

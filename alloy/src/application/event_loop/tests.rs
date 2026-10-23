@@ -10,6 +10,7 @@
 //! threads would make the proof racy for no added coverage.
 #![allow(clippy::unwrap_used)]
 
+use browser::{FetchPayload, FetchResult};
 use graphics::{Color, Framebuffer, ImageId};
 use network::MockTransport;
 use window::{
@@ -18,10 +19,9 @@ use window::{
 
 use super::initial_window_attributes;
 use super::test_support::{
-    TestSession, completed_navigation, load, loaded_session, loaded_window, navigation_to, pump,
-    session_over,
+    TestSession, completed_navigation, load, loaded_session, loaded_window, pump, session_over,
 };
-use super::worker::{LoopMessage, fetch_text};
+use super::worker::fetch_text;
 use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
@@ -85,12 +85,9 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     let mut session = loaded_session(attributes.initial_size());
     let outbox = session.outbox_for_test();
     for index in 0..50u32 {
-        outbox
-            .send(LoopMessage::Image(
-                ImageId::new(index),
-                Ok(placeholder_framebuffer()),
-            ))
-            .unwrap();
+        let image = FetchPayload::Image(ImageId::new(index), Ok(placeholder_framebuffer()));
+        let navigation = session.current_navigation_for_test();
+        outbox.send(FetchResult::new(navigation, image)).unwrap();
     }
 
     pump(&mut system, &mut presenter, &mut session);
@@ -335,158 +332,24 @@ fn pump_queued(session: &mut TestSession) {
     pump(&mut system, &mut presenter, session);
 }
 
-fn late_stylesheet() -> LoopMessage {
-    LoopMessage::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()))
-}
-
+/// `NavigationId` supersession is proved purely in `core/browser`; this
+/// proves the session routes worker results through it.
 #[test]
-fn a_subresource_fetched_for_a_page_the_user_left_is_not_applied_to_the_next_one() {
+fn the_session_drops_a_result_stamped_for_a_navigation_the_user_left() {
     let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let page_a = session.outbox_for_test();
-    // Already queued when the user leaves A; ImageId 12 names a different <img> in B.
-    page_a.send(late_stylesheet()).unwrap();
-    page_a
-        .send(LoopMessage::Image(
-            ImageId::new(12),
-            Ok(placeholder_framebuffer()),
-        ))
-        .unwrap();
-    session.begin_navigation_for_test();
-    let page_b = session.outbox_for_test();
-    page_b
-        .send(navigation_to(
-            "<html><body>b</body></html>",
-            &page_url("b.html"),
-        ))
-        .unwrap();
-
-    pump_queued(&mut session);
-
-    let stats = session.stats();
-    assert_eq!(stats.navigations, 2, "page B itself must still be applied");
-    assert_eq!(
-        stats.stylesheets_loaded, 0,
-        "A's stylesheet must not enter B's cascade"
-    );
-    assert_eq!(
-        stats.images_loaded, 0,
-        "A's image must not replace whatever B has at the same ImageId"
-    );
-    assert!(
-        page_a.send(late_stylesheet()).is_err(),
-        "a worker of A still running has no way back to the session"
-    );
-}
-
-#[test]
-fn a_slower_earlier_navigation_does_not_replace_the_latest_one() {
-    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let slow = session.outbox_for_test();
-    session.begin_navigation_for_test();
-    let fast = session.outbox_for_test();
-    fast.send(navigation_to(
-        "<html><body>fast</body></html>",
-        &page_url("fast.html"),
-    ))
-    .unwrap();
-
-    let slow_result = slow.send(navigation_to(
-        "<html><body>slow</body></html>",
-        &page_url("slow.html"),
-    ));
-    pump_queued(&mut session);
-
-    assert!(
-        slow_result.is_err(),
-        "the response of the link clicked first has no way back"
-    );
-    assert_eq!(
-        session.base_url().map(ToString::to_string),
-        Some(page_url("fast.html")),
-        "the page clicked last stays"
-    );
-    assert_eq!(
-        session.stats().navigations,
-        2,
-        "the slow one is not counted"
-    );
-}
-
-#[test]
-fn a_failure_of_a_superseded_navigation_does_not_replace_the_current_page() {
-    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let slow = session.outbox_for_test();
-    session.begin_navigation_for_test();
+    let left = session.current_navigation_for_test();
+    session.navigate(network::Url::parse(&page_url("next.html")).unwrap());
+    let late_sheet =
+        FetchPayload::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()));
     session
         .outbox_for_test()
-        .send(navigation_to(
-            "<html><body>fast</body></html>",
-            &page_url("fast.html"),
-        ))
+        .send(FetchResult::new(left, late_sheet))
         .unwrap();
 
-    let slow_result = slow.send(LoopMessage::Navigation(Err(AlloyError::InvalidDimensions)));
     pump_queued(&mut session);
 
-    assert!(slow_result.is_err());
-    assert_eq!(
-        session.stats().navigation_errors,
-        0,
-        "an error nobody is waiting for must not become the error card"
-    );
-    assert_eq!(
-        session.base_url().map(ToString::to_string),
-        Some(page_url("fast.html"))
-    );
-}
-
-#[test]
-fn following_a_link_supersedes_the_navigation_in_flight() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = session_over(MockTransport::new(), attributes.initial_size());
-    load(
-        &mut session,
-        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
-        &page_url("index.html"),
-    );
-    pump(&mut system, &mut presenter, &mut session);
-    let before_click = session.outbox_for_test();
-    system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
-    });
-    system.schedule(WindowEvent::PointerButton {
-        button: window::PointerButton::Left,
-        pressed: true,
-    });
-
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(
-        before_click.send(late_stylesheet()).is_err(),
-        "a click that navigates must cut off everything still in flight"
-    );
-}
-
-#[test]
-fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
-    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let page = session.outbox_for_test();
-    page.send(LoopMessage::Stylesheet(
-        css::MediaQuery::never(),
-        Ok("body { background: red; }".into()),
-    ))
-    .unwrap();
-
-    pump_queued(&mut session);
-
-    let stats = session.stats();
-    assert_eq!(
-        stats.stylesheets_loaded, 0,
-        "print or non-matching stylesheet must not be absorbed"
-    );
+    assert_eq!(session.stats().stylesheets_loaded, 0);
+    assert_ne!(session.current_navigation_for_test(), left);
 }
 
 #[test]

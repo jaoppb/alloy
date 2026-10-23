@@ -14,23 +14,24 @@ use browser::{MarkupDiscoverer, SubresourceDiscoverer};
 /// arguments.
 ///
 /// The transport and policy are shared by pointer because each background
-/// fetch thread needs its own owning handle.
+/// fetch thread needs its own owning handle; the discoverer, because the
+/// browsing context owns the handle it asks.
 pub struct BrowserServices<F, T, P, D = MarkupDiscoverer> {
     font_provider: Arc<F>,
     transport: Arc<T>,
     policy: Arc<P>,
-    discoverer: D,
+    discoverer: Arc<D>,
 }
 
 impl<F: FontProvider, T: HttpTransport, P: RequestPolicy> BrowserServices<F, T, P> {
     /// Services discovering subresources from markup ([`MarkupDiscoverer`]).
     #[must_use]
-    pub const fn new(font_provider: Arc<F>, transport: Arc<T>, policy: Arc<P>) -> Self {
+    pub fn new(font_provider: Arc<F>, transport: Arc<T>, policy: Arc<P>) -> Self {
         Self {
             font_provider,
             transport,
             policy,
-            discoverer: MarkupDiscoverer,
+            discoverer: Arc::new(MarkupDiscoverer),
         }
     }
 }
@@ -46,7 +47,7 @@ impl<F, T, P, D> BrowserServices<F, T, P, D> {
             font_provider: self.font_provider,
             transport: self.transport,
             policy: self.policy,
-            discoverer,
+            discoverer: Arc::new(discoverer),
         }
     }
 
@@ -68,9 +69,10 @@ impl<F, T, P, D> BrowserServices<F, T, P, D> {
         &self.policy
     }
 
-    /// Where a document's subresource references come from.
+    /// Where a document's subresource references come from, shared with the
+    /// browsing context that asks it.
     #[must_use]
-    pub const fn discoverer(&self) -> &D {
+    pub const fn discoverer(&self) -> &Arc<D> {
         &self.discoverer
     }
 }

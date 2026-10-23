@@ -81,7 +81,9 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
         self.regions.replace(links);
         self.regions.epoch()
     }
+}
 
+impl<D> BrowsingContext<D> {
     /// The link regions of the last layout, in paint order.
     pub fn content_regions(&self) -> impl Iterator<Item = ContentRegion> + '_ {
         self.regions.iter()

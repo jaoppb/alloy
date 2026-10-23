@@ -4,13 +4,12 @@
 
 use std::sync::Arc;
 
-use browser::MarkupDiscoverer;
+use browser::{FetchPayload, FetchResult, LoadedDocument, MarkupDiscoverer};
 use graphics::SyntheticFontProvider;
 use network::{AllowAllPolicy, MockTransport};
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
 use super::session::Session;
-use super::worker::LoopMessage;
 use super::{initial_window_attributes, pump_once};
 use crate::application::browser_services::BrowserServices;
 use crate::application::paint::DEFAULT_FONT;
@@ -56,9 +55,14 @@ pub(super) fn completed_navigation(
         .expect("an applied navigation sets the document base")
 }
 
-pub(super) fn navigation_to(markup: &str, url: &str) -> LoopMessage {
+/// A finished navigation to `url`, stamped with the one the session accepts.
+pub(super) fn navigation_to(session: &TestSession, markup: &str, url: &str) -> FetchResult {
     let document = dom::parse(markup).unwrap().into_tree();
-    LoopMessage::Navigation(Ok((document, network::Url::parse(url).unwrap())))
+    let loaded = LoadedDocument::new(document, network::Url::parse(url).unwrap());
+    FetchResult::new(
+        session.current_navigation_for_test(),
+        FetchPayload::Document(Ok(loaded)),
+    )
 }
 
 /// Installs `markup` as a navigated document at `url`, the same way a
@@ -66,7 +70,7 @@ pub(super) fn navigation_to(markup: &str, url: &str) -> LoopMessage {
 pub(super) fn load(session: &mut TestSession, markup: &str, url: &str) {
     session
         .outbox_for_test()
-        .send(navigation_to(markup, url))
+        .send(navigation_to(session, markup, url))
         .unwrap();
     session.drain_messages();
 }
