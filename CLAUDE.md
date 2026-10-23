@@ -70,8 +70,14 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   RustCrypto alternative NO-GO — `docs/reports/SPIKE-C0-TLS-PROVIDER.md`), `HttpTransport`/`RequestPolicy` ports
   (`PRD-009`). `network::PORT_SCHEMA_VERSION = 1`, **not yet frozen** — freezes at `I4`.
 - **C2 — `core/window`**: `winit`+`softbuffer` adapter, `WindowSystem`/`Presenter` ports (`PRD-010`), headless reference
-  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 3` (`1→2`:
-  `WindowSystem::request_redraw` added during I4; `2→3`: `TextInput`/`ControlKey` for Omnibox #44), **not yet frozen**.
+  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 4` (`1→2`:
+  `WindowSystem::request_redraw` added during I4; `2→3`: `TextInput`/`ControlKey` for Omnibox #44; `3→4` (#112,
+  ADR-0027): one `WindowEvent::Key(KeyEvent)` per press carrying logical/physical key, `text`, `Modifiers` (incl.
+  `alt_graph()`) and `Pressed | Repeated | Released`, `TextCommitted(InputText)` for IME commits only, `set_title` and
+  `set_cursor`; `ControlKey` and key-produced `TextInput` are gone, no alias). Frozen at `I4`: a bump needs a `PRD-010`
+  §6 note. The adapter never decides shortcut versus typing — `KeyEvent::text` ignores Ctrl on Linux (Ctrl+L carries
+  `"l"`), so a consumer reads `modifiers` first; `alloy`'s `event_loop/key_mapping.rs` is the interim mapping until the
+  `core/ui` router and keymap land (#113, epic #110).
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
 - **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;

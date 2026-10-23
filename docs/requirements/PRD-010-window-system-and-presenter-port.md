@@ -58,7 +58,9 @@ What this port _does_ have to defend against is **misuse ordering**, not hostile
 ### 3.1 Boundary aggregates (owned by `core/window`, `#[non_exhaustive]`, versioned)
 
 - Value objects: `WindowEvent` / `PointerButton`, `SurfaceSize` / `ScaleFactor` / `PhysicalPosition`, `FrameView`,
-  `WindowAttributes` / `WindowTitle` / `WindowId`, `KeyCode`.
+  `WindowAttributes` / `WindowTitle` / `WindowId`, `CursorIcon`, and the keyboard vocabulary `KeyEvent` / `KeyState` /
+  `LogicalKey` / `KeyCode` / `Modifiers` / `InputText` (`ADR-0027`: one event per key press, carrying meaning, position,
+  text and modifiers; the adapter never decides shortcut versus typing).
 - `WindowError`, `#[non_exhaustive]`, one `thiserror` enum tagged with `WindowOperation` (`ADR-0011` item 4).
 - `window::PORT_SCHEMA_VERSION` — the single version knob (`core/window/src/lib.rs`).
 
@@ -68,12 +70,18 @@ What this port _does_ have to defend against is **misuse ordering**, not hostile
 pub trait WindowSystem {
     fn create_window(&mut self, attrs: &WindowAttributes) -> Result<WindowId, WindowError>;
     fn pump_events(&mut self, sink: &mut dyn FnMut(WindowEvent)) -> Result<PumpStatus, WindowError>;
+    fn request_redraw(&mut self);
+    fn set_title(&mut self, title: WindowTitle);
+    fn set_cursor(&mut self, icon: CursorIcon);
 }
 ```
 
 Deliberately **not** `Send + Sync`: the window event loop is the sole owner of the main thread (`ADR-0019`), and a type
 that could cross a thread boundary would invite a second loop fighting it for that thread. `pump_events` is pull-driven
 from the main thread — never a callback that hands the thread away.
+
+`request_redraw`, `set_title` and `set_cursor` are commands (Command–Query Separation): no return value, no failure
+channel, a silent no-op before any window exists.
 
 ### 3.3 `Presenter` trait (`window::application::ports`)
 
@@ -89,7 +97,7 @@ pub trait Presenter: Send {
 
 The window event loop is the **sole owner of the main thread**; `WinitSystem` must be constructed on the main thread on
 macOS and Windows and stay there. Blocking I/O (`core/network`'s `HttpTransport`, DNS, file reads) never runs on this
-loop's thread — that is Phase I4's `alloy/src/application/event_loop.rs`, not this crate.
+loop's thread — that is Phase I4's `alloy/src/application/event_loop/`, not this crate.
 
 ### 3.5 Script-driven adapters
 
@@ -140,3 +148,16 @@ golden e2e test run against instead of a real display.
 | Version | Change                                                                                                       | Adapter action |
 | ------- | ------------------------------------------------------------------------------------------------------------ | -------------- |
 | **1**   | Surface introduced in v0.5 Phase C2; frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`). | —              |
+| **2**   | `WindowSystem::request_redraw` added during I4, before the freeze (Wayland first-present recovery, expose/occlusion redraws). | Add the method; a no-op is conformant. |
+| **3**   | `WindowEvent::TextInput` and `WindowEvent::ControlKey` added for the omnibox (#44). Landed after the freeze; this row backfills the note it lacked. | Handle the new variants or use a `_` arm. |
+| **4**   | One `WindowEvent::Key(KeyEvent)` per physical press (logical key, physical key, `text`, `Modifiers` incl. `alt_graph()`, `Pressed \| Repeated \| Released`); `TextInput` and `ControlKey` removed; `TextCommitted(InputText)` for input-method commits; `WindowSystem::set_title` and `set_cursor` added (`ADR-0027`, #112). | Migration note below. |
+
+**`3 → 4` migration note** (no `ControlKey` alias; full detail in `docs/architecture/window-system-port-contract.md`
+§4):
+
+- Implement `set_title` and `set_cursor` (a silent no-op before a window exists is conformant).
+- `Key { code, pressed }` becomes `Key(KeyEvent)`: `physical()` and `state()`. A held key is `Pressed` then `Repeated`.
+- Key-produced `TextInput { text }` is now `KeyEvent::text()` on the same press — check `modifiers()` first, because
+  `winit` reports Ctrl+L with text `"l"` on Linux. `ControlKey { key, state }` is `KeyEvent::logical()` and `state()`.
+- IME commits arrive as `TextCommitted(InputText)`.
+- Read `KeyEvent::modifiers()`; do not reconstruct modifiers from raw key events.

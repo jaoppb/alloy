@@ -29,6 +29,7 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0023](0023-recoverable-diagnostics-are-port-data.md)                  | Recoverable Diagnostics Are Port Data, Not Errors        | Accepted | 2026-10-05 |
 | [ADR-0024](0024-dom-depends-on-the-html-vocabulary.md)                     | `dom` Depends on the `html` Vocabulary                   | Accepted | 2026-10-05 |
 | [ADR-0025](0025-mise-as-the-source-of-truth-for-tool-versions.md)          | mise Is the Source of Truth for Tool Versions            | Accepted | 2026-10-05 |
+| [ADR-0027](0027-input-model-source-split-key-events-and-keymap-as-data.md) | Input Model — Source-Split Key Events and Keymap-as-Data | Accepted | 2026-10-23 |
 
 ---
 
