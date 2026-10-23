@@ -57,7 +57,7 @@ a convention F10/F11 could unknowingly break.
 
 - **Positive**: I5 is largely pre-solved. The F11 watcher is one more producer on the channel; the F10 JS loop is one
   more consumer on the same loop. No executor to thread through hooks.
-- **Negative**: a hand-rolled thread pool + channel plumbing in `alloy/src/application/event_loop.rs` instead of a
+- **Negative**: a hand-rolled thread pool + channel plumbing in `alloy/src/application/event_loop/` instead of a
   batteries-included runtime. Long CPU-bound work on the main thread (large relayout) still blocks the loop — mitigated
   by per-frame coalescing, not by preemption.
 
@@ -91,3 +91,27 @@ owns every `WindowSystem` impl (`WinitSystem` → `Window::request_redraw`; `Hea
 `RedrawRequested`), so the port method is small. `window::PORT_SCHEMA_VERSION` moves `1 → 2`; the
 `window-system-port-contract.md` migration table records it. The port had not yet frozen (`I4` is not merged to `main`),
 so this is a pre-freeze change, not a contract break.
+
+---
+
+## Amendment — 2026-10-23: navigation supersession by `NavigationId` (#111, `ADR-0026`)
+
+The loop used to supersede a navigation by **replacing the channel** its workers report on (`e832b6a`): dropping the old
+receiver discarded what its workers had already queued and made their later `send` fail. That kept stale results out,
+but only a real thread, a real channel and a sleep could prove it.
+
+**Decision.** The document state moves into the pure `core/browser` crate, which never spawns or owns a channel. Every
+navigation mints a `NavigationId { context, sequence }`; every `BrowserEffect::Fetch` is stamped with it, the worker
+sends back a `FetchResult` carrying the same stamp, and `BrowsingContext::complete` drops (and logs) any result whose id
+is not the latest. This covers subresources too: a stylesheet or image result from the page the user left is dropped, so
+an `ImageId` — a DOM node index every document reuses — cannot name an `<img>` of the new page.
+
+The trade: stamping is a comparison the channel swap did not need, and one channel now lives for the whole session. What
+it buys is a browser crate whose supersession rules are plain unit tests (`core/browser` `browsing_context/tests.rs`)
+with no threads and no sleeps. `alloy/src/application/event_loop/worker.rs` is the thin executor: one `std::thread` per
+`FetchRequest`, unchanged in spirit (thread per fetch, no pool, no cancellation).
+
+Link clicks use the same discipline: a `RegionId` carries a `LayoutEpoch` that bumps on every layout and document swap,
+and a stale one is logged and ignored instead of resolving to whatever now sits at its index.
+
+The `Damage` signal (`Chrome` / `Content` / `Viewport`) amends this ADR separately with #108.

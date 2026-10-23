@@ -96,6 +96,11 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   **Known gap this session did not close**: that coverage extension currently measures **~66% lines**, not the 85% the
   gate requires — it is wired as specified and will fail until more domain-level tests are written for `network` (`Url`,
   `HeaderMap`, error variants) and `window` (`error`, `attributes`) especially.
+- **#111 — `core/browser`** (epic #110, ADR-0026): the document state, fetch-result application, subresource discovery,
+  `ImageStore` and the error page moved out of `alloy`'s `Session` into a pure, thread-free `BrowsingContext`.
+  Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment); `arch-lint.toml` (`browser-pure`)
+  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/.../event_loop/worker.rs` is the thin executor
+  of `BrowserEffect::Fetch`.
 - **I4 — `alloy <url>`, native window rendering**: **not part of this delivered set** — in progress separately.
 
 Still **stubs** (a doc comment and `#![forbid(unsafe_code)]`, no functions): `core/js`, `devtools`, `extension`. Open
@@ -154,6 +159,7 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/js`                    | `js`            | Web-content ECMAScript runtime (untrusted page `<script>`) — distinct from the Rhai muscle engine. **Stub (v0.7+)**       |
 | `core/dom`                   | `dom`           | Node hierarchy, elements, mutations; `DomTreeSink` + `parse` over `html` (depends on `html`, ADR-0024)                    |
 | `core/html`                  | `html`          | HTML vocabulary (`TagName`, `AttributeName`, `NamedCharacterReference`), HTML5 tokenizer & `TreeSink`/`TokenSink` ports. Leaf crate    |
+| `core/browser`               | `browser`       | Pure browsing context: `BrowsingContext`, `NavigationId` supersession, `RegionId` link regions, error page, subresource discovery, `ImageStore` — returns `BrowserEffect`s, never spawns a thread (ADR-0026) |
 | `core/css`                   | `css`           | Parser, selectors, cascade, box model / inline formatting / Flexbox layout (v0.5 B0–B4)                                   |
 | `core/graphics`              | `graphics`      | `DisplayList`, `RenderBackend` port, `SoftwareCpuBackend`, PNG codec, text rasterization (v0.3–v0.5)                      |
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |
