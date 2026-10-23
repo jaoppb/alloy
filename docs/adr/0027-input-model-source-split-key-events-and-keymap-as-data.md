@@ -71,9 +71,9 @@ reintroduce #117 on the next platform quirk.
 ### Modifiers and AltGr
 
 The adapter stamps `Modifiers` on every `KeyEvent` from `ModifiersChanged`. `winit`'s `ModifiersState` has no AltGr bit,
-so the adapter also tracks `NamedKey::AltGraph` press and release itself and sets `Modifiers::alt_graph()` (Linux; macOS
-Option maps likewise). The tracked state is cleared when the window loses focus. Windows cannot tell AltGr from
-Ctrl+Alt; there `alt_graph()` is never set and the fallback below applies.
+so the adapter also tracks `NamedKey::AltGraph` press and release itself and sets `Modifiers::alt_graph()` (Linux only:
+macOS reports Option as Alt, see the router rules below). The tracked state is cleared when the window loses focus.
+Windows cannot tell AltGr from Ctrl+Alt; there `alt_graph()` is never set and the fallback below applies.
 
 ### Keymap is data
 
@@ -91,18 +91,18 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
 5. Otherwise `text` → insert the text.
 
 Shift never blocks insertion. `Released` events never produce input. Named editing keys under Ctrl, Super or Alt are
-dropped unless the keymap binds them. On macOS, Option+letter must insert its composed text and the binding for "focus
-the address bar" is Super+L. `winit` reports Option as Alt there (no AltGraph key), so the adapter sets `alt()`, not
-`alt_graph()`: the router needs a platform fact from `core/platform` (`ADR-0022`) to apply that rule, which is left to
-
-## 113 — this port cannot branch on `target_os`
+dropped unless the keymap binds them (the interim `alloy` mapping already applies this to both typing and editing). On
+macOS, Option+letter must insert its composed text and the binding for "focus the address bar" is Super+L. `winit`
+reports Option as Alt there (no AltGraph key), so the adapter sets `alt()`, not `alt_graph()`: the router needs a
+platform fact from `core/platform` (`ADR-0022`) to apply that rule, which is left to the router (issue 113). This port
+cannot branch on `target_os`.
 
 ### Window mutation commands
 
 The same version bump adds `WindowSystem::set_title(WindowTitle)` and `WindowSystem::set_cursor(CursorIcon)`: commands
 (no return value, silent no-op before a window exists), recorded by `HeadlessWindowSystem`.
 
-#### Consequences
+### Consequences
 
 - Good: Alt+D and Ctrl+L are bindable; the adapter no longer owns any shortcut or typing policy.
 - Good: modifiers come from the platform, so a modifier held across a focus change is correct.
