@@ -91,15 +91,18 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
 5. Otherwise `text` → insert the text.
 
 Shift never blocks insertion. `Released` events never produce input. Named editing keys under Ctrl, Super or Alt are
-dropped unless the keymap binds them. On macOS, Option+letter is `alt_graph` text (it inserts) and the binding for
-"focus the address bar" is Super+L.
+dropped unless the keymap binds them. On macOS, Option+letter must insert its composed text and the binding for "focus
+the address bar" is Super+L. `winit` reports Option as Alt there (no AltGraph key), so the adapter sets `alt()`, not
+`alt_graph()`: the router needs a platform fact from `core/platform` (`ADR-0022`) to apply that rule, which is left to
+
+## 113 — this port cannot branch on `target_os`
 
 ### Window mutation commands
 
 The same version bump adds `WindowSystem::set_title(WindowTitle)` and `WindowSystem::set_cursor(CursorIcon)`: commands
 (no return value, silent no-op before a window exists), recorded by `HeadlessWindowSystem`.
 
-### Consequences
+#### Consequences
 
 - Good: Alt+D and Ctrl+L are bindable; the adapter no longer owns any shortcut or typing policy.
 - Good: modifiers come from the platform, so a modifier held across a focus change is correct.
@@ -113,7 +116,7 @@ The same version bump adds `WindowSystem::set_title(WindowTitle)` and `WindowSys
 
 ---
 
-## Links
+### Links
 
 - `docs/architecture/window-system-port-contract.md` §4, `docs/requirements/PRD-010-window-system-and-presenter-port.md`
   §6

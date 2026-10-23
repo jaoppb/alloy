@@ -99,7 +99,8 @@ impl KeyboardState {
     }
 
     /// `winit` has no `AltGr` modifier bit, so the key's own press and release
-    /// are the only signal (Linux; macOS Option maps likewise).
+    /// are the only signal (Linux). macOS reports Option as Alt, so there `alt()` is set instead
+    /// and the consumer owns the rule (`ADR-0027`).
     const fn track_alt_graph(&mut self, input: &KeyInput) {
         if matches!(input.logical_key, Key::Named(NamedKey::AltGraph)) {
             self.alt_graph = !matches!(input.state, ElementState::Released);
