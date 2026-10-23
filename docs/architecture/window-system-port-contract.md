@@ -9,7 +9,7 @@ document is its contract record: the state of all seven mandatory items at the `
 | ---- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | Seam PRD with variation + threat model                                    | ✅ `PRD-010` §2 (variation model: `WindowSystem`/`Presenter` each independently replaceable; threat model: no attacker-controlled bytes on this seam — the concern is misuse ordering, not hostile input, `ADR-0018` row 3)                                                                                                                                                                                                                                                                   |
 | 2    | Port traits: assoc types only, no adapter types, object-safe or companion | ✅ Both `WindowSystem` and `Presenter` are object-safe from the start — no generic method, no associated type, every signature speaks only this crate's own boundary types (`create_window`, `pump_events`, `request_redraw`, `set_title`, `set_cursor`, `present`). No companion needed, same shape as `graphics::RenderBackend`/`network::HttpTransport`                                                                                                                                                               |
-| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `WindowEvent`, `FrameView`, `WindowAttributes`, `WindowError`, … all domain-owned in `core/window`, `#[non_exhaustive]`; `window::PORT_SCHEMA_VERSION = 4` (`1 → 2`: `WindowSystem::request_redraw` added; `2 → 3`: `WindowEvent::TextInput` and `WindowEvent::ControlKey` added, issue #44; `3 → 4`: unified `KeyEvent`, `TextCommitted`, `set_title`, `set_cursor`, issue #112 — see §4) |
+| 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `WindowEvent`, `FrameView`, `WindowAttributes`, `WindowError`, … all domain-owned in `core/window`; enums (`WindowEvent`, `KeyState`, `LogicalKey`, …) are `#[non_exhaustive]`, structs (`KeyEvent`, `Modifiers`, `FrameView`, …) keep their fields private so one added is not a break; `window::PORT_SCHEMA_VERSION = 4` (`1 → 2`: `WindowSystem::request_redraw` added; `2 → 3`: `WindowEvent::TextInput` and `WindowEvent::ControlKey` added, issue #44; `3 → 4`: unified `KeyEvent`, `TextCommitted`, `set_title`, `set_cursor`, issue #112 — see §4) |
 | 4    | Exactly one typed error, source location                                  | ✅ `WindowError`, `#[non_exhaustive]`, one `thiserror` enum; every variant carries the `WindowOperation` attempted, and every variant tied to an existing window carries its `WindowId` — the location metadata for this port                                                                                                                                                                                                                                                                 |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `window::conformance::run_window_suite`; `HeadlessWindowSystem` + `RecordingPresenter` (reference) and `WinitSystem` + `SoftbufferPresenter` (real, feature `winit-system`, default-on) both pass it. `cargo test -p window --no-default-features` links neither `winit` nor `softbuffer` at all — the `layering` CI job holds this. `alloy/tests/e2e_golden.rs` additionally proves `HeadlessWindowSystem`/`RecordingPresenter` drive the real `alloy::run_browser_until` loop end to end |
@@ -39,8 +39,9 @@ before any window exists. `set_title` backs the page title in the title bar (#84
 pointer (#68). `WinitSystem` forwards to `Window::set_title` / `Window::set_cursor`; `HeadlessWindowSystem` records the
 last value, readable through its `title()` and `cursor()` queries so a test can assert on it.
 
-Every parameter and return type is a concrete, `#[non_exhaustive]` boundary aggregate. `&mut dyn WindowSystem` and
-`&mut dyn Presenter` both compile and are exactly what `core/window/src/application/conformance.rs` takes.
+Every parameter and return type is a concrete boundary aggregate (enums `#[non_exhaustive]`, structs with private
+fields). `&mut dyn WindowSystem` and `&mut dyn Presenter` both compile and are exactly what
+`core/window/src/application/conformance.rs` takes.
 
 ---
 
@@ -68,10 +69,11 @@ including `Character(InputText)`), `physical` (`KeyCode`, the layout-independent
   `modifiers` before treating `text` as typing. The adapter does not use `text_with_all_modifiers`.
 - `KeyboardState` (`infrastructure/keyboard.rs`) is the adapter's only memory: it stamps `ModifiersChanged` onto each
   event and tracks `NamedKey::AltGraph` press/release (cleared on focus loss) because `winit`'s `ModifiersState` has no
-  AltGr bit. Windows reports AltGr as Ctrl+Alt, so `alt_graph()` is never set there.
+  AltGr bit. Windows reports AltGr as Ctrl+Alt, so `alt_graph()` is never set there. A modifier key's own press reports
+  it held and its release reports it released (the DOM convention).
 - `InputText` is non-empty and free of control characters; the adapter drops `\r`, `\x08` and the like from `text` and
   keeps the press (as `LogicalKey::Enter`, `Backspace`, …).
-- `winit::event::KeyEvent` cannot be constructed outside `winit`, so the mapping is split at `KeyInput` (the five fields
+- `winit::event::KeyEvent` cannot be constructed outside `winit`, so the mapping is split at `KeyInput` (the four fields
   it reads) and unit-tested through it (`core/window/tests/event_map.rs`).
 
 ---

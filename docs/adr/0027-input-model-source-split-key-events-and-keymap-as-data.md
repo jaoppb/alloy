@@ -72,7 +72,8 @@ reintroduce #117 on the next platform quirk.
 
 The adapter stamps `Modifiers` on every `KeyEvent` from `ModifiersChanged`. `winit`'s `ModifiersState` has no AltGr bit,
 so the adapter also tracks `NamedKey::AltGraph` press and release itself and sets `Modifiers::alt_graph()` (Linux only:
-macOS reports Option as Alt, see the router rules below). The tracked state is cleared when the window loses focus.
+macOS reports Option as Alt, see the router rules below). The tracked state is cleared when the window loses focus. A
+modifier key's own events follow the DOM convention: the AltGr press carries `alt_graph()`, its release does not.
 Windows cannot tell AltGr from Ctrl+Alt; there `alt_graph()` is never set and the fallback below applies.
 
 ### Keymap is data
