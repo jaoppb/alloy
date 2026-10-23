@@ -7,9 +7,18 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use window::{
-    HeadlessWindowSystem, KeyState, LogicalKey, Presenter as _, RecordingPresenter, SurfaceSize,
-    WindowAttributes, WindowError, WindowEvent, WindowSystem as _,
+    CursorIcon, HeadlessWindowSystem, InputText, KeyCode, KeyEvent, KeyState, LogicalKey,
+    Modifiers, Presenter as _, RecordingPresenter, SurfaceSize, WindowAttributes, WindowError,
+    WindowEvent, WindowSystem as _, WindowTitle,
 };
+
+fn text(value: &str) -> InputText {
+    InputText::new(value).expect("a printable fixture is valid input text")
+}
+
+fn probe_attributes() -> WindowAttributes {
+    WindowAttributes::new("probe", SurfaceSize::new(4, 4).expect("4x4 is valid"))
+}
 
 #[test]
 fn the_headless_reference_pair_passes_the_conformance_suite() {
@@ -40,20 +49,17 @@ fn create_window_hands_out_distinct_ids_across_systems() {
 
 #[test]
 fn scheduled_events_are_delivered_in_order_after_the_automatic_resize() {
-    let size = SurfaceSize::new(4, 4).expect("4x4 is valid");
-    let attrs = WindowAttributes::new("probe", size);
     let mut system = HeadlessWindowSystem::new();
     system
-        .create_window(&attrs)
+        .create_window(&probe_attributes())
         .expect("create_window succeeds");
     system.schedule(WindowEvent::RedrawRequested);
-    system.schedule(WindowEvent::TextInput {
-        text: String::from("https://alloy.engine"),
-    });
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Enter,
-        state: KeyState::Pressed,
-    });
+    system.schedule(WindowEvent::TextCommitted(text("https://alloy.engine")));
+    system.schedule(WindowEvent::Key(KeyEvent::new(
+        LogicalKey::Enter,
+        KeyCode::ENTER,
+        KeyState::Pressed,
+    )));
     system.schedule(WindowEvent::CloseRequested);
 
     let mut observed = Vec::new();
@@ -65,8 +71,8 @@ fn scheduled_events_are_delivered_in_order_after_the_automatic_resize() {
         [
             WindowEvent::Resized(_),
             WindowEvent::RedrawRequested,
-            WindowEvent::TextInput { .. },
-            WindowEvent::ControlKey { .. },
+            WindowEvent::TextCommitted(_),
+            WindowEvent::Key(_),
             WindowEvent::CloseRequested,
         ]
     ));
@@ -74,39 +80,64 @@ fn scheduled_events_are_delivered_in_order_after_the_automatic_resize() {
 }
 
 #[test]
-fn scheduled_text_input_and_control_keys_preserve_payload() {
-    let size = SurfaceSize::new(4, 4).expect("4x4 is valid");
-    let attrs = WindowAttributes::new("probe", size);
+fn a_scheduled_key_event_keeps_its_text_modifiers_and_state() {
     let mut system = HeadlessWindowSystem::new();
     system
-        .create_window(&attrs)
+        .create_window(&probe_attributes())
         .expect("create_window succeeds");
-
-    system.schedule(WindowEvent::TextInput {
-        text: String::from("hello"),
-    });
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Backspace,
-        state: KeyState::Released,
-    });
+    let pressed = KeyEvent::new(
+        LogicalKey::Character(text("d")),
+        KeyCode::KEY_D,
+        KeyState::Pressed,
+    )
+    .with_text(text("d"))
+    .with_modifiers(Modifiers::NONE.with_alt());
+    system.schedule(WindowEvent::Key(pressed.clone()));
+    system.schedule(WindowEvent::TextCommitted(text("hello")));
 
     let mut observed = Vec::new();
     let mut sink = |event: WindowEvent| observed.push(event);
     let _ = system.pump_events(&mut sink).expect("pump_events succeeds");
 
-    assert_eq!(
-        observed[1],
-        WindowEvent::TextInput {
-            text: String::from("hello"),
-        }
-    );
-    assert_eq!(
-        observed[2],
-        WindowEvent::ControlKey {
-            key: LogicalKey::Backspace,
-            state: KeyState::Released,
-        }
-    );
+    assert_eq!(observed[1], WindowEvent::Key(pressed));
+    assert_eq!(observed[2], WindowEvent::TextCommitted(text("hello")));
+}
+
+#[test]
+fn set_title_is_recorded_once_a_window_exists() {
+    let mut system = HeadlessWindowSystem::new();
+    system
+        .create_window(&probe_attributes())
+        .expect("create_window succeeds");
+    assert_eq!(system.title(), Some(&WindowTitle::from("probe")));
+
+    system.set_title(WindowTitle::from("Example Domain"));
+
+    assert_eq!(system.title(), Some(&WindowTitle::from("Example Domain")));
+}
+
+#[test]
+fn set_cursor_is_recorded_once_a_window_exists() {
+    let mut system = HeadlessWindowSystem::new();
+    system
+        .create_window(&probe_attributes())
+        .expect("create_window succeeds");
+    assert_eq!(system.cursor(), CursorIcon::Default);
+
+    system.set_cursor(CursorIcon::Pointer);
+
+    assert_eq!(system.cursor(), CursorIcon::Pointer);
+}
+
+#[test]
+fn window_commands_before_create_window_are_silent_no_ops() {
+    let mut system = HeadlessWindowSystem::new();
+
+    system.set_title(WindowTitle::from("too early"));
+    system.set_cursor(CursorIcon::Text);
+
+    assert_eq!(system.title(), None);
+    assert_eq!(system.cursor(), CursorIcon::Default);
 }
 
 #[test]

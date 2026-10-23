@@ -16,14 +16,23 @@
 
 use winit::keyboard::PhysicalKey;
 
+use crate::domain::cursor::CursorIcon;
 use crate::domain::event::{PointerButton, WindowEvent};
-use crate::domain::key::{KeyCode, KeyState, LogicalKey};
+use crate::domain::key::KeyCode;
 use crate::domain::surface::{PhysicalPosition, SurfaceSize};
+use crate::domain::text::InputText;
+use crate::infrastructure::keyboard::{KeyInput, KeyboardState};
 
 /// Maps one `winit` window event to this port's vocabulary, or `None` when
 /// the event has no representation in it yet.
+///
+/// `keyboard` is the adapter's modifier memory: `ModifiersChanged` and
+/// `Focused` update it (and map to `None`), `KeyboardInput` is stamped from it.
 #[must_use]
-pub fn map_window_event(event: winit::event::WindowEvent) -> Option<WindowEvent> {
+pub fn map_window_event(
+    event: winit::event::WindowEvent,
+    keyboard: &mut KeyboardState,
+) -> Option<WindowEvent> {
     match event {
         winit::event::WindowEvent::Resized(size) => {
             SurfaceSize::new(size.width, size.height).map(WindowEvent::Resized)
@@ -40,9 +49,21 @@ pub fn map_window_event(event: winit::event::WindowEvent) -> Option<WindowEvent>
                 pressed: state.is_pressed(),
             })
         }
-        winit::event::WindowEvent::KeyboardInput { event, .. } => Some(map_key_event(event)),
+        winit::event::WindowEvent::KeyboardInput { event, .. } => Some(WindowEvent::Key(
+            keyboard.translate(&KeyInput::from_winit(&event)),
+        )),
+        winit::event::WindowEvent::ModifiersChanged(modifiers) => {
+            keyboard.modifiers_changed(modifiers.state());
+            None
+        }
+        winit::event::WindowEvent::Focused(focused) => {
+            if !focused {
+                keyboard.focus_lost();
+            }
+            None
+        }
         winit::event::WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
-            Some(WindowEvent::TextInput { text })
+            InputText::new(text).map(WindowEvent::TextCommitted)
         }
         winit::event::WindowEvent::MouseWheel { delta, .. } => Some(map_scroll_delta(delta)),
         winit::event::WindowEvent::RedrawRequested => Some(WindowEvent::RedrawRequested),
@@ -56,8 +77,6 @@ pub fn map_window_event(event: winit::event::WindowEvent) -> Option<WindowEvent>
         | winit::event::WindowEvent::DroppedFile(_)
         | winit::event::WindowEvent::HoveredFile(_)
         | winit::event::WindowEvent::HoveredFileCancelled
-        | winit::event::WindowEvent::Focused(_)
-        | winit::event::WindowEvent::ModifiersChanged(_)
         | winit::event::WindowEvent::Ime(
             winit::event::Ime::Enabled
             | winit::event::Ime::Preedit(..)
@@ -78,65 +97,18 @@ pub fn map_window_event(event: winit::event::WindowEvent) -> Option<WindowEvent>
     }
 }
 
-fn map_key_event(event: winit::event::KeyEvent) -> WindowEvent {
-    if let Some(logical_key) = map_logical_key(&event.logical_key) {
-        return WindowEvent::ControlKey {
-            key: logical_key,
-            state: map_key_state(event.state),
-        };
-    }
-
-    match (event.state.is_pressed(), event.text) {
-        (true, Some(text)) if is_valid_text_input(text.as_str()) => {
-            return WindowEvent::TextInput {
-                text: text.to_string(),
-            };
-        }
-        _ => {}
-    }
-
-    WindowEvent::Key {
-        code: map_physical_key(event.physical_key),
-        pressed: event.state.is_pressed(),
-    }
-}
-
-/// Maps a `winit` logical key to a strongly-typed [`LogicalKey`] if it matches
-/// one of the 8 supported editing or navigation control keys.
+/// Maps a port [`CursorIcon`] to the `winit` cursor it names.
 #[must_use]
-pub const fn map_logical_key(key: &winit::keyboard::Key) -> Option<LogicalKey> {
-    let winit::keyboard::Key::Named(named_key) = key else {
-        return None;
-    };
-    match named_key {
-        winit::keyboard::NamedKey::Enter => Some(LogicalKey::Enter),
-        winit::keyboard::NamedKey::Backspace => Some(LogicalKey::Backspace),
-        winit::keyboard::NamedKey::Delete => Some(LogicalKey::Delete),
-        winit::keyboard::NamedKey::Escape => Some(LogicalKey::Escape),
-        winit::keyboard::NamedKey::ArrowLeft => Some(LogicalKey::ArrowLeft),
-        winit::keyboard::NamedKey::ArrowRight => Some(LogicalKey::ArrowRight),
-        winit::keyboard::NamedKey::Home => Some(LogicalKey::Home),
-        winit::keyboard::NamedKey::End => Some(LogicalKey::End),
-        _ => None,
+pub const fn map_cursor_icon(icon: CursorIcon) -> winit::window::CursorIcon {
+    match icon {
+        CursorIcon::Default => winit::window::CursorIcon::Default,
+        CursorIcon::Pointer => winit::window::CursorIcon::Pointer,
+        CursorIcon::Text => winit::window::CursorIcon::Text,
+        CursorIcon::Wait => winit::window::CursorIcon::Wait,
+        CursorIcon::Progress => winit::window::CursorIcon::Progress,
+        CursorIcon::Crosshair => winit::window::CursorIcon::Crosshair,
+        CursorIcon::NotAllowed => winit::window::CursorIcon::NotAllowed,
     }
-}
-
-/// Maps a `winit` element state to a [`KeyState`].
-#[must_use]
-pub const fn map_key_state(state: winit::event::ElementState) -> KeyState {
-    match state {
-        winit::event::ElementState::Pressed => KeyState::Pressed,
-        winit::event::ElementState::Released => KeyState::Released,
-    }
-}
-
-/// Returns `true` if `text` is non-empty and contains no Unicode control characters.
-#[must_use]
-pub fn is_valid_text_input(text: &str) -> bool {
-    if text.is_empty() {
-        return false;
-    }
-    !text.chars().any(char::is_control)
 }
 
 fn map_scroll_delta(delta: winit::event::MouseScrollDelta) -> WindowEvent {
@@ -163,7 +135,7 @@ const fn map_mouse_button(button: winit::event::MouseButton) -> PointerButton {
     }
 }
 
-const fn map_physical_key(key: PhysicalKey) -> KeyCode {
+pub(super) const fn map_physical_key(key: PhysicalKey) -> KeyCode {
     match key {
         PhysicalKey::Code(code) => map_key_code(code),
         // No native scancode is carried across (`NativeKeyCode` is itself

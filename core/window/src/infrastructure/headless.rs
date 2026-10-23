@@ -12,7 +12,8 @@
 use std::collections::VecDeque;
 
 use crate::application::ports::{Presenter, PumpStatus, WindowSystem};
-use crate::domain::attributes::{WindowAttributes, WindowId};
+use crate::domain::attributes::{WindowAttributes, WindowId, WindowTitle};
+use crate::domain::cursor::CursorIcon;
 use crate::domain::error::{WindowError, WindowOperation};
 use crate::domain::event::WindowEvent;
 use crate::domain::frame::FrameView;
@@ -24,6 +25,8 @@ pub struct HeadlessWindowSystem {
     next_window_id: u64,
     scripted_events: VecDeque<WindowEvent>,
     exited: bool,
+    title: Option<WindowTitle>,
+    cursor: CursorIcon,
 }
 
 impl HeadlessWindowSystem {
@@ -40,6 +43,21 @@ impl HeadlessWindowSystem {
     pub fn schedule(&mut self, event: WindowEvent) {
         self.scripted_events.push_back(event);
     }
+
+    /// The title last given to the window — the one from
+    /// [`WindowAttributes`] until [`WindowSystem::set_title`] replaces it —
+    /// or `None` before any window exists.
+    #[must_use]
+    pub const fn title(&self) -> Option<&WindowTitle> {
+        self.title.as_ref()
+    }
+
+    /// The pointer image last requested with [`WindowSystem::set_cursor`];
+    /// [`CursorIcon::Default`] until then.
+    #[must_use]
+    pub const fn cursor(&self) -> CursorIcon {
+        self.cursor
+    }
 }
 
 impl WindowSystem for HeadlessWindowSystem {
@@ -51,6 +69,7 @@ impl WindowSystem for HeadlessWindowSystem {
             .ok_or_else(|| WindowError::creation_failed("window id counter exhausted"))?;
         self.next_window_id = next;
         self.window = Some(id);
+        self.title = Some(attrs.title().clone());
         self.scripted_events
             .push_back(WindowEvent::Resized(attrs.initial_size()));
         Ok(id)
@@ -82,6 +101,20 @@ impl WindowSystem for HeadlessWindowSystem {
             return;
         }
         self.scripted_events.push_back(WindowEvent::RedrawRequested);
+    }
+
+    fn set_title(&mut self, title: WindowTitle) {
+        if self.window.is_none() {
+            return;
+        }
+        self.title = Some(title);
+    }
+
+    fn set_cursor(&mut self, icon: CursorIcon) {
+        if self.window.is_none() {
+            return;
+        }
+        self.cursor = icon;
     }
 }
 

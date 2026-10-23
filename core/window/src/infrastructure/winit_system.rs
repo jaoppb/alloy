@@ -31,10 +31,12 @@ use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus as WinitPu
 use winit::window::Window;
 
 use crate::application::ports::{PumpStatus, WindowSystem};
-use crate::domain::attributes::{WindowAttributes, WindowId};
+use crate::domain::attributes::{WindowAttributes, WindowId, WindowTitle};
+use crate::domain::cursor::CursorIcon;
 use crate::domain::error::{WindowError, WindowOperation};
 use crate::domain::event::WindowEvent;
-use crate::infrastructure::event_map::map_window_event;
+use crate::infrastructure::event_map::{map_cursor_icon, map_window_event};
+use crate::infrastructure::keyboard::KeyboardState;
 
 /// How many bounded pumps [`WinitSystem::create_window`] tries before giving
 /// up typed. Each pump has a zero timeout, so this bounds wall-clock time to
@@ -138,6 +140,20 @@ impl WindowSystem for WinitSystem {
         };
         window.request_redraw();
     }
+
+    fn set_title(&mut self, title: WindowTitle) {
+        let Some(window) = self.handler.window.as_ref() else {
+            return;
+        };
+        window.set_title(title.as_str());
+    }
+
+    fn set_cursor(&mut self, icon: CursorIcon) {
+        let Some(window) = self.handler.window.as_ref() else {
+            return;
+        };
+        window.set_cursor(map_cursor_icon(icon));
+    }
 }
 
 /// The `winit::application::ApplicationHandler` this adapter drives —
@@ -150,6 +166,7 @@ struct Handler {
     window: Option<Arc<Window>>,
     creation_error: Option<WindowError>,
     buffered_events: VecDeque<WindowEvent>,
+    keyboard: KeyboardState,
 }
 
 impl ApplicationHandler for Handler {
@@ -177,7 +194,7 @@ impl ApplicationHandler for Handler {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let Some(mapped) = map_window_event(event) else {
+        let Some(mapped) = map_window_event(event, &mut self.keyboard) else {
             return;
         };
         if matches!(mapped, WindowEvent::CloseRequested) {
