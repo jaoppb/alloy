@@ -99,8 +99,9 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
 - **#111 — `core/browser`** (epic #110, ADR-0026): the document state, fetch-result application, subresource discovery,
   `ImageStore` and the error page moved out of `alloy`'s `Session` into a pure, thread-free `BrowsingContext`.
   Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment); `arch-lint.toml` (`browser-pure`)
-  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/.../event_loop/worker.rs` is the thin executor
-  of `BrowserEffect::Fetch`.
+  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/src/infrastructure/thread_fetch.rs` is the
+  `FetchExecutor` adapter of `BrowserEffect::Fetch` (#114: fetch threads, PNG decoding and the idle sleep sit behind
+  ports; an `arch-lint.toml` rule keeps `std::thread` and `png::decode` out of `alloy/src/application/**`).
 - **#109 — `core/ui`** (epic #110, ADR-0026): the render tree, hit testing, theme, omnibox and `OmniboxClassifier` moved
   out of `alloy` (and `network`) into `core/ui`, with no re-export left behind. `core/region` holds the ids `ui` and
   `browser` share; `arch-lint.toml` (`ui-isolated`, `region-isolated`) keeps the two siblings apart.
