@@ -63,6 +63,13 @@ paths = ["core/runtime/rhai-bindings/**"]
 name = "alloy-cli"
 paths = ["alloy/**"]
 
+# The application layer of `alloy` (#110 decision 26, #114): ports and orchestration only.
+# `alloy/src/infrastructure/**` holds the adapters; #115 adds its own scope and the
+# `event_loop` rules.
+[[scopes]]
+name = "alloy-application"
+paths = ["alloy/src/application/**"]
+
 [[scopes]]
 name = "dom-domain"
 paths = ["core/dom/src/domain/**"]
@@ -509,6 +516,15 @@ deny = [
     "std::thread::*",
 ]
 message = "core/region is the leaf ui and browser share; it imports graphics and nothing else (ADR-0026)."
+
+# #114: `alloy`'s only threads and byte decoding live in `alloy/src/infrastructure/` behind the
+# `FetchExecutor` / `ImageDecoder` / `IdlePause` ports. `graphics::png::encode` stays allowed (the headless
+# `alloy render` path writes PNGs), so the rule names the module import and `decode`, not `png::*`.
+[[restrict-use]]
+name = "alloy-application-no-threads-or-decoding"
+scope = "alloy-application"
+deny = ["std::thread", "std::thread::*", "graphics::png", "graphics::png::decode"]
+message = "alloy's application layer names no std::thread and no PNG decoder — fetch workers and image decoding are infrastructure adapters behind ports (#110 decision 26, #114, ADR-0010)."
 
 [[restrict-use]]
 name = "platform-isolated"
