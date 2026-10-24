@@ -14,9 +14,12 @@
 //! - **Refusal ordering**: `pump_events` before any `create_window` call ever
 //!   succeeded is a typed [`WindowError::NoWindowYet`], never a panic and
 //!   never a hang.
+//! - **Silent window commands**: `request_redraw`, `set_title` and
+//!   `set_cursor` are commands with no failure channel — before any window
+//!   exists each is a no-op, never a panic.
 //! - **Reusability**: both `system` and `presenter` survive more than one
 //!   call — a second `pump_events`, a second `present`, a second
-//!   `request_redraw`.
+//!   `request_redraw`, `set_title` or `set_cursor`.
 //!
 //! What it does **not** pin is *pixels*: `Presenter::present`'s job is to
 //! move bytes onto a surface, and only a golden comparison (`I4`) can judge
@@ -34,11 +37,16 @@
 #![allow(clippy::panic, clippy::expect_used)]
 
 use crate::application::ports::{Presenter, WindowSystem};
-use crate::domain::attributes::WindowAttributes;
+use crate::domain::attributes::{WindowAttributes, WindowTitle};
+use crate::domain::cursor::CursorIcon;
 use crate::domain::error::WindowError;
 use crate::domain::event::WindowEvent;
 use crate::domain::frame::FrameView;
+use crate::domain::key::KeyCode;
+use crate::domain::key_event::{KeyEvent, KeyState};
+use crate::domain::logical_key::LogicalKey;
 use crate::domain::surface::SurfaceSize;
+use crate::domain::text::InputText;
 
 /// Runs every rule a [`WindowSystem`] / [`Presenter`] pair must obey.
 ///
@@ -48,17 +56,17 @@ use crate::domain::surface::SurfaceSize;
 /// `system`.
 pub fn run_window_suite(system: &mut dyn WindowSystem, presenter: &mut dyn Presenter) {
     check_pump_events_before_create_window_is_refused(system);
-    check_request_redraw_before_create_window_is_silent(system);
+    check_window_commands_before_create_window_are_silent(system);
     let size = check_surface_size_round_trips(system);
     check_pump_events_is_reusable(system);
-    check_request_redraw_is_reusable(system);
+    check_window_commands_are_reusable(system);
     check_presenting_is_reusable(presenter, size);
     check_event_vocabulary_coverage();
 }
 
 /// Asserts that a [`WindowEvent`] can be matched and inspected by standard event
-/// dispatchers, verifying coverage of all current variants including `TextInput`
-/// and `ControlKey`.
+/// dispatchers, verifying coverage of all current variants including `Key` and
+/// `TextCommitted`.
 #[must_use]
 pub const fn describes_window_event(event: &WindowEvent) -> &'static str {
     match event {
@@ -66,9 +74,8 @@ pub const fn describes_window_event(event: &WindowEvent) -> &'static str {
         WindowEvent::CloseRequested => "close_requested",
         WindowEvent::PointerMoved { .. } => "pointer_moved",
         WindowEvent::PointerButton { .. } => "pointer_button",
-        WindowEvent::Key { .. } => "key",
-        WindowEvent::TextInput { .. } => "text_input",
-        WindowEvent::ControlKey { .. } => "control_key",
+        WindowEvent::Key(_) => "key",
+        WindowEvent::TextCommitted(_) => "text_committed",
         WindowEvent::Scroll { .. } => "scroll",
         WindowEvent::RedrawRequested => "redraw_requested",
     }
@@ -86,17 +93,12 @@ fn check_event_vocabulary_coverage() {
             button: crate::domain::event::PointerButton::Left,
             pressed: true,
         },
-        WindowEvent::Key {
-            code: crate::domain::key::KeyCode::UNIDENTIFIED,
-            pressed: true,
-        },
-        WindowEvent::TextInput {
-            text: String::from("a"),
-        },
-        WindowEvent::ControlKey {
-            key: crate::domain::key::LogicalKey::Enter,
-            state: crate::domain::key::KeyState::Pressed,
-        },
+        WindowEvent::Key(KeyEvent::new(
+            LogicalKey::Enter,
+            KeyCode::ENTER,
+            KeyState::Pressed,
+        )),
+        WindowEvent::TextCommitted(InputText::new("a").expect("a letter is valid input text")),
         WindowEvent::Scroll {
             delta_x: 0.0,
             delta_y: 0.0,
@@ -161,15 +163,22 @@ fn check_surface_size_round_trips(system: &mut dyn WindowSystem) -> SurfaceSize 
     reported
 }
 
-fn check_request_redraw_before_create_window_is_silent(system: &mut dyn WindowSystem) {
-    // `request_redraw` is a command with no failure channel — before any
-    // window exists it must be a silent no-op, never a panic (`PRD-010`).
+fn check_window_commands_before_create_window_are_silent(system: &mut dyn WindowSystem) {
+    // `request_redraw`, `set_title` and `set_cursor` are commands with no
+    // failure channel — before any window exists each must be a silent no-op,
+    // never a panic (`PRD-010`).
     system.request_redraw();
+    system.set_title(WindowTitle::from("too early"));
+    system.set_cursor(CursorIcon::Pointer);
 }
 
-fn check_request_redraw_is_reusable(system: &mut dyn WindowSystem) {
+fn check_window_commands_are_reusable(system: &mut dyn WindowSystem) {
     system.request_redraw();
     system.request_redraw();
+    system.set_title(WindowTitle::from("first"));
+    system.set_title(WindowTitle::from("second"));
+    system.set_cursor(CursorIcon::Text);
+    system.set_cursor(CursorIcon::Default);
 }
 
 fn check_pump_events_is_reusable(system: &mut dyn WindowSystem) {

@@ -2,6 +2,7 @@
 
 mod buffer;
 pub mod controller;
+mod edit_key;
 mod gap_buffer;
 pub mod paint;
 mod state;
@@ -12,6 +13,7 @@ mod tests;
 pub use crate::application::theme;
 pub use buffer::{CursorPosition, OmniboxBuffer};
 pub use controller::{OmniboxController, OmniboxEffect, OmniboxInput};
+pub use edit_key::EditKey;
 pub use gap_buffer::GapBuffer;
 pub use paint::{
     CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, ChromeHeight, DEFAULT_CHROME_HEIGHT,

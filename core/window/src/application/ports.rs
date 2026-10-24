@@ -16,7 +16,8 @@
 //! and `&mut dyn Presenter` compile directly (`ADR-0011` item 2) — the same
 //! shape as `graphics::RenderBackend` and `network::HttpTransport`.
 
-use crate::domain::attributes::{WindowAttributes, WindowId};
+use crate::domain::attributes::{WindowAttributes, WindowId, WindowTitle};
+use crate::domain::cursor::CursorIcon;
 use crate::domain::error::WindowError;
 use crate::domain::event::WindowEvent;
 use crate::domain::frame::FrameView;
@@ -45,6 +46,19 @@ pub trait WindowSystem {
     /// surface is live, and so expose/occlusion redraws are served at all
     /// (`ADR-0019`; `PRD-010`).
     fn request_redraw(&mut self);
+
+    /// Replaces the window's title.
+    ///
+    /// A command (Command–Query Separation), like [`Self::request_redraw`]: a
+    /// silent no-op when no window exists yet, so the caller may fire it
+    /// whenever a page's title changes.
+    fn set_title(&mut self, title: WindowTitle);
+
+    /// Changes the pointer image shown over the window.
+    ///
+    /// A command, and a silent no-op when no window exists yet. The image
+    /// stays until the next call — the caller sets it on every hover change.
+    fn set_cursor(&mut self, icon: CursorIcon);
 }
 
 /// Turns a rendered frame into pixels on screen. `Send` — see the module doc.

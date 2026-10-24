@@ -13,13 +13,17 @@
 
 mod frame;
 mod hit_test;
-mod modifiers;
+mod key_mapping;
 mod pixel;
 mod render_tree;
 mod session;
 mod stats;
 mod worker;
 
+#[cfg(test)]
+mod keyboard_tests;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;
 
@@ -28,12 +32,11 @@ use std::thread;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
-    KeyCode, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
+    PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
 };
 
-pub use self::hit_test::hit_test;
-pub use self::modifiers::ModifiersState;
+use self::key_mapping::omnibox_input;
 pub use self::render_tree::{
     ChromeHeight, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
 };
@@ -42,7 +45,6 @@ pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
 use crate::application::omnibox::OmniboxInput;
 use crate::application::pipeline::RenderOptions;
-use crate::application::subresource::SubresourceDiscoverer;
 use crate::error::AlloyError;
 
 /// The window `alloy <url>` and the e2e golden test both open.
@@ -76,9 +78,9 @@ pub fn initial_window_attributes() -> Result<WindowAttributes, AlloyError> {
 /// `RecordingPresenter`) drive the exact same loop, which is what lets the
 /// e2e golden test exercise this function directly rather than a parallel
 /// test-only copy of it.
-pub fn run_browser<S, R, F, T, P, D>(
+pub fn run_browser<S, R, F, T, P>(
     url: &Url,
-    services: BrowserServices<F, T, P, D>,
+    services: BrowserServices<F, T, P>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -89,7 +91,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     run_browser_until(url, services, system, presenter, initial_size, |_| false)
 }
@@ -103,9 +104,9 @@ where
 /// presented frame, without racing the background fetch threads against a
 /// scripted close event — and for a one-shot render, via
 /// [`run_browser_until_first_frame`].
-pub fn run_browser_until<S, R, F, T, P, D>(
+pub fn run_browser_until<S, R, F, T, P>(
     url: &Url,
-    services: BrowserServices<F, T, P, D>,
+    services: BrowserServices<F, T, P>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -117,7 +118,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     let mut session = Session::new(initial_size, services);
     run_loop(url, system, presenter, &mut session, should_stop)
@@ -125,9 +125,9 @@ where
 
 /// [`run_browser_until`], stopping as soon as the first frame has been laid
 /// out and presented.
-pub fn run_browser_until_first_frame<S, R, F, T, P, D>(
+pub fn run_browser_until_first_frame<S, R, F, T, P>(
     url: &Url,
-    services: BrowserServices<F, T, P, D>,
+    services: BrowserServices<F, T, P>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -138,7 +138,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     run_browser_until(url, services, system, presenter, initial_size, |stats| {
         stats.relayouts >= 1
@@ -151,11 +150,11 @@ where
 /// blocking primitive spanning both the window and the `mpsc` channel.
 const IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(4);
 
-fn run_loop<S, R, F, T, P, D>(
+fn run_loop<S, R, F, T, P>(
     url: &Url,
     system: &mut S,
     presenter: &mut R,
-    session: &mut Session<F, T, P, D>,
+    session: &mut Session<F, T, P>,
     mut should_stop: impl FnMut(&LoopStats) -> bool,
 ) -> Result<LoopStats, AlloyError>
 where
@@ -164,7 +163,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     session.navigate(url.clone());
 
@@ -188,10 +186,10 @@ where
 /// idle-sleep before the next cycle, purely to avoid busy-spinning a CPU core;
 /// it plays no part in the coalescing invariant itself, which is entirely
 /// "drain everything currently available, then relay out at most once".
-fn pump_once<S, R, F, T, P, D>(
+fn pump_once<S, R, F, T, P>(
     system: &mut S,
     presenter: &mut R,
-    session: &mut Session<F, T, P, D>,
+    session: &mut Session<F, T, P>,
 ) -> Result<(PumpStatus, bool), AlloyError>
 where
     S: WindowSystem,
@@ -199,12 +197,10 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
-    let mut events = PumpEvents::starting_at(session.pointer_position(), session.modifiers());
+    let mut events = PumpEvents::starting_at(session.pointer_position());
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
     session.track_pointer(events.pointer_position);
-    session.track_modifiers(events.modifiers);
 
     if let Some(viewport) = events.latest_resize {
         session.resize(viewport);
@@ -236,15 +232,11 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-fn dispatch_omnibox_inputs<F, T, P, D>(
-    session: &mut Session<F, T, P, D>,
-    inputs: &[OmniboxInput],
-) -> bool
+fn dispatch_omnibox_inputs<F, T, P>(session: &mut Session<F, T, P>, inputs: &[OmniboxInput]) -> bool
 where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     let mut modified = false;
     for input in inputs {
@@ -266,15 +258,13 @@ struct PumpEvents {
     needs_repaint: bool,
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
-    modifiers: ModifiersState,
     omnibox_inputs: Vec<OmniboxInput>,
 }
 
 impl PumpEvents {
-    fn starting_at(pointer_position: Option<PhysicalPosition>, modifiers: ModifiersState) -> Self {
+    fn starting_at(pointer_position: Option<PhysicalPosition>) -> Self {
         Self {
             pointer_position,
-            modifiers,
             ..Self::default()
         }
     }
@@ -290,34 +280,11 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
-            WindowEvent::Key { code, pressed } => {
-                self.modifiers.update(*code, *pressed);
-                if *pressed {
-                    self.observe_key_press(*code);
-                }
-            }
-            WindowEvent::TextInput { text } => {
-                self.omnibox_inputs
-                    .push(OmniboxInput::TextInput(text.clone()));
-            }
-            WindowEvent::ControlKey { key, state } if state.is_pressed() => {
-                self.omnibox_inputs.push(OmniboxInput::ControlKey(*key));
+            WindowEvent::Key(key) => self.omnibox_inputs.extend(omnibox_input(key)),
+            WindowEvent::TextCommitted(text) => {
+                self.omnibox_inputs.push(OmniboxInput::Insert(text.clone()));
             }
             _ => {}
-        }
-    }
-
-    fn observe_key_press(&mut self, code: KeyCode) {
-        if self.modifiers.is_focus_omnibox_shortcut(code) {
-            self.omnibox_inputs.push(OmniboxInput::Focus);
-            return;
-        }
-        if code == KeyCode::ENTER {
-            self.omnibox_inputs.push(OmniboxInput::Enter);
-            return;
-        }
-        if code == KeyCode::ESCAPE {
-            self.omnibox_inputs.push(OmniboxInput::Escape);
         }
     }
 

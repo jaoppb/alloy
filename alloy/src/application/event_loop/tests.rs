@@ -10,22 +10,18 @@
 //! threads would make the proof racy for no added coverage.
 #![allow(clippy::unwrap_used)]
 
-use std::sync::Arc;
-
-use graphics::{ImageId, SyntheticFontProvider};
-use network::{AllowAllPolicy, MockTransport};
+use browser::{FetchPayload, FetchResult};
+use graphics::{Color, Framebuffer, ImageId};
+use network::MockTransport;
 use window::{
-    HeadlessWindowSystem, KeyCode, KeyState, LogicalKey, RecordingPresenter, SurfaceSize,
-    WindowEvent, WindowSystem as _,
+    HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
 
-use super::session::Session;
-use super::worker::{LoopMessage, fetch_text};
-use super::{initial_window_attributes, pump_once};
-use crate::application::browser_services::BrowserServices;
-use crate::application::paint::DEFAULT_FONT;
-use crate::application::pipeline::DEFAULT_FONT_SIZE;
-use crate::application::subresource::{MarkupDiscoverer, placeholder_framebuffer};
+use super::initial_window_attributes;
+use super::test_support::{
+    TestSession, completed_navigation, load, loaded_session, loaded_window, pump, session_over,
+};
+use super::worker::fetch_text;
 use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
@@ -47,68 +43,9 @@ fn a_non_2xx_stylesheet_status_is_a_typed_error_not_an_empty_body() {
     );
 }
 
-type TestSession = Session<SyntheticFontProvider, MockTransport, AllowAllPolicy, MarkupDiscoverer>;
-
-fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
-    let font_provider =
-        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let services = BrowserServices::new(
-        font_provider,
-        Arc::new(transport),
-        Arc::new(AllowAllPolicy::new()),
-    );
-    Session::new(viewport, services)
-}
-
-/// The URL a link click navigated to: keeps pumping until the click's
-/// navigation — the first one past `navigations_before_click` — has been
-/// applied, so the outcome does not depend on how fast its thread runs.
-fn completed_navigation(
-    system: &mut HeadlessWindowSystem,
-    presenter: &mut RecordingPresenter,
-    session: &mut TestSession,
-    navigations_before_click: usize,
-) -> network::Url {
-    for _ in 0..5000 {
-        if session.stats().navigations > navigations_before_click {
-            break;
-        }
-        pump(system, presenter, session);
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-    assert!(
-        session.stats().navigations > navigations_before_click,
-        "the click's navigation never arrived"
-    );
-    session
-        .base_url()
-        .cloned()
-        .expect("an applied navigation sets the document base")
-}
-
-fn navigation_to(markup: &str, url: &str) -> LoopMessage {
-    let document = dom::parse(markup).unwrap().into_tree();
-    LoopMessage::Navigation(Ok((document, network::Url::parse(url).unwrap())))
-}
-
-/// Installs `markup` as a navigated document at `url`, the same way a
-/// finished navigation thread does.
-fn load(session: &mut TestSession, markup: &str, url: &str) {
-    session
-        .outbox_for_test()
-        .send(navigation_to(markup, url))
-        .unwrap();
-    session.drain_messages();
-}
-
-fn loaded_session(viewport: SurfaceSize) -> TestSession {
-    let mut session = session_over(MockTransport::new(), viewport);
-    load(
-        &mut session,
-        "<html><body>hi</body></html>",
-        "http://example.com/",
-    );
-    session
+fn placeholder_framebuffer() -> Framebuffer {
+    let size = graphics::SurfaceSize::new(1, 1).unwrap();
+    Framebuffer::filled(size, Color::TRANSPARENT).unwrap()
 }
 
 #[test]
@@ -148,12 +85,9 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     let mut session = loaded_session(attributes.initial_size());
     let outbox = session.outbox_for_test();
     for index in 0..50u32 {
-        outbox
-            .send(LoopMessage::Image(
-                ImageId::new(index),
-                Ok(placeholder_framebuffer()),
-            ))
-            .unwrap();
+        let image = FetchPayload::Image(ImageId::new(index), Ok(placeholder_framebuffer()));
+        let navigation = session.current_navigation_for_test();
+        outbox.send(FetchResult::new(navigation, image)).unwrap();
     }
 
     pump(&mut system, &mut presenter, &mut session);
@@ -165,21 +99,9 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     );
 }
 
-fn pump(
-    system: &mut HeadlessWindowSystem,
-    presenter: &mut RecordingPresenter,
-    session: &mut TestSession,
-) {
-    pump_once(system, presenter, session).unwrap();
-}
-
 #[test]
 fn a_redraw_request_repaints_the_cached_frame_without_a_relayout() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     // First pump: the auto-seeded Resized lays out and presents once.
     pump(&mut system, &mut presenter, &mut session);
@@ -223,11 +145,7 @@ fn a_redraw_request_before_the_first_frame_is_a_silent_noop() {
 
 #[test]
 fn a_relayout_arms_a_following_repaint() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
     assert_eq!(presenter.present_count(), 1);
@@ -250,11 +168,7 @@ fn a_relayout_arms_a_following_repaint() {
 
 #[test]
 fn many_redraw_requests_in_one_pump_coalesce_to_one_repaint() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
+    let (mut system, mut presenter, mut session) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut session);
     let presents_after_load = presenter.present_count();
@@ -418,477 +332,24 @@ fn pump_queued(session: &mut TestSession) {
     pump(&mut system, &mut presenter, session);
 }
 
-fn late_stylesheet() -> LoopMessage {
-    LoopMessage::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()))
-}
-
+/// `NavigationId` supersession is proved purely in `core/browser`; this
+/// proves the session routes worker results through it.
 #[test]
-fn a_subresource_fetched_for_a_page_the_user_left_is_not_applied_to_the_next_one() {
+fn the_session_drops_a_result_stamped_for_a_navigation_the_user_left() {
     let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let page_a = session.outbox_for_test();
-    // Already queued when the user leaves A; ImageId 12 names a different <img> in B.
-    page_a.send(late_stylesheet()).unwrap();
-    page_a
-        .send(LoopMessage::Image(
-            ImageId::new(12),
-            Ok(placeholder_framebuffer()),
-        ))
-        .unwrap();
-    session.begin_navigation_for_test();
-    let page_b = session.outbox_for_test();
-    page_b
-        .send(navigation_to(
-            "<html><body>b</body></html>",
-            &page_url("b.html"),
-        ))
-        .unwrap();
-
-    pump_queued(&mut session);
-
-    let stats = session.stats();
-    assert_eq!(stats.navigations, 2, "page B itself must still be applied");
-    assert_eq!(
-        stats.stylesheets_loaded, 0,
-        "A's stylesheet must not enter B's cascade"
-    );
-    assert_eq!(
-        stats.images_loaded, 0,
-        "A's image must not replace whatever B has at the same ImageId"
-    );
-    assert!(
-        page_a.send(late_stylesheet()).is_err(),
-        "a worker of A still running has no way back to the session"
-    );
-}
-
-#[test]
-fn a_slower_earlier_navigation_does_not_replace_the_latest_one() {
-    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let slow = session.outbox_for_test();
-    session.begin_navigation_for_test();
-    let fast = session.outbox_for_test();
-    fast.send(navigation_to(
-        "<html><body>fast</body></html>",
-        &page_url("fast.html"),
-    ))
-    .unwrap();
-
-    let slow_result = slow.send(navigation_to(
-        "<html><body>slow</body></html>",
-        &page_url("slow.html"),
-    ));
-    pump_queued(&mut session);
-
-    assert!(
-        slow_result.is_err(),
-        "the response of the link clicked first has no way back"
-    );
-    assert_eq!(
-        session.base_url().map(ToString::to_string),
-        Some(page_url("fast.html")),
-        "the page clicked last stays"
-    );
-    assert_eq!(
-        session.stats().navigations,
-        2,
-        "the slow one is not counted"
-    );
-}
-
-#[test]
-fn a_failure_of_a_superseded_navigation_does_not_replace_the_current_page() {
-    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let slow = session.outbox_for_test();
-    session.begin_navigation_for_test();
+    let left = session.current_navigation_for_test();
+    session.navigate(network::Url::parse(&page_url("next.html")).unwrap());
+    let late_sheet =
+        FetchPayload::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()));
     session
         .outbox_for_test()
-        .send(navigation_to(
-            "<html><body>fast</body></html>",
-            &page_url("fast.html"),
-        ))
+        .send(FetchResult::new(left, late_sheet))
         .unwrap();
 
-    let slow_result = slow.send(LoopMessage::Navigation(Err(AlloyError::InvalidDimensions)));
     pump_queued(&mut session);
 
-    assert!(slow_result.is_err());
-    assert_eq!(
-        session.stats().navigation_errors,
-        0,
-        "an error nobody is waiting for must not become the error card"
-    );
-    assert_eq!(
-        session.base_url().map(ToString::to_string),
-        Some(page_url("fast.html"))
-    );
-}
-
-#[test]
-fn following_a_link_supersedes_the_navigation_in_flight() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = session_over(MockTransport::new(), attributes.initial_size());
-    load(
-        &mut session,
-        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
-        &page_url("index.html"),
-    );
-    pump(&mut system, &mut presenter, &mut session);
-    let before_click = session.outbox_for_test();
-    system.schedule(WindowEvent::PointerMoved {
-        position: window::PhysicalPosition::new(20.0, window_y(20.0)),
-    });
-    system.schedule(WindowEvent::PointerButton {
-        button: window::PointerButton::Left,
-        pressed: true,
-    });
-
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(
-        before_click.send(late_stylesheet()).is_err(),
-        "a click that navigates must cut off everything still in flight"
-    );
-}
-
-#[test]
-fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
-    let mut session = loaded_session(initial_window_attributes().unwrap().initial_size());
-    let page = session.outbox_for_test();
-    page.send(LoopMessage::Stylesheet(
-        css::MediaQuery::never(),
-        Ok("body { background: red; }".into()),
-    ))
-    .unwrap();
-
-    pump_queued(&mut session);
-
-    let stats = session.stats();
-    assert_eq!(
-        stats.stylesheets_loaded, 0,
-        "print or non-matching stylesheet must not be absorbed"
-    );
-}
-
-#[test]
-fn ctrl_l_shortcut_focuses_omnibox_and_selects_all_text() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-
-    pump(&mut system, &mut presenter, &mut session);
-    assert!(!session.omnibox().is_focused());
-    assert!(!session.omnibox().is_all_selected());
-
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: false,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: false,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(
-        session.omnibox().is_focused(),
-        "Ctrl+L must grant focus to the omnibox"
-    );
-    assert!(
-        session.omnibox().is_all_selected(),
-        "Ctrl+L must select existing omnibox text"
-    );
-}
-
-#[test]
-fn alt_d_shortcut_focuses_omnibox_and_selects_all_text() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-
-    pump(&mut system, &mut presenter, &mut session);
-    assert!(!session.omnibox().is_focused());
-
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::ALT_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_D,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_D,
-        pressed: false,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::ALT_LEFT,
-        pressed: false,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(
-        session.omnibox().is_focused(),
-        "Alt+D must grant focus to the omnibox"
-    );
-    assert!(
-        session.omnibox().is_all_selected(),
-        "Alt+D must select existing omnibox text"
-    );
-}
-
-#[test]
-fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-
-    // Initial pump: document relayouts once.
-    pump(&mut system, &mut presenter, &mut session);
-    let relayouts_before = session.stats().relayouts;
-    assert_eq!(relayouts_before, 1);
-
-    // Focus omnibox via Ctrl+L.
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert!(session.omnibox().is_focused());
-    assert_eq!(
-        session.stats().relayouts,
-        relayouts_before,
-        "focusing omnibox must not trigger a DOM relayout"
-    );
-
-    // First character replaces selected text.
-    system.schedule(WindowEvent::TextInput {
-        text: "h".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "h");
-    assert_eq!(
-        session.stats().relayouts,
-        relayouts_before,
-        "typing in omnibox must strictly leave stats.relayouts unchanged"
-    );
-
-    // Subsequent characters append to the buffer.
-    system.schedule(WindowEvent::TextInput {
-        text: "ello".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "hello");
-    assert_eq!(
-        session.stats().relayouts,
-        relayouts_before,
-        "typing in omnibox must strictly leave stats.relayouts unchanged"
-    );
-}
-
-#[test]
-fn typing_when_unfocused_is_ignored() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-
-    pump(&mut system, &mut presenter, &mut session);
-    let initial_text = session.omnibox().text().to_string();
-
-    system.schedule(WindowEvent::TextInput {
-        text: "ignored".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert_eq!(
-        session.omnibox().text(),
-        initial_text.as_str(),
-        "typing without omnibox focus must not mutate the buffer"
-    );
-}
-
-#[test]
-fn escape_cancels_editing_reverts_to_active_url_and_unfocuses() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-
-    pump(&mut system, &mut presenter, &mut session);
-    let original_url_text = session.omnibox().text().to_string();
-
-    // Focus and type.
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-
-    system.schedule(WindowEvent::TextInput {
-        text: "draft query".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "draft query");
-    assert!(session.omnibox().is_focused());
-
-    // Press Escape.
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Escape,
-        state: KeyState::Pressed,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-
-    assert!(
-        !session.omnibox().is_focused(),
-        "Escape must release omnibox focus"
-    );
-    assert_eq!(
-        session.omnibox().text(),
-        original_url_text.as_str(),
-        "Escape must revert omnibox text to active page URL"
-    );
-}
-
-#[test]
-fn end_to_end_shortcut_typing_and_navigation_dispatch() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-
-    let target = network::Url::parse("https://rust-lang.org/").unwrap();
-    let response = network::HttpResponse::new(
-        network::StatusCode::OK,
-        network::HeaderMap::new(),
-        network::Body::from_text("<html><body>Rust</body></html>"),
-    );
-    let mut session = session_over(
-        MockTransport::new().with_response(target.clone(), response),
-        attributes.initial_size(),
-    );
-    load(
-        &mut session,
-        "<html><body>Initial page</body></html>",
-        "http://example.com/index.html",
-    );
-    pump(&mut system, &mut presenter, &mut session);
-    let navigations_before = session.stats().navigations;
-
-    // 1. Press Ctrl+L to focus omnibox.
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert!(session.omnibox().is_focused());
-
-    // 2. Type "rust-lang.org" (without scheme).
-    system.schedule(WindowEvent::TextInput {
-        text: "rust-lang.org".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "rust-lang.org");
-
-    // 3. Press Enter.
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Enter,
-        state: KeyState::Pressed,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-
-    // Focus must be released immediately.
-    assert!(
-        !session.omnibox().is_focused(),
-        "pressing Enter must release omnibox focus"
-    );
-
-    // Navigation must be classified as https://rust-lang.org/ and completed.
-    assert_eq!(
-        completed_navigation(
-            &mut system,
-            &mut presenter,
-            &mut session,
-            navigations_before
-        ),
-        target,
-        "Enter must classify input and dispatch navigation to classified destination"
-    );
-}
-
-#[test]
-fn control_keys_backspace_and_arrows_operate_on_focused_omnibox() {
-    let attributes = initial_window_attributes().unwrap();
-    let mut system = HeadlessWindowSystem::new();
-    system.create_window(&attributes).unwrap();
-    let mut presenter = RecordingPresenter::new();
-    let mut session = loaded_session(attributes.initial_size());
-
-    pump(&mut system, &mut presenter, &mut session);
-
-    // Focus via Ctrl+L and type "cat"
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::CONTROL_LEFT,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::Key {
-        code: KeyCode::KEY_L,
-        pressed: true,
-    });
-    system.schedule(WindowEvent::TextInput {
-        text: "cat".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "cat");
-
-    // Backspace removes 't' -> "ca"
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::Backspace,
-        state: KeyState::Pressed,
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "ca");
-
-    // ArrowLeft moves cursor between 'c' and 'a', then type 'o' -> "coa"
-    system.schedule(WindowEvent::ControlKey {
-        key: LogicalKey::ArrowLeft,
-        state: KeyState::Pressed,
-    });
-    system.schedule(WindowEvent::TextInput {
-        text: "o".to_string(),
-    });
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.omnibox().text(), "coa");
+    assert_eq!(session.stats().stylesheets_loaded, 0);
+    assert_ne!(session.current_navigation_for_test(), left);
 }
 
 #[test]

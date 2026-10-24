@@ -9,16 +9,16 @@
 
 use std::sync::Arc;
 
+use browser::{ImageStore, LinkTarget, LinkTargets};
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
     StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
 };
 use graphics::{
-    Au, DisplayListBuilder, FontProvider, Framebuffer, Rect, RenderBackend, SoftwareCpuBackend,
+    Au, DisplayListBuilder, FontProvider, Framebuffer, RenderBackend, SoftwareCpuBackend,
     SurfaceSize, SyntheticFontProvider,
 };
 
-use crate::application::image_store::ImageStore;
 use crate::application::paint::{DEFAULT_FONT, paint_box_tree};
 use crate::application::runtime_font::RuntimeFontProvider;
 use crate::error::AlloyError;
@@ -107,15 +107,6 @@ pub fn run_render(source_html: &str, width: u32, height: u32) -> Result<Vec<u8>,
     render_html_to_png(source_html, &options)
 }
 
-/// A clickable link region within the rendered document.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LinkTarget {
-    /// Bounding rectangle in document space (`Au`).
-    pub area: Rect,
-    /// The link destination (`href`).
-    pub href: String,
-}
-
 /// Renders an already-parsed document using the deterministic [`SyntheticFontProvider`].
 ///
 /// `extra_sheets` is absorbed into the document's own `<style>`/`style=`
@@ -163,7 +154,7 @@ pub fn render_dom_with_links<F: FontProvider + 'static>(
     images: &ImageStore,
     surface_size: SurfaceSize,
     font_provider: Arc<F>,
-) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
+) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     // `FontBackedMeasurer` (core/css) still takes a trait object; the `Arc<F>`
     // coerces at this one boundary, so alloy names no `dyn` itself.
     let measured_fonts = Arc::clone(&font_provider);
@@ -185,7 +176,7 @@ fn render_document<F: FontProvider + 'static, M: TextMeasurer + Send + Sync>(
     surface_size: SurfaceSize,
     font_provider: Arc<F>,
     layout: &BlockLayout<M>,
-) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
+) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
     sheets.absorb(extra_sheets);
@@ -237,7 +228,7 @@ fn log_cascade_input(sheets: &StyleSheetSet) {
     }
 }
 
-fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec<LinkTarget> {
+fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> LinkTargets {
     let mut targets = Vec::new();
     for laid_out in box_tree.boxes_in_document_order() {
         let border_box = laid_out.border_box();
@@ -252,16 +243,13 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
             if node.tag_str() == Some("a")
                 && let Some(href) = node.attribute("href")
             {
-                targets.push(LinkTarget {
-                    area: border_box,
-                    href: href.to_string(),
-                });
+                targets.push(LinkTarget::new(border_box, href));
                 break;
             }
             current_id = node.parent();
         }
     }
-    targets
+    targets.into_iter().collect()
 }
 
 fn make_constraints(surface_size: SurfaceSize) -> Result<ViewportConstraints, AlloyError> {

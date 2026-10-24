@@ -5,48 +5,29 @@ use std::sync::Arc;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy};
 
-use crate::application::subresource::{MarkupDiscoverer, SubresourceDiscoverer};
-
-/// Font, network and discovery collaborators of one browser session.
+/// Font and network collaborators of one browser session.
 ///
-/// Bundled so the event loop stays statically dispatched (`F`, `T`, `P`, `D`
-/// are all monomorphised — no `dyn`) without every function repeating four
+/// Bundled so the event loop stays statically dispatched (`F`, `T`, `P` are
+/// all monomorphised — no `dyn`) without every function repeating three
 /// arguments.
 ///
 /// The transport and policy are shared by pointer because each background
-/// fetch thread needs its own owning handle.
-pub struct BrowserServices<F, T, P, D = MarkupDiscoverer> {
+/// fetch thread needs its own owning handle. Subresource discovery is not a
+/// service of the session: the browsing context owns it (`core/browser`).
+pub struct BrowserServices<F, T, P> {
     font_provider: Arc<F>,
     transport: Arc<T>,
     policy: Arc<P>,
-    discoverer: D,
 }
 
 impl<F: FontProvider, T: HttpTransport, P: RequestPolicy> BrowserServices<F, T, P> {
-    /// Services discovering subresources from markup ([`MarkupDiscoverer`]).
+    /// Services over `font_provider`, `transport` and `policy`.
     #[must_use]
     pub const fn new(font_provider: Arc<F>, transport: Arc<T>, policy: Arc<P>) -> Self {
         Self {
             font_provider,
             transport,
             policy,
-            discoverer: MarkupDiscoverer,
-        }
-    }
-}
-
-impl<F, T, P, D> BrowserServices<F, T, P, D> {
-    /// The same services discovering subresources through `discoverer`.
-    #[must_use]
-    pub fn with_discoverer<Other: SubresourceDiscoverer>(
-        self,
-        discoverer: Other,
-    ) -> BrowserServices<F, T, P, Other> {
-        BrowserServices {
-            font_provider: self.font_provider,
-            transport: self.transport,
-            policy: self.policy,
-            discoverer,
         }
     }
 
@@ -66,11 +47,5 @@ impl<F, T, P, D> BrowserServices<F, T, P, D> {
     #[must_use]
     pub const fn policy(&self) -> &Arc<P> {
         &self.policy
-    }
-
-    /// Where a document's subresource references come from.
-    #[must_use]
-    pub const fn discoverer(&self) -> &D {
-        &self.discoverer
     }
 }

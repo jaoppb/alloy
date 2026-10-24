@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
 	"alloy",
+	"core/browser",
 	"core/css",
 	"core/dom",
 	"core/engine",

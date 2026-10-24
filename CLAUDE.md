@@ -70,8 +70,14 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   RustCrypto alternative NO-GO — `docs/reports/SPIKE-C0-TLS-PROVIDER.md`), `HttpTransport`/`RequestPolicy` ports
   (`PRD-009`). `network::PORT_SCHEMA_VERSION = 1`, **not yet frozen** — freezes at `I4`.
 - **C2 — `core/window`**: `winit`+`softbuffer` adapter, `WindowSystem`/`Presenter` ports (`PRD-010`), headless reference
-  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 3` (`1→2`:
-  `WindowSystem::request_redraw` added during I4; `2→3`: `TextInput`/`ControlKey` for Omnibox #44), **not yet frozen**.
+  (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 4` (`1→2`:
+  `WindowSystem::request_redraw` added during I4; `2→3`: `TextInput`/`ControlKey` for Omnibox #44; `3→4` (#112,
+  ADR-0027): one `WindowEvent::Key(KeyEvent)` per press carrying logical/physical key, `text`, `Modifiers` (incl.
+  `alt_graph()`) and `Pressed | Repeated | Released`, `TextCommitted(InputText)` for IME commits only, `set_title` and
+  `set_cursor`; `ControlKey` and key-produced `TextInput` are gone, no alias). Frozen at `I4`: a bump needs a `PRD-010`
+  §6 note. The adapter never decides shortcut versus typing — `KeyEvent::text` ignores Ctrl on Linux (Ctrl+L carries
+  `"l"`), so a consumer reads `modifiers` first; `alloy`'s `event_loop/key_mapping.rs` is the interim mapping until the
+  `core/ui` router and keymap land (#113, epic #110).
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
 - **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;
@@ -90,6 +96,11 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   **Known gap this session did not close**: that coverage extension currently measures **~66% lines**, not the 85% the
   gate requires — it is wired as specified and will fail until more domain-level tests are written for `network` (`Url`,
   `HeaderMap`, error variants) and `window` (`error`, `attributes`) especially.
+- **#111 — `core/browser`** (epic #110, ADR-0026): the document state, fetch-result application, subresource discovery,
+  `ImageStore` and the error page moved out of `alloy`'s `Session` into a pure, thread-free `BrowsingContext`.
+  Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment); `arch-lint.toml` (`browser-pure`)
+  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/.../event_loop/worker.rs` is the thin executor
+  of `BrowserEffect::Fetch`.
 - **I4 — `alloy <url>`, native window rendering**: **not part of this delivered set** — in progress separately.
 
 Still **stubs** (a doc comment and `#![forbid(unsafe_code)]`, no functions): `core/js`, `devtools`, `extension`. Open
@@ -148,6 +159,7 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/js`                    | `js`            | Web-content ECMAScript runtime (untrusted page `<script>`) — distinct from the Rhai muscle engine. **Stub (v0.7+)**       |
 | `core/dom`                   | `dom`           | Node hierarchy, elements, mutations; `DomTreeSink` + `parse` over `html` (depends on `html`, ADR-0024)                    |
 | `core/html`                  | `html`          | HTML vocabulary (`TagName`, `AttributeName`, `NamedCharacterReference`), HTML5 tokenizer & `TreeSink`/`TokenSink` ports. Leaf crate    |
+| `core/browser`               | `browser`       | Pure browsing context: `BrowsingContext`, `NavigationId` supersession, `RegionId` link regions, error page, subresource discovery, `ImageStore` — returns `BrowserEffect`s, never spawns a thread (ADR-0026) |
 | `core/css`                   | `css`           | Parser, selectors, cascade, box model / inline formatting / Flexbox layout (v0.5 B0–B4)                                   |
 | `core/graphics`              | `graphics`      | `DisplayList`, `RenderBackend` port, `SoftwareCpuBackend`, PNG codec, text rasterization (v0.3–v0.5)                      |
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |

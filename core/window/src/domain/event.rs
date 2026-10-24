@@ -9,8 +9,9 @@
 //! exhaustive match with no wildcard over `winit::event::WindowEvent` itself
 //! (`ADR-0011` item 3).
 
-use crate::domain::key::{KeyCode, KeyState, LogicalKey};
+use crate::domain::key_event::KeyEvent;
 use crate::domain::surface::{PhysicalPosition, SurfaceSize};
+use crate::domain::text::InputText;
 
 /// One event a window's backend observed.
 #[derive(Clone, Debug, PartialEq)]
@@ -29,13 +30,14 @@ pub enum WindowEvent {
         button: PointerButton,
         pressed: bool,
     },
-    /// A keyboard key changed state.
-    Key { code: KeyCode, pressed: bool },
-    /// Text input produced by typing under the active keyboard layout or
-    /// committed by an IME.
-    TextInput { text: String },
-    /// A logical editing or navigation control key event.
-    ControlKey { key: LogicalKey, state: KeyState },
+    /// One physical key press (or auto-repeat, or release), carrying its
+    /// meaning, position, text and modifiers. The adapter never classifies it
+    /// as shortcut or typing — the consumer's keymap does (`ADR-0027`).
+    Key(KeyEvent),
+    /// Text an input method committed, with no single key behind it
+    /// (composition, emoji pickers, dictation). Text a key press produces
+    /// travels in [`KeyEvent::text`] instead.
+    TextCommitted(InputText),
     /// A scroll wheel or touchpad-pan gesture. No invariant to protect (any
     /// finite delta is a legal reading), so `delta_x`/`delta_y` stay bare
     /// `f64` rather than a dedicated newtype.

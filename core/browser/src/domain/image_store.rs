@@ -1,16 +1,14 @@
-//! The decoded images a live page currently knows about.
+//! The decoded images a live page currently knows about (moved from `alloy` by #111).
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use graphics::{Framebuffer, GraphicsError, ImageId, ImageProvider};
-
-use crate::application::subresource::placeholder_framebuffer;
+use graphics::{Color, Framebuffer, GraphicsError, ImageId, ImageProvider, SurfaceSize};
 
 /// Decoded images by [`ImageId`], shared by pointer so a relayout snapshots
 /// them without copying pixel buffers.
 ///
-/// Wraps the map so the loop never manipulates the backing collection
+/// Wraps the map so no caller manipulates the backing collection
 /// directly (CLAUDE.md: first-class collections, no naked primitives).
 #[derive(Clone, Debug, Default)]
 pub struct ImageStore {
@@ -71,6 +69,27 @@ impl ImageProvider for StoreSnapshot {
         let frame = self.frames.get(&image).unwrap_or(&self.placeholder);
         Ok(Arc::clone(frame))
     }
+}
+
+/// A 1×1, fully transparent placeholder.
+///
+/// `core/css` marks every replaced-element box (`<img>` included)
+/// [`css::IntrinsicSize::Pending`] the moment it sees the tag — regardless of
+/// whether the resource has loaded (`core/css/src/domain/computed/intrinsic.rs`)
+/// — and the painter always emits a `DrawImage` command for a pending box.
+/// Every id a discoverer finds must therefore resolve to *something* from the
+/// very first paint, or rendering fails outright before a single fetch has had
+/// a chance to complete.
+// "genuinely impossible state" `.expect()` carve-out CLAUDE.md documents:
+// 1x1 is a compile-time-known-valid, non-zero surface size (same pattern as
+// core/css/src/infrastructure/ua_sheet.rs). Private: an impossible-state
+// `.expect()` is only defensible for a module's own callers.
+#[allow(clippy::expect_used)]
+#[must_use]
+fn placeholder_framebuffer() -> Framebuffer {
+    let size = SurfaceSize::new(1, 1).expect("1×1 is always a valid, non-zero surface size");
+    Framebuffer::filled(size, Color::TRANSPARENT)
+        .expect("a freshly built 1×1 framebuffer always fits its own pixel buffer")
 }
 
 #[cfg(test)]

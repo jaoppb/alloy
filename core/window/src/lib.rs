@@ -16,8 +16,10 @@
 //!
 //! - [`domain`] — zero-I/O value objects: [`WindowEvent`] / [`PointerButton`],
 //!   [`SurfaceSize`] / [`ScaleFactor`] / [`PhysicalPosition`], [`FrameView`],
-//!   [`WindowAttributes`] / [`WindowTitle`] / [`WindowId`], [`KeyCode`], and
-//!   the typed [`WindowError`] / [`WindowOperation`].
+//!   [`WindowAttributes`] / [`WindowTitle`] / [`WindowId`], the keyboard
+//!   vocabulary ([`KeyEvent`], [`LogicalKey`], [`KeyCode`], [`Modifiers`],
+//!   [`InputText`]), [`CursorIcon`], and the typed [`WindowError`] /
+//!   [`WindowOperation`].
 //! - [`application`] — the two ports ([`WindowSystem`], [`Presenter`],
 //!   [`PumpStatus`]) and the [`conformance`] suite.
 //! - [`infrastructure`] — the `winit` + `softbuffer` adapter
@@ -78,16 +80,30 @@ pub mod infrastructure;
 ///
 /// `2 -> 3`: Added `WindowEvent::TextInput` and `WindowEvent::ControlKey`
 /// to capture typed characters and logical editing keys for the omnibox (issue #44).
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+///
+/// `3 -> 4`: One event per physical key press (`ADR-0027`, issue #112).
+/// `WindowEvent::Key` is now `Key(KeyEvent)` — logical key, physical key, text,
+/// modifiers and `Pressed | Repeated | Released` state in one value — and
+/// `WindowEvent::TextInput` / `WindowEvent::ControlKey` are removed;
+/// `WindowEvent::TextCommitted` carries IME commits only. Added `Modifiers`
+/// (with `alt_graph`), `InputText`, `CursorIcon`, `LogicalKey::Character` and
+/// more named keys, plus the `WindowSystem::set_title` / `set_cursor` commands.
+pub const PORT_SCHEMA_VERSION: u32 = 4;
 
 pub use application::conformance;
 pub use application::{Presenter, PumpStatus, WindowSystem};
 pub use domain::attributes::{WindowAttributes, WindowId, WindowTitle};
+pub use domain::cursor::CursorIcon;
 pub use domain::error::{WindowError, WindowOperation};
 pub use domain::event::{PointerButton, WindowEvent};
 pub use domain::frame::FrameView;
-pub use domain::key::{KeyCode, KeyState, LogicalKey};
+pub use domain::function_key::FunctionKey;
+pub use domain::key::KeyCode;
+pub use domain::key_event::{KeyEvent, KeyState};
+pub use domain::logical_key::LogicalKey;
+pub use domain::modifiers::Modifiers;
 pub use domain::surface::{PhysicalPosition, ScaleFactor, SurfaceSize};
+pub use domain::text::InputText;
 pub use infrastructure::{HeadlessWindowSystem, RecordingPresenter};
 
 #[cfg(feature = "winit-system")]

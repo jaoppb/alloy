@@ -1,0 +1,156 @@
+//! The links of the last layout, addressed by [`RegionId`] (see [`super::region`]).
+
+use super::region::{ContentRegion, LayoutEpoch, LinkTargets, RegionId};
+use crate::domain::ContextId;
+
+/// Why a [`RegionId`] could not be resolved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RegionError {
+    /// Minted by another browsing context.
+    #[error("region belongs to {0}, not this context")]
+    WrongContext(ContextId),
+    /// Minted for an earlier layout or document.
+    #[error("region is from an earlier layout (epoch {minted:?}, current {current:?})")]
+    Stale {
+        /// The epoch the id was minted for.
+        minted: LayoutEpoch,
+        /// The epoch the document is in now.
+        current: LayoutEpoch,
+    },
+    /// No such link in the current layout.
+    #[error("region index {0} is out of range")]
+    Unknown(usize),
+}
+
+/// The links of the current layout, plus the epoch they were minted in.
+#[derive(Clone, Debug)]
+pub struct ContentRegions {
+    context: ContextId,
+    epoch: LayoutEpoch,
+    targets: LinkTargets,
+}
+
+impl ContentRegions {
+    /// No links, epoch zero.
+    #[must_use]
+    pub const fn new(context: ContextId) -> Self {
+        Self {
+            context,
+            epoch: LayoutEpoch(0),
+            targets: LinkTargets::none(),
+        }
+    }
+
+    /// Adopts the links of a fresh layout under a new epoch.
+    pub fn replace(&mut self, targets: LinkTargets) {
+        self.epoch = self.epoch.next();
+        self.targets = targets;
+    }
+
+    /// Forgets every link under a new epoch — the document they described is gone.
+    pub fn invalidate(&mut self) {
+        self.replace(LinkTargets::none());
+    }
+
+    /// The epoch ids are currently minted in.
+    #[must_use]
+    pub const fn epoch(&self) -> LayoutEpoch {
+        self.epoch
+    }
+
+    /// The regions of the current layout, in paint order.
+    pub fn iter(&self) -> impl Iterator<Item = ContentRegion> + '_ {
+        (&self.targets)
+            .into_iter()
+            .enumerate()
+            .map(|(index, target)| ContentRegion {
+                id: RegionId {
+                    context: self.context,
+                    epoch: self.epoch,
+                    index,
+                },
+                bounds: target.area(),
+            })
+    }
+
+    /// Where the region `id` points, if it is still from the current layout.
+    ///
+    /// # Errors
+    ///
+    /// [`RegionError`] when `id` belongs to another context, to an earlier
+    /// layout or document, or to no link at all.
+    pub fn href(&self, id: RegionId) -> Result<&str, RegionError> {
+        if id.context != self.context {
+            return Err(RegionError::WrongContext(id.context));
+        }
+        if id.epoch != self.epoch {
+            return Err(RegionError::Stale {
+                minted: id.epoch,
+                current: self.epoch,
+            });
+        }
+        self.targets
+            .get(id.index)
+            .map(super::region::LinkTarget::href)
+            .ok_or(RegionError::Unknown(id.index))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use graphics::{Au, Point, Rect, Size};
+
+    use super::{ContentRegions, RegionError};
+    use crate::domain::ContextId;
+    use crate::domain::LinkTarget;
+
+    fn link(href: &str) -> LinkTarget {
+        let au = |pixels| Au::from_whole_px(pixels).unwrap();
+        let area = Rect::new(Point::new(au(0), au(0)), Size::new(au(10), au(10)).unwrap());
+        LinkTarget::new(area, href)
+    }
+
+    fn regions_with(hrefs: &[&str]) -> ContentRegions {
+        let mut regions = ContentRegions::new(ContextId::ROOT);
+        regions.replace(hrefs.iter().map(|href| link(href)).collect());
+        regions
+    }
+
+    #[test]
+    fn a_minted_region_resolves_to_its_href_in_paint_order() {
+        let regions = regions_with(&["/a", "/b"]);
+        let ids: Vec<_> = regions.iter().map(|region| region.id()).collect();
+
+        assert_eq!(regions.href(ids[0]), Ok("/a"));
+        assert_eq!(regions.href(ids[1]), Ok("/b"));
+    }
+
+    #[test]
+    fn a_region_from_before_a_relayout_is_stale_even_when_its_index_still_exists() {
+        let mut regions = regions_with(&["/old"]);
+        let old = regions.iter().next().unwrap().id();
+        regions.replace(std::iter::once(link("/new")).collect());
+
+        assert!(matches!(regions.href(old), Err(RegionError::Stale { .. })));
+    }
+
+    #[test]
+    fn invalidating_refuses_every_earlier_region_and_lists_none() {
+        let mut regions = regions_with(&["/a"]);
+        let old = regions.iter().next().unwrap().id();
+        regions.invalidate();
+
+        assert!(matches!(regions.href(old), Err(RegionError::Stale { .. })));
+        assert_eq!(regions.iter().count(), 0);
+    }
+
+    #[test]
+    fn an_index_past_the_last_link_is_unknown_not_a_panic() {
+        let two = regions_with(&["/a", "/b"]);
+        let past_the_end = two.iter().nth(1).unwrap().id();
+        let mut one = ContentRegions::new(ContextId::ROOT);
+        one.replace(std::iter::once(link("/a")).collect());
+        // Same epoch number (1), but only one link: index 1 does not exist.
+        assert_eq!(one.href(past_the_end), Err(RegionError::Unknown(1)));
+    }
+}
