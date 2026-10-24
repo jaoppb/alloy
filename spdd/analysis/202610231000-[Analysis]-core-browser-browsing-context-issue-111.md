@@ -1,4 +1,4 @@
-# SPDD Analysis: `core/browser` — the pure browsing context (issue #111)
+# SPDD Analysis: `core/browser` - the pure browsing context (issue #111)
 
 ## Original Business Requirement
 
@@ -17,26 +17,26 @@ sleepless test that a late `complete` is dropped; `ContextId` on every id/effect
 - Fetch-result application (`drain_messages`, `apply`, `load_document`, `absorb_stylesheet`, `spawn_subresources`) and
   link policy lived in `session/{mod,messages}.rs`; the error page was a `format!` with `&` and `<` escaped.
 - `SubresourceDiscoverer` and `ImageStore` lived in `alloy/src/application`.
-- Hit testing returned the raw `href`, resolved against `base_url` on click — also after a document swap and before the
+- Hit testing returned the raw `href`, resolved against `base_url` on click - also after a document swap and before the
   next relayout, so a click could follow the previous page's link against the new page's base.
 
 ## Decisions
 
-1. **Crate shape** — `core/browser` with `domain/` (ids, `Document`, `ContentRegions`, requests, effects, stats, link
+1. **Crate shape** - `core/browser` with `domain/` (ids, `Document`, `ContentRegions`, requests, effects, stats, link
    policy), `application/` (`BrowsingContext`, `SubresourceDiscoverer`, `error_page`) and `infrastructure/`
    (`MarkupDiscoverer`). Depends on `dom`, `html`, `css`, `network`, `graphics` (domain types only).
-2. **Supersession by `NavigationId`** (#110 decision 4) — one id per navigation, stamped on its fetches; `complete`
+2. **Supersession by `NavigationId`** (#110 decision 4) - one id per navigation, stamped on its fetches; `complete`
    drops a non-latest id. Recorded as an ADR-0019 amendment. A _genesis_ id (sequence 0, never issued) keeps `latest()`
    total.
 3. **`FetchResult` carries its `NavigationId`** (and so its `ContextId`), so `complete(result)` takes one argument
    rather than `complete(NavigationId, FetchResult)`: the stamp cannot disagree with the payload.
-4. **Effects** — `NavigationStarted`, `Fetch`, `DocumentLoaded`, `ContentDamaged`, each naming its context. The issue's
+4. **Effects** - `NavigationStarted`, `Fetch`, `DocumentLoaded`, `ContentDamaged`, each naming its context. The issue's
    `TitleChanged` is left to #84 (nothing produces a title yet) and `Damage(Content)` is named `ContentDamaged` until
    #108 defines `Damage`.
-5. **Regions** — `RegionId { context, epoch, index }`; `ContentRegions` bumps the epoch on `replace` and `invalidate`.
+5. **Regions** - `RegionId { context, epoch, index }`; `ContentRegions` bumps the epoch on `replace` and `invalidate`.
    `layout_completed(links) -> LayoutEpoch`, `content_regions()`, `follow_link(RegionId)`.
-6. **Error page** — embedded `error.html`; the message is a DOM text node appended to `#error-message`.
-7. **`alloy` side** — `worker.rs` becomes the executor of `FetchRequest`; `Session` keeps one channel, executes effects,
+6. **Error page** - embedded `error.html`; the message is a DOM text node appended to `#error-message`.
+7. **`alloy` side** - `worker.rs` becomes the executor of `FetchRequest`; `Session` keeps one channel, executes effects,
    and builds `LoopStats` from `BrowsingContext::stats()`. The render tree and hit target carry `RegionId`
    (`UiHitTarget::PageLink(RegionId)`), so `href`s no longer reach the chrome.
 8. **`BrowserServices` shares its discoverer** as `Arc<D>` so the context and the services hold the same handle.
