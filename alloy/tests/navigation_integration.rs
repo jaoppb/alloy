@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
+use alloy::infrastructure::{PngImageDecoder, SleepPause, ThreadFetchExecutor};
 use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
 use graphics::SyntheticFontProvider;
 use network::{
@@ -29,14 +30,16 @@ use window::{
 /// host's installed fonts.
 fn services(
     transport: MockTransport,
-) -> BrowserServices<SyntheticFontProvider, MockTransport, AllowAllPolicy> {
+) -> BrowserServices<
+    SyntheticFontProvider,
+    ThreadFetchExecutor<MockTransport, AllowAllPolicy, PngImageDecoder>,
+    SleepPause,
+> {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    BrowserServices::new(
-        font_provider,
-        Arc::new(transport),
-        Arc::new(AllowAllPolicy::new()),
-    )
+    let (fetch_executor, fetch_inbox) =
+        ThreadFetchExecutor::connected(transport, AllowAllPolicy::new());
+    BrowserServices::new(font_provider, fetch_executor, fetch_inbox, SleepPause)
 }
 
 /// 20 px into the page, which starts below the default theme's chrome bar —

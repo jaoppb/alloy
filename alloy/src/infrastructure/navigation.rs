@@ -1,10 +1,12 @@
-//! Navigation (v0.5 Phase I4): `Url -> RequestPolicy -> HttpTransport ->
-//! core/html -> DomTree`.
+//! Navigation (v0.5 Phase I4): `DocumentRequest -> RequestPolicy ->
+//! HttpTransport -> core/html -> DomTree`.
 //!
 //! Policy runs before mechanism (`PRD-009` §3.3): `decide` is consulted
 //! before [`HttpTransport::execute`] ever opens a socket, so a denial costs
-//! no connection.
+//! no connection. This is infrastructure (#114): it is the one place that
+//! calls `execute` for a document, run by a fetch worker.
 
+use browser::DocumentRequest;
 use dom::DomTree;
 use network::{
     HttpRequest, HttpTransport, NetworkError, PolicyVerdict, RequestPolicy, StatusCode, Url,
@@ -12,8 +14,8 @@ use network::{
 
 use crate::error::AlloyError;
 
-/// Fetches `url` through `policy` then `transport`, and parses the response
-/// body as HTML.
+/// Fetches the document `request` asks for through `policy` then `transport`,
+/// and parses the response body as HTML.
 ///
 /// A response that "succeeds" at the transport layer but carries a non-`2xx`
 /// status, an empty body, or bytes that are not UTF-8 text is a typed `Err`
@@ -21,11 +23,13 @@ use crate::error::AlloyError;
 /// visible error card, where a silently-parsed `""` would just be a blank
 /// window (v0.5 Phase I4).
 pub fn navigate<T: HttpTransport, P: RequestPolicy>(
-    url: &Url,
+    document: &DocumentRequest,
     transport: &T,
     policy: &P,
 ) -> Result<DomTree, AlloyError> {
-    let requested = HttpRequest::get(url.clone());
+    let url = document.url();
+    let requested =
+        HttpRequest::new(document.method(), url.clone()).with_body(document.body().clone());
     let request = match policy.decide(&requested)? {
         PolicyVerdict::Allow => requested,
         PolicyVerdict::Rewrite(rewritten) => rewritten,
@@ -58,7 +62,7 @@ pub fn navigate<T: HttpTransport, P: RequestPolicy>(
 ///
 /// A fetch that redirected to an error page still "succeeds" at the transport
 /// layer; both the main document ([`navigate`]) and the subresource fetches
-/// (`event_loop`) go through here so an HTML 404/500 body never reaches a
+/// (`http_fetch`) go through here so an HTML 404/500 body never reaches a
 /// parser as if it were the resource.
 pub(crate) fn ensure_success(url: &Url, status: StatusCode) -> Result<(), AlloyError> {
     if status.is_success() {
@@ -73,14 +77,22 @@ pub(crate) fn ensure_success(url: &Url, status: StatusCode) -> Result<(), AlloyE
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
-    use network::{AllowAllPolicy, Body, HeaderMap, HttpResponse, MockTransport, StatusCode, Url};
+    use browser::DocumentRequest;
+    use network::{
+        AllowAllPolicy, Body, HeaderMap, HttpRequest, HttpResponse, Method, MockTransport,
+        NetworkError, PolicyVerdict, RequestPolicy, StatusCode, Url,
+    };
 
     use super::navigate;
     use crate::error::AlloyError;
 
     fn navigate_to(url: &Url, response: HttpResponse) -> Result<dom::DomTree, AlloyError> {
         let transport = MockTransport::new().with_response(url.clone(), response);
-        navigate(url, &transport, &AllowAllPolicy)
+        navigate(
+            &DocumentRequest::get(url.clone()),
+            &transport,
+            &AllowAllPolicy,
+        )
     }
 
     fn html_ok(body: &str) -> HttpResponse {
@@ -162,6 +174,33 @@ mod tests {
         assert!(
             matches!(result, Err(AlloyError::NonTextualDocument { .. })),
             "got {result:?}"
+        );
+    }
+
+    /// Denies everything, quoting the method and body it was asked about.
+    struct QuotingPolicy;
+
+    impl RequestPolicy for QuotingPolicy {
+        fn decide(&self, request: &HttpRequest) -> Result<PolicyVerdict, NetworkError> {
+            Ok(PolicyVerdict::deny(format!(
+                "{} carrying {} body bytes",
+                request.method(),
+                request.body().len()
+            )))
+        }
+    }
+
+    #[test]
+    fn a_documents_method_and_body_reach_the_policy() {
+        let url = Url::parse("http://example.com/form").unwrap();
+        let document = DocumentRequest::new(url, Method::Post, Body::from_text("a=1"));
+
+        let result = navigate(&document, &MockTransport::new(), &QuotingPolicy);
+
+        let message = result.unwrap_err().to_string();
+        assert!(
+            message.contains("POST carrying 3 body bytes"),
+            "got {message}"
         );
     }
 }

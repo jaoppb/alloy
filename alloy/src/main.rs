@@ -19,9 +19,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::Arc;
 
 use alloy::error::AlloyError;
+use alloy::infrastructure::{SleepPause, ThreadFetchExecutor};
 use alloy::logging;
 use alloy::{
     BrowserServices, RenderOptions, default_runtime_font_provider, initial_window_attributes,
@@ -111,10 +111,13 @@ fn run(cli: &Cli) -> Result<(), AlloyError> {
 /// not this binary's default). Runs until the window closes.
 fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     let url = Url::parse(raw_url)?;
+    let (fetch_executor, fetch_inbox) =
+        ThreadFetchExecutor::connected(RealHttpTransport::new()?, AllowAllPolicy::new());
     let services = BrowserServices::new(
         default_runtime_font_provider(),
-        Arc::new(RealHttpTransport::new()?),
-        Arc::new(AllowAllPolicy::new()),
+        fetch_executor,
+        fetch_inbox,
+        SleepPause,
     );
 
     let mut system = WinitSystem::new()?;

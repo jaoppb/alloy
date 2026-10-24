@@ -9,6 +9,7 @@
 
 pub mod application;
 pub mod error;
+pub mod infrastructure;
 pub mod logging;
 
 pub use application::browser_services::BrowserServices;
@@ -20,7 +21,7 @@ pub use application::pipeline::{
 };
 pub use application::runtime_font::RuntimeFontProvider;
 pub use application::{
-    LoopStats, initial_window_attributes, navigate, run_browser, run_browser_until,
+    LoopStats, initial_window_attributes, run_browser, run_browser_until,
     run_browser_until_first_frame,
 };
 pub use error::AlloyError;

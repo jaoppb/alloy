@@ -20,28 +20,9 @@ use window::{
 
 use super::initial_window_attributes;
 use super::test_support::{
-    TestSession, completed_navigation, load, loaded_session, loaded_window, pump, session_over,
+    TestSession, completed_navigation, deliver, load, loaded_session, loaded_window, pump,
+    session_over,
 };
-use super::worker::fetch_text;
-use crate::error::AlloyError;
-
-#[test]
-fn a_non_2xx_stylesheet_status_is_a_typed_error_not_an_empty_body() {
-    let sheet_url = network::Url::parse("http://example.com/missing.css").unwrap();
-    let not_found = network::HttpResponse::new(
-        network::StatusCode::NOT_FOUND,
-        network::HeaderMap::new(),
-        network::Body::from_text("<!doctype html><title>404</title>"),
-    );
-    let transport = MockTransport::new().with_response(sheet_url.clone(), not_found);
-
-    let result = fetch_text(&sheet_url, &transport);
-
-    assert!(
-        matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
-        "a 404 error page must not reach the CSS parser as a stylesheet"
-    );
-}
 
 fn placeholder_framebuffer() -> Framebuffer {
     let size = graphics::SurfaceSize::new(1, 1).unwrap();
@@ -83,11 +64,10 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
 
     let mut presenter = RecordingPresenter::new();
     let mut session = loaded_session(attributes.initial_size());
-    let outbox = session.outbox_for_test();
     for index in 0..50u32 {
         let image = FetchPayload::Image(ImageId::new(index), Ok(placeholder_framebuffer()));
         let navigation = session.current_navigation_for_test();
-        outbox.send(FetchResult::new(navigation, image)).unwrap();
+        deliver(&session, FetchResult::new(navigation, image));
     }
 
     pump(&mut system, &mut presenter, &mut session);
@@ -341,10 +321,7 @@ fn the_session_drops_a_result_stamped_for_a_navigation_the_user_left() {
     session.navigate(network::Url::parse(&page_url("next.html")).unwrap());
     let late_sheet =
         FetchPayload::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()));
-    session
-        .outbox_for_test()
-        .send(FetchResult::new(left, late_sheet))
-        .unwrap();
+    deliver(&session, FetchResult::new(left, late_sheet));
 
     pump_queued(&mut session);
 

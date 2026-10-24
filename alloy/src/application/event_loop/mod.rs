@@ -1,9 +1,10 @@
 //! The v0.5 Phase I4 event loop (`ADR-0019`).
 //!
 //! A single [`WindowSystem`] owns the main thread. Every blocking fetch —
-//! navigation, a stylesheet, an image — runs on its own `std::thread`; its
-//! result comes back over `std::sync::mpsc` as one more event this loop
-//! drains. **No async runtime.**
+//! navigation, a stylesheet, an image — is handed to the [`FetchExecutor`] port
+//! (`infrastructure` runs it on a worker thread of its own); its result comes back
+//! over `std::sync::mpsc` as one more event this loop drains. **No async
+//! runtime.**
 //!
 //! Coalescing is the same mechanism for both resize and subresource arrival:
 //! one pump cycle drains *every* window event and *every* queued background
@@ -16,7 +17,6 @@ mod key_mapping;
 mod pixel;
 mod session;
 mod stats;
-mod worker;
 
 #[cfg(test)]
 mod keyboard_tests;
@@ -25,10 +25,8 @@ mod test_support;
 #[cfg(test)]
 mod tests;
 
-use std::thread;
-
 use graphics::FontProvider;
-use network::{HttpTransport, RequestPolicy, Url};
+use network::Url;
 use ui::OmniboxInput;
 use window::{
     PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
@@ -40,6 +38,7 @@ use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
 use crate::application::pipeline::RenderOptions;
+use crate::application::ports::{FetchExecutor, IdlePause};
 use crate::error::AlloyError;
 
 /// The window `alloy <url>` and the e2e golden test both open.
@@ -73,9 +72,9 @@ pub fn initial_window_attributes() -> Result<WindowAttributes, AlloyError> {
 /// `RecordingPresenter`) drive the exact same loop, which is what lets the
 /// e2e golden test exercise this function directly rather than a parallel
 /// test-only copy of it.
-pub fn run_browser<S, R, F, T, P>(
+pub fn run_browser<S, R, F, X, W>(
     url: &Url,
-    services: BrowserServices<F, T, P>,
+    services: BrowserServices<F, X, W>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -84,8 +83,8 @@ where
     S: WindowSystem,
     R: Presenter,
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
 {
     run_browser_until(url, services, system, presenter, initial_size, |_| false)
 }
@@ -99,9 +98,9 @@ where
 /// presented frame, without racing the background fetch threads against a
 /// scripted close event — and for a one-shot render, via
 /// [`run_browser_until_first_frame`].
-pub fn run_browser_until<S, R, F, T, P>(
+pub fn run_browser_until<S, R, F, X, W>(
     url: &Url,
-    services: BrowserServices<F, T, P>,
+    services: BrowserServices<F, X, W>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -111,8 +110,8 @@ where
     S: WindowSystem,
     R: Presenter,
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
 {
     let mut session = Session::new(initial_size, services);
     run_loop(url, system, presenter, &mut session, should_stop)
@@ -120,9 +119,9 @@ where
 
 /// [`run_browser_until`], stopping as soon as the first frame has been laid
 /// out and presented.
-pub fn run_browser_until_first_frame<S, R, F, T, P>(
+pub fn run_browser_until_first_frame<S, R, F, X, W>(
     url: &Url,
-    services: BrowserServices<F, T, P>,
+    services: BrowserServices<F, X, W>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -131,33 +130,27 @@ where
     S: WindowSystem,
     R: Presenter,
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
 {
     run_browser_until(url, services, system, presenter, initial_size, |stats| {
         stats.relayouts >= 1
     })
 }
 
-/// How long a pump cycle sleeps when neither a window event nor a
-/// background-fetch result was waiting — keeps the loop from busy-spinning a
-/// CPU core while a fetch is in flight, with no async runtime and no OS
-/// blocking primitive spanning both the window and the `mpsc` channel.
-const IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(4);
-
-fn run_loop<S, R, F, T, P>(
+fn run_loop<S, R, F, X, W>(
     url: &Url,
     system: &mut S,
     presenter: &mut R,
-    session: &mut Session<F, T, P>,
+    session: &mut Session<F, X, W>,
     mut should_stop: impl FnMut(&LoopStats) -> bool,
 ) -> Result<LoopStats, AlloyError>
 where
     S: WindowSystem,
     R: Presenter,
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
 {
     session.navigate(url.clone());
 
@@ -167,7 +160,7 @@ where
             return Ok(session.stats());
         }
         if !did_work {
-            thread::sleep(IDLE_POLL);
+            session.pause_idle();
         }
     }
 }
@@ -181,17 +174,17 @@ where
 /// idle-sleep before the next cycle, purely to avoid busy-spinning a CPU core;
 /// it plays no part in the coalescing invariant itself, which is entirely
 /// "drain everything currently available, then relay out at most once".
-fn pump_once<S, R, F, T, P>(
+fn pump_once<S, R, F, X, W>(
     system: &mut S,
     presenter: &mut R,
-    session: &mut Session<F, T, P>,
+    session: &mut Session<F, X, W>,
 ) -> Result<(PumpStatus, bool), AlloyError>
 where
     S: WindowSystem,
     R: Presenter,
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
 {
     let mut events = PumpEvents::starting_at(session.pointer_position());
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
@@ -227,11 +220,11 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-fn dispatch_omnibox_inputs<F, T, P>(session: &mut Session<F, T, P>, inputs: &[OmniboxInput]) -> bool
+fn dispatch_omnibox_inputs<F, X, W>(session: &mut Session<F, X, W>, inputs: &[OmniboxInput]) -> bool
 where
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
 {
     let mut modified = false;
     for input in inputs {
