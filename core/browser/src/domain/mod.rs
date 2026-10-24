@@ -2,6 +2,7 @@
 //! threads, no I/O (`ADR-0010`).
 
 mod document;
+mod document_request;
 mod effect;
 mod fetch;
 mod image_store;
@@ -13,6 +14,7 @@ mod stats;
 mod subresource;
 
 pub use document::Document;
+pub use document_request::DocumentRequest;
 pub use effect::{BrowserEffect, Effects};
 pub use fetch::{FetchFailure, FetchPayload, FetchRequest, FetchResult, LoadedDocument};
 pub use image_store::{ImageStore, StoreSnapshot};

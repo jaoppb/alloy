@@ -13,8 +13,8 @@ use region::{ContentRegion, ContextId, LayoutEpoch, RegionId};
 
 use crate::application::SubresourceDiscoverer;
 use crate::domain::{
-    BrowserEffect, ContentRegions, ContextStats, Document, Effects, FetchRequest, LinkDestination,
-    LinkTargets, NavigationId, Navigations,
+    BrowserEffect, ContentRegions, ContextStats, Document, DocumentRequest, Effects, FetchRequest,
+    LinkDestination, LinkTargets, NavigationId, Navigations,
 };
 
 mod completion;
@@ -54,7 +54,10 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
         let navigation = self.navigations.latest();
         Effects::from_iter([
             BrowserEffect::NavigationStarted(self.id, url.clone()),
-            BrowserEffect::Fetch(FetchRequest::Document(url), navigation),
+            BrowserEffect::Fetch(
+                FetchRequest::Document(DocumentRequest::get(url)),
+                navigation,
+            ),
         ])
     }
 

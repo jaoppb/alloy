@@ -10,13 +10,13 @@ use graphics::{Framebuffer, ImageId};
 use network::Url;
 use region::ContextId;
 
-use crate::domain::{NavigationId, SubresourceRequest};
+use crate::domain::{DocumentRequest, NavigationId, SubresourceRequest};
 
 /// Something for an executor to fetch.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FetchRequest {
     /// The document a navigation targets.
-    Document(Url),
+    Document(DocumentRequest),
     /// A stylesheet or image the loaded document references.
     Subresource(SubresourceRequest),
 }
