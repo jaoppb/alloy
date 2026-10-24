@@ -71,10 +71,26 @@ reintroduce #117 on the next platform quirk.
 ### Modifiers and AltGr
 
 The adapter stamps `Modifiers` on every `KeyEvent` from `ModifiersChanged`. `winit`'s `ModifiersState` has no AltGr bit,
-so the adapter also tracks `NamedKey::AltGraph` press and release itself and sets `Modifiers::alt_graph()` (Linux only:
-macOS reports Option as Alt, see the router rules below). The tracked state is cleared when the window loses focus. A
-modifier key's own events follow the DOM convention: the AltGr press carries `alt_graph()`, its release does not.
-Windows cannot tell AltGr from Ctrl+Alt; there `alt_graph()` is never set and the fallback below applies.
+so the adapter also tracks `NamedKey::AltGraph` press and release itself and sets `Modifiers::alt_graph()`. On Linux
+this is the only signal. From the `winit` 0.30.13 source (not run on Windows hardware): on a Windows layout that has an
+AltGr key, `winit` names the right Alt key `AltGraph` and clears Ctrl and Alt from `ModifiersState` while it is held, so
+AltGr+Q arrives as `alt_graph()` with neither `control()` nor `alt()` — the same shape as Linux. What still arrives as
+plain Ctrl+Alt on Windows is the _left_ Ctrl+Alt, which Windows also accepts as AltGr; router step 3 covers it. macOS
+reports Option as Alt (no AltGraph key), see below.
+
+Which physical modifier keys are down is recorded from the key events themselves, synthetic ones included, and cleared
+when the window loses focus. A modifier key's own events follow the DOM convention for **every** modifier: its press
+reports it held, its release reports it released unless the other side of the pair (left/right Shift, Ctrl, Alt, Super)
+is still down. This does not depend on whether `winit` delivers `ModifiersChanged` before or after the key event, which
+differs by platform (X11 stamps the state from just before the event).
+
+### Synthetic key events
+
+On X11 and Windows, `winit` synthesises a press for every key already held when the window gains focus and a release for
+every key still down when it loses focus (`KeyboardInput::is_synthetic`). They are platform bookkeeping, not user
+intent: a held letter would otherwise become an `Insert` into a focused omnibox, and a held Ctrl+L would fire `Focus`.
+The adapter never reports them as `WindowEvent`s, but it still records them, because they say which keys are really
+down.
 
 ### Keymap is data
 
@@ -84,10 +100,11 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
 
 ### Router order for a `Pressed` or `Repeated` key event
 
-1. `alt_graph` and `text` → insert the text.
-2. Windows only, exactly Ctrl+Alt and `text` → insert the text (the AltGr fallback).
-3. A keymap binding matches → the bound `Command`. Chords match the logical key first and the physical key as the
-   fallback.
+1. A keymap binding matches → the bound `Command`. Chords match the logical key first and the physical key as the
+   fallback. This comes first so a chord that includes AltGr (Ctrl+AltGr+L) stays bindable.
+2. `alt_graph` and `text` → insert the text.
+3. Windows only, exactly Ctrl+Alt and `text` → insert the text (the fallback for the left Ctrl+Alt that Windows accepts
+   as AltGr).
 4. Ctrl, Super or Alt held without AltGr → dropped; nothing is inserted (an unbound Ctrl+K types nothing).
 5. Otherwise `text` → insert the text.
 
@@ -112,8 +129,9 @@ The same version bump adds `WindowSystem::set_title(WindowTitle)` and `WindowSys
 - Bad: every consumer must read `modifiers` before treating `text` as typing. Until the router lands (#113), `alloy`
   carries an interim `KeyEvent` → `OmniboxInput` mapping that applies steps 3–5 of the rule.
 - Bad: `PORT_SCHEMA_VERSION` 3 → 4 breaks every `WindowSystem` implementer and every `match` on `WindowEvent`.
-- Bad: Alt and AltGr text payloads are unverified on Windows and macOS (no hardware in CI); the `event_map` tests encode
-  the expected mapping and a manual check is tracked on #112.
+- Bad: Alt and AltGr text payloads, and the `winit` behaviours above, are read from the 0.30.13 source and unverified on
+  Windows and macOS (no hardware in CI); the `event_map` tests encode the expected mapping and a manual check is tracked
+  on #112.
 
 ---
 

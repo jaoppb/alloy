@@ -69,8 +69,12 @@ including `Character(InputText)`), `physical` (`KeyCode`, the layout-independent
   `modifiers` before treating `text` as typing. The adapter does not use `text_with_all_modifiers`.
 - `KeyboardState` (`infrastructure/keyboard.rs`) is the adapter's only memory: it stamps `ModifiersChanged` onto each
   event and tracks `NamedKey::AltGraph` press/release (cleared on focus loss) because `winit`'s `ModifiersState` has no
-  AltGr bit. Windows reports AltGr as Ctrl+Alt, so `alt_graph()` is never set there. A modifier key's own press reports
-  it held and its release reports it released (the DOM convention).
+  AltGr bit. On Windows layouts with an AltGr key, winit names it `AltGraph` and clears Ctrl/Alt while it is held (read
+  from the 0.30.13 source, not run on Windows); only the left Ctrl+Alt that Windows also accepts as AltGr arrives as
+  plain Ctrl+Alt. A modifier key's own press reports it held and its release reports it released unless the twin key
+  (left or right) is still down, whichever of `ModifiersChanged` and the key event winit sends first (the DOM
+  convention).
+- `winit`'s synthetic key events (X11/Windows focus changes) are recorded but never reported as `WindowEvent`s.
 - `InputText` is non-empty and free of control characters; the adapter drops `\r`, `\x08` and the like from `text` and
   keeps the press (as `LogicalKey::Enter`, `Backspace`, …).
 - `winit::event::KeyEvent` cannot be constructed outside `winit`, so the mapping is split at `KeyInput` (the four fields
@@ -97,6 +101,8 @@ including `Character(InputText)`), `physical` (`KeyCode`, the layout-independent
 - `WindowEvent::ControlKey { key, state }` becomes a `Key` whose `logical()` is the same `LogicalKey` variant.
 - An input-method commit is `WindowEvent::TextCommitted(InputText)`.
 - Stop reconstructing modifiers from raw `Key` events; read `KeyEvent::modifiers()`.
+- Do not expect key events `winit` synthesises when focus changes (X11, Windows): the adapter records them but never
+  reports them.
 
 ---
 

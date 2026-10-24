@@ -161,3 +161,5 @@ golden e2e test run against instead of a real display.
   `winit` reports Ctrl+L with text `"l"` on Linux. `ControlKey { key, state }` is `KeyEvent::logical()` and `state()`.
 - IME commits arrive as `TextCommitted(InputText)`.
 - Read `KeyEvent::modifiers()`; do not reconstruct modifiers from raw key events.
+- Do not expect key events `winit` synthesises when focus changes (X11, Windows): the adapter records them but never
+  reports them.
