@@ -16,6 +16,8 @@ pub mod event_map;
 #[cfg(feature = "winit-system")]
 pub mod keyboard;
 #[cfg(feature = "winit-system")]
+mod modifier_keys;
+#[cfg(feature = "winit-system")]
 pub mod physical_key;
 #[cfg(feature = "winit-system")]
 pub mod softbuffer_presenter;

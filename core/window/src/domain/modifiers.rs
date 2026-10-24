@@ -8,9 +8,13 @@
 /// modifier was pressed while the window was unfocused, issue #112).
 ///
 /// [`Self::alt_graph`] is distinct from [`Self::alt`]: it is set only where
-/// the platform reports `AltGr` as its own key (`ADR-0027`). Windows reports
-/// `AltGr` as Ctrl+Alt, so there it never appears and the consumer owns the
-/// fallback rule.
+/// the platform reports `AltGr` as its own key (`ADR-0027`). From the `winit`
+/// 0.30.13 source (not run on Windows hardware): on Linux and on Windows
+/// layouts that have an `AltGr` key, `winit` names it `AltGraph` and, on
+/// Windows, clears Ctrl and Alt from its modifier state while it is held, so
+/// `alt_graph()` is set without `control()` or `alt()`. The left Ctrl+Alt that
+/// Windows also accepts as `AltGr` still arrives as plain Ctrl+Alt, and macOS
+/// reports Option as Alt; the consumer owns those fallback rules.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Modifiers(u8);
 

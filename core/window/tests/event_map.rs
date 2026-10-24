@@ -247,6 +247,23 @@ fn lose_focus(keyboard: &mut KeyboardState) {
     assert_eq!(map_window_event(event, keyboard), None);
 }
 
+/// The handler's path for a real (non-synthetic) key press.
+fn feed(keyboard: &mut KeyboardState, input: &KeyInput) -> window::KeyEvent {
+    map_key_input(keyboard, input).expect("a real key press maps to a KeyEvent")
+}
+
+fn modifier_key(
+    keyboard: &mut KeyboardState,
+    physical: winit::keyboard::KeyCode,
+    named: NamedKey,
+    state: KeyState,
+) -> window::KeyEvent {
+    feed(
+        keyboard,
+        &KeyInput::new(code(physical), Key::Named(named), None, state),
+    )
+}
+
 const fn function(number: u8) -> LogicalKey {
     LogicalKey::Function(FunctionKey::new(number).unwrap())
 }
@@ -260,7 +277,7 @@ fn alt_d_yields_one_key_event_carrying_alt_and_the_text_d() {
     let mut keyboard = KeyboardState::default();
     hold(&mut keyboard, ModifiersState::ALT);
 
-    let event = map_key_input(
+    let event = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyD),
@@ -284,7 +301,7 @@ fn ctrl_l_carries_the_text_l_as_winit_reports_it_on_linux() {
     let mut keyboard = KeyboardState::default();
     hold(&mut keyboard, ModifiersState::CONTROL);
 
-    let event = map_key_input(
+    let event = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyL),
@@ -310,9 +327,9 @@ fn modifiers_stamp_every_following_press_until_they_change_again() {
     };
 
     hold(&mut keyboard, ModifiersState::SHIFT | ModifiersState::SUPER);
-    let held = map_key_input(&mut keyboard, &letter());
+    let held = feed(&mut keyboard, &letter());
     hold(&mut keyboard, ModifiersState::empty());
-    let released = map_key_input(&mut keyboard, &letter());
+    let released = feed(&mut keyboard, &letter());
 
     assert!(held.modifiers().shift() && held.modifiers().super_key());
     assert!(released.modifiers().is_empty());
@@ -326,7 +343,7 @@ fn a_modifier_pressed_before_the_window_had_focus_still_stamps_the_first_press()
     let mut keyboard = KeyboardState::default();
     hold(&mut keyboard, ModifiersState::CONTROL);
 
-    let event = map_key_input(
+    let event = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyL),
@@ -341,7 +358,7 @@ fn a_modifier_pressed_before_the_window_had_focus_still_stamps_the_first_press()
 #[test]
 fn altgr_q_on_a_german_layout_yields_alt_graph_and_the_text_at_sign() {
     let mut keyboard = KeyboardState::default();
-    let altgr = map_key_input(
+    let altgr = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::AltRight),
@@ -350,7 +367,7 @@ fn altgr_q_on_a_german_layout_yields_alt_graph_and_the_text_at_sign() {
         ),
     );
 
-    let at_sign = map_key_input(
+    let at_sign = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyQ),
@@ -383,8 +400,8 @@ fn an_altgr_press_reports_itself_held_and_its_release_reports_it_released() {
         )
     };
 
-    let pressed = map_key_input(&mut keyboard, &altgr(KeyState::Pressed));
-    let released = map_key_input(&mut keyboard, &altgr(KeyState::Released));
+    let pressed = feed(&mut keyboard, &altgr(KeyState::Pressed));
+    let released = feed(&mut keyboard, &altgr(KeyState::Released));
 
     assert!(pressed.modifiers().alt_graph());
     assert!(!released.modifiers().alt_graph());
@@ -401,10 +418,10 @@ fn releasing_altgr_stops_stamping_alt_graph() {
             state,
         )
     };
-    map_key_input(&mut keyboard, &altgr(KeyState::Pressed));
-    map_key_input(&mut keyboard, &altgr(KeyState::Released));
+    feed(&mut keyboard, &altgr(KeyState::Pressed));
+    feed(&mut keyboard, &altgr(KeyState::Released));
 
-    let after = map_key_input(
+    let after = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyQ),
@@ -420,7 +437,7 @@ fn releasing_altgr_stops_stamping_alt_graph() {
 fn losing_focus_forgets_a_held_altgr() {
     // The release happens while another window has focus and never arrives.
     let mut keyboard = KeyboardState::default();
-    map_key_input(
+    feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::AltRight),
@@ -431,7 +448,7 @@ fn losing_focus_forgets_a_held_altgr() {
 
     lose_focus(&mut keyboard);
 
-    let after = map_key_input(
+    let after = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyQ),
@@ -450,7 +467,7 @@ fn losing_focus_forgets_every_held_modifier_not_only_altgr() {
     hold(&mut keyboard, ModifiersState::CONTROL | ModifiersState::ALT);
     lose_focus(&mut keyboard);
 
-    let after = map_key_input(
+    let after = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::KeyA),
@@ -466,7 +483,7 @@ fn losing_focus_forgets_every_held_modifier_not_only_altgr() {
 fn a_held_key_yields_pressed_then_repeated_not_repeated_pressed() {
     let mut keyboard = KeyboardState::default();
     let step = |keyboard: &mut KeyboardState, state, repetition| {
-        map_key_input(
+        feed(
             keyboard,
             &KeyInput::new(
                 code(winit::keyboard::KeyCode::KeyA),
@@ -500,7 +517,7 @@ fn a_held_key_yields_pressed_then_repeated_not_repeated_pressed() {
 fn a_release_carries_no_text() {
     let mut keyboard = KeyboardState::default();
 
-    let event = map_key_input(
+    let event = feed(
         &mut keyboard,
         &KeyInput::new(
             code(winit::keyboard::KeyCode::KeyA),
@@ -517,7 +534,7 @@ fn a_release_carries_no_text() {
 fn control_characters_in_the_text_are_dropped_but_the_key_is_kept() {
     let mut keyboard = KeyboardState::default();
 
-    let enter = map_key_input(
+    let enter = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::Enter),
@@ -525,7 +542,7 @@ fn control_characters_in_the_text_are_dropped_but_the_key_is_kept() {
             Some("\r"),
         ),
     );
-    let backspace = map_key_input(
+    let backspace = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::Backspace),
@@ -545,7 +562,7 @@ fn control_characters_in_the_text_are_dropped_but_the_key_is_kept() {
 fn space_carries_its_text() {
     let mut keyboard = KeyboardState::default();
 
-    let event = map_key_input(
+    let event = feed(
         &mut keyboard,
         &input(
             code(winit::keyboard::KeyCode::Space),
@@ -590,7 +607,7 @@ fn named_keys_map_to_their_logical_key() {
 
     for (named, expected) in cases {
         let mut keyboard = KeyboardState::default();
-        let event = map_key_input(
+        let event = feed(
             &mut keyboard,
             &input(
                 PhysicalKey::Code(winit::keyboard::KeyCode::KeyA),
@@ -606,7 +623,7 @@ fn named_keys_map_to_their_logical_key() {
 fn character_dead_and_unidentified_keys_map_to_their_logical_key() {
     let mut keyboard = KeyboardState::default();
     let logical_of = |keyboard: &mut KeyboardState, key| {
-        map_key_input(
+        feed(
             keyboard,
             &input(code(winit::keyboard::KeyCode::KeyA), key, None),
         )
@@ -640,7 +657,7 @@ fn character_dead_and_unidentified_keys_map_to_their_logical_key() {
 fn an_unidentified_physical_key_maps_to_the_unidentified_key_code() {
     let mut keyboard = KeyboardState::default();
 
-    let event = map_key_input(
+    let event = feed(
         &mut keyboard,
         &input(
             PhysicalKey::Unidentified(winit::keyboard::NativeKeyCode::Unidentified),
@@ -672,4 +689,166 @@ fn cursor_icons_map_to_winit_cursor_icons() {
     for (icon, expected) in cases {
         assert_eq!(map_cursor_icon(icon), expected, "{icon:?}");
     }
+}
+
+// ---- a modifier key's own events (DOM convention, ADR-0027) ----
+
+#[test]
+fn a_modifier_press_reports_itself_held_whichever_event_winit_sends_first() {
+    // winit may deliver ModifiersChanged before or after the key event.
+    let press = |keyboard: &mut KeyboardState| {
+        modifier_key(
+            keyboard,
+            winit::keyboard::KeyCode::ControlLeft,
+            NamedKey::Control,
+            KeyState::Pressed,
+        )
+    };
+
+    let mut modifiers_first = KeyboardState::default();
+    hold(&mut modifiers_first, ModifiersState::CONTROL);
+    let mut key_first = KeyboardState::default();
+
+    assert!(press(&mut modifiers_first).modifiers().control());
+    assert!(press(&mut key_first).modifiers().control());
+}
+
+#[test]
+fn a_modifier_release_reports_it_released_whichever_event_winit_sends_first() {
+    let release_after = |stale: ModifiersState| {
+        let mut keyboard = KeyboardState::default();
+        modifier_key(
+            &mut keyboard,
+            winit::keyboard::KeyCode::AltLeft,
+            NamedKey::Alt,
+            KeyState::Pressed,
+        );
+        hold(&mut keyboard, stale);
+        modifier_key(
+            &mut keyboard,
+            winit::keyboard::KeyCode::AltLeft,
+            NamedKey::Alt,
+            KeyState::Released,
+        )
+    };
+
+    assert!(!release_after(ModifiersState::ALT).modifiers().alt());
+    assert!(!release_after(ModifiersState::empty()).modifiers().alt());
+}
+
+#[test]
+fn releasing_one_shift_while_the_other_is_down_still_reports_shift_held() {
+    let mut keyboard = KeyboardState::default();
+    let shift = |keyboard: &mut KeyboardState, key, state| {
+        modifier_key(keyboard, key, NamedKey::Shift, state)
+    };
+    shift(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftLeft,
+        KeyState::Pressed,
+    );
+    shift(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftRight,
+        KeyState::Pressed,
+    );
+    hold(&mut keyboard, ModifiersState::SHIFT);
+
+    let left_released = shift(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftLeft,
+        KeyState::Released,
+    );
+    let right_released = shift(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftRight,
+        KeyState::Released,
+    );
+
+    assert!(
+        left_released.modifiers().shift(),
+        "the right Shift is still down"
+    );
+    assert!(!right_released.modifiers().shift());
+}
+
+#[test]
+fn losing_focus_forgets_which_modifier_keys_were_down() {
+    let mut keyboard = KeyboardState::default();
+    modifier_key(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftRight,
+        NamedKey::Shift,
+        KeyState::Pressed,
+    );
+    lose_focus(&mut keyboard);
+
+    let left_pressed_then_released = {
+        modifier_key(
+            &mut keyboard,
+            winit::keyboard::KeyCode::ShiftLeft,
+            NamedKey::Shift,
+            KeyState::Pressed,
+        );
+        modifier_key(
+            &mut keyboard,
+            winit::keyboard::KeyCode::ShiftLeft,
+            NamedKey::Shift,
+            KeyState::Released,
+        )
+    };
+
+    assert!(
+        !left_pressed_then_released.modifiers().shift(),
+        "the right Shift was released while unfocused and must not be remembered"
+    );
+}
+
+// ---- synthetic key events (ADR-0027) ----
+
+#[test]
+fn a_synthetic_key_event_is_never_reported() {
+    let mut keyboard = KeyboardState::default();
+    let held_on_focus = input(
+        code(winit::keyboard::KeyCode::KeyA),
+        character("a"),
+        Some("a"),
+    )
+    .synthetic();
+
+    assert_eq!(map_key_input(&mut keyboard, &held_on_focus), None);
+}
+
+#[test]
+fn a_synthetic_modifier_press_still_tells_the_adapter_which_keys_are_down() {
+    let mut keyboard = KeyboardState::default();
+    let right_shift_held_on_focus = KeyInput::new(
+        code(winit::keyboard::KeyCode::ShiftRight),
+        Key::Named(NamedKey::Shift),
+        None,
+        KeyState::Pressed,
+    )
+    .synthetic();
+    assert_eq!(
+        map_key_input(&mut keyboard, &right_shift_held_on_focus),
+        None
+    );
+
+    modifier_key(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftLeft,
+        NamedKey::Shift,
+        KeyState::Pressed,
+    );
+    let left_released = modifier_key(
+        &mut keyboard,
+        winit::keyboard::KeyCode::ShiftLeft,
+        NamedKey::Shift,
+        KeyState::Released,
+    );
+
+    assert!(
+        left_released.modifiers().shift(),
+        "the synthetically pressed right Shift is down"
+    );
 }

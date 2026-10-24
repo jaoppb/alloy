@@ -23,7 +23,7 @@ use crate::domain::event::{PointerButton, WindowEvent};
 use crate::domain::key_event::KeyEvent;
 use crate::domain::surface::{PhysicalPosition, SurfaceSize};
 use crate::domain::text::InputText;
-use crate::infrastructure::keyboard::{KeyInput, KeyboardState};
+use crate::infrastructure::keyboard::{KeyInput, KeyboardState, Origin};
 
 /// Maps one `winit` window event to this port's vocabulary, or `None` when
 /// the event has no representation in it yet.
@@ -52,9 +52,15 @@ pub fn map_window_event(
                 pressed: state.is_pressed(),
             })
         }
-        winit::event::WindowEvent::KeyboardInput { event, .. } => Some(WindowEvent::Key(
-            map_key_input(keyboard, &KeyInput::from_winit(&event)),
-        )),
+        winit::event::WindowEvent::KeyboardInput {
+            event,
+            is_synthetic,
+            ..
+        } => map_key_input(
+            keyboard,
+            &KeyInput::from_winit(&event, Origin::from(is_synthetic)),
+        )
+        .map(WindowEvent::Key),
         winit::event::WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
             InputText::new(text).map(WindowEvent::TextCommitted)
         }
@@ -92,14 +98,19 @@ pub fn map_window_event(
     }
 }
 
-/// The [`KeyEvent`] for one key press.
+/// The [`KeyEvent`] for one key press, or `None` for a synthetic one.
 ///
-/// The press is observed first (an `AltGr` press counts as held from its own
-/// event on, a release as released — the DOM convention), then translated with
-/// the modifiers held.
-pub fn map_key_input(keyboard: &mut KeyboardState, input: &KeyInput) -> KeyEvent {
+/// The press is observed first, synthetic or not (it tells the adapter which
+/// modifier keys are really down), then — for a real press only — translated
+/// with the modifiers held. `winit` synthesises key events when focus changes
+/// (X11, Windows); they are bookkeeping, not user intent, so the port never
+/// reports them (`ADR-0027`).
+pub fn map_key_input(keyboard: &mut KeyboardState, input: &KeyInput) -> Option<KeyEvent> {
     keyboard.observe_key(input);
-    keyboard.translate(input)
+    if input.is_synthetic() {
+        return None;
+    }
+    Some(keyboard.translate(input))
 }
 
 /// Maps a port [`CursorIcon`] to the `winit` cursor it names.

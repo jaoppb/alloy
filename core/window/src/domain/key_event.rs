@@ -106,7 +106,8 @@ impl KeyEvent {
 
     /// The modifiers held when this press happened. A modifier key's own
     /// events follow the DOM convention: its press reports it held, its
-    /// release reports it released.
+    /// release reports it released unless the other side of the pair (left
+    /// and right Shift, Ctrl, Alt, Super) is still down.
     #[must_use]
     pub const fn modifiers(&self) -> Modifiers {
         self.modifiers
