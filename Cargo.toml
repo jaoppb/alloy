@@ -59,7 +59,7 @@ thiserror = "=2.0.17"
 # core/network C1 — TLS 1.2/1.3 state machine (sans-I/O); `ring` provider selected via feature.
 rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12", "ring"] }
 # core/network C1 — embedded Mozilla trust roots (NOT the OS trust store; v0.5 report decision).
-webpki-roots = "=1.0.9"
+webpki-roots = "=1.0.11"
 # core/network C1 — `rustls::crypto::ring::default_provider()` primitives. ADR-0018 row-1
 # EXCEPTION (hand-written assembly + C on the TLS-record decrypt surface); recorded in
 # `unsafe-allowlist.toml` and ADR-0018 §"The RustCrypto carve-out". Temporary: revisit when a

@@ -102,14 +102,19 @@ fuzz target="":
     @command -v cargo-fuzz >/dev/null || { echo "cargo-fuzz not found — run: just setup"; exit 1; }
     {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do cargo +nightly fuzz run $t -- -max_total_time=600; done" } else { "cargo +nightly fuzz run " + target + " -- -max_total_time=600" } }}
 
-# Supply-chain audit: licenses, advisories, bans, sources
-deny:
+# A truncated mise install leaves a 0-byte `cargo-deny` that exits 0 with no output, which made
+# `just deny` / `just gate` pass while CI failed — so require a non-empty `--version`, not just `command -v`.
+[private]
+_require-cargo-deny:
     @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: just setup"; exit 1; }
+    @[ -n "$(cargo-deny --version 2>/dev/null)" ] || { echo "cargo-deny is installed but prints nothing (corrupt install) — run: mise install -f cargo-deny"; exit 1; }
+
+# Supply-chain audit: licenses, advisories, bans, sources
+deny: _require-cargo-deny
     {{cargo}} deny check
 
 # Just the security-advisory half of `deny` (fast)
-audit:
-    @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: just setup"; exit 1; }
+audit: _require-cargo-deny
     {{cargo}} deny check advisories
 
 # Line coverage of the engine crate, and of css/network/window/html's domain/
