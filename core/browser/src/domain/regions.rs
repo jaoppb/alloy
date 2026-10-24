@@ -2,7 +2,7 @@
 
 use region::{ContentRegion, ContextId, LayoutEpoch, RegionId};
 
-use super::region::LinkTargets;
+use super::link_target::LinkTargets;
 
 /// Why a [`RegionId`] could not be resolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -86,10 +86,11 @@ impl ContentRegions {
                 current: self.epoch,
             });
         }
+        let index = id.index();
         self.targets
-            .get(id.index())
-            .map(super::region::LinkTarget::href)
-            .ok_or_else(|| RegionError::Unknown(id.index()))
+            .get(index)
+            .map(super::link_target::LinkTarget::href)
+            .ok_or(RegionError::Unknown(index))
     }
 }
 

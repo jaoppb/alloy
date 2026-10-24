@@ -9,20 +9,21 @@ use graphics::{Au, Point, Rect, Size};
 use region::ContentRegion;
 use window::{PhysicalPosition, SurfaceSize};
 
-use super::builder::{build_chrome_node, build_content_node, surface_length_to_au};
+use super::builder::{build_chrome_node, build_content_node};
 use super::hit_geometry::snapped_raw_au;
 use super::hit_target::UiHitTarget;
 use super::node::UiNode;
 use super::node_children::UiNodeChildren;
 use super::node_kind::UiNodeKind;
+use super::surface_length::surface_length_to_au;
 use crate::domain::error::UiError;
 use crate::domain::theme::{ChromeHeight, OmniboxTheme};
 
 /// The browser UI render tree.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UiRenderTree {
-    pub(super) viewport: SurfaceSize,
-    pub(super) chrome_height: ChromeHeight,
+    viewport: SurfaceSize,
+    chrome_height: ChromeHeight,
     root: UiNode,
 }
 

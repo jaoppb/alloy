@@ -8,13 +8,6 @@ use super::node_kind::UiNodeKind;
 use crate::domain::error::UiError;
 use crate::domain::theme::OmniboxTheme;
 
-/// A surface edge in whole pixels as app units, or
-/// [`UiError::InvalidDimensions`] when it overflows the `Au` envelope.
-pub(super) fn surface_length_to_au(pixels: u32) -> Result<Au, UiError> {
-    let pixels = i32::try_from(pixels).map_err(|_| UiError::InvalidDimensions)?;
-    Au::from_whole_px(pixels).ok_or(UiError::InvalidDimensions)
-}
-
 pub(super) fn build_chrome_node(
     width_in_app_units: Au,
     theme: &OmniboxTheme,

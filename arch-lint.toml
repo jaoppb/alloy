@@ -276,8 +276,8 @@ message = "Browser domain layer must not depend on application ports, engine, ru
 # engine, a script runtime, the bindings crate, the CLI, or the window system.
 [[deny-scope-dep]]
 from = "browser"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "core/browser must not depend on engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
+to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "ui"]
+message = "core/browser must not depend on core/ui, engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
 
 # UI domain layer must not depend on the application layer or any adapter crate.
 [[deny-scope-dep]]

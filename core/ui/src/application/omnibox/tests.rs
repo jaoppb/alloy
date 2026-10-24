@@ -1,8 +1,10 @@
 use network::Url;
 use window::{InputText, LogicalKey};
 
-use super::controller::{OmniboxController, OmniboxEffect, OmniboxInput};
-use crate::domain::omnibox::{CursorPosition, EditKey, GapBuffer, OmniboxBuffer, OmniboxState};
+use super::controller::OmniboxController;
+use crate::domain::omnibox::{
+    CursorPosition, EditKey, GapBuffer, OmniboxBuffer, OmniboxEffect, OmniboxInput, OmniboxState,
+};
 
 #[test]
 fn cursor_position_value_object() {

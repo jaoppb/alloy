@@ -22,6 +22,7 @@ use super::frame::CachedFrame;
 use super::stats::LoopStats;
 use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
+use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::{render_dom_with_links, surface_length_to_au};
 use crate::error::AlloyError;
 
@@ -272,7 +273,9 @@ fn render_chrome<F: FontProvider + 'static>(
     font_provider: Arc<F>,
 ) -> Result<graphics::Framebuffer, AlloyError> {
     let mut builder = DisplayListBuilder::new();
-    let painter = OmniboxPainter::new(font_provider.as_ref()).with_theme(*theme);
+    let painter = OmniboxPainter::new(font_provider.as_ref())
+        .with_theme(*theme)
+        .with_font(DEFAULT_FONT);
     painter.paint(
         omnibox,
         surface_length_to_au(chrome_size.width())?.to_px(),

@@ -12,7 +12,7 @@ impl UiRenderTree {
     ///
     /// Returns [`UiError::InvalidDimensions`] if the chrome height is zero.
     pub fn chrome_size(&self) -> Result<graphics::SurfaceSize, UiError> {
-        graphics::SurfaceSize::new(self.viewport.width(), self.chrome_rows()?)
+        graphics::SurfaceSize::new(self.viewport().width(), self.chrome_rows()?)
             .ok_or(UiError::InvalidDimensions)
     }
 
@@ -23,11 +23,11 @@ impl UiRenderTree {
     /// Returns [`UiError::InvalidDimensions`] if the content height is zero.
     pub fn content_size(&self) -> Result<graphics::SurfaceSize, UiError> {
         let content_height = self
-            .viewport
+            .viewport()
             .height()
             .checked_sub(self.chrome_rows()?)
             .ok_or(UiError::InvalidDimensions)?;
-        graphics::SurfaceSize::new(self.viewport.width(), content_height)
+        graphics::SurfaceSize::new(self.viewport().width(), content_height)
             .ok_or(UiError::InvalidDimensions)
     }
 
@@ -35,7 +35,7 @@ impl UiRenderTree {
     /// left over, so the two surfaces always stack to the full viewport.
     fn chrome_rows(&self) -> Result<u32, UiError> {
         let whole_pixels = self
-            .chrome_height
+            .chrome_height()
             .to_au()
             .raw()
             .checked_div(AU_PER_PX)
