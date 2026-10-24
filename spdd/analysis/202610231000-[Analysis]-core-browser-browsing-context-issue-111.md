@@ -30,9 +30,8 @@ sleepless test that a late `complete` is dropped; `ContextId` on every id/effect
    total.
 3. **`FetchResult` carries its `NavigationId`** (and so its `ContextId`), so `complete(result)` takes one argument
    rather than `complete(NavigationId, FetchResult)`: the stamp cannot disagree with the payload.
-4. **Effects** - `NavigationStarted`, `Fetch`, `DocumentLoaded`, `ContentDamaged`, each naming its context. The issue's
-   `TitleChanged` is left to #84 (nothing produces a title yet) and `Damage(Content)` is named `ContentDamaged` until
-   #108 defines `Damage`.
+4. **Effects** - `NavigationStarted`, `Fetch`, `DocumentLoaded`, `ContentDamaged`, each naming its context.
+   `Damage(Content)` is `ContentDamaged` until #108 defines `Damage`; `TitleChanged` is left to #84.
 5. **Regions** - `RegionId { context, epoch, index }`; `ContentRegions` bumps the epoch on `replace` and `invalidate`.
    `layout_completed(links) -> LayoutEpoch`, `content_regions()`, `follow_link(RegionId)`.
 6. **Error page** - embedded `error.html`; the message is a DOM text node appended to `#error-message`.
