@@ -264,6 +264,39 @@ fn altgr_q_on_a_german_layout_types_the_at_sign() {
 }
 
 #[test]
+fn altgr_with_a_command_modifier_still_types_when_no_binding_matches() {
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    chord(
+        &mut system,
+        Modifiers::NONE.with_alt_graph().with_control(),
+        KeyCode::KEY_Q,
+        "@",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abc@");
+}
+
+#[test]
+fn a_bound_chord_wins_over_altgr_insert() {
+    // ADR-0027: the keymap match comes before AltGr insert, so Ctrl+AltGr+L is
+    // the focus shortcut, not the text "l".
+    let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
+
+    chord(
+        &mut system,
+        Modifiers::NONE.with_alt_graph().with_control(),
+        KeyCode::KEY_L,
+        "l",
+    );
+    pump(&mut system, &mut presenter, &mut session);
+
+    assert_eq!(session.omnibox().text(), "abc");
+    assert!(session.omnibox().is_all_selected());
+}
+
+#[test]
 fn text_committed_by_an_input_method_is_inserted_into_the_focused_omnibox() {
     let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
 

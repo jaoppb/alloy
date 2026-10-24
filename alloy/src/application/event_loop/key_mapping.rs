@@ -7,10 +7,13 @@
 //! Ctrl+L arrives with text `"l"` — a press types or edits only when no
 //! command modifier is held.
 //!
-//! Known gaps, left to #113: on Windows `AltGr` is reported as Ctrl+Alt with
-//! no `alt_graph` bit, and on macOS Option is reported as Alt, so `AltGr` and
-//! Option text is dropped here until the router adds its platform rules
-//! (decision 18 step 2, decision 24).
+//! Order (`ADR-0027`): a bound chord (the focus shortcut, the only binding
+//! until the keymap lands) beats `AltGr` text, which beats the command-modifier
+//! drop. Known gaps, left to #113: on Windows the left Ctrl+Alt that is
+//! accepted as `AltGr` arrives as plain Ctrl+Alt with no `alt_graph` bit (an
+//! `AltGr` key on an `AltGr` layout does set it, per the `winit` source), and
+//! on macOS Option is reported as Alt, so that text is dropped here until the
+//! router adds its platform rules (decision 18 step 3, decision 24).
 
 use window::{KeyCode, KeyEvent, Modifiers};
 
