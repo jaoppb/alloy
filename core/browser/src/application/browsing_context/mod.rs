@@ -9,11 +9,12 @@
 //! [`BrowsingContext::complete`] and its helpers live in [`completion`].
 
 use network::Url;
+use region::{ContentRegion, ContextId, LayoutEpoch, RegionId};
 
 use crate::application::SubresourceDiscoverer;
 use crate::domain::{
-    BrowserEffect, ContentRegion, ContentRegions, ContextId, ContextStats, Document, Effects,
-    FetchRequest, LayoutEpoch, LinkDestination, LinkTargets, NavigationId, Navigations, RegionId,
+    BrowserEffect, ContentRegions, ContextStats, Document, Effects, FetchRequest, LinkDestination,
+    LinkTargets, NavigationId, Navigations,
 };
 
 mod completion;

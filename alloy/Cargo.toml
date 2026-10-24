@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 browser = { path = "../core/browser" }
+region = { path = "../core/region" }
 dom = { path = "../core/dom" }
 engine = { path = "../core/engine" }
 rhai-runtime = { path = "../core/runtime/rhai" }
@@ -26,6 +27,7 @@ graphics = { path = "../core/graphics", features = ["software-backend"] }
 html = { path = "../core/html" }
 network = { path = "../core/network", features = ["real-transport"] }
 window = { path = "../core/window" }
+ui = { path = "../core/ui" }
 clap = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

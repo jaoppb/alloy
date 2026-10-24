@@ -12,13 +12,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
-use alloy::theme::OmniboxTheme;
 use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
 use graphics::SyntheticFontProvider;
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
 };
+use ui::OmniboxTheme;
 use window::{
     CursorIcon, HeadlessWindowSystem, PhysicalPosition, PointerButton, PumpStatus,
     RecordingPresenter, WindowAttributes, WindowError, WindowEvent, WindowId, WindowSystem,

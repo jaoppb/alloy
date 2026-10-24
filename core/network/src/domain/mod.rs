@@ -12,7 +12,6 @@ pub mod error;
 pub mod header_map;
 pub mod media_type;
 pub mod method;
-pub mod omnibox;
 pub mod phase;
 pub mod request;
 pub mod response;

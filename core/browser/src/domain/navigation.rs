@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use crate::domain::ContextId;
+use region::ContextId;
 
 /// One navigation of one browsing context. A document, and every subresource
 /// fetched for it, report under the same id.
@@ -75,8 +75,9 @@ impl Navigations {
 
 #[cfg(test)]
 mod tests {
+    use region::ContextId;
+
     use super::Navigations;
-    use crate::domain::ContextId;
 
     #[test]
     fn superseding_makes_the_previous_id_stale() {

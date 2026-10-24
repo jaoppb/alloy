@@ -5,8 +5,7 @@
 
 use core::fmt;
 
-use crate::domain::error::NetworkError;
-use crate::domain::url::Url;
+use network::{NetworkError, Url};
 
 /// The target destination resolved from omnibox input.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

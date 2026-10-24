@@ -1,8 +1,9 @@
 //! What a [`crate::BrowsingContext`] asks the world to do.
 
 use network::Url;
+use region::ContextId;
 
-use crate::domain::{ContextId, FetchRequest, NavigationId};
+use crate::domain::{FetchRequest, NavigationId};
 
 /// An instruction from a browsing context to `alloy`'s executor. Every variant
 /// names its context so a context tree (#90) can be routed without changing

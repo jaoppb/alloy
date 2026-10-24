@@ -23,13 +23,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use alloy::application::omnibox::{
-    CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, ChromeHeight, DEFAULT_CHROME_HEIGHT,
-    FOCUS_BORDER_COLOR, FOCUS_BORDER_WIDTH, FOCUS_INNER_RADIUS, INPUT_BACKGROUND_COLOR,
-    INPUT_BOX_HEIGHT, INPUT_BOX_MARGIN_X, INPUT_BOX_RADIUS, OmniboxPainter, OmniboxState,
-    OmniboxTheme, TEXT_COLOR, Theme, compute_cursor_offset, paint_omnibox,
-    paint_omnibox_with_theme,
-};
 use alloy::application::paint::DEFAULT_FONT;
 use alloy::application::pipeline::DEFAULT_FONT_SIZE;
 use graphics::golden::assert_matches_golden;
@@ -38,6 +31,15 @@ use graphics::{
     PxRect, RenderBackend, SoftwareCpuBackend, SurfaceSize, SyntheticFontProvider,
 };
 use network::Url;
+use ui::theme::{
+    CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, DEFAULT_CHROME_HEIGHT, FOCUS_BORDER_COLOR,
+    FOCUS_BORDER_WIDTH, FOCUS_INNER_RADIUS, INPUT_BACKGROUND_COLOR, INPUT_BOX_HEIGHT,
+    INPUT_BOX_MARGIN_X, INPUT_BOX_RADIUS, TEXT_COLOR,
+};
+use ui::{
+    ChromeHeight, OmniboxPainter, OmniboxState, OmniboxTheme, Theme, compute_cursor_offset,
+    paint_omnibox, paint_omnibox_with_theme,
+};
 
 fn golden_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -478,4 +480,11 @@ fn custom_theme_styling_and_dynamic_colors_rendered_into_display_list() {
 
     let root_theme = Theme::new().with_omnibox(theme);
     assert_eq!(*root_theme.omnibox(), theme);
+}
+
+/// The chrome painter and the page painter name the default face by the same
+/// id; a drift would draw the omnibox with a font the provider never registered.
+#[test]
+fn the_chrome_font_is_the_default_page_font() {
+    assert_eq!(ui::CHROME_FONT, DEFAULT_FONT);
 }

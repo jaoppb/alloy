@@ -12,10 +12,8 @@
 //! pump cycles cost one relayout, not ten or fifty.
 
 mod frame;
-mod hit_test;
 mod key_mapping;
 mod pixel;
-mod render_tree;
 mod session;
 mod stats;
 mod worker;
@@ -31,19 +29,16 @@ use std::thread;
 
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
+use ui::OmniboxInput;
 use window::{
     PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
 };
 
 use self::key_mapping::omnibox_input;
-pub use self::render_tree::{
-    ChromeHeight, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
-};
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
-use crate::application::omnibox::OmniboxInput;
 use crate::application::pipeline::RenderOptions;
 use crate::error::AlloyError;
 

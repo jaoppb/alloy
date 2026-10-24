@@ -13,6 +13,7 @@
 use browser::{FetchPayload, FetchResult};
 use graphics::{Color, Framebuffer, ImageId};
 use network::MockTransport;
+use ui::OmniboxTheme;
 use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
@@ -22,7 +23,6 @@ use super::test_support::{
     TestSession, completed_navigation, load, loaded_session, loaded_window, pump, session_over,
 };
 use super::worker::fetch_text;
-use crate::application::theme::OmniboxTheme;
 use crate::error::AlloyError;
 
 #[test]
@@ -439,8 +439,8 @@ fn session_maintains_ui_render_tree_hierarchy() {
     let attributes = initial_window_attributes().unwrap();
     let session = session_over(MockTransport::new(), attributes.initial_size());
     let tree = session.ui_tree();
-    assert_eq!(tree.root().kind(), &super::UiNodeKind::Window);
-    assert_eq!(tree.chrome_height(), super::ChromeHeight::DEFAULT);
+    assert_eq!(tree.root().kind(), &ui::UiNodeKind::Window);
+    assert_eq!(tree.chrome_height(), ui::ChromeHeight::DEFAULT);
 }
 
 #[test]
@@ -468,6 +468,6 @@ fn resizing_below_chrome_height_updates_ui_tree_to_fallback() {
         session
             .ui_tree()
             .hit_test(window::PhysicalPosition::new(20.0, 20.0)),
-        Some(super::UiHitTarget::Omnibox)
+        Some(ui::UiHitTarget::Omnibox)
     );
 }

@@ -5,11 +5,12 @@
 use css::MediaQuery;
 use graphics::{Au, Color, Framebuffer, ImageId, Point, Rect, Size, SurfaceSize};
 use network::Url;
+use region::ContextId;
 
 use super::BrowsingContext;
 use crate::domain::{
-    BrowserEffect, ContextId, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult,
-    LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
+    BrowserEffect, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult, LinkTarget,
+    LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
 };
 use crate::infrastructure::MarkupDiscoverer;
 

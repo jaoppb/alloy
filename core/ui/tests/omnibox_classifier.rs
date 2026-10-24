@@ -5,9 +5,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use network::{
-    NetworkError, OmniboxClassifier, OmniboxDestination, SearchTemplate, Url, UrlDefect,
-};
+use network::{NetworkError, Url, UrlDefect};
+use ui::{OmniboxClassifier, OmniboxDestination, SearchTemplate};
 
 fn classifier() -> OmniboxClassifier {
     OmniboxClassifier::default()

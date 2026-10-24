@@ -1,0 +1,18 @@
+[package]
+name = "region"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Opaque content-region ids shared by core/ui and core/browser, which depend on this leaf instead of on each other (#109, ADR-0026)."
+
+# The seam vocabulary of ADR-0026: `core/browser` mints a `RegionId` per link, `core/ui`
+# hit-tests the `ContentRegion`s and hands the winning id back. A leaf on purpose — it
+# names no other subsystem but the `Rect` it carries.
+[dependencies]
+# Domain types only (`Rect`); the rasterizer stays off.
+graphics = { path = "../graphics", default-features = false }
+
+[lints]
+workspace = true

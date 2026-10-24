@@ -2,11 +2,10 @@
 
 use std::borrow::Cow;
 
-use network::{OmniboxClassifier, Url};
+use network::Url;
 use window::InputText;
 
-use super::edit_key::EditKey;
-use super::state::OmniboxState;
+use crate::domain::omnibox::{EditKey, OmniboxClassifier, OmniboxState};
 
 /// High-level effect produced by omnibox interactions that the session executes.
 #[derive(Clone, Debug, PartialEq, Eq)]

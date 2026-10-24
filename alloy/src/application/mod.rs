@@ -4,22 +4,16 @@ pub mod browser_services;
 pub mod event_loop;
 pub mod html_parse;
 pub mod navigation;
-pub mod omnibox;
 pub mod paint;
 pub mod pipeline;
 pub mod runtime_font;
-pub mod theme;
 
 pub use browser_services::BrowserServices;
 pub use event_loop::{
-    ChromeHeight, LoopStats, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
-    initial_window_attributes, run_browser, run_browser_until, run_browser_until_first_frame,
+    LoopStats, initial_window_attributes, run_browser, run_browser_until,
+    run_browser_until_first_frame,
 };
 pub use navigation::navigate;
-pub use omnibox::{
-    CursorPosition, OmniboxBuffer, OmniboxController, OmniboxEffect, OmniboxInput, OmniboxPainter,
-    OmniboxState, OmniboxTheme, Theme, compute_cursor_offset, paint_omnibox,
-};
 pub use paint::paint_box_tree;
 pub use pipeline::{
     DEFAULT_FONT_SIZE, RenderOptions, default_runtime_font_provider, render_dom,
