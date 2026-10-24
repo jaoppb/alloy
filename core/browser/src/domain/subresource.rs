@@ -90,6 +90,20 @@ impl Subresources {
     pub fn push(&mut self, request: SubresourceRequest) {
         self.requests.push(request);
     }
+
+    /// The requests in document order.
+    pub fn iter(&self) -> std::slice::Iter<'_, SubresourceRequest> {
+        self.requests.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Subresources {
+    type Item = &'a SubresourceRequest;
+    type IntoIter = std::slice::Iter<'a, SubresourceRequest>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.requests.iter()
+    }
 }
 
 impl IntoIterator for Subresources {

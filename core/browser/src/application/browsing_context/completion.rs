@@ -4,22 +4,24 @@ use css::MediaQuery;
 use graphics::{Framebuffer, ImageId};
 
 use super::BrowsingContext;
-use crate::application::{SubresourceDiscoverer, document_base_url, error_page};
+use crate::application::{
+    SubresourceDiscoverer, document_base_url, error_page, parse_author_stylesheet,
+};
 use crate::domain::{
-    BrowserEffect, Document, FetchFailure, FetchPayload, FetchRequest, FetchResult, LoadedDocument,
-    NavigationId, StylesheetRejected, SubresourceRequest,
+    Accepted, BrowserEffect, Document, Effects, FetchFailure, FetchPayload, FetchRequest,
+    FetchResult, LoadedDocument, NavigationId, Subresources,
 };
 
 impl<D: SubresourceDiscoverer> BrowsingContext<D> {
     /// Applies a finished fetch — but only if it belongs to the latest
-    /// navigation. A fetch cannot be cancelled, so a result from a page the user
-    /// left is dropped here instead; that includes an `ImageId`, a DOM node
+    /// navigation. A fetch cannot be cancelled, so a result from a page the
+    /// user left is dropped here instead; that includes an `ImageId`, a DOM node
     /// index every document reuses, naming an `<img>` of the new page.
-    pub fn complete(&mut self, result: FetchResult) -> Vec<BrowserEffect> {
+    pub fn complete(&mut self, result: FetchResult) -> Effects {
         let navigation = result.navigation();
         if !self.accepts(navigation) {
-            tracing::debug!(%navigation, latest = %self.navigations.latest(), "dropping a result of a superseded navigation");
-            return Vec::new();
+            tracing::debug!(%navigation, latest = %self.navigations.latest(), "dropping a superseded result");
+            return Effects::none();
         }
         match result.into_payload() {
             FetchPayload::Document(Ok(loaded)) => self.load_document(loaded, navigation),
@@ -32,33 +34,22 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
     }
 
     fn accepts(&self, navigation: NavigationId) -> bool {
-        navigation.context() == self.id && self.navigations.is_latest(navigation)
+        self.navigations.is_latest(navigation)
     }
 
     /// Installs a freshly navigated document under its effective base URL
     /// (`<base href>` applied) and asks for what it references.
-    fn load_document(
-        &mut self,
-        loaded: LoadedDocument,
-        navigation: NavigationId,
-    ) -> Vec<BrowserEffect> {
+    fn load_document(&mut self, loaded: LoadedDocument, navigation: NavigationId) -> Effects {
         let (tree, navigation_url) = loaded.into_parts();
         let snapshot = css::snapshot(&tree, tree.document());
         let base_url = document_base_url(&snapshot, &navigation_url);
         tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
         let found = self.discoverer.discover(&snapshot, &base_url);
         let mut document = Document::loaded(tree, base_url);
-        let mut effects = Vec::new();
-        for request in found {
-            tracing::debug!(?request, "subresource discovered");
-            reserve_placeholder(&mut document, &request);
-            effects.push(BrowserEffect::Fetch(
-                FetchRequest::Subresource(request),
-                navigation,
-            ));
-        }
+        document.reserve_placeholders(&found);
+        let mut effects = fetches_for(found, navigation);
         self.install(document);
-        self.stats.count_navigation();
+        self.stats.record(Accepted::Navigation);
         effects.push(BrowserEffect::DocumentLoaded(self.id, navigation_url));
         effects.push(self.content_damaged());
         effects
@@ -66,48 +57,53 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
 
     /// Replaces the page with a visible error document — a failed navigation
     /// must be seen, not just logged.
-    fn show_navigation_error(&mut self, failure: &FetchFailure) -> Vec<BrowserEffect> {
+    fn show_navigation_error(&mut self, failure: &FetchFailure) -> Effects {
         tracing::error!(error = %failure, "navigation failed");
-        self.stats.count_navigation_error();
+        self.stats.record(Accepted::NavigationError);
         match error_page(&failure.to_string()) {
             Ok(tree) => {
                 self.install(Document::generated(tree));
-                vec![self.content_damaged()]
+                Effects::from_iter([self.content_damaged()])
             }
             Err(error) => {
                 tracing::error!(%error, "the error page could not be built");
-                Vec::new()
+                Effects::none()
             }
         }
     }
 
-    fn absorb_stylesheet(&mut self, text: &str, media: &MediaQuery) -> Vec<BrowserEffect> {
-        let Some(document) = self.document.as_mut() else {
-            return Vec::new();
+    fn absorb_stylesheet(&mut self, text: &str, media: &MediaQuery) -> Effects {
+        let sheet = match parse_author_stylesheet(text, media) {
+            Ok(sheet) => sheet,
+            Err(rejected) => {
+                tracing::debug!(%rejected, bytes = text.len(), "stylesheet not absorbed");
+                return Effects::none();
+            }
         };
-        match document.absorb_stylesheet(text, media) {
-            Ok(()) => {
-                self.stats.count_stylesheet();
-                vec![self.content_damaged()]
-            }
-            Err(StylesheetRejected::NeverMatches) => {
-                tracing::debug!("stylesheet skipped: media query does not match screen");
-                Vec::new()
-            }
-            Err(error @ StylesheetRejected::Unparsable(_)) => {
-                tracing::warn!(%error, bytes = text.len(), "stylesheet rejected");
-                Vec::new()
-            }
-        }
+        let Some(document) = self.document_to_update("stylesheet") else {
+            return Effects::none();
+        };
+        document.add_sheet(sheet);
+        self.stats.record(Accepted::Stylesheet);
+        Effects::from_iter([self.content_damaged()])
     }
 
-    fn accept_image(&mut self, id: ImageId, frame: Framebuffer) -> Vec<BrowserEffect> {
-        let Some(document) = self.document.as_mut() else {
-            return Vec::new();
+    fn accept_image(&mut self, id: ImageId, frame: Framebuffer) -> Effects {
+        let Some(document) = self.document_to_update("image") else {
+            return Effects::none();
         };
         document.insert_image(id, frame);
-        self.stats.count_image();
-        vec![self.content_damaged()]
+        self.stats.record(Accepted::Image);
+        Effects::from_iter([self.content_damaged()])
+    }
+
+    /// The document a subresource of `kind` may be added to; none yet means the
+    /// result arrived with no page to belong to, which is logged, not applied.
+    fn document_to_update(&mut self, kind: &str) -> Option<&mut Document> {
+        if self.document.is_none() {
+            tracing::debug!(kind, "subresource arrived before any document; dropped");
+        }
+        self.document.as_mut()
     }
 
     /// A new document starts from no sheets, images or link regions — and any
@@ -122,15 +118,16 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
     }
 }
 
-/// A discovered image must resolve to *something* from the very first paint
-/// (see `ImageStore::reserve_placeholder`).
-fn reserve_placeholder(document: &mut Document, request: &SubresourceRequest) {
-    if let SubresourceRequest::Image(image) = request {
-        document.reserve_image(image.id());
-    }
+/// One fetch per discovered subresource, all under the navigation that found them.
+fn fetches_for(found: Subresources, navigation: NavigationId) -> Effects {
+    found
+        .into_iter()
+        .inspect(|request| tracing::debug!(?request, "subresource discovered"))
+        .map(|request| BrowserEffect::Fetch(FetchRequest::Subresource(request), navigation))
+        .collect()
 }
 
-fn log_failed(kind: &str, failure: &FetchFailure) -> Vec<BrowserEffect> {
+fn log_failed(kind: &str, failure: &FetchFailure) -> Effects {
     tracing::warn!(error = %failure, kind, "subresource fetch failed");
-    Vec::new()
+    Effects::none()
 }

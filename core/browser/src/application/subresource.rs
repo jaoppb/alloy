@@ -13,7 +13,7 @@ use crate::domain::Subresources;
 /// from (tags today; CSS `url()`, scripts later) can grow without touching the
 /// fetch machinery, while [`crate::SubresourceRequest`] keeps the fetchable
 /// kinds closed.
-pub trait SubresourceDiscoverer: Send + Sync {
+pub trait SubresourceDiscoverer {
     /// Walks `snapshot` and resolves every reference against `base` — the
     /// document's effective base URL, which the caller computes once per
     /// navigation with [`document_base_url`] so subresources and link clicks

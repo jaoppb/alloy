@@ -8,14 +8,12 @@
 //!
 //! [`BrowsingContext::complete`] and its helpers live in [`completion`].
 
-use std::sync::Arc;
-
 use network::Url;
 
 use crate::application::SubresourceDiscoverer;
 use crate::domain::{
-    BrowserEffect, ContentRegion, ContentRegions, ContextId, ContextStats, Document, FetchRequest,
-    LayoutEpoch, LinkDestination, LinkTarget, NavigationId, Navigations, RegionId,
+    BrowserEffect, ContentRegion, ContentRegions, ContextId, ContextStats, Document, Effects,
+    FetchRequest, LayoutEpoch, LinkDestination, LinkTargets, NavigationId, Navigations, RegionId,
 };
 
 mod completion;
@@ -28,14 +26,14 @@ pub struct BrowsingContext<D> {
     navigations: Navigations,
     document: Option<Document>,
     regions: ContentRegions,
-    discoverer: Arc<D>,
+    discoverer: D,
     stats: ContextStats,
 }
 
 impl<D: SubresourceDiscoverer> BrowsingContext<D> {
     /// The root context, showing nothing yet, finding subresources with `discoverer`.
     #[must_use]
-    pub fn new(discoverer: Arc<D>) -> Self {
+    pub fn new(discoverer: D) -> Self {
         let id = ContextId::ROOT;
         Self {
             id,
@@ -50,18 +48,18 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
     /// Starts navigating to `url`, superseding every navigation and subresource
     /// fetch still in flight: their results will arrive stamped with an id that
     /// is no longer the latest and be dropped.
-    pub fn navigate(&mut self, url: Url) -> Vec<BrowserEffect> {
+    pub fn navigate(&mut self, url: Url) -> Effects {
         self.navigations.supersede();
         let navigation = self.navigations.latest();
-        vec![
+        Effects::from_iter([
             BrowserEffect::NavigationStarted(self.id, url.clone()),
             BrowserEffect::Fetch(FetchRequest::Document(url), navigation),
-        ]
+        ])
     }
 
     /// Follows the link `region` stands for. A region from an earlier layout is
     /// logged and ignored — never resolved against whatever now sits at its index.
-    pub fn follow_link(&mut self, region: RegionId) -> Vec<BrowserEffect> {
+    pub fn follow_link(&mut self, region: RegionId) -> Effects {
         match self.link_destination(region) {
             Some(LinkDestination::Navigate(target)) => {
                 tracing::info!(url = %target, "link clicked, navigating");
@@ -69,15 +67,15 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
             }
             Some(LinkDestination::InPageAnchor) => {
                 tracing::info!("in-page anchor clicked (no-op in v0.5)");
-                Vec::new()
+                Effects::none()
             }
-            None => Vec::new(),
+            None => Effects::none(),
         }
     }
 
     /// Takes the link areas of a finished layout and mints the [`RegionId`]s
     /// ([`BrowsingContext::content_regions`]) `core/ui` hit-tests, under a new epoch.
-    pub fn layout_completed(&mut self, links: Vec<LinkTarget>) -> LayoutEpoch {
+    pub fn layout_completed(&mut self, links: LinkTargets) -> LayoutEpoch {
         self.regions.replace(links);
         self.regions.epoch()
     }

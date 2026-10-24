@@ -29,7 +29,6 @@ mod tests;
 
 use std::thread;
 
-use browser::SubresourceDiscoverer;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
@@ -37,7 +36,6 @@ use window::{
     WindowEvent, WindowSystem, WindowTitle,
 };
 
-pub use self::hit_test::hit_test;
 use self::key_mapping::omnibox_input;
 pub use self::render_tree::{
     ChromeHeight, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
@@ -80,9 +78,9 @@ pub fn initial_window_attributes() -> Result<WindowAttributes, AlloyError> {
 /// `RecordingPresenter`) drive the exact same loop, which is what lets the
 /// e2e golden test exercise this function directly rather than a parallel
 /// test-only copy of it.
-pub fn run_browser<S, R, F, T, P, D>(
+pub fn run_browser<S, R, F, T, P>(
     url: &Url,
-    services: BrowserServices<F, T, P, D>,
+    services: BrowserServices<F, T, P>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -93,7 +91,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     run_browser_until(url, services, system, presenter, initial_size, |_| false)
 }
@@ -107,9 +104,9 @@ where
 /// presented frame, without racing the background fetch threads against a
 /// scripted close event — and for a one-shot render, via
 /// [`run_browser_until_first_frame`].
-pub fn run_browser_until<S, R, F, T, P, D>(
+pub fn run_browser_until<S, R, F, T, P>(
     url: &Url,
-    services: BrowserServices<F, T, P, D>,
+    services: BrowserServices<F, T, P>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -121,7 +118,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     let mut session = Session::new(initial_size, services);
     run_loop(url, system, presenter, &mut session, should_stop)
@@ -129,9 +125,9 @@ where
 
 /// [`run_browser_until`], stopping as soon as the first frame has been laid
 /// out and presented.
-pub fn run_browser_until_first_frame<S, R, F, T, P, D>(
+pub fn run_browser_until_first_frame<S, R, F, T, P>(
     url: &Url,
-    services: BrowserServices<F, T, P, D>,
+    services: BrowserServices<F, T, P>,
     system: &mut S,
     presenter: &mut R,
     initial_size: window::SurfaceSize,
@@ -142,7 +138,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     run_browser_until(url, services, system, presenter, initial_size, |stats| {
         stats.relayouts >= 1
@@ -155,11 +150,11 @@ where
 /// blocking primitive spanning both the window and the `mpsc` channel.
 const IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(4);
 
-fn run_loop<S, R, F, T, P, D>(
+fn run_loop<S, R, F, T, P>(
     url: &Url,
     system: &mut S,
     presenter: &mut R,
-    session: &mut Session<F, T, P, D>,
+    session: &mut Session<F, T, P>,
     mut should_stop: impl FnMut(&LoopStats) -> bool,
 ) -> Result<LoopStats, AlloyError>
 where
@@ -168,7 +163,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     session.navigate(url.clone());
 
@@ -192,10 +186,10 @@ where
 /// idle-sleep before the next cycle, purely to avoid busy-spinning a CPU core;
 /// it plays no part in the coalescing invariant itself, which is entirely
 /// "drain everything currently available, then relay out at most once".
-fn pump_once<S, R, F, T, P, D>(
+fn pump_once<S, R, F, T, P>(
     system: &mut S,
     presenter: &mut R,
-    session: &mut Session<F, T, P, D>,
+    session: &mut Session<F, T, P>,
 ) -> Result<(PumpStatus, bool), AlloyError>
 where
     S: WindowSystem,
@@ -203,7 +197,6 @@ where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     let mut events = PumpEvents::starting_at(session.pointer_position());
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
@@ -239,15 +232,11 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-fn dispatch_omnibox_inputs<F, T, P, D>(
-    session: &mut Session<F, T, P, D>,
-    inputs: &[OmniboxInput],
-) -> bool
+fn dispatch_omnibox_inputs<F, T, P>(session: &mut Session<F, T, P>, inputs: &[OmniboxInput]) -> bool
 where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
     let mut modified = false;
     for input in inputs {

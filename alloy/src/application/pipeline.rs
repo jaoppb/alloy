@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use browser::{ImageStore, LinkTarget};
+use browser::{ImageStore, LinkTarget, LinkTargets};
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
     StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
@@ -154,7 +154,7 @@ pub fn render_dom_with_links<F: FontProvider + 'static>(
     images: &ImageStore,
     surface_size: SurfaceSize,
     font_provider: Arc<F>,
-) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
+) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     // `FontBackedMeasurer` (core/css) still takes a trait object; the `Arc<F>`
     // coerces at this one boundary, so alloy names no `dyn` itself.
     let measured_fonts = Arc::clone(&font_provider);
@@ -176,7 +176,7 @@ fn render_document<F: FontProvider + 'static, M: TextMeasurer + Send + Sync>(
     surface_size: SurfaceSize,
     font_provider: Arc<F>,
     layout: &BlockLayout<M>,
-) -> Result<(Framebuffer, Vec<LinkTarget>), AlloyError> {
+) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
     sheets.absorb(extra_sheets);
@@ -228,7 +228,7 @@ fn log_cascade_input(sheets: &StyleSheetSet) {
     }
 }
 
-fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec<LinkTarget> {
+fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> LinkTargets {
     let mut targets = Vec::new();
     for laid_out in box_tree.boxes_in_document_order() {
         let border_box = laid_out.border_box();
@@ -249,7 +249,7 @@ fn collect_link_targets(box_tree: &LayoutBoxTree, snapshot: &DomSnapshot) -> Vec
             current_id = node.parent();
         }
     }
-    targets
+    targets.into_iter().collect()
 }
 
 fn make_constraints(surface_size: SurfaceSize) -> Result<ViewportConstraints, AlloyError> {

@@ -38,7 +38,10 @@ sleepless test that a late `complete` is dropped; `ContextId` on every id/effect
 7. **`alloy` side** - `worker.rs` becomes the executor of `FetchRequest`; `Session` keeps one channel, executes effects,
    and builds `LoopStats` from `BrowsingContext::stats()`. The render tree and hit target carry `RegionId`
    (`UiHitTarget::PageLink(RegionId)`), so `href`s no longer reach the chrome.
-8. **`BrowserServices` shares its discoverer** as `Arc<D>` so the context and the services hold the same handle.
+8. **The discoverer is not a session service**: `BrowsingContext<D>` owns it by value and `Session` fixes it to
+   `MarkupDiscoverer`, so `BrowserServices` and `Session` lose their `D` parameter and `with_discoverer` goes.
+   Stylesheet parsing lives in the application layer (`parse_author_stylesheet`), `Document` only stores parsed sheets,
+   and commands return the `Effects` and take the `LinkTargets` first-class collections.
 
 ## Open points handed on
 

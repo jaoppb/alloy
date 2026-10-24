@@ -24,12 +24,13 @@ pub mod domain;
 pub mod infrastructure;
 
 pub use application::{
-    BrowsingContext, ErrorPageError, SubresourceDiscoverer, document_base_url, error_page,
+    BrowsingContext, ErrorPageError, StylesheetRejected, SubresourceDiscoverer, document_base_url,
+    error_page, parse_author_stylesheet,
 };
 pub use domain::{
-    BrowserEffect, ContentRegion, ContextId, ContextStats, Document, FetchFailure, FetchPayload,
-    FetchRequest, FetchResult, ImageRequest, ImageStore, LayoutEpoch, LinkDestination, LinkTarget,
-    LoadedDocument, NavigationId, Navigations, RegionError, RegionId, StoreSnapshot,
-    StylesheetRejected, StylesheetRequest, SubresourceRequest, Subresources,
+    BrowserEffect, ContentRegion, ContextId, ContextStats, Document, Effects, FetchFailure,
+    FetchPayload, FetchRequest, FetchResult, ImageRequest, ImageStore, LayoutEpoch,
+    LinkDestination, LinkTarget, LinkTargets, LoadedDocument, NavigationId, Navigations,
+    RegionError, RegionId, StoreSnapshot, StylesheetRequest, SubresourceRequest, Subresources,
 };
 pub use infrastructure::MarkupDiscoverer;

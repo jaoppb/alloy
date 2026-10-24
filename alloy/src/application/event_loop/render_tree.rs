@@ -197,7 +197,7 @@ impl UiRenderTree {
     pub fn build(
         viewport: SurfaceSize,
         theme: &OmniboxTheme,
-        regions: &[ContentRegion],
+        regions: impl IntoIterator<Item = ContentRegion>,
     ) -> Result<Self, AlloyError> {
         let chrome_height = theme.chrome_height();
         let width_in_app_units = surface_length_to_au(viewport.width())?;
@@ -328,14 +328,14 @@ fn build_content_node(
     width_in_app_units: Au,
     chrome_height: Au,
     content_height: Au,
-    regions: &[ContentRegion],
+    regions: impl IntoIterator<Item = ContentRegion>,
 ) -> Result<UiNode, AlloyError> {
     let content_origin = Point::new(Au::ZERO, chrome_height);
     let content_size =
         Size::new(width_in_app_units, content_height).ok_or(AlloyError::InvalidDimensions)?;
     let content_bounds = Rect::new(content_origin, content_size);
     let children = regions
-        .iter()
+        .into_iter()
         .map(|region| UiNode::new(UiNodeKind::Link(region.id()), region.bounds()))
         .collect();
     Ok(UiNode::with_children(
@@ -347,8 +347,6 @@ fn build_content_node(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use browser::{BrowsingContext, ContentRegion, LinkTarget, MarkupDiscoverer};
     use graphics::{Au, Point, Rect, Size};
     use window::{PhysicalPosition, SurfaceSize};
@@ -369,8 +367,8 @@ mod tests {
 
     /// The regions a browsing context mints for `links`, in paint order.
     fn minted(links: Vec<LinkTarget>) -> Vec<ContentRegion> {
-        let mut context = BrowsingContext::new(Arc::new(MarkupDiscoverer));
-        context.layout_completed(links);
+        let mut context = BrowsingContext::new(MarkupDiscoverer);
+        context.layout_completed(links.into_iter().collect());
         context.content_regions().collect()
     }
 
@@ -382,7 +380,8 @@ mod tests {
 
     fn sample_tree(regions: &[ContentRegion]) -> UiRenderTree {
         let size = SurfaceSize::new(800, 600).expect("valid size");
-        UiRenderTree::build(size, &OmniboxTheme::DEFAULT, regions).expect("valid tree")
+        UiRenderTree::build(size, &OmniboxTheme::DEFAULT, regions.iter().copied())
+            .expect("valid tree")
     }
 
     #[test]
@@ -484,7 +483,8 @@ mod tests {
         ));
         let regions = minted(vec![link("/top", 0, 0, 100, 50)]);
         let size = SurfaceSize::new(800, 600).expect("valid size");
-        let tree = UiRenderTree::build(size, &tall_chrome, &regions).expect("valid tree");
+        let tree =
+            UiRenderTree::build(size, &tall_chrome, regions.iter().copied()).expect("valid tree");
 
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(4.0, 50.0)),
@@ -559,7 +559,7 @@ mod tests {
     fn narrow_viewport_handles_zero_box_width_without_panic() {
         let narrow_size = SurfaceSize::new(10, 100).expect("positive surface size");
         let tree =
-            UiRenderTree::build(narrow_size, &OmniboxTheme::DEFAULT, &[]).expect("valid tree");
+            UiRenderTree::build(narrow_size, &OmniboxTheme::DEFAULT, []).expect("valid tree");
         // Too narrow for the input box, so (5, 20) hits the bare chrome bar.
         assert_eq!(
             tree.hit_test(PhysicalPosition::new(5.0, 20.0)),

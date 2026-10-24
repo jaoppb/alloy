@@ -1,6 +1,6 @@
 //! The links of the last layout, addressed by [`RegionId`] (see [`super::region`]).
 
-use super::region::{ContentRegion, LayoutEpoch, LinkTarget, RegionId};
+use super::region::{ContentRegion, LayoutEpoch, LinkTargets, RegionId};
 use crate::domain::ContextId;
 
 /// Why a [`RegionId`] could not be resolved.
@@ -27,7 +27,7 @@ pub enum RegionError {
 pub struct ContentRegions {
     context: ContextId,
     epoch: LayoutEpoch,
-    targets: Vec<LinkTarget>,
+    targets: LinkTargets,
 }
 
 impl ContentRegions {
@@ -37,19 +37,19 @@ impl ContentRegions {
         Self {
             context,
             epoch: LayoutEpoch(0),
-            targets: Vec::new(),
+            targets: LinkTargets::none(),
         }
     }
 
     /// Adopts the links of a fresh layout under a new epoch.
-    pub fn replace(&mut self, targets: Vec<LinkTarget>) {
+    pub fn replace(&mut self, targets: LinkTargets) {
         self.epoch = self.epoch.next();
         self.targets = targets;
     }
 
     /// Forgets every link under a new epoch — the document they described is gone.
     pub fn invalidate(&mut self) {
-        self.replace(Vec::new());
+        self.replace(LinkTargets::none());
     }
 
     /// The epoch ids are currently minted in.
@@ -60,8 +60,8 @@ impl ContentRegions {
 
     /// The regions of the current layout, in paint order.
     pub fn iter(&self) -> impl Iterator<Item = ContentRegion> + '_ {
-        self.targets
-            .iter()
+        (&self.targets)
+            .into_iter()
             .enumerate()
             .map(|(index, target)| ContentRegion {
                 id: RegionId {
@@ -69,7 +69,7 @@ impl ContentRegions {
                     epoch: self.epoch,
                     index,
                 },
-                bounds: target.area,
+                bounds: target.area(),
             })
     }
 
@@ -91,7 +91,7 @@ impl ContentRegions {
         }
         self.targets
             .get(id.index)
-            .map(LinkTarget::href)
+            .map(super::region::LinkTarget::href)
             .ok_or(RegionError::Unknown(id.index))
     }
 }
@@ -100,8 +100,9 @@ impl ContentRegions {
 mod tests {
     use graphics::{Au, Point, Rect, Size};
 
-    use super::{ContentRegions, LinkTarget, RegionError};
+    use super::{ContentRegions, RegionError};
     use crate::domain::ContextId;
+    use crate::domain::LinkTarget;
 
     fn link(href: &str) -> LinkTarget {
         let au = |pixels| Au::from_whole_px(pixels).unwrap();
@@ -128,7 +129,7 @@ mod tests {
     fn a_region_from_before_a_relayout_is_stale_even_when_its_index_still_exists() {
         let mut regions = regions_with(&["/old"]);
         let old = regions.iter().next().unwrap().id();
-        regions.replace(vec![link("/new")]);
+        regions.replace(std::iter::once(link("/new")).collect());
 
         assert!(matches!(regions.href(old), Err(RegionError::Stale { .. })));
     }
@@ -148,7 +149,7 @@ mod tests {
         let two = regions_with(&["/a", "/b"]);
         let past_the_end = two.iter().nth(1).unwrap().id();
         let mut one = ContentRegions::new(ContextId::ROOT);
-        one.replace(vec![link("/a")]);
+        one.replace(std::iter::once(link("/a")).collect());
         // Same epoch number (1), but only one link: index 1 does not exist.
         assert_eq!(one.href(past_the_end), Err(RegionError::Unknown(1)));
     }

@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use browser::{FetchPayload, FetchResult, LoadedDocument, MarkupDiscoverer};
+use browser::{FetchPayload, FetchResult, LoadedDocument};
 use graphics::SyntheticFontProvider;
 use network::{AllowAllPolicy, MockTransport};
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
@@ -15,8 +15,7 @@ use crate::application::browser_services::BrowserServices;
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
 
-pub(super) type TestSession =
-    Session<SyntheticFontProvider, MockTransport, AllowAllPolicy, MarkupDiscoverer>;
+pub(super) type TestSession = Session<SyntheticFontProvider, MockTransport, AllowAllPolicy>;
 
 pub(super) fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
     let font_provider =

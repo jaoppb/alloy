@@ -6,7 +6,10 @@
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use browser::{BrowserEffect, BrowsingContext, ContentRegion, FetchResult, SubresourceDiscoverer};
+use browser::{
+    BrowserEffect, BrowsingContext, ContentRegion, Effects, FetchResult, LinkTargets,
+    MarkupDiscoverer,
+};
 use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
@@ -33,9 +36,9 @@ use crate::error::AlloyError;
 /// Every field is private: `dirty` → [`Session::relayout`] → clean, and the
 /// context's link regions always describing `last_frame`, are invariants only
 /// this type's methods may move.
-pub struct Session<F, T, P, D> {
-    services: BrowserServices<F, T, P, D>,
-    browsing: BrowsingContext<D>,
+pub struct Session<F, T, P> {
+    services: BrowserServices<F, T, P>,
+    browsing: BrowsingContext<MarkupDiscoverer>,
     pointer_position: Option<PhysicalPosition>,
     dirty: bool,
     viewport: SurfaceSize,
@@ -54,22 +57,19 @@ pub struct Session<F, T, P, D> {
     ui_tree: UiRenderTree,
 }
 
-impl<F, T, P, D> Session<F, T, P, D>
+impl<F, T, P> Session<F, T, P>
 where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
-    D: SubresourceDiscoverer,
 {
-    pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P, D>) -> Self {
+    pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P>) -> Self {
         let (outbox, inbox) = mpsc::channel();
         let theme = Theme::DEFAULT;
-        let ui_tree = UiRenderTree::build(viewport, theme.omnibox(), &[])
-            .unwrap_or_else(|_| UiRenderTree::fallback(viewport, theme.omnibox()));
-        let browsing = BrowsingContext::new(Arc::clone(services.discoverer()));
+        let ui_tree = ui_tree_for(viewport, &theme, []);
         Self {
             services,
-            browsing,
+            browsing: BrowsingContext::new(MarkupDiscoverer),
             pointer_position: None,
             dirty: false,
             viewport,
@@ -132,8 +132,7 @@ where
     /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
     pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
-        self.ui_tree = UiRenderTree::build(viewport, self.theme.omnibox(), &self.content_regions())
-            .unwrap_or_else(|_| UiRenderTree::fallback(viewport, self.theme.omnibox()));
+        self.ui_tree = ui_tree_for(viewport, &self.theme, self.browsing.content_regions());
         self.dirty = true;
     }
 
@@ -163,7 +162,7 @@ where
 
     /// Carries out what the browsing context asked for: fetches run on worker
     /// threads, the omnibox follows the URL, damage schedules a relayout.
-    fn execute_browser_effects(&mut self, effects: Vec<BrowserEffect>) {
+    fn execute_browser_effects(&mut self, effects: Effects) {
         for effect in effects {
             match effect {
                 BrowserEffect::NavigationStarted(_, url)
@@ -178,10 +177,6 @@ where
                 BrowserEffect::ContentDamaged(_) => self.dirty = true,
             }
         }
-    }
-
-    fn content_regions(&self) -> Vec<ContentRegion> {
-        self.browsing.content_regions().collect()
     }
 
     /// Dispatches a pointer click at `position` through the UI render tree:
@@ -231,12 +226,18 @@ where
         )?;
         let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
         frame.present(presenter)?;
+        self.commit_layout(links, frame);
+        Ok(())
+    }
+
+    /// Adopts a presented layout in one step, so the link regions, the UI tree
+    /// hit-testing them and the cached frame never describe different layouts.
+    /// Nothing here can fail: everything fallible ran before the frame was shown.
+    fn commit_layout(&mut self, links: LinkTargets, frame: CachedFrame) {
         self.browsing.layout_completed(links);
-        self.ui_tree =
-            UiRenderTree::build(self.viewport, self.theme.omnibox(), &self.content_regions())?;
+        self.ui_tree = ui_tree_for(self.viewport, &self.theme, self.browsing.content_regions());
         self.last_frame = Some(frame);
         self.relayouts = self.relayouts.saturating_add(1);
-        Ok(())
     }
 
     /// Re-blits the frame [`Session::relayout`] last produced, with no
@@ -250,6 +251,17 @@ where
         };
         frame.present(presenter)
     }
+}
+
+/// The UI tree for `viewport`, or the inert fallback when the viewport cannot
+/// hold the chrome (#118 tracks making that a visible state).
+fn ui_tree_for(
+    viewport: SurfaceSize,
+    theme: &Theme,
+    regions: impl IntoIterator<Item = ContentRegion>,
+) -> UiRenderTree {
+    UiRenderTree::build(viewport, theme.omnibox(), regions)
+        .unwrap_or_else(|_| UiRenderTree::fallback(viewport, theme.omnibox()))
 }
 
 fn render_chrome<F: FontProvider + 'static>(
@@ -277,7 +289,7 @@ fn render_chrome<F: FontProvider + 'static>(
 
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
-impl<F, T, P, D> Session<F, T, P, D> {
+impl<F, T, P> Session<F, T, P> {
     pub const fn omnibox(&self) -> &OmniboxController {
         &self.omnibox
     }

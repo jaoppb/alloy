@@ -2,23 +2,21 @@
 //! channel, no sleep. A "late" fetch is simply a `complete` call made after
 //! the navigation that started it was superseded.
 
-use std::sync::Arc;
-
 use css::MediaQuery;
 use graphics::{Au, Color, Framebuffer, ImageId, Point, Rect, Size, SurfaceSize};
 use network::Url;
 
 use super::BrowsingContext;
 use crate::domain::{
-    BrowserEffect, ContextId, FetchFailure, FetchPayload, FetchRequest, FetchResult, LinkTarget,
-    LoadedDocument, NavigationId, SubresourceRequest,
+    BrowserEffect, ContextId, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult,
+    LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
 };
 use crate::infrastructure::MarkupDiscoverer;
 
 type TestContext = BrowsingContext<MarkupDiscoverer>;
 
 fn context() -> TestContext {
-    BrowsingContext::new(Arc::new(MarkupDiscoverer))
+    BrowsingContext::new(MarkupDiscoverer)
 }
 
 fn url(text: &str) -> Url {
@@ -30,8 +28,9 @@ fn page(path: &str) -> Url {
 }
 
 /// The navigation a `navigate` / `follow_link` call started.
-fn started(effects: &[BrowserEffect]) -> NavigationId {
+fn started(effects: &Effects) -> NavigationId {
     effects
+        .as_slice()
         .iter()
         .find_map(|effect| match effect {
             BrowserEffect::Fetch(FetchRequest::Document(_), navigation) => Some(*navigation),
@@ -77,6 +76,11 @@ fn load(context: &mut TestContext, markup: &str, at: &Url) -> NavigationId {
     navigation
 }
 
+/// The links of a layout, in paint order.
+fn links(hrefs: &[&str]) -> LinkTargets {
+    hrefs.iter().map(|href| link(href)).collect()
+}
+
 fn link(href: &str) -> LinkTarget {
     let au = |pixels| Au::from_whole_px(pixels).unwrap();
     let area = Rect::new(Point::new(au(0), au(0)), Size::new(au(10), au(10)).unwrap());
@@ -90,8 +94,9 @@ fn base_url(context: &TestContext) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn damaged(effects: &[BrowserEffect]) -> bool {
+fn damaged(effects: &Effects) -> bool {
     effects
+        .as_slice()
         .iter()
         .any(|effect| matches!(effect, BrowserEffect::ContentDamaged(_)))
 }
@@ -106,8 +111,8 @@ fn navigating_announces_the_url_and_asks_for_the_document_under_a_fresh_id() {
     let navigation = started(&effects);
     assert_eq!(navigation, context.current_navigation());
     assert_eq!(
-        effects,
-        vec![
+        effects.as_slice(),
+        [
             BrowserEffect::NavigationStarted(ContextId::ROOT, target.clone()),
             BrowserEffect::Fetch(FetchRequest::Document(target), navigation),
         ]
@@ -127,6 +132,7 @@ fn a_completed_document_is_installed_and_reports_what_to_fetch_next() {
     ));
 
     let fetched: Vec<_> = effects
+        .as_slice()
         .iter()
         .filter_map(|effect| match effect {
             BrowserEffect::Fetch(FetchRequest::Subresource(request), stamp) => {
@@ -146,7 +152,11 @@ fn a_completed_document_is_installed_and_reports_what_to_fetch_next() {
     );
     assert!(matches!(fetched[0].0, SubresourceRequest::Stylesheet(_)));
     assert!(matches!(fetched[1].0, SubresourceRequest::Image(_)));
-    assert!(effects.contains(&BrowserEffect::DocumentLoaded(ContextId::ROOT, target)));
+    assert!(
+        effects
+            .as_slice()
+            .contains(&BrowserEffect::DocumentLoaded(ContextId::ROOT, target))
+    );
     assert!(damaged(&effects));
     assert_eq!(context.stats().navigations(), 1);
 }
@@ -164,6 +174,7 @@ fn every_discovered_image_has_a_placeholder_before_its_pixels_arrive() {
     ));
 
     let image_id = effects
+        .as_slice()
         .iter()
         .find_map(|effect| match effect {
             BrowserEffect::Fetch(
@@ -352,8 +363,8 @@ fn a_completed_layout_mints_regions_under_a_new_epoch_each_time() {
     let mut context = context();
     load(&mut context, "<body>hi</body>", &page("a.html"));
 
-    let first = context.layout_completed(vec![link("/a")]);
-    let second = context.layout_completed(vec![link("/a")]);
+    let first = context.layout_completed(links(&["/a"]));
+    let second = context.layout_completed(links(&["/a"]));
 
     assert_ne!(first, second);
     assert_eq!(context.content_regions().count(), 1);
@@ -367,7 +378,7 @@ fn following_a_link_resolves_against_the_base_and_supersedes_what_is_in_flight()
         r#"<head><base href="https://cdn.example/app/"></head><body>x</body>"#,
         &url("https://example.com/index.html"),
     );
-    context.layout_completed(vec![link("docs.html")]);
+    context.layout_completed(links(&["docs.html"]));
     let region = context.content_regions().next().unwrap().id();
     let target = url("https://cdn.example/app/docs.html");
 
@@ -375,8 +386,8 @@ fn following_a_link_resolves_against_the_base_and_supersedes_what_is_in_flight()
 
     let navigation = started(&effects);
     assert_eq!(
-        effects,
-        vec![
+        effects.as_slice(),
+        [
             BrowserEffect::NavigationStarted(ContextId::ROOT, target.clone()),
             BrowserEffect::Fetch(FetchRequest::Document(target), navigation),
         ]
@@ -393,7 +404,7 @@ fn following_a_link_resolves_against_the_base_and_supersedes_what_is_in_flight()
 fn following_an_in_page_anchor_does_nothing() {
     let mut context = context();
     load(&mut context, "<body>x</body>", &page("a.html"));
-    context.layout_completed(vec![link("#section")]);
+    context.layout_completed(links(&["#section"]));
     let region = context.content_regions().next().unwrap().id();
     let before = context.current_navigation();
 
@@ -409,7 +420,7 @@ fn following_an_in_page_anchor_does_nothing() {
 fn a_link_followed_with_a_stale_layout_epoch_is_ignored() {
     let mut context = context();
     load(&mut context, "<body>old</body>", &page("old.html"));
-    context.layout_completed(vec![link("/old-target")]);
+    context.layout_completed(links(&["/old-target"]));
     let stale = context.content_regions().next().unwrap().id();
     // The document is swapped but nothing has laid it out yet.
     load(&mut context, "<body>new</body>", &page("new.html"));
@@ -428,7 +439,7 @@ fn a_link_followed_with_a_stale_layout_epoch_is_ignored() {
 fn a_document_swap_forgets_the_old_documents_regions() {
     let mut context = context();
     load(&mut context, "<body>old</body>", &page("old.html"));
-    context.layout_completed(vec![link("/a"), link("/b")]);
+    context.layout_completed(links(&["/a", "/b"]));
 
     load(&mut context, "<body>new</body>", &page("new.html"));
 
@@ -438,7 +449,7 @@ fn a_document_swap_forgets_the_old_documents_regions() {
 #[test]
 fn a_link_followed_before_any_document_is_ignored() {
     let mut context = context();
-    context.layout_completed(vec![link("/a")]);
+    context.layout_completed(links(&["/a"]));
     let region = context.content_regions().next().unwrap().id();
 
     assert!(context.follow_link(region).is_empty());
@@ -448,9 +459,9 @@ fn a_link_followed_before_any_document_is_ignored() {
 fn a_region_from_before_a_relayout_does_not_follow_the_new_layouts_link_at_its_index() {
     let mut context = context();
     load(&mut context, "<body>x</body>", &page("a.html"));
-    context.layout_completed(vec![link("/before")]);
+    context.layout_completed(links(&["/before"]));
     let before = context.content_regions().next().unwrap().id();
-    context.layout_completed(vec![link("/after")]);
+    context.layout_completed(links(&["/after"]));
 
     assert!(context.follow_link(before).is_empty());
 }

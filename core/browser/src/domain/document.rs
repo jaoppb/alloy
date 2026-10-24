@@ -1,22 +1,11 @@
 //! The document a context currently shows, with everything fetched for it.
 
-use css::{MediaQuery, Origin, StyleSheetSet};
+use css::StyleSheetSet;
 use dom::DomTree;
 use graphics::{Framebuffer, ImageId};
 use network::Url;
 
-use crate::domain::ImageStore;
-
-/// Why a fetched stylesheet was not added to the cascade.
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum StylesheetRejected {
-    /// Its `media=` can never match a screen.
-    #[error("media query does not match screen")]
-    NeverMatches,
-    /// The text is not a stylesheet.
-    #[error("stylesheet does not parse: {0}")]
-    Unparsable(css::CssError),
-}
+use crate::domain::{ImageStore, SubresourceRequest, Subresources};
 
 /// A DOM tree, the base URL its relative references resolve against, and the
 /// sheets and images fetched for it. A new document starts from none of them.
@@ -75,9 +64,15 @@ impl Document {
         &self.images
     }
 
-    /// Gives `id` a placeholder until its pixels arrive.
-    pub fn reserve_image(&mut self, id: ImageId) {
-        self.images.reserve_placeholder(id);
+    /// Gives every image `found` references a placeholder until its pixels
+    /// arrive: a discovered image must resolve to *something* from the first
+    /// paint (see [`ImageStore::reserve_placeholder`]).
+    pub fn reserve_placeholders(&mut self, found: &Subresources) {
+        for request in found {
+            if let SubresourceRequest::Image(image) = request {
+                self.images.reserve_placeholder(image.id());
+            }
+        }
     }
 
     /// Replaces `id`'s placeholder with its decoded pixels.
@@ -85,30 +80,8 @@ impl Document {
         self.images.insert(id, frame);
     }
 
-    /// Parses `text` and adds it to the cascade, limited to `media`.
-    ///
-    /// # Errors
-    ///
-    /// [`StylesheetRejected`] when `media` can never match a screen or `text`
-    /// is not a stylesheet; the cascade is left as it was.
-    pub fn absorb_stylesheet(
-        &mut self,
-        text: &str,
-        media: &MediaQuery,
-    ) -> Result<(), StylesheetRejected> {
-        if media.is_never() {
-            return Err(StylesheetRejected::NeverMatches);
-        }
-        let mut sheet =
-            css::parse_stylesheet(text, Origin::Author).map_err(StylesheetRejected::Unparsable)?;
-        sheet.apply_media(media);
-        tracing::debug!(
-            rules = sheet.rules().count(),
-            notes = sheet.notes().len(),
-            bytes = text.len(),
-            "stylesheet absorbed"
-        );
+    /// Adds an already parsed author `sheet` to the cascade.
+    pub fn add_sheet(&mut self, sheet: StyleSheetSet) {
         self.sheets.absorb(sheet);
-        Ok(())
     }
 }
