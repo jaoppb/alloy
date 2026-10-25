@@ -128,7 +128,7 @@ where
 
     /// Waits briefly after a pump cycle that found nothing to do.
     pub fn pause_idle(&self) {
-        self.services.idle_pause().pause();
+        self.services.pause_idle();
     }
 
     pub const fn needs_relayout(&self) -> bool {
@@ -147,7 +147,7 @@ where
     /// were any.
     pub fn drain_messages(&mut self) -> bool {
         let mut saw_message = false;
-        while let Some(result) = self.services.fetch_inbox().next_ready() {
+        while let Some(result) = self.services.next_ready_fetch() {
             saw_message = true;
             let effects = self.browsing.complete(result);
             self.execute_browser_effects(effects);
@@ -165,7 +165,7 @@ where
                     self.omnibox.reset_to_url(&url);
                 }
                 BrowserEffect::Fetch(request, navigation) => {
-                    self.services.fetch_executor().execute(request, navigation);
+                    self.services.execute(request, navigation);
                 }
                 BrowserEffect::ContentDamaged(_) => self.dirty = true,
             }

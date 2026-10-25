@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
+use browser::{FetchRequest, FetchResult, NavigationId};
+
 use crate::application::fetch_channel::FetchInbox;
+use crate::application::ports::{FetchExecutor, IdlePause};
 
 /// Font, fetching and pacing collaborators of one browser session.
 ///
@@ -48,16 +51,22 @@ impl<F, X, W> BrowserServices<F, X, W> {
     pub const fn fetch_executor(&self) -> &X {
         &self.fetch_executor
     }
+}
 
-    /// Where the executor's finished fetches wait for the loop.
-    #[must_use]
-    pub const fn fetch_inbox(&self) -> &FetchInbox {
-        &self.fetch_inbox
+impl<F, X: FetchExecutor, W: IdlePause> BrowserServices<F, X, W> {
+    /// Starts `request` on the executor on behalf of `navigation`.
+    pub fn execute(&self, request: FetchRequest, navigation: NavigationId) {
+        self.fetch_executor.execute(request, navigation);
     }
 
-    /// What an idle pump cycle waits with.
+    /// The next finished fetch already waiting, if any.
     #[must_use]
-    pub const fn idle_pause(&self) -> &W {
-        &self.idle_pause
+    pub fn next_ready_fetch(&self) -> Option<FetchResult> {
+        self.fetch_inbox.next_ready()
+    }
+
+    /// Waits briefly after a pump cycle that found nothing to do.
+    pub fn pause_idle(&self) {
+        self.idle_pause.pause();
     }
 }

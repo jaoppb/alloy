@@ -5,10 +5,11 @@
 //! navigation's thread runs to completion and its result is dropped on arrival
 //! by `NavigationId` (#110 non-goals).
 
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::thread;
 
-use browser::{FetchRequest, FetchResult, NavigationId};
+use browser::{FetchFailure, FetchPayload, FetchRequest, FetchResult, NavigationId};
 use network::{HttpTransport, RequestPolicy};
 
 use super::http_fetch::HttpFetcher;
@@ -63,10 +64,31 @@ where
         let fetcher = Arc::clone(&self.fetcher);
         let outbox = self.outbox.clone();
         thread::spawn(move || {
-            let payload = fetcher.fetch(request);
+            let payload = fetch_reporting_panics(&fetcher, request);
             outbox.send(FetchResult::new(navigation, payload));
         });
     }
+}
+
+/// Fetches `request`, turning a panic into a failed payload.
+///
+/// A worker nobody joins would otherwise die silently: no result would ever
+/// reach the loop and the page would stay "loading" with nothing to show. Like
+/// a trapped script panic (ADR-0004), it must never go unreported.
+fn fetch_reporting_panics<T, P, D>(
+    fetcher: &HttpFetcher<T, P, D>,
+    request: FetchRequest,
+) -> FetchPayload
+where
+    T: HttpTransport,
+    P: RequestPolicy,
+    D: ImageDecoder,
+{
+    let on_panic = request.clone();
+    panic::catch_unwind(AssertUnwindSafe(|| fetcher.fetch(request))).unwrap_or_else(|_| {
+        tracing::error!("a fetch worker panicked");
+        on_panic.failed(FetchFailure::new("the fetch worker panicked"))
+    })
 }
 
 #[cfg(test)]
@@ -75,12 +97,15 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use browser::{FetchRequest, FetchResult, Navigations, StylesheetRequest, SubresourceRequest};
-    use network::{AllowAllPolicy, MockTransport, Url};
+    use network::{
+        AllowAllPolicy, HttpRequest, HttpResponse, HttpTransport, MockTransport, NetworkError, Url,
+    };
     use region::ContextId;
 
     use super::ThreadFetchExecutor;
-    use crate::application::fetch_channel::FetchInbox;
+    use crate::application::fetch_channel::{FetchInbox, fetch_channel};
     use crate::application::ports::FetchExecutor;
+    use crate::infrastructure::PngImageDecoder;
 
     /// The adapter really runs on another thread, so this is the one test that
     /// has to wait for it; the loop's own tests use a synchronous executor.
@@ -118,5 +143,39 @@ mod tests {
 
         assert_eq!(result.navigation(), navigation);
         assert_eq!(result.context(), ContextId::ROOT);
+    }
+
+    struct PanickingTransport;
+
+    impl HttpTransport for PanickingTransport {
+        #[allow(clippy::panic_in_result_fn)] // panicking is the point of this fixture
+        fn execute(&self, _request: &HttpRequest) -> Result<HttpResponse, NetworkError> {
+            panic!("the transport blew up");
+        }
+    }
+
+    #[test]
+    fn a_panicking_fetch_still_reports_its_navigation() {
+        let (outbox, inbox) = fetch_channel();
+        let executor = ThreadFetchExecutor::new(
+            PanickingTransport,
+            AllowAllPolicy::new(),
+            PngImageDecoder,
+            outbox,
+        );
+        let mut navigations = Navigations::new(ContextId::ROOT);
+        navigations.supersede();
+        let navigation = navigations.latest();
+        let sheet = StylesheetRequest::new(
+            Url::parse("http://example.com/a.css").unwrap(),
+            css::MediaQuery::always(),
+        );
+
+        executor.execute(
+            FetchRequest::Subresource(SubresourceRequest::Stylesheet(sheet)),
+            navigation,
+        );
+
+        assert_eq!(wait_for_result(&inbox).navigation(), navigation);
     }
 }
