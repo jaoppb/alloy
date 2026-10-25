@@ -92,6 +92,11 @@ pub enum AlloyError {
     /// error card rather than rendering nothing (v0.5 Phase I4).
     #[error("{url} returned a document body that is not valid UTF-8 text")]
     NonTextualDocument { url: String },
+
+    /// A stylesheet's body is not valid UTF-8 text. Reported rather than read
+    /// as an empty sheet, so the page's styling never vanishes without a trace.
+    #[error("{url} returned a stylesheet that is not valid UTF-8 text")]
+    NonTextualStylesheet { url: String },
 }
 
 impl From<ui::UiError> for AlloyError {

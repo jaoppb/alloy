@@ -1,16 +1,19 @@
 //! What a [`FetchRequest`] means over HTTP: the one place a request variant
 //! maps to how it is fetched, and a response maps to a [`FetchPayload`].
 //!
-//! Runs wherever the executor runs it — a worker thread in production, the
-//! caller's own thread in a deterministic test.
+//! Every request, document or subresource, goes through [`HttpFetcher::send`]:
+//! policy runs before mechanism (`PRD-009` §3.3), so `decide` is consulted
+//! before [`HttpTransport::execute`] ever opens a socket and a denial costs no
+//! connection. Runs wherever the executor runs it — a worker thread in
+//! production, the caller's own thread in a deterministic test.
 
-use browser::{
-    FetchFailure, FetchPayload, FetchRequest, LoadedDocument, StylesheetRequest, SubresourceRequest,
-};
+use browser::{FetchFailure, FetchPayload, FetchRequest, StylesheetRequest, SubresourceRequest};
 use graphics::Framebuffer;
-use network::{HttpRequest, HttpTransport, RequestPolicy, Url};
+use network::{
+    HttpRequest, HttpResponse, HttpTransport, NetworkError, PolicyVerdict, RequestPolicy,
+    StatusCode, Url,
+};
 
-use super::navigation;
 use crate::application::ports::ImageDecoder;
 use crate::error::AlloyError;
 
@@ -37,8 +40,7 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     pub fn fetch(&self, request: FetchRequest) -> FetchPayload {
         match request {
             FetchRequest::Document(document) => {
-                let loaded = navigation::navigate(&document, &self.transport, &self.policy)
-                    .map(|tree| LoadedDocument::new(tree, document.url().clone()));
+                let loaded = self.fetch_document(document);
                 FetchPayload::Document(loaded.map_err(|error| describe(&error)))
             }
             FetchRequest::Subresource(SubresourceRequest::Stylesheet(stylesheet)) => {
@@ -51,6 +53,29 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
         }
     }
 
+    /// Sends `requested` through the policy, then the transport, and rejects a
+    /// non-`2xx` answer: a fetch that redirected to an error page still
+    /// "succeeds" at the transport layer, and an HTML 404/500 body must never
+    /// reach a parser as if it were the resource.
+    pub(super) fn send(&self, requested: HttpRequest) -> Result<HttpResponse, AlloyError> {
+        let url = requested.url().clone();
+        let request = match self.policy.decide(&requested)? {
+            PolicyVerdict::Allow => requested,
+            PolicyVerdict::Rewrite(rewritten) => rewritten,
+            PolicyVerdict::Deny { reason } => {
+                return Err(AlloyError::from(NetworkError::policy_denied(reason)));
+            }
+            _ => {
+                return Err(AlloyError::from(NetworkError::policy_denied(
+                    "unrecognised policy verdict",
+                )));
+            }
+        };
+        let response = self.transport.execute(&request)?;
+        ensure_success(&url, response.status())?;
+        Ok(response)
+    }
+
     fn fetch_stylesheet(&self, stylesheet: &StylesheetRequest) -> FetchPayload {
         let text = self
             .fetch_text(stylesheet.url())
@@ -59,9 +84,14 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     }
 
     fn fetch_text(&self, url: &Url) -> Result<String, AlloyError> {
-        let response = self.transport.execute(&HttpRequest::get(url.clone()))?;
-        navigation::ensure_success(url, response.status())?;
-        let body = response.body().as_str().unwrap_or_default().to_owned();
+        let response = self.send(HttpRequest::get(url.clone()))?;
+        let body = response
+            .body()
+            .as_str()
+            .ok_or_else(|| AlloyError::NonTextualStylesheet {
+                url: url.to_string(),
+            })?
+            .to_owned();
         tracing::debug!(
             %url,
             status = response.status().code(),
@@ -72,10 +102,20 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     }
 
     fn fetch_image(&self, url: &Url) -> Result<Framebuffer, AlloyError> {
-        let response = self.transport.execute(&HttpRequest::get(url.clone()))?;
-        navigation::ensure_success(url, response.status())?;
+        let response = self.send(HttpRequest::get(url.clone()))?;
         self.decoder.decode(response.body().as_bytes())
     }
+}
+
+/// Rejects a non-`2xx` status with a typed [`AlloyError::HttpStatus`].
+fn ensure_success(url: &Url, status: StatusCode) -> Result<(), AlloyError> {
+    if status.is_success() {
+        return Ok(());
+    }
+    Err(AlloyError::HttpStatus {
+        url: url.to_string(),
+        status: status.code(),
+    })
 }
 
 /// The error page shows the message; the cause stays in this crate's error.
@@ -86,7 +126,10 @@ fn describe(error: &AlloyError) -> FetchFailure {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use network::{AllowAllPolicy, Body, HeaderMap, HttpResponse, MockTransport, StatusCode, Url};
+    use network::{
+        AllowAllPolicy, Body, HeaderMap, HttpRequest, HttpResponse, MockTransport, NetworkError,
+        PolicyVerdict, RequestPolicy, StatusCode, Url,
+    };
 
     use super::HttpFetcher;
     use crate::error::AlloyError;
@@ -108,6 +151,53 @@ mod tests {
         assert!(
             matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
             "a 404 error page must not reach the CSS parser as a stylesheet"
+        );
+    }
+
+    #[test]
+    fn a_non_utf8_stylesheet_is_a_typed_error_not_an_empty_sheet() {
+        let sheet_url = Url::parse("http://example.com/binary.css").unwrap();
+        let binary = HttpResponse::new(
+            StatusCode::OK,
+            HeaderMap::new(),
+            Body::from_bytes(vec![0xFF, 0xFE, 0x00, 0x9C]),
+        );
+        let transport = MockTransport::new().with_response(sheet_url.clone(), binary);
+        let fetcher = HttpFetcher::new(transport, AllowAllPolicy::new(), PngImageDecoder);
+
+        let result = fetcher.fetch_text(&sheet_url);
+
+        assert!(
+            matches!(result, Err(AlloyError::NonTextualStylesheet { .. })),
+            "got {result:?}"
+        );
+    }
+
+    struct DenyAll;
+
+    impl RequestPolicy for DenyAll {
+        fn decide(&self, _request: &HttpRequest) -> Result<PolicyVerdict, NetworkError> {
+            Ok(PolicyVerdict::deny("blocked"))
+        }
+    }
+
+    #[test]
+    fn a_policy_denial_stops_a_subresource_before_the_transport() {
+        let sheet_url = Url::parse("http://example.com/a.css").unwrap();
+        let transport = MockTransport::new().with_response(
+            sheet_url.clone(),
+            HttpResponse::new(StatusCode::OK, HeaderMap::new(), Body::from_text("p {}")),
+        );
+        let fetcher = HttpFetcher::new(transport, DenyAll, PngImageDecoder);
+
+        let result = fetcher.fetch_text(&sheet_url);
+
+        assert!(
+            matches!(
+                result,
+                Err(AlloyError::Network(NetworkError::PolicyDenied { .. }))
+            ),
+            "got {result:?}"
         );
     }
 }
