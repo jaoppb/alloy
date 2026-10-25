@@ -84,6 +84,13 @@ impl Au {
         }
     }
 
+    /// Converts a surface edge in whole pixels, or `None` when it does not fit
+    /// the app-unit envelope.
+    #[must_use]
+    pub fn from_surface_length(pixels: u32) -> Option<Self> {
+        i32::try_from(pixels).ok().and_then(Self::from_whole_px)
+    }
+
     /// The one crossing from author input into computed geometry.
     ///
     /// Returns `None` for a non-finite input: there is no correct reading of

@@ -261,6 +261,5 @@ fn make_constraints(surface_size: SurfaceSize) -> Result<ViewportConstraints, Al
 /// A surface edge in whole pixels as app units, or
 /// [`AlloyError::InvalidDimensions`] when it overflows the `Au` envelope.
 pub(crate) fn surface_length_to_au(pixels: u32) -> Result<Au, AlloyError> {
-    let pixels = i32::try_from(pixels).map_err(|_| AlloyError::InvalidDimensions)?;
-    Au::from_whole_px(pixels).ok_or(AlloyError::InvalidDimensions)
+    Au::from_surface_length(pixels).ok_or(AlloyError::InvalidDimensions)
 }

@@ -7,7 +7,6 @@ mod hit_target;
 mod node;
 mod node_children;
 mod node_kind;
-mod surface_length;
 mod surfaces;
 mod tree;
 

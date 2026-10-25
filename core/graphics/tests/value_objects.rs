@@ -310,3 +310,19 @@ fn the_port_schema_version_is_recorded_in_exactly_one_place() {
     // RenderBackend and FontProvider.
     assert_eq!(graphics::PORT_SCHEMA_VERSION, 3);
 }
+
+#[test]
+fn a_surface_length_converts_to_app_units_or_none_past_the_envelope() {
+    assert_eq!(Au::from_surface_length(0), Some(Au::ZERO));
+    assert_eq!(Au::from_surface_length(800), Au::from_whole_px(800));
+    assert_eq!(
+        Au::from_surface_length(u32::MAX),
+        None,
+        "u32::MAX does not fit an i32 edge"
+    );
+    assert_eq!(
+        Au::from_surface_length(u32::try_from(i32::MAX).expect("positive")),
+        None,
+        "and an i32 edge that overflows app units is refused too"
+    );
+}

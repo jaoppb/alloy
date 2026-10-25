@@ -91,8 +91,11 @@ on (decision 3), so the placeholder was no longer the question. Options:
 - **A shared leaf crate (chosen).** `core/region` holds `ContextId`, `LayoutEpoch`, `RegionId` and `ContentRegion`. Both
   siblings depend on it; `alloy` hands the browser's regions to the render tree and the winning `RegionId` back to the
   browser with no conversion and no lookup table. The constructors are public — `core/ui`'s tests and `core/browser`
-  both build values — so `core/ui` *could* forge an id. That is harmless: `ContentRegions::href` refuses an id from
-  another context or an earlier epoch (`RegionError`), which is what decision 13 relies on anyway.
+  both build values — so "only `core/browser` mints" is a convention the compiler no longer checks, and `arch-lint`
+  cannot check it either (`restrict-use` matches imports, not method calls). `ContentRegions::href` still refuses an id
+  from another context or an earlier epoch (`RegionError`), which is what decision 13 relies on. An id forged for the
+  current layout would resolve to a real link of that layout and no other: no new capability, but not impossible. If
+  that is ever too weak, the next step is a `RegionMint` owned by `core/browser`.
 - **`core/ui` owns its own opaque `RegionId`.** `alloy` would convert every `browser::ContentRegion` on each layout and
   keep a parallel `Vec<browser::RegionId>` to map a hit back; that table can drift from the tree and duplicates the id
   concept. Rejected.
@@ -117,6 +120,6 @@ names #109 moved, unchanged — so the move is behavior-preserving.
 
 ---
 
-### Links
+## Links
 
 - Epic #110 (decisions 2, 3, 4, 11–14, 20, 22, 23), #111, #109; `ADR-0010`, `ADR-0019`, `ADR-0027`

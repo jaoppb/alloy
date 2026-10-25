@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Opaque content-region ids shared by core/ui and core/browser, which depend on this leaf instead of on each other (#109, ADR-0026)."
+description = "Opaque content-region ids shared by core/ui and core/browser, which depend on this graphics-only leaf instead of on each other (#109, ADR-0026)."
 
 # The seam vocabulary of ADR-0026: `core/browser` mints a `RegionId` per link, `core/ui`
 # hit-tests the `ContentRegion`s and hands the winning id back. A leaf on purpose — it

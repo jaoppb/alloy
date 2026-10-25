@@ -15,7 +15,6 @@ use super::hit_target::UiHitTarget;
 use super::node::UiNode;
 use super::node_children::UiNodeChildren;
 use super::node_kind::UiNodeKind;
-use super::surface_length::surface_length_to_au;
 use crate::domain::error::UiError;
 use crate::domain::theme::{ChromeHeight, OmniboxTheme};
 
@@ -42,8 +41,10 @@ impl UiRenderTree {
         regions: impl IntoIterator<Item = ContentRegion>,
     ) -> Result<Self, UiError> {
         let chrome_height = theme.chrome_height();
-        let width_in_app_units = surface_length_to_au(viewport.width())?;
-        let height_in_app_units = surface_length_to_au(viewport.height())?;
+        let width_in_app_units =
+            Au::from_surface_length(viewport.width()).ok_or(UiError::InvalidDimensions)?;
+        let height_in_app_units =
+            Au::from_surface_length(viewport.height()).ok_or(UiError::InvalidDimensions)?;
         let chrome_height_au = chrome_height.to_au();
 
         if height_in_app_units <= chrome_height_au {

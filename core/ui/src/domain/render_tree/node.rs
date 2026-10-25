@@ -34,10 +34,6 @@ impl UiNode {
         }
     }
 
-    pub fn add_child(&mut self, child: Self) {
-        self.children.push(child);
-    }
-
     #[must_use]
     pub const fn kind(&self) -> &UiNodeKind {
         &self.kind

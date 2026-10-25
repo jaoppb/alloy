@@ -7,9 +7,11 @@
 //! scoped by. It never carries an `href` (#110 decision 12).
 //!
 //! The constructors are public because both crates and their tests need to
-//! build values, but only `core/browser` *resolves* an id, and it refuses one
-//! from another context or an earlier layout (#110 decision 13) — a forged id
-//! cannot reach a link it was not minted for.
+//! build values, so "only `core/browser` mints" is a convention, not something
+//! the compiler checks. What is enforced: only `core/browser` *resolves* an id,
+//! and it refuses one from another context or an earlier layout (#110
+//! decision 13). An id forged for the current layout would resolve to a real
+//! link of that layout — no link outside it.
 
 #![forbid(unsafe_code)]
 
