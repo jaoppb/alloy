@@ -21,6 +21,24 @@ pub enum FetchRequest {
     Subresource(SubresourceRequest),
 }
 
+impl FetchRequest {
+    /// The payload that reports this request failed with `failure`, shaped
+    /// like the one a success would have produced — so an executor that could
+    /// not run the request at all (a worker that panicked) still answers it.
+    #[must_use]
+    pub fn failed(&self, failure: FetchFailure) -> FetchPayload {
+        match self {
+            Self::Document(_) => FetchPayload::Document(Err(failure)),
+            Self::Subresource(SubresourceRequest::Stylesheet(stylesheet)) => {
+                FetchPayload::Stylesheet(stylesheet.media().clone(), Err(failure))
+            }
+            Self::Subresource(SubresourceRequest::Image(image)) => {
+                FetchPayload::Image(image.id(), Err(failure))
+            }
+        }
+    }
+}
+
 /// Why a fetch produced nothing usable, already rendered for a person to read.
 ///
 /// The cause (a transport error, a policy denial, a non-`2xx` status) lives in
@@ -99,5 +117,55 @@ impl FetchResult {
 
     pub(crate) fn into_payload(self) -> FetchPayload {
         self.payload
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use css::MediaQuery;
+    use graphics::ImageId;
+    use network::Url;
+
+    use super::{DocumentRequest, FetchFailure, FetchPayload, FetchRequest};
+    use crate::domain::{ImageRequest, StylesheetRequest, SubresourceRequest};
+
+    fn url() -> Url {
+        Url::parse("http://example.com/a").expect("a valid test URL")
+    }
+
+    fn failure() -> FetchFailure {
+        FetchFailure::new("worker panicked")
+    }
+
+    #[test]
+    fn a_failed_document_answers_as_a_document() {
+        let request = FetchRequest::Document(DocumentRequest::get(url()));
+
+        assert!(matches!(
+            request.failed(failure()),
+            FetchPayload::Document(Err(_))
+        ));
+    }
+
+    #[test]
+    fn a_failed_stylesheet_keeps_its_media() {
+        let sheet = StylesheetRequest::new(url(), MediaQuery::always());
+        let request = FetchRequest::Subresource(SubresourceRequest::Stylesheet(sheet));
+
+        let FetchPayload::Stylesheet(media, Err(_)) = request.failed(failure()) else {
+            panic!("a stylesheet request fails as a stylesheet payload");
+        };
+        assert_eq!(media, MediaQuery::always());
+    }
+
+    #[test]
+    fn a_failed_image_keeps_its_id() {
+        let image = ImageRequest::new(ImageId::new(7), url());
+        let request = FetchRequest::Subresource(SubresourceRequest::Image(image));
+
+        let FetchPayload::Image(id, Err(_)) = request.failed(failure()) else {
+            panic!("an image request fails as an image payload");
+        };
+        assert_eq!(id, ImageId::new(7));
     }
 }

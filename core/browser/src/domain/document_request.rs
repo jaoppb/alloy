@@ -1,6 +1,6 @@
 //! The request a navigation asks `alloy` to make for a document.
 
-use network::{Body, Method, Url};
+use network::{Body, HttpRequest, Method, Url};
 
 /// What to ask for when a navigation fetches its document.
 ///
@@ -50,6 +50,20 @@ impl DocumentRequest {
     pub const fn body(&self) -> &Body {
         &self.body
     }
+
+    /// The wire-level request this asks for: the one place a document request
+    /// becomes an [`HttpRequest`], so the executor and a [`RequestPolicy`] see
+    /// the same method and body.
+    ///
+    /// [`RequestPolicy`]: network::RequestPolicy
+    #[must_use]
+    pub fn into_http_request(self) -> HttpRequest {
+        let request = HttpRequest::new(self.method, self.url);
+        if self.body.is_empty() {
+            return request;
+        }
+        request.with_body(self.body)
+    }
 }
 
 #[cfg(test)]
@@ -69,6 +83,24 @@ mod tests {
         assert_eq!(request.method(), Method::Get);
         assert!(request.body().is_empty());
         assert_eq!(request.url(), &url());
+    }
+
+    #[test]
+    fn the_http_request_carries_the_method_and_body() {
+        let request =
+            DocumentRequest::new(url(), Method::Post, Body::from_text("a=1")).into_http_request();
+
+        assert_eq!(request.method(), Method::Post);
+        assert_eq!(request.url(), &url());
+        assert_eq!(request.body().as_bytes(), b"a=1");
+    }
+
+    #[test]
+    fn a_get_becomes_a_bodyless_http_request() {
+        let request = DocumentRequest::get(url()).into_http_request();
+
+        assert_eq!(request.method(), Method::Get);
+        assert!(request.body().is_empty());
     }
 
     #[test]
