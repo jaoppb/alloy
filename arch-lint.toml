@@ -523,8 +523,15 @@ message = "core/region is the leaf ui and browser share; it imports graphics and
 [[restrict-use]]
 name = "alloy-application-no-threads-or-decoding"
 scope = "alloy-application"
-deny = ["std::thread", "std::thread::*", "graphics::png", "graphics::png::decode"]
-message = "alloy's application layer names no std::thread and no PNG decoder — fetch workers and image decoding are infrastructure adapters behind ports (#110 decision 26, #114, ADR-0010)."
+deny = [
+    "std::thread",
+    "std::thread::*",
+    "graphics::png",
+    "graphics::png::decode",
+    "crate::infrastructure",
+    "crate::infrastructure::*",
+]
+message = "alloy's application layer names no std::thread, no PNG decoder and no crate::infrastructure item (tests included) — fetch workers and image decoding are infrastructure adapters behind ports (#110 decision 26, #114, ADR-0010)."
 
 [[restrict-use]]
 name = "platform-isolated"

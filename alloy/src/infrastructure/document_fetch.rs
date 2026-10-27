@@ -1,4 +1,4 @@
-//! Navigation (v0.5 Phase I4): `DocumentRequest -> RequestPolicy ->
+//! Document fetching (v0.5 Phase I4): `DocumentRequest -> RequestPolicy ->
 //! HttpTransport -> core/html -> LoadedDocument`.
 //!
 //! The document half of [`HttpFetcher`]: the request goes through
@@ -23,10 +23,10 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     /// a blank window (v0.5 Phase I4).
     pub(super) fn fetch_document(
         &self,
-        document: DocumentRequest,
+        document: &DocumentRequest,
     ) -> Result<LoadedDocument, AlloyError> {
         let url = document.url().clone();
-        let response = self.send(document.into_http_request())?;
+        let response = self.send(document.to_http_request())?;
         if response.body().is_empty() {
             return Err(AlloyError::EmptyDocument {
                 url: url.to_string(),
@@ -58,7 +58,7 @@ mod tests {
     fn navigate_to(url: &Url, response: HttpResponse) -> Result<LoadedDocument, AlloyError> {
         let transport = MockTransport::new().with_response(url.clone(), response);
         let fetcher = HttpFetcher::new(transport, AllowAllPolicy::new(), PngImageDecoder);
-        fetcher.fetch_document(DocumentRequest::get(url.clone()))
+        fetcher.fetch_document(&DocumentRequest::get(url.clone()))
     }
 
     fn html_ok(body: &str) -> HttpResponse {
@@ -163,7 +163,7 @@ mod tests {
 
         let fetcher = HttpFetcher::new(MockTransport::new(), QuotingPolicy, PngImageDecoder);
 
-        let result = fetcher.fetch_document(document);
+        let result = fetcher.fetch_document(&document);
 
         let message = result.unwrap_err().to_string();
         assert!(

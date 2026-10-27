@@ -3,8 +3,8 @@
 //! The only code in `alloy` that spawns a thread, sleeps, calls
 //! `HttpTransport::execute` or decodes image bytes (#110 decision 26, #114).
 
+mod document_fetch;
 pub mod http_fetch;
-mod navigation;
 pub mod png_decoder;
 pub mod sleep_pause;
 pub mod thread_fetch;

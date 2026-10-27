@@ -1,12 +1,14 @@
-//! Fixtures shared by the event-loop test modules: a session over a mock
-//! transport, a loaded page, a headless window, and the pump.
+//! Fixtures shared by the event-loop test modules: a session over a fake web, a
+//! loaded page, a headless window, and the pump.
 #![allow(clippy::unwrap_used)]
-
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use browser::{FetchPayload, FetchRequest, FetchResult, LoadedDocument, NavigationId};
+use browser::{
+    FetchFailure, FetchPayload, FetchRequest, FetchResult, LoadedDocument, NavigationId,
+};
 use graphics::SyntheticFontProvider;
-use network::{AllowAllPolicy, MockTransport};
+use network::Url;
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
 use super::session::Session;
@@ -16,13 +18,40 @@ use crate::application::fetch_channel::{FetchOutbox, fetch_channel};
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
 use crate::application::ports::{FetchExecutor, IdlePause};
-use crate::infrastructure::{HttpFetcher, PngImageDecoder};
 
-/// A [`FetchExecutor`] that fetches on the caller's own thread: the result is
-/// already waiting on the inbox when `execute` returns, so a test pumps the
-/// loop and asserts — no thread to outwait, no sleep.
+/// The pages a test's fake network serves, by address. Anything else is a
+/// failed fetch, like a host that does not answer.
+#[derive(Default)]
+pub(super) struct FakeWeb {
+    pages: HashMap<Url, &'static str>,
+}
+
+impl FakeWeb {
+    pub(super) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(super) fn with_page(mut self, url: Url, markup: &'static str) -> Self {
+        self.pages.insert(url, markup);
+        self
+    }
+
+    fn document(&self, url: &Url) -> Result<LoadedDocument, FetchFailure> {
+        let markup = self
+            .pages
+            .get(url)
+            .ok_or_else(|| FetchFailure::new(format!("the fake web has no page at {url}")))?;
+        let tree = dom::parse(markup).unwrap().into_tree();
+        Ok(LoadedDocument::new(tree, url.clone()))
+    }
+}
+
+/// A [`FetchExecutor`] that answers on the caller's own thread, from a
+/// [`FakeWeb`]: the result is already waiting on the inbox when `execute`
+/// returns, so a test pumps the loop and asserts — no thread to outwait, no
+/// sleep, and none of the HTTP stack.
 pub(super) struct InlineFetchExecutor {
-    fetcher: HttpFetcher<MockTransport, AllowAllPolicy, PngImageDecoder>,
+    web: FakeWeb,
     outbox: FetchOutbox,
 }
 
@@ -35,7 +64,14 @@ impl InlineFetchExecutor {
 
 impl FetchExecutor for InlineFetchExecutor {
     fn execute(&self, request: FetchRequest, navigation: NavigationId) {
-        let payload = self.fetcher.fetch(request);
+        let payload = match &request {
+            FetchRequest::Document(document) => {
+                FetchPayload::Document(self.web.document(document.url()))
+            }
+            FetchRequest::Subresource(_) => {
+                request.failed(FetchFailure::new("the fake web serves documents only"))
+            }
+        };
         self.outbox.send(FetchResult::new(navigation, payload));
     }
 }
@@ -49,14 +85,11 @@ impl IdlePause for NoPause {
 
 pub(super) type TestSession = Session<SyntheticFontProvider, InlineFetchExecutor, NoPause>;
 
-pub(super) fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
+pub(super) fn session_over(web: FakeWeb, viewport: SurfaceSize) -> TestSession {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
     let (outbox, inbox) = fetch_channel();
-    let fetch_executor = InlineFetchExecutor {
-        fetcher: HttpFetcher::new(transport, AllowAllPolicy::new(), PngImageDecoder),
-        outbox,
-    };
+    let fetch_executor = InlineFetchExecutor { web, outbox };
     let services = BrowserServices::new(font_provider, fetch_executor, inbox, NoPause);
     Session::new(viewport, services)
 }
@@ -103,7 +136,7 @@ pub(super) fn load(session: &mut TestSession, markup: &str, url: &str) {
 }
 
 pub(super) fn loaded_session(viewport: SurfaceSize) -> TestSession {
-    let mut session = session_over(MockTransport::new(), viewport);
+    let mut session = session_over(FakeWeb::new(), viewport);
     load(
         &mut session,
         "<html><body>hi</body></html>",

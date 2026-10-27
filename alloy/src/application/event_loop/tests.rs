@@ -12,7 +12,6 @@
 
 use browser::{FetchPayload, FetchResult};
 use graphics::{Color, Framebuffer, ImageId};
-use network::MockTransport;
 use ui::OmniboxTheme;
 use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
@@ -20,7 +19,7 @@ use window::{
 
 use super::initial_window_attributes;
 use super::test_support::{
-    TestSession, completed_navigation, deliver, load, loaded_session, loaded_window, pump,
+    FakeWeb, TestSession, completed_navigation, deliver, load, loaded_session, loaded_window, pump,
     session_over,
 };
 
@@ -110,7 +109,7 @@ fn a_redraw_request_before_the_first_frame_is_a_silent_noop() {
     system.create_window(&attributes).unwrap();
     let mut presenter = RecordingPresenter::new();
     // No document yet.
-    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    let mut session = session_over(FakeWeb::new(), attributes.initial_size());
 
     system.schedule(WindowEvent::RedrawRequested);
     pump(&mut system, &mut presenter, &mut session);
@@ -174,13 +173,8 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
 
     let mut presenter = RecordingPresenter::new();
     let target_url = network::Url::parse("http://example.com/target.html").unwrap();
-    let response = network::HttpResponse::new(
-        network::StatusCode::OK,
-        network::HeaderMap::new(),
-        network::Body::from_text("<html><body>target</body></html>"),
-    );
     let mut session = session_over(
-        MockTransport::new().with_response(target_url, response),
+        FakeWeb::new().with_page(target_url, "<html><body>target</body></html>"),
         attributes.initial_size(),
     );
     load(
@@ -226,13 +220,8 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
 
     let mut presenter = RecordingPresenter::new();
     let expected = network::Url::parse("https://cdn.example/app/docs.html").unwrap();
-    let response = network::HttpResponse::new(
-        network::StatusCode::OK,
-        network::HeaderMap::new(),
-        network::Body::from_text("<html><body>docs</body></html>"),
-    );
     let mut session = session_over(
-        MockTransport::new().with_response(expected.clone(), response),
+        FakeWeb::new().with_page(expected.clone(), "<html><body>docs</body></html>"),
         attributes.initial_size(),
     );
     load(
@@ -278,7 +267,7 @@ fn a_resize_before_any_document_counts_no_relayout() {
     system.create_window(&attributes).unwrap();
     let mut presenter = RecordingPresenter::new();
     // The auto-seeded Resized arrives while the navigation is still in flight.
-    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    let mut session = session_over(FakeWeb::new(), attributes.initial_size());
 
     pump(&mut system, &mut presenter, &mut session);
 
@@ -335,7 +324,7 @@ fn clicks_in_chrome_region_target_omnibox_and_do_not_trigger_links() {
     let mut system = HeadlessWindowSystem::new();
     system.create_window(&attributes).unwrap();
     let mut presenter = RecordingPresenter::new();
-    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    let mut session = session_over(FakeWeb::new(), attributes.initial_size());
     load(
         &mut session,
         "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
@@ -373,13 +362,8 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
     system.create_window(&attributes).unwrap();
     let mut presenter = RecordingPresenter::new();
     let target = network::Url::parse("http://example.com/target.html").unwrap();
-    let response = network::HttpResponse::new(
-        network::StatusCode::OK,
-        network::HeaderMap::new(),
-        network::Body::from_text("<html><body>target</body></html>"),
-    );
     let mut session = session_over(
-        MockTransport::new().with_response(target.clone(), response),
+        FakeWeb::new().with_page(target.clone(), "<html><body>target</body></html>"),
         attributes.initial_size(),
     );
     load(
@@ -414,7 +398,7 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
 #[test]
 fn session_maintains_ui_render_tree_hierarchy() {
     let attributes = initial_window_attributes().unwrap();
-    let session = session_over(MockTransport::new(), attributes.initial_size());
+    let session = session_over(FakeWeb::new(), attributes.initial_size());
     let tree = session.ui_tree();
     assert_eq!(tree.root().kind(), &ui::UiNodeKind::Window);
     assert_eq!(tree.chrome_height(), ui::ChromeHeight::DEFAULT);
@@ -423,7 +407,7 @@ fn session_maintains_ui_render_tree_hierarchy() {
 #[test]
 fn resizing_below_chrome_height_updates_ui_tree_to_fallback() {
     let attributes = initial_window_attributes().unwrap();
-    let mut session = session_over(MockTransport::new(), attributes.initial_size());
+    let mut session = session_over(FakeWeb::new(), attributes.initial_size());
     let small_size = SurfaceSize::new(800, 30).unwrap();
     session.resize(small_size);
 

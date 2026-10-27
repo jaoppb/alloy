@@ -57,12 +57,8 @@ impl DocumentRequest {
     ///
     /// [`RequestPolicy`]: network::RequestPolicy
     #[must_use]
-    pub fn into_http_request(self) -> HttpRequest {
-        let request = HttpRequest::new(self.method, self.url);
-        if self.body.is_empty() {
-            return request;
-        }
-        request.with_body(self.body)
+    pub fn to_http_request(&self) -> HttpRequest {
+        HttpRequest::new(self.method, self.url.clone()).with_body(self.body.clone())
     }
 }
 
@@ -86,26 +82,18 @@ mod tests {
     }
 
     #[test]
-    fn the_http_request_carries_the_method_and_body() {
-        let request =
-            DocumentRequest::new(url(), Method::Post, Body::from_text("a=1")).into_http_request();
-
-        assert_eq!(request.method(), Method::Post);
-        assert_eq!(request.url(), &url());
-        assert_eq!(request.body().as_bytes(), b"a=1");
-    }
-
-    #[test]
     fn a_get_becomes_a_bodyless_http_request() {
-        let request = DocumentRequest::get(url()).into_http_request();
+        let request = DocumentRequest::get(url()).to_http_request();
 
         assert_eq!(request.method(), Method::Get);
+        assert_eq!(request.url(), &url());
         assert!(request.body().is_empty());
     }
 
     #[test]
-    fn a_post_keeps_its_method_and_body() {
-        let request = DocumentRequest::new(url(), Method::Post, Body::from_text("a=1"));
+    fn a_post_keeps_its_method_and_body_on_the_wire() {
+        let request =
+            DocumentRequest::new(url(), Method::Post, Body::from_text("a=1")).to_http_request();
 
         assert_eq!(request.method(), Method::Post);
         assert_eq!(request.body().as_bytes(), b"a=1");

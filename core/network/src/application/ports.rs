@@ -77,6 +77,20 @@ impl PolicyVerdict {
         }
     }
 
+    /// The request to send: `original` as it stands, the rewritten one, or the
+    /// denial as the [`NetworkError::PolicyDenied`] the caller reports.
+    ///
+    /// # Errors
+    ///
+    /// [`NetworkError::PolicyDenied`] for a [`PolicyVerdict::Deny`], carrying its reason.
+    pub fn into_request(self, original: HttpRequest) -> Result<HttpRequest, NetworkError> {
+        match self {
+            Self::Allow => Ok(original),
+            Self::Rewrite(rewritten) => Ok(rewritten),
+            Self::Deny { reason } => Err(NetworkError::policy_denied(reason)),
+        }
+    }
+
     /// The request this verdict says to send, if it says to send one.
     #[must_use]
     pub const fn request_to_send<'verdict>(
@@ -88,5 +102,46 @@ impl PolicyVerdict {
             Self::Rewrite(rewritten) => Some(rewritten),
             Self::Deny { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PolicyVerdict;
+    use crate::domain::error::NetworkError;
+    use crate::domain::request::HttpRequest;
+    use crate::domain::url::Url;
+
+    fn request(path: &str) -> HttpRequest {
+        HttpRequest::get(Url::parse(&format!("http://example.com/{path}")).expect("a valid URL"))
+    }
+
+    #[test]
+    fn allow_sends_the_original() {
+        let original = request("a");
+
+        assert_eq!(
+            PolicyVerdict::Allow.into_request(original.clone()),
+            Ok(original)
+        );
+    }
+
+    #[test]
+    fn rewrite_sends_the_rewritten_request() {
+        let rewritten = request("b");
+
+        let sent = PolicyVerdict::Rewrite(rewritten.clone()).into_request(request("a"));
+
+        assert_eq!(sent, Ok(rewritten));
+    }
+
+    #[test]
+    fn deny_is_a_policy_denied_error_with_its_reason() {
+        let sent = PolicyVerdict::deny("blocked").into_request(request("a"));
+
+        assert!(
+            matches!(sent, Err(NetworkError::PolicyDenied { ref reason, .. }) if reason == "blocked"),
+            "got {sent:?}"
+        );
     }
 }

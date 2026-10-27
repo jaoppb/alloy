@@ -22,6 +22,16 @@ pub enum FetchRequest {
 }
 
 impl FetchRequest {
+    /// The address being fetched, for logs.
+    #[must_use]
+    pub const fn url(&self) -> &Url {
+        match self {
+            Self::Document(document) => document.url(),
+            Self::Subresource(SubresourceRequest::Stylesheet(stylesheet)) => stylesheet.url(),
+            Self::Subresource(SubresourceRequest::Image(image)) => image.url(),
+        }
+    }
+
     /// The payload that reports this request failed with `failure`, shaped
     /// like the one a success would have produced — so an executor that could
     /// not run the request at all (a worker that panicked) still answers it.
@@ -135,6 +145,25 @@ mod tests {
 
     fn failure() -> FetchFailure {
         FetchFailure::new("worker panicked")
+    }
+
+    #[test]
+    fn every_kind_of_request_names_its_url() {
+        let sheet = StylesheetRequest::new(url(), MediaQuery::always());
+        let image = ImageRequest::new(ImageId::new(1), url());
+
+        assert_eq!(
+            FetchRequest::Document(DocumentRequest::get(url())).url(),
+            &url()
+        );
+        assert_eq!(
+            FetchRequest::Subresource(SubresourceRequest::Stylesheet(sheet)).url(),
+            &url()
+        );
+        assert_eq!(
+            FetchRequest::Subresource(SubresourceRequest::Image(image)).url(),
+            &url()
+        );
     }
 
     #[test]

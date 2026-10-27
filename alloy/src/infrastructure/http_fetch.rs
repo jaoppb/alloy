@@ -9,10 +9,7 @@
 
 use browser::{FetchFailure, FetchPayload, FetchRequest, StylesheetRequest, SubresourceRequest};
 use graphics::Framebuffer;
-use network::{
-    HttpRequest, HttpResponse, HttpTransport, NetworkError, PolicyVerdict, RequestPolicy,
-    StatusCode, Url,
-};
+use network::{HttpRequest, HttpResponse, HttpTransport, RequestPolicy, StatusCode, Url};
 
 use crate::application::ports::ImageDecoder;
 use crate::error::AlloyError;
@@ -37,14 +34,14 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
 
     /// Fetches `request`. A failure is already a message for the error page;
     /// the cause stays in [`AlloyError`] and the log.
-    pub fn fetch(&self, request: FetchRequest) -> FetchPayload {
+    pub fn fetch(&self, request: &FetchRequest) -> FetchPayload {
         match request {
             FetchRequest::Document(document) => {
                 let loaded = self.fetch_document(document);
                 FetchPayload::Document(loaded.map_err(|error| describe(&error)))
             }
             FetchRequest::Subresource(SubresourceRequest::Stylesheet(stylesheet)) => {
-                self.fetch_stylesheet(&stylesheet)
+                self.fetch_stylesheet(stylesheet)
             }
             FetchRequest::Subresource(SubresourceRequest::Image(image)) => {
                 let frame = self.fetch_image(image.url());
@@ -59,18 +56,8 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     /// reach a parser as if it were the resource.
     pub(super) fn send(&self, requested: HttpRequest) -> Result<HttpResponse, AlloyError> {
         let url = requested.url().clone();
-        let request = match self.policy.decide(&requested)? {
-            PolicyVerdict::Allow => requested,
-            PolicyVerdict::Rewrite(rewritten) => rewritten,
-            PolicyVerdict::Deny { reason } => {
-                return Err(AlloyError::from(NetworkError::policy_denied(reason)));
-            }
-            _ => {
-                return Err(AlloyError::from(NetworkError::policy_denied(
-                    "unrecognised policy verdict",
-                )));
-            }
-        };
+        let verdict = self.policy.decide(&requested)?;
+        let request = verdict.into_request(requested)?;
         let response = self.transport.execute(&request)?;
         ensure_success(&url, response.status())?;
         Ok(response)
@@ -78,12 +65,12 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
 
     fn fetch_stylesheet(&self, stylesheet: &StylesheetRequest) -> FetchPayload {
         let text = self
-            .fetch_text(stylesheet.url())
+            .fetch_stylesheet_text(stylesheet.url())
             .map_err(|error| describe(&error));
         FetchPayload::Stylesheet(stylesheet.media().clone(), text)
     }
 
-    fn fetch_text(&self, url: &Url) -> Result<String, AlloyError> {
+    fn fetch_stylesheet_text(&self, url: &Url) -> Result<String, AlloyError> {
         let response = self.send(HttpRequest::get(url.clone()))?;
         let body = response
             .body()
@@ -146,7 +133,7 @@ mod tests {
         let transport = MockTransport::new().with_response(sheet_url.clone(), not_found);
         let fetcher = HttpFetcher::new(transport, AllowAllPolicy::new(), PngImageDecoder);
 
-        let result = fetcher.fetch_text(&sheet_url);
+        let result = fetcher.fetch_stylesheet_text(&sheet_url);
 
         assert!(
             matches!(result, Err(AlloyError::HttpStatus { status: 404, .. })),
@@ -165,7 +152,7 @@ mod tests {
         let transport = MockTransport::new().with_response(sheet_url.clone(), binary);
         let fetcher = HttpFetcher::new(transport, AllowAllPolicy::new(), PngImageDecoder);
 
-        let result = fetcher.fetch_text(&sheet_url);
+        let result = fetcher.fetch_stylesheet_text(&sheet_url);
 
         assert!(
             matches!(result, Err(AlloyError::NonTextualStylesheet { .. })),
@@ -190,7 +177,7 @@ mod tests {
         );
         let fetcher = HttpFetcher::new(transport, DenyAll, PngImageDecoder);
 
-        let result = fetcher.fetch_text(&sheet_url);
+        let result = fetcher.fetch_stylesheet_text(&sheet_url);
 
         assert!(
             matches!(
