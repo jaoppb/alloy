@@ -3,6 +3,7 @@
 use core::fmt;
 use core::str::FromStr;
 
+use super::keymap_binding::ActionName;
 use super::keymap_error::KeymapError;
 
 /// An action a [`Keymap`](super::Keymap) binds a chord to.
@@ -33,7 +34,7 @@ impl FromStr for BrowserCommand {
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
             "focus_omnibox" => Ok(Self::FocusOmnibox),
-            unknown => Err(KeymapError::UnknownAction(unknown.to_owned())),
+            unknown => Err(KeymapError::UnknownAction(ActionName::from(unknown))),
         }
     }
 }

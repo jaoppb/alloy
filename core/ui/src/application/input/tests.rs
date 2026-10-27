@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::unnecessary_wraps)]
+#![allow(clippy::unwrap_used)]
 
 use graphics::{Au, Point, Rect, Size};
 use platform::HostOs;
@@ -8,7 +8,9 @@ use window::{
 };
 
 use super::{InputRouter, UiController};
-use crate::domain::input::{BrowserCommand, FocusTarget, Keymap, KeymapBinding, UiEffect, UiInput};
+use crate::domain::input::{
+    BrowserCommand, FocusTarget, Keymap, KeymapBinding, UiEffect, UiEffects, UiInput,
+};
 use crate::domain::omnibox::EditKey;
 use crate::domain::render_tree::UiRenderTree;
 use crate::domain::theme::OmniboxTheme;
@@ -47,13 +49,15 @@ fn router(host: HostOs) -> InputRouter {
 }
 
 fn route(event: &KeyEvent) -> Option<UiInput> {
-    router(HostOs::Other).route_key(event, FocusTarget::Omnibox)
+    router(HostOs::Other).route_key(event)
 }
 
+#[allow(clippy::unnecessary_wraps, reason = "compared with route_key's Option")]
 fn insert(value: &str) -> Option<UiInput> {
     Some(UiInput::Insert(text(value)))
 }
 
+#[allow(clippy::unnecessary_wraps, reason = "compared with route_key's Option")]
 fn focus_command() -> Option<UiInput> {
     Some(UiInput::Command(BrowserCommand::FocusOmnibox))
 }
@@ -74,24 +78,18 @@ fn alt_gr_q_types_an_at_sign() {
 #[test]
 fn ctrl_alt_gr_l_stays_bindable() {
     let chord = Modifiers::NONE.with_control().with_alt_graph();
-    let load = Keymap::from_bindings([KeymapBinding::new("ctrl+altgr+l", "focus_omnibox")]);
-    let router = InputRouter::new(load.into_keymap(), HostOs::Other);
+    let (keymap, _) = Keymap::from_bindings([KeymapBinding::new("ctrl+altgr+l", "focus_omnibox")]);
+    let router = InputRouter::new(keymap, HostOs::Other);
     let event = typed("l", KeyCode::KEY_L, chord);
-    assert_eq!(
-        router.route_key(&event, FocusTarget::Omnibox),
-        focus_command()
-    );
+    assert_eq!(router.route_key(&event), focus_command());
 }
 
 #[test]
 fn windows_ctrl_alt_types_text_even_with_a_ctrl_alt_binding() {
-    let load = Keymap::from_bindings([KeymapBinding::new("ctrl+alt+q", "focus_omnibox")]);
-    let windows = InputRouter::new(load.into_keymap(), HostOs::Windows);
+    let (keymap, _) = Keymap::from_bindings([KeymapBinding::new("ctrl+alt+q", "focus_omnibox")]);
+    let windows = InputRouter::new(keymap, HostOs::Windows);
     let at_sign = typed("@", KeyCode::KEY_Q, CTRL_ALT);
-    assert_eq!(
-        windows.route_key(&at_sign, FocusTarget::Omnibox),
-        insert("@")
-    );
+    assert_eq!(windows.route_key(&at_sign), insert("@"));
 }
 
 #[test]
@@ -100,7 +98,7 @@ fn ctrl_alt_text_is_dropped_off_windows() {
     let shifted = CTRL_ALT.with_shift();
     let windows = router(HostOs::Windows);
     assert_eq!(
-        windows.route_key(&typed("@", KeyCode::KEY_Q, shifted), FocusTarget::Omnibox),
+        windows.route_key(&typed("@", KeyCode::KEY_Q, shifted)),
         insert("@"),
         "Shift never blocks",
     );
@@ -109,10 +107,7 @@ fn ctrl_alt_text_is_dropped_off_windows() {
 #[test]
 fn windows_ctrl_alt_with_super_is_not_alt_gr() {
     let event = typed("@", KeyCode::KEY_Q, CTRL_ALT.with_super_key());
-    assert_eq!(
-        router(HostOs::Windows).route_key(&event, FocusTarget::Omnibox),
-        None
-    );
+    assert_eq!(router(HostOs::Windows).route_key(&event), None);
 }
 
 #[test]
@@ -133,11 +128,11 @@ fn shift_never_blocks_typing() {
 fn macos_option_composes_text_while_cmd_is_a_command() {
     let mac = router(HostOs::MacOs);
     let option_e = typed("é", KeyCode::KEY_E, ALT);
-    assert_eq!(mac.route_key(&option_e, FocusTarget::Omnibox), insert("é"));
+    assert_eq!(mac.route_key(&option_e), insert("é"));
     let cmd_l = typed("l", KeyCode::KEY_L, Modifiers::NONE.with_super_key());
-    assert_eq!(mac.route_key(&cmd_l, FocusTarget::Omnibox), focus_command());
+    assert_eq!(mac.route_key(&cmd_l), focus_command());
     let cmd_k = typed("k", KeyCode::KEY_K, Modifiers::NONE.with_super_key());
-    assert_eq!(mac.route_key(&cmd_k, FocusTarget::Omnibox), None);
+    assert_eq!(mac.route_key(&cmd_k), None);
 }
 
 #[test]
@@ -149,10 +144,7 @@ fn macos_option_backspace_is_not_an_edit() {
         ALT,
         KeyState::Pressed,
     );
-    assert_eq!(
-        router(HostOs::MacOs).route_key(&backspace, FocusTarget::Omnibox),
-        None
-    );
+    assert_eq!(router(HostOs::MacOs).route_key(&backspace), None);
 }
 
 #[test]
@@ -237,19 +229,10 @@ fn named_editing_keys_edit_unless_a_command_modifier_is_held() {
 }
 
 #[test]
-fn typing_and_editing_reach_only_a_focused_omnibox() {
-    let router = router(HostOs::Other);
-    let letter = typed("a", KeyCode::KEY_A, Modifiers::NONE);
-    assert_eq!(router.route_key(&letter, FocusTarget::Content), None);
-    assert_eq!(router.route_text(text("a"), FocusTarget::Content), None);
+fn input_method_commits_route_to_an_insert() {
     assert_eq!(
-        router.route_text(text("a"), FocusTarget::Omnibox),
-        insert("a")
-    );
-    let ctrl_l = typed("l", KeyCode::KEY_L, CTRL);
-    assert_eq!(
-        router.route_key(&ctrl_l, FocusTarget::Content),
-        focus_command()
+        InputRouter::route_text(text("é")),
+        UiInput::Insert(text("é"))
     );
 }
 
@@ -259,16 +242,16 @@ fn the_controller_focuses_types_and_ignores_unfocused_typing() {
     assert_eq!(controller.focus(), FocusTarget::Content);
     assert_eq!(
         controller.handle_key(&typed("a", KeyCode::KEY_A, Modifiers::NONE)),
-        UiEffect::None
+        UiEffects::none()
     );
     assert_eq!(
         controller.handle_key(&typed("l", KeyCode::KEY_L, CTRL)),
-        UiEffect::ChromeDamaged
+        UiEffects::from(UiEffect::ChromeDamaged)
     );
     assert_eq!(controller.focus(), FocusTarget::Omnibox);
     assert_eq!(
         controller.handle_key(&typed("x", KeyCode::KEY_X, CTRL)),
-        UiEffect::None
+        UiEffects::none()
     );
     controller.handle_key(&typed("q", KeyCode::KEY_Q, Modifiers::NONE));
     assert_eq!(controller.omnibox().text(), "q");
@@ -308,7 +291,7 @@ fn clicking_the_chrome_focuses_the_omnibox() {
     let tree = tree_with(link_region());
     assert_eq!(
         controller.handle_click(&tree, chrome_position()),
-        UiEffect::ChromeDamaged
+        UiEffects::from(UiEffect::ChromeDamaged)
     );
     assert_eq!(controller.focus(), FocusTarget::Omnibox);
 }
@@ -320,8 +303,21 @@ fn clicking_a_link_asks_the_browser_to_follow_it_and_takes_focus_from_the_omnibo
     let mut controller = UiController::new(Keymap::default(), HostOs::Other);
     controller.handle_click(&tree, chrome_position());
     let effect = controller.handle_click(&tree, content_position(20.0));
-    assert_eq!(effect, UiEffect::FollowLink(region.id()));
+    let expected = UiEffects::from(UiEffect::ChromeDamaged).then(UiEffect::FollowLink(region.id()));
+    assert_eq!(
+        effect, expected,
+        "ending address editing damages the chrome too"
+    );
     assert_eq!(controller.focus(), FocusTarget::Content);
+}
+
+#[test]
+fn clicking_a_link_without_address_editing_only_follows_it() {
+    let region = link_region();
+    let tree = tree_with(region);
+    let mut controller = UiController::new(Keymap::default(), HostOs::Other);
+    let effect = controller.handle_click(&tree, content_position(20.0));
+    assert_eq!(effect, UiEffects::from(UiEffect::FollowLink(region.id())));
 }
 
 #[test]
@@ -330,11 +326,11 @@ fn clicking_empty_page_content_only_moves_focus() {
     let mut controller = UiController::new(Keymap::default(), HostOs::Other);
     assert_eq!(
         controller.handle_click(&tree, content_position(300.0)),
-        UiEffect::None
+        UiEffects::none()
     );
     controller.handle_click(&tree, chrome_position());
     let effect = controller.handle_click(&tree, content_position(300.0));
-    assert_eq!(effect, UiEffect::ChromeDamaged);
+    assert_eq!(effect, UiEffects::from(UiEffect::ChromeDamaged));
     assert_eq!(controller.focus(), FocusTarget::Content);
 }
 
@@ -350,9 +346,7 @@ fn enter_in_the_omnibox_navigates_and_returns_focus_to_the_page() {
         Modifiers::NONE,
         KeyState::Pressed,
     );
-    assert!(matches!(
-        controller.handle_key(&enter),
-        UiEffect::Navigate(_)
-    ));
+    let effects: Vec<UiEffect> = controller.handle_key(&enter).into_iter().collect();
+    assert!(matches!(effects.as_slice(), [UiEffect::Navigate(_)]));
     assert_eq!(controller.focus(), FocusTarget::Content);
 }

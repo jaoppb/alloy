@@ -1,88 +1,50 @@
 //! [`Keymap`] — chord → command bindings, as data.
 
+// One allow for the file: `BrowserCommand` has a single variant today, so the
+// map's values are zero-sized; it gains more with #115 and #50.
+#![allow(clippy::zero_sized_map_values)]
+
 use std::collections::HashMap;
 
-use window::{InputText, KeyCode, KeyEvent, Modifiers};
+use window::KeyEvent;
 
-use super::{BrowserCommand, ChordKey, KeyChord, KeymapError};
+use super::{BrowserCommand, KeyChord, KeymapBinding, KeymapError};
 
-/// One binding as a script or config hands it over: unvalidated text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KeymapBinding {
-    chord: String,
-    action: String,
-}
-
-impl KeymapBinding {
-    #[must_use]
-    pub fn new(chord: impl Into<String>, action: impl Into<String>) -> Self {
-        Self {
-            chord: chord.into(),
-            action: action.into(),
-        }
-    }
-
-    fn parse(&self) -> Result<(KeyChord, BrowserCommand), KeymapError> {
-        Ok((self.chord.parse()?, self.action.parse()?))
-    }
-}
-
-/// The result of [`Keymap::from_bindings`]: the keymap to use, and why each
-/// rejected binding was left out.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KeymapLoad {
-    keymap: Keymap,
-    rejected: Vec<KeymapError>,
-}
-
-impl KeymapLoad {
-    #[must_use]
-    pub const fn keymap(&self) -> &Keymap {
-        &self.keymap
-    }
-
-    #[must_use]
-    pub fn rejected(&self) -> &[KeymapError] {
-        &self.rejected
-    }
-
-    #[must_use]
-    pub fn into_keymap(self) -> Keymap {
-        self.keymap
-    }
-}
+/// What Alloy binds out of the box, in the same text a script supplies: by
+/// logical key, and by position for layouts whose logical key is not Latin.
+/// No Ctrl+Alt chord, so Windows' left Ctrl+Alt (`AltGr`) still types.
+const DEFAULT_BINDINGS: [(&str, &str); 6] = [
+    ("ctrl+l", "focus_omnibox"),
+    ("super+l", "focus_omnibox"),
+    ("alt+d", "focus_omnibox"),
+    ("ctrl+code:l", "focus_omnibox"),
+    ("super+code:l", "focus_omnibox"),
+    ("alt+code:d", "focus_omnibox"),
+];
 
 /// Chord → [`BrowserCommand`]. Resolved in Rust on every key press; a script
 /// only ever supplies the bindings once, at init or reload (`ADR-0027`).
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(
-    clippy::zero_sized_map_values,
-    reason = "BrowserCommand has one variant today; it gains more with #115 and #50"
-)]
 pub struct Keymap {
     bindings: HashMap<KeyChord, BrowserCommand>,
 }
 
 impl Keymap {
-    /// Builds a keymap from unvalidated bindings. A malformed chord or an
-    /// unknown action rejects that binding alone and is reported; a later
-    /// binding of the same chord replaces an earlier one. When no binding is
-    /// valid the result is [`Keymap::default`], so a bad script never leaves
-    /// the browser without shortcuts (`ADR-0004`).
+    /// Builds a keymap from unvalidated bindings, and returns why each
+    /// rejected binding was left out. A malformed chord or an unknown action
+    /// rejects that binding alone; a later binding of the same chord replaces
+    /// an earlier one. When no binding is valid the keymap is
+    /// [`Keymap::default`], so a bad script never leaves the browser without
+    /// shortcuts (`ADR-0004`).
     #[must_use]
-    pub fn from_bindings(bindings: impl IntoIterator<Item = KeymapBinding>) -> KeymapLoad {
-        let mut keymap = Self::empty();
-        let mut rejected = Vec::new();
-        for binding in bindings {
-            match binding.parse() {
-                Ok((chord, command)) => keymap.bind(chord, command),
-                Err(error) => rejected.push(error),
-            }
-        }
+    pub fn from_bindings(
+        bindings: impl IntoIterator<Item = KeymapBinding>,
+    ) -> (Self, Vec<KeymapError>) {
+        let (keymap, rejected) = Self::parse_all(bindings);
         if keymap.bindings.is_empty() {
-            keymap = Self::default();
+            return (Self::default(), rejected);
         }
-        KeymapLoad { keymap, rejected }
+        (keymap, rejected)
     }
 
     /// The command bound to `event`'s chord: the logical key is tried first,
@@ -94,40 +56,35 @@ impl Keymap {
             .find_map(|chord| self.bindings.get(chord).copied())
     }
 
-    #[allow(
-        clippy::zero_sized_map_values,
-        reason = "BrowserCommand has one variant today; it gains more with #115 and #50"
-    )]
-    fn empty() -> Self {
-        Self {
-            bindings: HashMap::new(),
+    fn parse_all(bindings: impl IntoIterator<Item = KeymapBinding>) -> (Self, Vec<KeymapError>) {
+        let mut keymap = Self {
+            bindings: HashMap::default(),
+        };
+        let mut rejected = Vec::new();
+        for binding in bindings {
+            match Self::parse(&binding) {
+                Ok((chord, command)) => {
+                    keymap.bindings.insert(chord, command);
+                }
+                Err(error) => rejected.push(error),
+            }
         }
+        (keymap, rejected)
     }
 
-    fn bind(&mut self, chord: KeyChord, command: BrowserCommand) {
-        self.bindings.insert(chord, command);
-    }
-
-    fn bind_letter(&mut self, modifiers: Modifiers, letter: &str, code: KeyCode) {
-        let command = BrowserCommand::FocusOmnibox;
-        if let Some(text) = InputText::new(letter) {
-            self.bindings
-                .insert(KeyChord::letter(modifiers, &text), command);
-        }
-        self.bindings
-            .insert(KeyChord::new(modifiers, ChordKey::Physical(code)), command);
+    fn parse(binding: &KeymapBinding) -> Result<(KeyChord, BrowserCommand), KeymapError> {
+        Ok((
+            binding.chord().as_str().parse()?,
+            binding.action().as_str().parse()?,
+        ))
     }
 }
 
 impl Default for Keymap {
-    /// Ctrl+L, Super+L (Cmd+L on macOS) and Alt+D focus the address bar, by
-    /// logical key and by position. No Ctrl+Alt chord, so Windows' left
-    /// Ctrl+Alt (`AltGr`) still types.
     fn default() -> Self {
-        let mut keymap = Self::empty();
-        keymap.bind_letter(Modifiers::NONE.with_control(), "l", KeyCode::KEY_L);
-        keymap.bind_letter(Modifiers::NONE.with_super_key(), "l", KeyCode::KEY_L);
-        keymap.bind_letter(Modifiers::NONE.with_alt(), "d", KeyCode::KEY_D);
-        keymap
+        let defaults = DEFAULT_BINDINGS
+            .iter()
+            .map(|(chord, action)| KeymapBinding::new(chord, action));
+        Self::parse_all(defaults).0
     }
 }

@@ -2,12 +2,14 @@
 
 use window::{InputText, KeyCode, KeyEvent, KeyState, LogicalKey, Modifiers};
 
-use super::{BrowserCommand, ChordKey, KeyChord, Keymap, KeymapBinding, KeymapError, UiInput};
-use crate::domain::input::FocusTarget;
-use crate::domain::omnibox::EditKey;
+use super::{ActionName, BrowserCommand, ChordKey, KeyChord, Keymap, KeymapBinding, KeymapError};
 
 fn character(value: &str) -> LogicalKey {
     LogicalKey::Character(InputText::new(value).unwrap())
+}
+
+fn letter(modifiers: Modifiers, value: &str) -> KeyChord {
+    KeyChord::new(modifiers, ChordKey::Logical(character(value)))
 }
 
 fn press(logical: LogicalKey, physical: KeyCode, modifiers: Modifiers) -> KeyEvent {
@@ -70,18 +72,9 @@ fn chord_text_parses_modifiers_and_keys() {
     );
     assert_eq!(chord, expected);
     let plus: KeyChord = "ctrl++".parse().unwrap();
-    assert_eq!(
-        plus,
-        KeyChord::letter(
-            Modifiers::NONE.with_control(),
-            &InputText::new("+").unwrap()
-        )
-    );
+    assert_eq!(plus, letter(Modifiers::NONE.with_control(), "+"));
     let alt_graph: KeyChord = "ctrl+altgr+l".parse().unwrap();
-    let expected = KeyChord::letter(
-        Modifiers::NONE.with_control().with_alt_graph(),
-        &InputText::new("l").unwrap(),
-    );
+    let expected = letter(Modifiers::NONE.with_control().with_alt_graph(), "l");
     assert_eq!(alt_graph, expected);
 }
 
@@ -111,27 +104,26 @@ fn command_names_round_trip_and_unknown_names_are_typed_errors() {
     assert_eq!(command.to_string(), "focus_omnibox");
     assert_eq!(
         "reload_everything".parse::<BrowserCommand>(),
-        Err(KeymapError::UnknownAction("reload_everything".to_owned()))
+        Err(KeymapError::UnknownAction(ActionName::from(
+            "reload_everything"
+        )))
     );
 }
 
 #[test]
 fn from_bindings_keeps_valid_bindings_and_reports_the_rest() {
-    let load = Keymap::from_bindings([
+    let (keymap, rejected) = Keymap::from_bindings([
         KeymapBinding::new("ctrl+k", "focus_omnibox"),
         KeymapBinding::new("ctrl+", "focus_omnibox"),
         KeymapBinding::new("ctrl+j", "teleport"),
     ]);
     let ctrl = Modifiers::NONE.with_control();
     let ctrl_k = press(character("k"), KeyCode::KEY_K, ctrl);
-    assert_eq!(
-        load.keymap().resolve(&ctrl_k),
-        Some(BrowserCommand::FocusOmnibox)
-    );
-    assert_eq!(load.rejected().len(), 2);
+    assert_eq!(keymap.resolve(&ctrl_k), Some(BrowserCommand::FocusOmnibox));
+    assert_eq!(rejected.len(), 2);
     let ctrl_l = press(character("l"), KeyCode::KEY_L, ctrl);
     assert_eq!(
-        load.keymap().resolve(&ctrl_l),
+        keymap.resolve(&ctrl_l),
         None,
         "a valid set replaces the defaults"
     );
@@ -139,18 +131,54 @@ fn from_bindings_keeps_valid_bindings_and_reports_the_rest() {
 
 #[test]
 fn an_entirely_invalid_set_keeps_the_default_keymap() {
-    let load = Keymap::from_bindings([KeymapBinding::new("nope+", "nothing")]);
-    assert_eq!(*load.keymap(), Keymap::default());
-    assert_eq!(load.rejected().len(), 1);
-    assert_eq!(Keymap::from_bindings([]).into_keymap(), Keymap::default());
+    let (keymap, rejected) = Keymap::from_bindings([KeymapBinding::new("nope+", "nothing")]);
+    assert_eq!(keymap, Keymap::default());
+    assert_eq!(rejected.len(), 1);
+    assert_eq!(Keymap::from_bindings([]).0, Keymap::default());
 }
 
 #[test]
-fn typing_reaches_only_the_omnibox_while_commands_reach_everyone() {
-    let insert = UiInput::Insert(InputText::new("a").unwrap());
-    let edit = UiInput::Edit(EditKey::Backspace);
-    let command = UiInput::Command(BrowserCommand::FocusOmnibox);
-    assert!(insert.reaches(FocusTarget::Omnibox) && edit.reaches(FocusTarget::Omnibox));
-    assert!(!insert.reaches(FocusTarget::Content) && !edit.reaches(FocusTarget::Content));
-    assert!(command.reaches(FocusTarget::Content));
+fn positional_chords_bind_the_key_at_a_position() {
+    let chord: KeyChord = "ctrl+code:l".parse().unwrap();
+    let expected = KeyChord::new(
+        Modifiers::NONE.with_control(),
+        ChordKey::Physical(KeyCode::KEY_L),
+    );
+    assert_eq!(chord, expected);
+    let digit: KeyChord = "alt+code:7".parse().unwrap();
+    assert_eq!(
+        digit,
+        KeyChord::new(
+            Modifiers::NONE.with_alt(),
+            ChordKey::Physical(KeyCode::DIGIT7)
+        )
+    );
+    assert!(matches!(
+        "ctrl+code:".parse::<KeyChord>(),
+        Err(KeymapError::UnknownKey { .. })
+    ));
+    assert!(matches!(
+        "ctrl+code:ll".parse::<KeyChord>(),
+        Err(KeymapError::UnknownKey { .. })
+    ));
+    assert!(matches!(
+        "ctrl+code:!".parse::<KeyChord>(),
+        Err(KeymapError::UnknownKey { .. })
+    ));
+}
+
+#[test]
+fn the_default_keymap_is_built_from_valid_binding_text() {
+    let defaults = [
+        "ctrl+l",
+        "super+l",
+        "alt+d",
+        "ctrl+code:l",
+        "super+code:l",
+        "alt+code:d",
+    ]
+    .map(|chord| KeymapBinding::new(chord, "focus_omnibox"));
+    let (keymap, rejected) = Keymap::from_bindings(defaults);
+    assert!(rejected.is_empty());
+    assert_eq!(keymap, Keymap::default());
 }

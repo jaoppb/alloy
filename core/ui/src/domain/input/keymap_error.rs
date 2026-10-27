@@ -1,5 +1,7 @@
 //! Why one keymap binding was rejected.
 
+use super::keymap_binding::{ActionName, ChordText};
+
 /// A binding that could not be loaded. The rest of the set is kept
 /// (epic #110 decision 15).
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -7,14 +9,15 @@
 pub enum KeymapError {
     /// The action name is not a [`BrowserCommand`](super::BrowserCommand).
     #[error("unknown action `{0}`")]
-    UnknownAction(String),
+    UnknownAction(ActionName),
     /// The chord text is empty or names no key (`"ctrl+"`).
     #[error("chord `{0}` names no key")]
-    MissingKey(String),
-    /// A word before the final `+` is not a modifier.
+    MissingKey(ChordText),
+    /// A word before the key is not a modifier.
     #[error("unknown modifier `{modifier}` in chord `{chord}`")]
-    UnknownModifier { chord: String, modifier: String },
-    /// The final word is neither one character nor a known key name.
+    UnknownModifier { chord: ChordText, modifier: String },
+    /// The key word is neither one character, a `code:` position nor a known
+    /// key name.
     #[error("unknown key `{key}` in chord `{chord}`")]
-    UnknownKey { chord: String, key: String },
+    UnknownKey { chord: ChordText, key: String },
 }

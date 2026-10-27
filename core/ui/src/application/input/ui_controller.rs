@@ -6,7 +6,7 @@ use window::{InputText, KeyEvent, PhysicalPosition};
 
 use super::input_router::InputRouter;
 use crate::application::omnibox::OmniboxController;
-use crate::domain::input::{FocusTarget, Keymap, UiEffect, UiInput};
+use crate::domain::input::{FocusTarget, Keymap, UiEffect, UiEffects, UiInput};
 use crate::domain::render_tree::{UiHitTarget, UiRenderTree};
 
 /// Owns the chrome's focus and controllers and turns window input into
@@ -56,34 +56,36 @@ impl UiController {
     }
 
     /// Routes a key event and applies what it resolves to.
-    pub fn handle_key(&mut self, event: &KeyEvent) -> UiEffect {
-        let routed = self.router.route_key(event, self.focus());
+    pub fn handle_key(&mut self, event: &KeyEvent) -> UiEffects {
+        let routed = self.router.route_key(event);
         self.apply(routed)
     }
 
     /// Applies an input-method commit.
-    pub fn handle_text_committed(&mut self, text: InputText) -> UiEffect {
-        let routed = self.router.route_text(text, self.focus());
-        self.apply(routed)
+    pub fn handle_text_committed(&mut self, text: InputText) -> UiEffects {
+        self.apply(Some(InputRouter::route_text(text)))
     }
 
     /// Resolves a primary-button press at `position` through `tree`: a click
     /// on the chrome focuses the address bar, a click on the page moves focus
-    /// to it (and cancels address editing), a click on a link also asks the
-    /// browser to follow it.
-    pub fn handle_click(&mut self, tree: &UiRenderTree, position: PhysicalPosition) -> UiEffect {
+    /// to it (cancelling address editing, which damages the chrome), a click on
+    /// a link also asks the browser to follow it.
+    pub fn handle_click(&mut self, tree: &UiRenderTree, position: PhysicalPosition) -> UiEffects {
         match tree.hit_test(position) {
-            Some(UiHitTarget::Omnibox | UiHitTarget::Chrome) => self.omnibox.focus(),
+            Some(UiHitTarget::Omnibox | UiHitTarget::Chrome) => self.omnibox.focus().into(),
             Some(UiHitTarget::PageLink(region)) => {
-                self.omnibox.handle_escape();
-                UiEffect::FollowLink(region)
+                UiEffects::from(self.omnibox.handle_escape()).then(UiEffect::FollowLink(region))
             }
-            Some(UiHitTarget::PageContent) => self.omnibox.handle_escape(),
-            None => UiEffect::None,
+            Some(UiHitTarget::PageContent) => self.omnibox.handle_escape().into(),
+            None => UiEffects::none(),
         }
     }
 
-    fn apply(&mut self, input: Option<UiInput>) -> UiEffect {
-        input.map_or(UiEffect::None, |input| self.omnibox.handle_input(&input))
+    /// Hands typing and editing to the omnibox, which ignores them unless it
+    /// holds focus; a command is the browser's whatever has focus.
+    fn apply(&mut self, input: Option<UiInput>) -> UiEffects {
+        input.map_or_else(UiEffects::none, |input| {
+            self.omnibox.handle_input(&input).into()
+        })
     }
 }

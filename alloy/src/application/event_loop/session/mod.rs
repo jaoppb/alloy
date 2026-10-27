@@ -3,6 +3,8 @@
 //! fetch results may change it — live in `core/browser`; this type executes the
 //! [`BrowserEffect`]s it returns.
 
+mod redraw;
+
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -13,11 +15,15 @@ use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBacke
 use network::{HttpTransport, RequestPolicy, Url};
 use platform::HostPlatform;
 use region::ContentRegion;
+#[cfg(test)]
+use ui::OmniboxController;
 use ui::{
-    Keymap, OmniboxPainter, OmniboxState, OmniboxTheme, Theme, UiController, UiEffect, UiRenderTree,
+    Keymap, OmniboxPainter, OmniboxState, OmniboxTheme, Theme, UiController, UiEffect, UiEffects,
+    UiRenderTree,
 };
-use window::{InputText, KeyEvent, PhysicalPosition, Presenter, SurfaceSize};
+use window::{PhysicalPosition, Presenter, SurfaceSize, WindowEvent};
 
+pub use self::redraw::Redraw;
 use super::frame::CachedFrame;
 use super::stats::LoopStats;
 use super::worker::spawn_fetch;
@@ -50,9 +56,6 @@ pub struct Session<F, T, P> {
     /// until the composition root resolves one (#115 builds the hook, #50
     /// plugs the script into it).
     ui: UiController,
-    /// A `UiEffect` asked for a platform redraw that the loop has not yet
-    /// issued.
-    redraw_requested: bool,
     /// Where the fetch workers report. One channel for the session's life: a
     /// result from a page the user left is not cut off here but dropped by the
     /// browsing context, because it is stamped with a superseded
@@ -84,7 +87,6 @@ where
             last_frame: None,
             relayouts: 0,
             ui: UiController::new(Keymap::default(), HostPlatform::new().os()),
-            redraw_requested: false,
             inbox,
             outbox,
             theme,
@@ -103,45 +105,41 @@ where
         }
     }
 
-    /// Routes a key event through the chrome and executes what it asks for.
-    pub fn handle_key(&mut self, event: &KeyEvent) {
-        let effect = self.ui.handle_key(event);
-        self.execute_ui_effect(effect);
-    }
-
-    /// Routes an input-method commit through the chrome.
-    pub fn handle_text_committed(&mut self, text: InputText) {
-        let effect = self.ui.handle_text_committed(text);
-        self.execute_ui_effect(effect);
+    /// Routes a keyboard event (a key press or an input-method commit) through
+    /// the chrome and executes what it asks for. Any other event is ignored.
+    pub fn handle_keyboard(&mut self, event: &WindowEvent) -> Redraw {
+        let effects = match event {
+            WindowEvent::Key(key) => self.ui.handle_key(key),
+            WindowEvent::TextCommitted(text) => self.ui.handle_text_committed(text.clone()),
+            _ => return Redraw::Skip,
+        };
+        self.execute_ui_effects(effects)
     }
 
     /// Dispatches a primary-button press at `position` through the chrome.
-    pub fn handle_click(&mut self, position: PhysicalPosition) {
-        let effect = self.ui.handle_click(&self.ui_tree, position);
-        self.execute_ui_effect(effect);
+    pub fn handle_click(&mut self, position: PhysicalPosition) -> Redraw {
+        let effects = self.ui.handle_click(&self.ui_tree, position);
+        self.execute_ui_effects(effects)
     }
 
-    /// Whether an executed effect asked for a platform redraw.
-    pub const fn wants_redraw(&self) -> bool {
-        self.redraw_requested
+    fn execute_ui_effects(&mut self, effects: UiEffects) -> Redraw {
+        effects.into_iter().fold(Redraw::Skip, |redraw, effect| {
+            redraw.or(self.execute_ui_effect(effect))
+        })
     }
 
-    /// Records that the pending redraw request was issued.
-    pub const fn redraw_issued(&mut self) {
-        self.redraw_requested = false;
-    }
-
-    fn execute_ui_effect(&mut self, effect: UiEffect) {
+    fn execute_ui_effect(&mut self, effect: UiEffect) -> Redraw {
         match effect {
-            UiEffect::None => {}
-            UiEffect::ChromeDamaged => self.redraw_requested = true,
+            UiEffect::None => Redraw::Skip,
+            UiEffect::ChromeDamaged => Redraw::Request,
             UiEffect::Navigate(url) => {
                 self.navigate(url);
-                self.redraw_requested = true;
+                Redraw::Request
             }
             UiEffect::FollowLink(region) => {
                 let effects = self.browsing.follow_link(region);
                 self.execute_browser_effects(effects);
+                Redraw::Skip
             }
         }
     }
@@ -305,7 +303,7 @@ fn render_chrome<F: FontProvider + 'static>(
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P> Session<F, T, P> {
-    pub const fn omnibox(&self) -> &ui::OmniboxController {
+    pub const fn omnibox(&self) -> &OmniboxController {
         self.ui.omnibox()
     }
 

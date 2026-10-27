@@ -29,11 +29,11 @@ use std::thread;
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
 use window::{
-    InputText, KeyEvent, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize,
-    WindowAttributes, WindowEvent, WindowSystem, WindowTitle,
+    PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
+    WindowEvent, WindowSystem, WindowTitle,
 };
 
-use self::session::Session;
+use self::session::{Redraw, Session};
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
 use crate::application::pipeline::RenderOptions;
@@ -197,16 +197,14 @@ where
     if let Some(viewport) = events.latest_resize {
         session.resize(viewport);
     }
-    if let Some(position) = events.clicked_at {
-        session.handle_click(position);
-    }
-
-    for input in &events.keyboard {
-        input.dispatch(session);
-    }
-    if session.wants_redraw() {
+    let clicked = events
+        .clicked_at
+        .map_or(Redraw::Skip, |position| session.handle_click(position));
+    let redraw = events.keyboard.iter().fold(clicked, |redraw, event| {
+        redraw.or(session.handle_keyboard(event))
+    });
+    if redraw.is_requested() {
         system.request_redraw();
-        session.redraw_issued();
     }
 
     let saw_message = session.drain_messages();
@@ -227,28 +225,6 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-/// Keyboard input as the window reported it, held until the pump cycle has
-/// handled the pointer: the chrome's router, not this loop, decides what each
-/// one means (`ADR-0027`).
-enum KeyboardInput {
-    Key(KeyEvent),
-    TextCommitted(InputText),
-}
-
-impl KeyboardInput {
-    fn dispatch<F, T, P>(&self, session: &mut Session<F, T, P>)
-    where
-        F: FontProvider + 'static,
-        T: HttpTransport + 'static,
-        P: RequestPolicy + 'static,
-    {
-        match self {
-            Self::Key(event) => session.handle_key(event),
-            Self::TextCommitted(text) => session.handle_text_committed(text.clone()),
-        }
-    }
-}
-
 /// What one `pump_events` drain observed, folded so `pump_once` decides once
 /// per cycle: only the *last* resize counts, any number of redraw requests
 /// cost one repaint, and a click lands wherever the pointer was at that
@@ -261,7 +237,9 @@ struct PumpEvents {
     needs_repaint: bool,
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
-    keyboard: Vec<KeyboardInput>,
+    /// Key presses and input-method commits, handled after the pointer so the
+    /// chrome's router, not this loop, decides what each means (`ADR-0027`).
+    keyboard: Vec<WindowEvent>,
 }
 
 impl PumpEvents {
@@ -283,10 +261,8 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
-            WindowEvent::Key(key) => self.keyboard.push(KeyboardInput::Key(key.clone())),
-            WindowEvent::TextCommitted(text) => {
-                self.keyboard
-                    .push(KeyboardInput::TextCommitted(text.clone()));
+            WindowEvent::Key(_) | WindowEvent::TextCommitted(_) => {
+                self.keyboard.push(event.clone());
             }
             _ => {}
         }
