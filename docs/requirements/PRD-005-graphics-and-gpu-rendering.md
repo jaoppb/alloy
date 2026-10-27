@@ -89,3 +89,14 @@ The active `RenderBackend` processes, optimizes, batches, and rasterizes the dis
 - [ ] Automatic fallback to `OpenGLBackend` (`glow`/`glutin`) when Vulkan instance creation fails.
 - [ ] Automatic fallback to `SoftwareCpuBackend` when running headless without a GPU driver.
 - [ ] Display list serialization and script binding tested with Rhai engine.
+
+---
+
+## 6. Port Migration Notes
+
+The port is frozen at `F4` (ADR-0011 item 3); each bump of `graphics::PORT_SCHEMA_VERSION` is recorded here.
+
+- **3 → 4 (#108, epic #110)**: `RenderBackend::bind_images(Arc<dyn ImageProvider>)` added, required. Backends are
+  long-lived (one per compositor layer) while decoded images belong to the current document, so the image source must
+  be swappable after construction. It takes effect from the next `begin_frame`; a backend that draws no images accepts
+  and ignores it. Every implementer adds the method; fonts stay constructor-bound.
