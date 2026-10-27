@@ -45,9 +45,12 @@ pub trait RenderBackend: Send + Sync {
     ///
     /// A backend is long-lived (the layered compositor of `ADR-0019` keeps one
     /// per layer) while the decoded images belong to the current document, so
-    /// the set must be swappable without rebuilding the backend. Takes effect
-    /// from the next [`Self::begin_frame`]; a frame in progress keeps what it
-    /// started with. A backend that draws no images accepts and ignores it.
+    /// the set must be swappable without rebuilding the backend. Call it
+    /// between frames, and it takes effect from the next [`Self::begin_frame`].
+    /// Binding while a frame is in progress is unspecified: the software
+    /// backend applies it to that frame at once, and no caller needs it
+    /// otherwise (the compositor binds between frames). A backend that draws no
+    /// images accepts and ignores it.
     fn bind_images(&mut self, images: Arc<dyn ImageProvider>);
 
     /// Starts a frame on a surface of `size`, discarding any previous content.
