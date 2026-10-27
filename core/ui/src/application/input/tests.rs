@@ -141,6 +141,21 @@ fn macos_option_composes_text_while_cmd_is_a_command() {
 }
 
 #[test]
+fn macos_option_backspace_is_not_an_edit() {
+    let backspace = key(
+        LogicalKey::Backspace,
+        KeyCode::BACKSPACE,
+        None,
+        ALT,
+        KeyState::Pressed,
+    );
+    assert_eq!(
+        router(HostOs::MacOs).route_key(&backspace, FocusTarget::Omnibox),
+        None
+    );
+}
+
+#[test]
 fn a_release_never_produces_input() {
     let release = |event: KeyEvent| {
         key(

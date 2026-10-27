@@ -65,12 +65,20 @@ impl InputRouter {
         if text.is_some() && (modifiers.alt_graph() || self.is_windows_alt_gr(modifiers)) {
             return text;
         }
-        if self.holds_command_modifier(modifiers) {
-            return None;
+        if let Some(edit) = EditKey::from_logical(event.logical()) {
+            return (!Self::holds_command_modifier(modifiers, AltIs::Command))
+                .then_some(UiInput::Edit(edit));
         }
-        EditKey::from_logical(event.logical())
-            .map(UiInput::Edit)
-            .or(text)
+        let option_composes = self.host_composes_with_alt();
+        let held = Self::holds_command_modifier(
+            modifiers,
+            if option_composes {
+                AltIs::Composer
+            } else {
+                AltIs::Command
+            },
+        );
+        if held { None } else { text }
     }
 
     /// Windows reports the left Ctrl+Alt, which it also accepts as `AltGr`, as
@@ -82,13 +90,25 @@ impl InputRouter {
             && !modifiers.super_key()
     }
 
-    /// Whether Ctrl, Super or Alt is held without `AltGr`. On macOS Alt is
-    /// Option, which composes text, so only Ctrl and Cmd count there.
-    const fn holds_command_modifier(&self, modifiers: Modifiers) -> bool {
+    /// macOS reports Option as Alt, and Option+letter composes text.
+    const fn host_composes_with_alt(&self) -> bool {
+        matches!(self.host, HostOs::MacOs)
+    }
+
+    /// Whether Ctrl, Super or a command-meaning Alt is held without `AltGr`.
+    const fn holds_command_modifier(modifiers: Modifiers, alt: AltIs) -> bool {
         if modifiers.alt_graph() {
             return false;
         }
-        let alt_is_command = !matches!(self.host, HostOs::MacOs);
-        modifiers.control() || modifiers.super_key() || (modifiers.alt() && alt_is_command)
+        let alt_is_command = matches!(alt, AltIs::Command) && modifiers.alt();
+        modifiers.control() || modifiers.super_key() || alt_is_command
     }
+}
+
+/// What Alt means for the key being routed. Option composes text on macOS, but
+/// Option+Backspace is still a word-wise edit, which is out of scope (decision 24).
+#[derive(Clone, Copy)]
+enum AltIs {
+    Command,
+    Composer,
 }
