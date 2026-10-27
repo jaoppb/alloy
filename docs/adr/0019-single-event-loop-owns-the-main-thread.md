@@ -129,3 +129,9 @@ only code in `alloy` that spawns a thread, sleeps, calls `HttpTransport::execute
 `alloy/src/infrastructure/`, and `arch-lint.toml` (`alloy-application-no-threads-or-decoding`) keeps `std::thread` and
 `graphics::png::decode` out of `alloy/src/application/**`. A test injects a synchronous executor that fetches on the
 caller's thread, so the pump tests need no sleep.
+
+A worker thread nobody joins would die silently, so the adapter names its threads (`alloy-fetch`) and traps a panic in
+the fetch (`catch_unwind`, a second deliberate exception beside trapped script panics) or a refused thread spawn, and
+answers with `FetchRequest::failed`: a failure payload shaped like the request's success, stamped with its
+`NavigationId`, so the page shows an error instead of loading forever. Every request, document or subresource, goes
+through the `RequestPolicy` before the transport (PRD-009 §3.3).

@@ -238,10 +238,10 @@ are the reference.
   `Attachment::Before`).
 - **Errors, not surprises.** Library code returns a typed `Result` (`DomError`, `EngineError`); no `unwrap` / `expect` /
   `panic!` on a path a caller can reach. `expect` is allowed only for a genuinely impossible state, with a message
-  saying why it can't happen. Trapped script panics are the one deliberate exception (`catch_unwind`, C-09). Derive
-  error enums with `thiserror` (ADR-0015) from the start — `core/engine` is the one deliberate hand-rolled
-  `Display`/`Error` exception (see Object Calisthenics below); everywhere else a hand-written impl is a mistake to fix
-  before it ships, not after review.
+  saying why it can't happen. Trapped script panics (`catch_unwind`, C-09) and a panicking fetch worker (#114, ADR-0019)
+  are the deliberate exceptions. Derive error enums with `thiserror` (ADR-0015) from the start — `core/engine` is the
+  one deliberate hand-rolled `Display`/`Error` exception (see Object Calisthenics below); everywhere else a hand-written
+  impl is a mistake to fix before it ships, not after review.
 - **Comments explain _why_, not _what_.** Cite the ADR/PRD/criterion a decision serves. Delete commented-out code.
 - **DRY, and the Boy Scout Rule.** No copy-paste logic; leave every file you touch a little cleaner than you found it.
 
