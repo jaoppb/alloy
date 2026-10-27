@@ -54,6 +54,9 @@ pub enum Presented {
     Shown,
     /// A layer has never been rastered, so there is nothing to compose.
     NotYet,
+    /// No damage was taken, so nothing was composed or presented. Keeps an
+    /// idle session idle: the caller must not re-arm a redraw for this.
+    Unchanged,
 }
 
 impl Presented {
@@ -121,14 +124,21 @@ impl<B: RenderBackend> Compositor<B> {
     /// Re-rasters the layers `damage` invalidated from `scene`, composes them
     /// and presents once.
     ///
-    /// Nothing is shown until both layers have been rastered at least once.
-    /// Content damage with no document in the scene is dropped.
+    /// Without damage nothing is composed or presented ([`Presented::Unchanged`]);
+    /// re-showing the last frame is [`Self::repaint`]'s job. Nothing is shown
+    /// until both layers have been rastered at least once. Content damage with no document in the scene is dropped.
     pub fn render<F: FontProvider + 'static, R: Presenter>(
         &mut self,
         damage: PendingDamage,
         scene: &Scene<'_, F>,
         presenter: &mut R,
     ) -> Result<Rendered, AlloyError> {
+        if damage.is_empty() {
+            return Ok(Rendered {
+                presented: Presented::Unchanged,
+                layout: Layout::Untouched,
+            });
+        }
         if damage.needs_chrome() {
             self.raster_chrome(scene)?;
         }

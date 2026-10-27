@@ -11,6 +11,7 @@ use window::{
     RecordingPresenter, SurfaceSize, WindowEvent,
 };
 
+use super::pump_once;
 use super::test_support::{TestSession, loaded_window, pump};
 
 /// The rows the chrome strip covers, from the same theme the painter uses.
@@ -187,4 +188,20 @@ fn growing_back_from_a_chrome_only_viewport_renders_the_page_again() {
     let (width, height, pixels) = presented(&presenter);
     assert_eq!((width, height), (800, 600));
     assert_eq!(pixels[..chrome_only.len()], chrome_only[..]);
+}
+
+#[test]
+fn an_idle_session_neither_presents_nor_rearms_the_redraw() {
+    let (mut system, mut presenter, mut session) = presented_page();
+    // The first present re-armed one redraw (Wayland); that re-blit settles it.
+    pump(&mut system, &mut presenter, &mut session);
+    let presents_settled = presenter.present_count();
+
+    for cycle in 0..5 {
+        let (_, did_work) = pump_once(&mut system, &mut presenter, &mut session).unwrap();
+        assert!(!did_work, "idle cycle {cycle} must let the loop sleep");
+    }
+
+    assert_eq!(presenter.present_count(), presents_settled);
+    assert_eq!(session.stats().relayouts, 1);
 }
