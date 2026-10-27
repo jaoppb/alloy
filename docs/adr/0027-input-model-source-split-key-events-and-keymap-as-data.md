@@ -103,13 +103,16 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
   characters case-folded) and on the physical key second, so a non-Latin layout still reaches Ctrl+L.
 - **Commands.** `BrowserCommand` is a closed enum parsed from action names (`focus_omnibox`); the default keymap binds
   Ctrl+L, Super+L (Cmd+L on macOS, on every platform) and Alt+D to it, by logical and by physical key, and no Ctrl+Alt
-  chord.
-- **The seam.** `Keymap::from_bindings` takes unvalidated `(chord text, action name)` pairs. A malformed chord or an
-  unknown action rejects that binding alone as a typed `KeymapError`, a later binding of the same chord replaces an
-  earlier one, and a set with no valid binding yields `Keymap::default()`. The composition root resolves the source once
-  before the loop and on reload (hook: #115; script: #50).
+  chord. The default is written in the same chord text a script supplies and parsed by the same code (`ctrl+l`,
+  `ctrl+code:l`: `code:` names a Latin letter or digit by position).
+- **The seam.** `Keymap::from_bindings` takes unvalidated `(chord text, action name)` pairs and returns the keymap with
+  the `KeymapError`s of the rejected bindings. A malformed chord or an unknown action rejects that binding alone, a
+  later binding of the same chord replaces an earlier one, and a set with no valid binding yields `Keymap::default()`.
+  The composition root resolves the source once before the loop and on reload (hook: #115; script: #50).
 - **Platform facts.** The router takes a `platform::HostOs` (`ADR-0022`) at construction; it is the only source of the
-  two platform rules below, so every platform's behaviour is unit-tested on any host.
+  two platform rules below, so every platform's behaviour is unit-tested on any host. The router decides what an event
+  means; whether the omnibox consumes typing is the controller's call, and one click can return several `UiEffects`
+  (ending address editing damages the chrome _and_ follows the link).
 
 ### Router order for a `Pressed` or `Repeated` key event
 
