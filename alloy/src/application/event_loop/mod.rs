@@ -230,14 +230,14 @@ where
     dispatch_omnibox_inputs(session, &events.omnibox_inputs);
     let saw_message = session.drain_messages();
 
-    let frame_shown = session.render(presenter)?;
-    if frame_shown {
+    let shown = session.render(presenter)?;
+    if shown.is_shown() {
         // Re-arm the platform redraw: on Wayland the present just made can be
         // dropped by a not-yet-configured surface, and the RedrawRequested
         // this schedules re-blits the composed frame once it is live.
         system.request_redraw();
     }
-    if events.needs_repaint && !frame_shown {
+    if events.needs_repaint && !shown.is_shown() {
         session.repaint(presenter)?;
     }
 

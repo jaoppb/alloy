@@ -13,7 +13,8 @@ pub enum Damage {
     /// The document changed (navigation, stylesheet, image). Relayouts the
     /// content — the only damage that does.
     Content,
-    /// The viewport changed size: both layers are re-sized and re-rastered.
+    /// The viewport changed size: exactly `Chrome` and `Content` together,
+    /// with both layers re-sized from the new viewport.
     Viewport,
 }
 
@@ -49,6 +50,12 @@ impl PendingDamage {
             content: false,
         };
         taken
+    }
+
+    /// Puts back damage a failed render took, so the next cycle retries it.
+    pub const fn restore(&mut self, damage: Self) {
+        self.chrome |= damage.chrome;
+        self.content |= damage.content;
     }
 
     #[must_use]
@@ -99,5 +106,18 @@ mod tests {
 
         assert!(taken.needs_content());
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn restoring_failed_damage_keeps_what_arrived_meanwhile() {
+        let mut pending = PendingDamage::default();
+        pending.record(Damage::Content);
+        let failed = pending.take();
+        pending.record(Damage::Chrome);
+
+        pending.restore(failed);
+
+        assert!(pending.needs_chrome());
+        assert!(pending.needs_content());
     }
 }

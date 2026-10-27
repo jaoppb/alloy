@@ -12,7 +12,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
-use alloy::{BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until};
+use alloy::{
+    BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until, software_compositor,
+};
 use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
@@ -42,10 +44,7 @@ fn font_provider() -> Arc<SyntheticFontProvider> {
 }
 
 fn compositor() -> Compositor<SoftwareCpuBackend<SyntheticFontProvider>> {
-    Compositor::new(
-        SoftwareCpuBackend::with_font_provider(font_provider()),
-        SoftwareCpuBackend::with_font_provider(font_provider()),
-    )
+    software_compositor(&font_provider())
 }
 
 /// 20 px into the page, which starts below the default theme's chrome bar —

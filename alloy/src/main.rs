@@ -24,13 +24,12 @@ use std::sync::Arc;
 use alloy::error::AlloyError;
 use alloy::logging;
 use alloy::{
-    BrowserServices, Compositor, RenderOptions, default_runtime_font_provider,
-    initial_window_attributes, render_html_with_font_provider, run_browser,
+    BrowserServices, RenderOptions, default_runtime_font_provider, initial_window_attributes,
+    render_html_with_font_provider, run_browser, software_compositor,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use dom::serialize_html;
 use engine::profiles;
-use graphics::SoftwareCpuBackend;
 use network::{AllowAllPolicy, RealHttpTransport, Url};
 use rhai_bindings::run_dom_with_fallback;
 use rhai_runtime::RhaiEngine;
@@ -113,10 +112,7 @@ fn run(cli: &Cli) -> Result<(), AlloyError> {
 fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     let url = Url::parse(raw_url)?;
     let font_provider = default_runtime_font_provider();
-    let compositor = Compositor::new(
-        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
-        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
-    );
+    let compositor = software_compositor(&font_provider);
     let services = BrowserServices::new(
         font_provider,
         Arc::new(RealHttpTransport::new()?),

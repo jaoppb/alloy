@@ -12,9 +12,9 @@ use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem
 use super::session::Session;
 use super::{initial_window_attributes, pump_once};
 use crate::application::browser_services::BrowserServices;
-use crate::application::compositor::Compositor;
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
+use crate::infrastructure::software_compositor;
 
 pub(super) type TestSession = Session<
     SyntheticFontProvider,
@@ -26,10 +26,7 @@ pub(super) type TestSession = Session<
 pub(super) fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let compositor = Compositor::new(
-        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
-        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
-    );
+    let compositor = software_compositor(&font_provider);
     let services = BrowserServices::new(
         font_provider,
         Arc::new(transport),

@@ -48,22 +48,28 @@ impl ComposedFrame {
         content: Option<&Layer>,
         viewport: SurfaceSize,
     ) -> Result<Self, AlloyError> {
+        if chrome.width != viewport.width()
+            || content.is_some_and(|layer| layer.width != viewport.width())
+        {
+            return Err(AlloyError::InvalidDimensions);
+        }
         let width_usize =
             usize::try_from(viewport.width()).map_err(|_| AlloyError::InvalidDimensions)?;
         let height_usize =
             usize::try_from(viewport.height()).map_err(|_| AlloyError::InvalidDimensions)?;
         let expected_len = width_usize.saturating_mul(height_usize);
-        let visible_chrome = chrome.pixels.len().min(expected_len);
 
+        // A viewport shorter than the chrome shows only the chrome's top rows.
+        let visible_chrome = chrome
+            .pixels
+            .get(..expected_len.min(chrome.pixels.len()))
+            .ok_or(AlloyError::InvalidDimensions)?;
         let mut pixels = Vec::with_capacity(expected_len);
-        pixels.extend_from_slice(chrome.pixels.get(..visible_chrome).unwrap_or_default());
+        pixels.extend_from_slice(visible_chrome);
         if let Some(content) = content {
             pixels.extend_from_slice(&content.pixels);
         }
-
-        let widths_agree = chrome.width == viewport.width()
-            && content.is_none_or(|layer| layer.width == viewport.width());
-        if pixels.len() != expected_len || !widths_agree {
+        if pixels.len() != expected_len {
             return Err(AlloyError::InvalidDimensions);
         }
 

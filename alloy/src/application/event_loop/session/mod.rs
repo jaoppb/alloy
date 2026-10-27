@@ -18,7 +18,10 @@ use window::{PhysicalPosition, Presenter, SurfaceSize};
 use super::stats::LoopStats;
 use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
-use crate::application::compositor::{Compositor, Damage, PendingDamage};
+use crate::application::compositor::{
+    ChromeScene, Compositor, ContentScene, Damage, Layout, PendingDamage, Presented, Rendered,
+    Scene,
+};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
@@ -206,66 +209,68 @@ where
     }
 
     /// Rasters whatever the accumulated damage invalidated, composes the
-    /// layers and presents once; returns whether a frame went out.
+    /// layers and presents once.
     ///
     /// Chrome damage re-rasters the chrome strip only. Content damage is the
     /// relayout — the only path that bumps `stats.relayouts`, and only once a
     /// frame laid out from a document was actually presented (the I4
     /// coalescing proof and `run_browser_until_first_frame` both rest on that).
     /// With no document yet there is nothing to lay out, and that damage is
-    /// dropped.
-    pub fn render<R: Presenter>(&mut self, presenter: &mut R) -> Result<bool, AlloyError> {
+    /// dropped. A render that fails puts its damage back, so nothing it
+    /// consumed is lost.
+    pub fn render<R: Presenter>(&mut self, presenter: &mut R) -> Result<Presented, AlloyError> {
         let damage = self.damage.take();
-        if damage.needs_chrome() {
-            self.compositor.raster_chrome(
-                self.omnibox.state(),
-                self.theme.omnibox(),
-                self.ui_tree.chrome_size()?,
-                self.services.font_provider().as_ref(),
-            )?;
-        }
-        let outcome = if damage.needs_content() {
-            self.raster_content()?
-        } else {
-            ContentOutcome::NoDocument
-        };
-        let shown = self.compositor.present(self.viewport, presenter)?;
-        match outcome {
-            ContentOutcome::NoDocument => {}
-            ContentOutcome::NoRows => self.commit_layout(LinkTargets::default()),
-            ContentOutcome::LaidOut(links) => {
-                self.commit_layout(links);
-                if shown {
-                    self.relayouts = self.relayouts.saturating_add(1);
-                }
+        let rendered = match self.render_damage(damage, presenter) {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                self.damage.restore(damage);
+                return Err(error);
             }
-        }
+        };
+        let shown = rendered.presented();
+        self.commit_layout(rendered.into_layout(), shown);
         Ok(shown)
     }
 
-    /// Lays the document out at the content size the viewport leaves, or marks
-    /// the content layer empty when it leaves none (#118). The links are
-    /// committed only after the frame that shows them is out.
-    fn raster_content(&mut self) -> Result<ContentOutcome, AlloyError> {
-        let Some(document) = self.browsing.document() else {
-            return Ok(ContentOutcome::NoDocument);
-        };
-        let Ok(size) = self.ui_tree.content_size() else {
-            self.compositor.clear_content();
-            return Ok(ContentOutcome::NoRows);
-        };
-        let fonts = self.services.font_provider();
-        let links = self.compositor.raster_content(document, size, fonts)?;
-        Ok(ContentOutcome::LaidOut(links))
+    fn render_damage<R: Presenter>(
+        &mut self,
+        damage: PendingDamage,
+        presenter: &mut R,
+    ) -> Result<Rendered, AlloyError> {
+        let scene = Scene::new(
+            ChromeScene::new(
+                self.omnibox.state(),
+                self.theme.omnibox(),
+                self.ui_tree.chrome_size()?,
+            ),
+            ContentScene::new(self.browsing.document(), self.ui_tree.content_size().ok()),
+            self.services.font_provider(),
+            self.viewport,
+        );
+        self.compositor.render(damage, &scene, presenter)
     }
 
     /// Adopts a rastered layout in one step, so the link regions and the UI
     /// tree hit-testing them never describe a different layout than the
     /// content layer. Nothing here can fail: everything fallible ran before the
     /// frame was shown.
-    fn commit_layout(&mut self, links: LinkTargets) {
+    fn commit_layout(&mut self, layout: Layout, shown: Presented) {
+        let links = match layout {
+            Layout::Untouched => return,
+            Layout::NoRows => LinkTargets::default(),
+            Layout::Done(links) => {
+                self.count_relayout(shown);
+                links
+            }
+        };
         self.browsing.layout_completed(links);
         self.ui_tree = ui_tree_for(self.viewport, &self.theme, self.browsing.content_regions());
+    }
+
+    const fn count_relayout(&mut self, shown: Presented) {
+        if shown.is_shown() {
+            self.relayouts = self.relayouts.saturating_add(1);
+        }
     }
 
     /// Presents the last composed frame again, with no raster work and without
@@ -273,15 +278,6 @@ where
     pub fn repaint<R: Presenter>(&self, presenter: &mut R) -> Result<(), AlloyError> {
         self.compositor.repaint(presenter)
     }
-}
-
-/// What the content step of a render found.
-enum ContentOutcome {
-    /// No document is loaded: nothing to lay out, the damage is dropped.
-    NoDocument,
-    /// The viewport leaves no rows below the chrome.
-    NoRows,
-    LaidOut(LinkTargets),
 }
 
 /// The UI tree for `viewport`, or the inert fallback when the viewport cannot
@@ -297,7 +293,7 @@ fn ui_tree_for(
 
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
-impl<F, T, P, B: RenderBackend> Session<F, T, P, B> {
+impl<F, T, P, B> Session<F, T, P, B> {
     pub const fn omnibox(&self) -> &OmniboxController {
         &self.omnibox
     }

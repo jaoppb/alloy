@@ -9,6 +9,7 @@
 
 pub mod application;
 pub mod error;
+pub mod infrastructure;
 pub mod logging;
 
 pub use application::browser_services::BrowserServices;
@@ -24,3 +25,4 @@ pub use application::{
     run_browser_until, run_browser_until_first_frame,
 };
 pub use error::AlloyError;
+pub use infrastructure::software_compositor;

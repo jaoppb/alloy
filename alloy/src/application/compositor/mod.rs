@@ -4,42 +4,102 @@
 //!
 //! The compositor owns the raster backends and reaches them only through the
 //! [`RenderBackend`] port; the composition root decides which backend that is.
-//! It knows nothing of sessions, omniboxes' behavior or navigation — it is
-//! handed what to draw and tells the caller whether a frame went out.
+//! It is handed a [`Scene`] and the accumulated [`PendingDamage`], decides
+//! which layers to re-raster, and tells the caller what it laid out and
+//! whether a frame went out. It knows nothing of sessions or navigation.
 
 mod damage;
 mod frame;
 mod pixel;
+mod scene;
 
-use std::sync::Arc;
-
-use browser::{Document, LinkTargets};
-use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SurfaceSize as LayerSize};
-use ui::{OmniboxPainter, OmniboxState, OmniboxTheme};
-use window::{Presenter, SurfaceSize};
+use browser::LinkTargets;
+use graphics::{DisplayListBuilder, FontProvider, RenderBackend};
+use ui::OmniboxPainter;
+use window::Presenter;
 
 pub use self::damage::{Damage, PendingDamage};
 use self::frame::{ComposedFrame, Layer};
+pub use self::scene::{ChromeScene, ContentScene, Scene};
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::{render_dom_with_links, surface_length_to_au};
 use crate::error::AlloyError;
 
-/// What the content layer holds.
-enum ContentLayer {
-    /// No document has been laid out yet: nothing can be composed.
+/// What one layer holds.
+enum LayerSlot {
+    /// Never rastered: nothing can be composed yet.
     Pending,
-    /// The viewport leaves no rows below the chrome (#118); valid, and shown
-    /// as the chrome alone.
+    /// The viewport leaves no rows for this layer (#118); valid, and shown as
+    /// nothing.
     Empty,
     Raster(Layer),
+}
+
+impl LayerSlot {
+    const fn is_pending(&self) -> bool {
+        matches!(self, Self::Pending)
+    }
+
+    const fn layer(&self) -> Option<&Layer> {
+        match self {
+            Self::Raster(layer) => Some(layer),
+            Self::Pending | Self::Empty => None,
+        }
+    }
+}
+
+/// Whether a render put a frame on screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presented {
+    Shown,
+    /// A layer has never been rastered, so there is nothing to compose.
+    NotYet,
+}
+
+impl Presented {
+    #[must_use]
+    pub const fn is_shown(self) -> bool {
+        matches!(self, Self::Shown)
+    }
+}
+
+/// What a render did to the content layer.
+pub enum Layout {
+    /// The content layer was not touched: no content damage, or no document
+    /// to lay out (that damage is dropped).
+    Untouched,
+    /// The viewport leaves no rows below the chrome.
+    NoRows,
+    /// The document was laid out; these are its clickable links.
+    Done(LinkTargets),
+}
+
+/// The outcome of [`Compositor::render`].
+pub struct Rendered {
+    presented: Presented,
+    layout: Layout,
+}
+
+impl Rendered {
+    #[must_use]
+    pub const fn presented(&self) -> Presented {
+        self.presented
+    }
+
+    /// Hands over what happened to the content layer, so the caller can commit
+    /// the links only after the frame that shows them is out.
+    #[must_use]
+    pub fn into_layout(self) -> Layout {
+        self.layout
+    }
 }
 
 /// Two cached layers and the last frame composed from them.
 pub struct Compositor<B> {
     chrome_backend: B,
     content_backend: B,
-    chrome: Option<Layer>,
-    content: ContentLayer,
+    chrome: LayerSlot,
+    content: LayerSlot,
     frame: Option<ComposedFrame>,
 }
 
@@ -52,85 +112,36 @@ impl<B: RenderBackend> Compositor<B> {
         Self {
             chrome_backend,
             content_backend,
-            chrome: None,
-            content: ContentLayer::Pending,
+            chrome: LayerSlot::Pending,
+            content: LayerSlot::Pending,
             frame: None,
         }
     }
 
-    /// Re-rasters the chrome layer from the omnibox as it is now. Leaves the
-    /// content layer untouched.
-    pub fn raster_chrome<F: FontProvider>(
+    /// Re-rasters the layers `damage` invalidated from `scene`, composes them
+    /// and presents once.
+    ///
+    /// Nothing is shown until both layers have been rastered at least once.
+    /// Content damage with no document in the scene is dropped.
+    pub fn render<F: FontProvider + 'static, R: Presenter>(
         &mut self,
-        omnibox: &OmniboxState,
-        theme: &OmniboxTheme,
-        size: LayerSize,
-        fonts: &F,
-    ) -> Result<(), AlloyError> {
-        let mut builder = DisplayListBuilder::new();
-        OmniboxPainter::new(fonts)
-            .with_theme(*theme)
-            .with_font(DEFAULT_FONT)
-            .paint(
-                omnibox,
-                surface_length_to_au(size.width())?.to_px(),
-                &mut builder,
-            )?;
-        let display_list = builder.build()?;
-
-        self.chrome_backend.begin_frame(size)?;
-        self.chrome_backend.submit(&display_list)?;
-        self.chrome_backend.end_frame()?;
-        self.chrome = Some(Layer::from_framebuffer(&self.chrome_backend.read_back()?));
-        Ok(())
-    }
-
-    /// Lays out, paints and rasters `document` into the content layer, and
-    /// returns the clickable links of that layout.
-    pub fn raster_content<F: FontProvider + 'static>(
-        &mut self,
-        document: &Document,
-        size: LayerSize,
-        fonts: &Arc<F>,
-    ) -> Result<LinkTargets, AlloyError> {
-        let (framebuffer, links) = render_dom_with_links(
-            document.tree(),
-            document.sheets().clone(),
-            document.images(),
-            size,
-            fonts,
-            &mut self.content_backend,
-        )?;
-        self.content = ContentLayer::Raster(Layer::from_framebuffer(&framebuffer));
-        Ok(links)
-    }
-
-    /// Marks the content layer as having no rows: the viewport is no taller
-    /// than the chrome.
-    pub fn clear_content(&mut self) {
-        self.content = ContentLayer::Empty;
-    }
-
-    /// Composes the layers at `viewport` and presents the result. Returns
-    /// whether a frame went out: it does not until both layers have been
-    /// rastered at least once.
-    pub fn present<R: Presenter>(
-        &mut self,
-        viewport: SurfaceSize,
+        damage: PendingDamage,
+        scene: &Scene<'_, F>,
         presenter: &mut R,
-    ) -> Result<bool, AlloyError> {
-        let Some(chrome) = self.chrome.as_ref() else {
-            return Ok(false);
+    ) -> Result<Rendered, AlloyError> {
+        if damage.needs_chrome() {
+            self.raster_chrome(scene)?;
+        }
+        let layout = if damage.needs_content() {
+            self.raster_content(scene)?
+        } else {
+            Layout::Untouched
         };
-        let content = match &self.content {
-            ContentLayer::Pending => return Ok(false),
-            ContentLayer::Empty => None,
-            ContentLayer::Raster(layer) => Some(layer),
-        };
-        let frame = ComposedFrame::compose(chrome, content, viewport)?;
-        frame.present(presenter)?;
-        self.frame = Some(frame);
-        Ok(true)
+        let shown = self.present(scene, presenter)?;
+        Ok(Rendered {
+            presented: shown,
+            layout,
+        })
     }
 
     /// Presents the last composed frame again, with no raster work. A no-op
@@ -144,6 +155,73 @@ impl<B: RenderBackend> Compositor<B> {
         frame.present(presenter)
     }
 
+    fn raster_chrome<F: FontProvider + 'static>(
+        &mut self,
+        scene: &Scene<'_, F>,
+    ) -> Result<(), AlloyError> {
+        let chrome = scene.chrome();
+        let mut builder = DisplayListBuilder::new();
+        OmniboxPainter::new(scene.fonts().as_ref())
+            .with_theme(*chrome.theme())
+            .with_font(DEFAULT_FONT)
+            .paint(
+                chrome.omnibox(),
+                surface_length_to_au(chrome.size().width())?.to_px(),
+                &mut builder,
+            )?;
+        let display_list = builder.build()?;
+
+        self.chrome_backend.begin_frame(chrome.size())?;
+        self.chrome_backend.submit(&display_list)?;
+        self.chrome_backend.end_frame()?;
+        let framebuffer = self.chrome_backend.read_back()?;
+        self.chrome = LayerSlot::Raster(Layer::from_framebuffer(&framebuffer));
+        Ok(())
+    }
+
+    fn raster_content<F: FontProvider + 'static>(
+        &mut self,
+        scene: &Scene<'_, F>,
+    ) -> Result<Layout, AlloyError> {
+        let content = scene.content();
+        let Some(document) = content.document() else {
+            return Ok(Layout::Untouched);
+        };
+        let Some(size) = content.size() else {
+            self.content = LayerSlot::Empty;
+            return Ok(Layout::NoRows);
+        };
+        let (framebuffer, links) = render_dom_with_links(
+            document.tree(),
+            document.sheets().clone(),
+            document.images(),
+            size,
+            scene.fonts(),
+            &mut self.content_backend,
+        )?;
+        self.content = LayerSlot::Raster(Layer::from_framebuffer(&framebuffer));
+        Ok(Layout::Done(links))
+    }
+
+    fn present<F, R: Presenter>(
+        &mut self,
+        scene: &Scene<'_, F>,
+        presenter: &mut R,
+    ) -> Result<Presented, AlloyError> {
+        if self.chrome.is_pending() || self.content.is_pending() {
+            return Ok(Presented::NotYet);
+        }
+        let Some(chrome) = self.chrome.layer() else {
+            return Ok(Presented::NotYet);
+        };
+        let frame = ComposedFrame::compose(chrome, self.content.layer(), scene.viewport())?;
+        frame.present(presenter)?;
+        self.frame = Some(frame);
+        Ok(Presented::Shown)
+    }
+}
+
+impl<B> Compositor<B> {
     #[cfg(test)]
     pub const fn has_frame(&self) -> bool {
         self.frame.is_some()

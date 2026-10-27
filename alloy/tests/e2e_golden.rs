@@ -23,12 +23,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
-use alloy::{BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until};
+use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until, software_compositor};
 use graphics::golden::assert_matches_golden;
-use graphics::{
-    Color, Framebuffer, SoftwareCpuBackend, SurfaceSize as GraphicsSurfaceSize,
-    SyntheticFontProvider,
-};
+use graphics::{Color, Framebuffer, SurfaceSize as GraphicsSurfaceSize, SyntheticFontProvider};
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
@@ -111,10 +108,7 @@ fn navigated_page_with_stylesheet_and_image_matches_golden_reference() {
     // committed golden byte-identical across machines.
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
-    let compositor = Compositor::new(
-        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
-        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
-    );
+    let compositor = software_compositor(&font_provider);
     let services = BrowserServices::new(
         font_provider,
         Arc::new(mock_transport(&base)),
