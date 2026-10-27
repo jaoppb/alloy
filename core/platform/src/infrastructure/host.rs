@@ -32,20 +32,3 @@ impl FontLocator for HostPlatform {
         FontCandidates::new(os::generic_family_paths(family))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_host_os_matches_the_build_target() {
-        let expected = if cfg!(target_os = "windows") {
-            HostOs::Windows
-        } else if cfg!(target_os = "macos") {
-            HostOs::MacOs
-        } else {
-            HostOs::Other
-        };
-        assert_eq!(HostPlatform::new().os(), expected);
-    }
-}

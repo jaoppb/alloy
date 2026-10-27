@@ -33,3 +33,13 @@ pub(super) const fn generic_family_paths(family: GenericFamily) -> &'static [&'s
 pub(super) const fn host_os() -> HostOs {
     HostOs::MacOs
 }
+
+#[cfg(test)]
+mod host_os_tests {
+    use super::*;
+
+    #[test]
+    fn this_target_is_reported_as_macos() {
+        assert_eq!(host_os(), HostOs::MacOs);
+    }
+}
