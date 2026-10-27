@@ -98,6 +98,19 @@ A script runs once (on init and reload) and returns bindings; Rust stores a `Key
 itself. There are zero script calls on the hot path, and a script failure keeps the Rust default keymap (`ADR-0004`).
 The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `core/ui` (epic #110, issue #113).
 
+- **Chords.** A `KeyChord` is a modifier set plus a key, matched with the modifiers **exactly** (Ctrl+Shift+L is not
+  Ctrl+L, and a chord that includes AltGr is a different chord). The key is matched on the logical key first (single
+  characters case-folded) and on the physical key second, so a non-Latin layout still reaches Ctrl+L.
+- **Commands.** `BrowserCommand` is a closed enum parsed from action names (`focus_omnibox`); the default keymap binds
+  Ctrl+L, Super+L (Cmd+L on macOS, on every platform) and Alt+D to it, by logical and by physical key, and no Ctrl+Alt
+  chord.
+- **The seam.** `Keymap::from_bindings` takes unvalidated `(chord text, action name)` pairs. A malformed chord or an
+  unknown action rejects that binding alone as a typed `KeymapError`, a later binding of the same chord replaces an
+  earlier one, and a set with no valid binding yields `Keymap::default()`. The composition root resolves the source once
+  before the loop and on reload (hook: #115; script: #50).
+- **Platform facts.** The router takes a `platform::HostOs` (`ADR-0022`) at construction; it is the only source of the
+  two platform rules below, so every platform's behaviour is unit-tested on any host.
+
 ### Router order for a `Pressed` or `Repeated` key event
 
 1. A keymap binding matches → the bound `Command`. Chords match the logical key first and the physical key as the
@@ -108,12 +121,14 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
 4. Ctrl, Super or Alt held without AltGr → dropped; nothing is inserted (an unbound Ctrl+K types nothing).
 5. Otherwise `text` → insert the text.
 
-Shift never blocks insertion. `Released` events never produce input. Named editing keys under Ctrl, Super or Alt are
-dropped unless the keymap binds them (the interim `alloy` mapping already applies this to both typing and editing). On
-macOS, Option+letter must insert its composed text and the binding for "focus the address bar" is Super+L. `winit`
-reports Option as Alt there (no AltGraph key), so the adapter sets `alt()`, not `alt_graph()`: the router needs a
-platform fact from `core/platform` (`ADR-0022`) to apply that rule, which is left to the router (issue 113). This port
-cannot branch on `target_os`.
+Shift never blocks insertion. `Released` events never produce input, and a held (`Repeated`) binding fires once, on the
+press; a held editing key or letter repeats. Named editing keys under Ctrl, Super or Alt are dropped unless the keymap
+binds them. Typing and editing reach only a focused omnibox; a command reaches the browser whatever has focus.
+
+On macOS, Option+letter must insert its composed text and the binding for "focus the address bar" is Super+L. `winit`
+reports Option as Alt there (no AltGraph key), so the adapter sets `alt()`, not `alt_graph()`. The router therefore does
+not count Alt as a command modifier when `HostOs` is `MacOs`: Option+letter inserts (step 5) while Cmd and Ctrl still
+drop. The Windows rule of step 3 is likewise gated on `HostOs::Windows`. This port cannot branch on `target_os`.
 
 ### Window mutation commands
 
@@ -126,8 +141,10 @@ The same version bump adds `WindowSystem::set_title(WindowTitle)` and `WindowSys
 - Good: modifiers come from the platform, so a modifier held across a focus change is correct.
 - Good: the whole mapping is unit-testable through `KeyInput`, because `winit::event::KeyEvent` cannot be constructed
   outside `winit`.
-- Bad: every consumer must read `modifiers` before treating `text` as typing. Until the router lands (#113), `alloy`
-  carries an interim `KeyEvent` → `OmniboxInput` mapping that applies steps 3–5 of the rule.
+- Bad: every consumer must read `modifiers` before treating `text` as typing. `core/ui`'s `InputRouter` is the one place
+  that does; `alloy`'s event loop forwards `KeyEvent`s whole (`arch-lint` rule `event-loop-no-key-policy`).
+- Bad: exact-modifier matching means the default Ctrl+L does not fire while AltGr is also held; that chord types its
+  text unless a keymap binds it.
 - Bad: `PORT_SCHEMA_VERSION` 3 → 4 breaks every `WindowSystem` implementer and every `match` on `WindowEvent`.
 - Bad: Alt and AltGr text payloads, and the `winit` behaviours above, are read from the 0.30.13 source and unverified on
   Windows and macOS (no hardware in CI); the `event_map` tests encode the expected mapping and a manual check is tracked

@@ -76,8 +76,8 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `alt_graph()`) and `Pressed | Repeated | Released`, `TextCommitted(InputText)` for IME commits only, `set_title` and
   `set_cursor`; `ControlKey` and key-produced `TextInput` are gone, no alias). Frozen at `I4`: a bump needs a `PRD-010`
   §6 note. The adapter never decides shortcut versus typing — `KeyEvent::text` ignores Ctrl on Linux (Ctrl+L carries
-  `"l"`), so a consumer reads `modifiers` first; `alloy`'s `event_loop/key_mapping.rs` is the interim mapping until the
-  `core/ui` router and keymap land (#113, epic #110).
+  `"l"`), so a consumer reads `modifiers` first; `core/ui`'s `InputRouter` + data-driven `Keymap` (#113, ADR-0027) now
+  decide shortcut versus typing; `alloy` forwards `KeyEvent`s whole (`arch-lint` `event-loop-no-key-policy`).
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
 - **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;
@@ -101,6 +101,10 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment); `arch-lint.toml` (`browser-pure`)
   forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/.../event_loop/worker.rs` is the thin executor
   of `BrowserEffect::Fetch`.
+- **#113 — input router and keymap** (epic #110, ADR-0027):
+  `ui::{Keymap, KeyChord, BrowserCommand, InputRouter, UiController}` and `UiInput`/`UiEffect`; `Keymap::from_bindings`
+  is the seam #50/#115 plug a script into. The router takes `platform::HostOs` for the Windows Ctrl+Alt and macOS Option
+  rules.
 - **#109 — `core/ui`** (epic #110, ADR-0026): the render tree, hit testing, theme, omnibox and `OmniboxClassifier` moved
   out of `alloy` (and `network`) into `core/ui`, with no re-export left behind. `core/region` holds the ids `ui` and
   `browser` share; `arch-lint.toml` (`ui-isolated`, `region-isolated`) keeps the two siblings apart.
