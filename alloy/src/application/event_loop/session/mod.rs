@@ -243,7 +243,7 @@ where
                 self.theme.omnibox(),
                 self.ui_tree.chrome_size()?,
             ),
-            ContentScene::new(self.browsing.document(), self.ui_tree.content_size().ok()),
+            ContentScene::new(self.browsing.document(), self.ui_tree.content_size()?),
             self.services.font_provider(),
             self.viewport,
         );
