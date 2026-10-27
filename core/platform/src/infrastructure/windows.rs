@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crate::domain::font::{FontDirectories, GenericFamily};
+use crate::domain::host_os::HostOs;
 
 pub(super) fn font_directories() -> FontDirectories {
     let windows_directory =
@@ -24,4 +25,8 @@ pub(super) const fn generic_family_paths(family: GenericFamily) -> &'static [&'s
         GenericFamily::Serif => &["C:\\Windows\\Fonts\\times.ttf"],
         GenericFamily::Monospace => &["C:\\Windows\\Fonts\\consola.ttf"],
     }
+}
+
+pub(super) const fn host_os() -> HostOs {
+    HostOs::Windows
 }

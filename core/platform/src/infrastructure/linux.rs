@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crate::domain::font::{FontDirectories, GenericFamily};
+use crate::domain::host_os::HostOs;
 use crate::infrastructure::environment::home_directory;
 
 pub(super) fn font_directories() -> FontDirectories {
@@ -39,4 +40,8 @@ pub(super) const fn generic_family_paths(family: GenericFamily) -> &'static [&'s
             "/usr/share/fonts/Adwaita/AdwaitaMono-Regular.ttf",
         ],
     }
+}
+
+pub(super) const fn host_os() -> HostOs {
+    HostOs::Other
 }
