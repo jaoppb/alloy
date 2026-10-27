@@ -56,9 +56,9 @@ pub(super) struct InlineFetchExecutor {
 }
 
 impl InlineFetchExecutor {
-    /// Where this executor reports; tests also send results of their own.
-    pub(super) const fn outbox(&self) -> &FetchOutbox {
-        &self.outbox
+    /// Reports `result` as if a fetch had just finished; tests send results of their own.
+    pub(super) fn deliver(&self, result: FetchResult) {
+        self.outbox.send(result);
     }
 }
 
@@ -96,7 +96,7 @@ pub(super) fn session_over(web: FakeWeb, viewport: SurfaceSize) -> TestSession {
 
 /// Hands `result` to the session as if a fetch had just finished.
 pub(super) fn deliver(session: &TestSession, result: FetchResult) {
-    session.fetch_executor().outbox().send(result);
+    session.fetch_executor().deliver(result);
 }
 
 /// The URL a link click navigated to, after the pump that applies the result

@@ -61,6 +61,7 @@ where
     D: ImageDecoder,
 {
     fn execute(&self, request: FetchRequest, navigation: NavigationId) {
+        // Shared only so a refused spawn, which consumes the job, can still answer the request.
         let request = Arc::new(request);
         let job = {
             let fetcher = Arc::clone(&self.fetcher);

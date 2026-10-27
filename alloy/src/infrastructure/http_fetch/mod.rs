@@ -1,13 +1,13 @@
 //! What a [`FetchRequest`] means over HTTP: the one place a request variant
 //! maps to how it is fetched, and a response maps to a [`FetchPayload`].
 //!
-//! Every request, document or subresource, goes through [`HttpFetcher::send`]:
+//! Every request, document (in `document`) or subresource, goes through [`HttpFetcher::send`]:
 //! policy runs before mechanism (`PRD-009` §3.3), so `decide` is consulted
 //! before [`HttpTransport::execute`] ever opens a socket and a denial costs no
 //! connection. Runs wherever the executor runs it — a worker thread in
 //! production, the caller's own thread in a deterministic test.
 
-use browser::{FetchFailure, FetchPayload, FetchRequest, StylesheetRequest, SubresourceRequest};
+use browser::{FetchPayload, FetchRequest, SubresourceRequest};
 use graphics::Framebuffer;
 use network::{HttpRequest, HttpResponse, HttpTransport, RequestPolicy, StatusCode, Url};
 
@@ -37,15 +37,15 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     pub fn fetch(&self, request: &FetchRequest) -> FetchPayload {
         match request {
             FetchRequest::Document(document) => {
-                let loaded = self.fetch_document(document);
-                FetchPayload::Document(loaded.map_err(|error| describe(&error)))
+                FetchPayload::Document(self.fetch_document(document).map_err(Into::into))
             }
             FetchRequest::Subresource(SubresourceRequest::Stylesheet(stylesheet)) => {
-                self.fetch_stylesheet(stylesheet)
+                let text = self.fetch_stylesheet_text(stylesheet.url());
+                FetchPayload::Stylesheet(stylesheet.media().clone(), text.map_err(Into::into))
             }
             FetchRequest::Subresource(SubresourceRequest::Image(image)) => {
                 let frame = self.fetch_image(image.url());
-                FetchPayload::Image(image.id(), frame.map_err(|error| describe(&error)))
+                FetchPayload::Image(image.id(), frame.map_err(Into::into))
             }
         }
     }
@@ -54,20 +54,12 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
     /// non-`2xx` answer: a fetch that redirected to an error page still
     /// "succeeds" at the transport layer, and an HTML 404/500 body must never
     /// reach a parser as if it were the resource.
-    pub(super) fn send(&self, requested: HttpRequest) -> Result<HttpResponse, AlloyError> {
-        let url = requested.url().clone();
+    fn send(&self, requested: HttpRequest) -> Result<HttpResponse, AlloyError> {
         let verdict = self.policy.decide(&requested)?;
         let request = verdict.into_request(requested)?;
         let response = self.transport.execute(&request)?;
-        ensure_success(&url, response.status())?;
+        ensure_success(request.url(), response.status())?;
         Ok(response)
-    }
-
-    fn fetch_stylesheet(&self, stylesheet: &StylesheetRequest) -> FetchPayload {
-        let text = self
-            .fetch_stylesheet_text(stylesheet.url())
-            .map_err(|error| describe(&error));
-        FetchPayload::Stylesheet(stylesheet.media().clone(), text)
     }
 
     fn fetch_stylesheet_text(&self, url: &Url) -> Result<String, AlloyError> {
@@ -75,9 +67,7 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
         let body = response
             .body()
             .as_str()
-            .ok_or_else(|| AlloyError::NonTextualStylesheet {
-                url: url.to_string(),
-            })?
+            .ok_or_else(|| AlloyError::NonTextualStylesheet { url: url.clone() })?
             .to_owned();
         tracing::debug!(
             %url,
@@ -105,10 +95,7 @@ fn ensure_success(url: &Url, status: StatusCode) -> Result<(), AlloyError> {
     })
 }
 
-/// The error page shows the message; the cause stays in this crate's error.
-fn describe(error: &AlloyError) -> FetchFailure {
-    FetchFailure::new(error.to_string())
-}
+mod document;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

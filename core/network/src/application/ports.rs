@@ -90,19 +90,6 @@ impl PolicyVerdict {
             Self::Deny { reason } => Err(NetworkError::policy_denied(reason)),
         }
     }
-
-    /// The request this verdict says to send, if it says to send one.
-    #[must_use]
-    pub const fn request_to_send<'verdict>(
-        &'verdict self,
-        original: &'verdict HttpRequest,
-    ) -> Option<&'verdict HttpRequest> {
-        match self {
-            Self::Allow => Some(original),
-            Self::Rewrite(rewritten) => Some(rewritten),
-            Self::Deny { .. } => None,
-        }
-    }
 }
 
 #[cfg(test)]

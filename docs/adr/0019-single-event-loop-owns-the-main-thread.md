@@ -73,8 +73,8 @@ The first `alloy <url>` sessions on Wayland opened a window that stayed blank. T
    path, no further frame is ever produced.
 2. **The main-document fetch rendered a silently-empty document.** A non-`2xx`, an empty body, or a non-UTF-8 body all
    became `html::parse("")` → a blank white window, logged only as success. (Fixed in
-   `alloy/src/infrastructure/navigation.rs`: those are now typed `AlloyError`s that fall back to the visible error
-   card.)
+   `alloy/src/infrastructure/http_fetch/document.rs`: those are now typed `AlloyError`s that fall back to the visible
+   error card.)
 
 **Decision.** _Relayout_ (rebuild the display list, bump `LoopStats::relayouts`) and _repaint_ (re-blit the cached
 frame, no pipeline) are separate operations. `WindowSystem` gains **`request_redraw(&mut self)`** — a

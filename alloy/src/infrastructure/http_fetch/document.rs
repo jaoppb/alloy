@@ -8,7 +8,7 @@
 use browser::{DocumentRequest, LoadedDocument};
 use network::{HttpTransport, RequestPolicy};
 
-use super::http_fetch::HttpFetcher;
+use super::HttpFetcher;
 use crate::application::ports::ImageDecoder;
 use crate::error::AlloyError;
 
@@ -25,7 +25,7 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
         &self,
         document: &DocumentRequest,
     ) -> Result<LoadedDocument, AlloyError> {
-        let url = document.url().clone();
+        let url = document.url();
         let response = self.send(document.to_http_request())?;
         if response.body().is_empty() {
             return Err(AlloyError::EmptyDocument {
@@ -39,7 +39,7 @@ impl<T: HttpTransport, P: RequestPolicy, D: ImageDecoder> HttpFetcher<T, P, D> {
                 url: url.to_string(),
             })?;
         let tree = crate::application::html_parse::parse_html(text)?;
-        Ok(LoadedDocument::new(tree, url))
+        Ok(LoadedDocument::new(tree, url.clone()))
     }
 }
 
