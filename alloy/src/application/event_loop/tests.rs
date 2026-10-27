@@ -309,7 +309,7 @@ fn a_resize_before_any_document_counts_no_relayout() {
     );
     assert_eq!(presenter.present_count(), 0);
     assert!(
-        !session.needs_relayout(),
+        !session.has_pending_damage(),
         "the dropped request is not retried"
     );
 }
@@ -451,7 +451,7 @@ fn resizing_below_chrome_height_updates_ui_tree_to_fallback() {
     session.resize(small_size);
 
     assert_eq!(session.ui_tree().viewport(), small_size);
-    assert!(session.ui_tree().content_size().is_err());
+    assert_eq!(session.ui_tree().content_size().unwrap(), None);
     assert_eq!(
         session
             .ui_tree()
@@ -463,7 +463,7 @@ fn resizing_below_chrome_height_updates_ui_tree_to_fallback() {
     let normal_size = SurfaceSize::new(800, 600).unwrap();
     session.resize(normal_size);
     assert_eq!(session.ui_tree().viewport(), normal_size);
-    assert!(session.ui_tree().content_size().is_ok());
+    assert!(session.ui_tree().content_size().unwrap().is_some());
     assert_eq!(
         session
             .ui_tree()

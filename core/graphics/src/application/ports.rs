@@ -27,6 +27,9 @@
 //! undefined output. A backend is reusable: a new `begin_frame` after
 //! `read_back` starts a fresh frame.
 
+use std::sync::Arc;
+
+use super::image_provider::ImageProvider;
 use crate::domain::display_list::DisplayList;
 use crate::domain::error::GraphicsError;
 use crate::domain::framebuffer::Framebuffer;
@@ -37,6 +40,18 @@ use crate::domain::tier::BackendTier;
 pub trait RenderBackend: Send + Sync {
     /// Which technology this backend is built on. Constant for its lifetime.
     fn tier(&self) -> BackendTier;
+
+    /// Replaces the source `DrawImage` commands resolve against.
+    ///
+    /// A backend is long-lived (the layered compositor of `ADR-0019` keeps one
+    /// per layer) while the decoded images belong to the current document, so
+    /// the set must be swappable without rebuilding the backend. Call it
+    /// between frames, and it takes effect from the next [`Self::begin_frame`].
+    /// Binding while a frame is in progress is unspecified: the software
+    /// backend applies it to that frame at once, and no caller needs it
+    /// otherwise (the compositor binds between frames). A backend that draws no
+    /// images accepts and ignores it.
+    fn bind_images(&mut self, images: Arc<dyn ImageProvider>);
 
     /// Starts a frame on a surface of `size`, discarding any previous content.
     fn begin_frame(&mut self, size: SurfaceSize) -> Result<(), GraphicsError>;

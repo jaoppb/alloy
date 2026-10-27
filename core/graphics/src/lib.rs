@@ -57,7 +57,9 @@ pub mod infrastructure;
 /// - `2`: v0.5 Phase B3 — [`FontProvider`] port and `FontUnavailable`.
 /// - `3`: v0.5 Phase X — [`ImageProvider`] port, `ImageUnavailable`, and
 ///   `DrawImage` on the software backend.
-pub const PORT_SCHEMA_VERSION: u32 = 3;
+/// - `4`: #108 — [`RenderBackend::bind_images`], so a long-lived backend can follow the
+///   current document's images (`PRD-005` §6).
+pub const PORT_SCHEMA_VERSION: u32 = 4;
 
 pub use application::conformance;
 pub use application::{DisplayListBuilder, FontProvider, ImageProvider, PxRect, RenderBackend};

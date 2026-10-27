@@ -449,6 +449,10 @@ impl<F: FontProvider> RenderBackend for SoftwareCpuBackend<F> {
         BackendTier::Software
     }
 
+    fn bind_images(&mut self, images: Arc<dyn ImageProvider>) {
+        self.images = images;
+    }
+
     fn begin_frame(&mut self, size: SurfaceSize) -> Result<(), GraphicsError> {
         // Valid from `Idle` and from `Presented`: a backend is reusable, and a
         // new frame after a read-back is the normal case. Only a nested frame is

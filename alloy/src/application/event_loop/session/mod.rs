@@ -9,42 +9,40 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use browser::{
     BrowserEffect, BrowsingContext, Effects, FetchResult, LinkTargets, MarkupDiscoverer,
 };
-use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
+use graphics::{FontProvider, RenderBackend};
 use network::{HttpTransport, RequestPolicy, Url};
 use region::ContentRegion;
-use ui::{
-    OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
-    UiHitTarget, UiRenderTree,
-};
+use ui::{OmniboxController, OmniboxEffect, Theme, UiHitTarget, UiRenderTree};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
 
-use super::frame::CachedFrame;
 use super::stats::LoopStats;
 use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
-use crate::application::paint::DEFAULT_FONT;
-use crate::application::pipeline::{render_dom_with_links, surface_length_to_au};
+use crate::application::compositor::{
+    ChromeScene, Compositor, ContentScene, Damage, Layout, PendingDamage, Presented, Rendered,
+    Scene,
+};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
-/// the arity limit: the browsing context, the current viewport, and the
-/// running relayout count.
+/// the arity limit: the browsing context, the current viewport, the damage
+/// waiting for the compositor, and the running relayout count.
 ///
 /// Rebuilding a fresh display list from the context's document on every
 /// relayout is the same "immutable snapshot in, immutable snapshot out"
 /// discipline the render pipeline itself uses (`ADR-0010:114-117`), applied
 /// to the state a live session must keep between frames.
 ///
-/// Every field is private: `dirty` → [`Session::relayout`] → clean, and the
-/// context's link regions always describing `last_frame`, are invariants only
-/// this type's methods may move.
-pub struct Session<F, T, P> {
+/// Every field is private: `damage` → [`Session::render`] → clean, and the
+/// context's link regions always describing the content layer last rastered,
+/// are invariants only this type's methods may move.
+pub struct Session<F, T, P, B> {
     services: BrowserServices<F, T, P>,
     browsing: BrowsingContext<MarkupDiscoverer>,
     pointer_position: Option<PhysicalPosition>,
-    dirty: bool,
+    damage: PendingDamage,
     viewport: SurfaceSize,
-    last_frame: Option<CachedFrame>,
+    compositor: Compositor<B>,
     relayouts: usize,
     omnibox: OmniboxController,
     /// Where the fetch workers report. One channel for the session's life: a
@@ -59,23 +57,31 @@ pub struct Session<F, T, P> {
     ui_tree: UiRenderTree,
 }
 
-impl<F, T, P> Session<F, T, P>
+impl<F, T, P, B> Session<F, T, P, B>
 where
     F: FontProvider + 'static,
     T: HttpTransport + 'static,
     P: RequestPolicy + 'static,
+    B: RenderBackend,
 {
-    pub fn new(viewport: SurfaceSize, services: BrowserServices<F, T, P>) -> Self {
+    pub fn new(
+        viewport: SurfaceSize,
+        services: BrowserServices<F, T, P>,
+        compositor: Compositor<B>,
+    ) -> Self {
         let (outbox, inbox) = mpsc::channel();
         let theme = Theme::DEFAULT;
         let ui_tree = ui_tree_for(viewport, &theme, []);
+        let mut damage = PendingDamage::default();
+        // The chrome has never been rastered: the first frame needs it.
+        damage.record(Damage::Chrome);
         Self {
             services,
             browsing: BrowsingContext::new(MarkupDiscoverer),
             pointer_position: None,
-            dirty: false,
+            damage,
             viewport,
-            last_frame: None,
+            compositor,
             relayouts: 0,
             omnibox: OmniboxController::new(),
             inbox,
@@ -101,17 +107,13 @@ where
         &mut self.omnibox
     }
 
-    /// Executes an effect emitted by the omnibox controller.
-    ///
-    /// Returns `true` if a platform redraw is requested.
-    pub fn execute_omnibox_effect(&mut self, effect: OmniboxEffect) -> bool {
+    /// Executes an effect emitted by the omnibox controller: a redraw is
+    /// chrome damage, never a relayout of the document.
+    pub fn execute_omnibox_effect(&mut self, effect: OmniboxEffect) {
         match effect {
-            OmniboxEffect::None => false,
-            OmniboxEffect::Redraw => true,
-            OmniboxEffect::Navigate(url) => {
-                self.navigate(url);
-                true
-            }
+            OmniboxEffect::None => {}
+            OmniboxEffect::Redraw => self.damage.record(Damage::Chrome),
+            OmniboxEffect::Navigate(url) => self.navigate(url),
         }
     }
 
@@ -131,15 +133,17 @@ where
         self.pointer_position = position;
     }
 
-    /// Adopts the new viewport; the next [`Session::relayout`] lays out at it.
+    /// Adopts the new viewport; the next [`Session::render`] sizes both layers
+    /// to it.
     pub fn resize(&mut self, viewport: SurfaceSize) {
         self.viewport = viewport;
         self.ui_tree = ui_tree_for(viewport, &self.theme, self.browsing.content_regions());
-        self.dirty = true;
+        self.damage.record(Damage::Viewport);
     }
 
-    pub const fn needs_relayout(&self) -> bool {
-        self.dirty
+    #[cfg(test)]
+    pub const fn has_pending_damage(&self) -> bool {
+        !self.damage.is_empty()
     }
 
     /// Starts navigating to `url`; the document arrives later as a
@@ -163,20 +167,22 @@ where
     }
 
     /// Carries out what the browsing context asked for: fetches run on worker
-    /// threads, the omnibox follows the URL, damage schedules a relayout.
+    /// threads, the omnibox follows the URL (chrome damage), document damage
+    /// schedules a relayout.
     fn execute_browser_effects(&mut self, effects: Effects) {
         for effect in effects {
             match effect {
                 BrowserEffect::NavigationStarted(_, url)
                 | BrowserEffect::DocumentLoaded(_, url) => {
                     self.omnibox.reset_to_url(&url);
+                    self.damage.record(Damage::Chrome);
                 }
                 BrowserEffect::Fetch(request, navigation) => {
                     let transport = Arc::clone(self.services.transport());
                     let policy = Arc::clone(self.services.policy());
                     spawn_fetch(request, navigation, transport, policy, self.outbox.clone());
                 }
-                BrowserEffect::ContentDamaged(_) => self.dirty = true,
+                BrowserEffect::ContentDamaged(_) => self.damage.record(Damage::Content),
             }
         }
     }
@@ -192,6 +198,7 @@ where
         match target {
             UiHitTarget::Omnibox | UiHitTarget::Chrome => {
                 self.omnibox.focus();
+                self.damage.record(Damage::Chrome);
             }
             UiHitTarget::PageLink(region) => {
                 let effects = self.browsing.follow_link(region);
@@ -201,62 +208,80 @@ where
         }
     }
 
-    /// Rebuilds the display list from the current document, viewport and
-    /// subresources, presents it, and caches the pixels for a later cheap
-    /// [`Session::repaint`]. The only path that bumps `stats.relayouts`, and
-    /// only once a frame was actually presented — the I4 coalescing proof
-    /// and `run_browser_until_first_frame` both rest on that. With no
-    /// document yet there is nothing to lay out, and the request is dropped.
-    pub fn relayout<R: Presenter>(&mut self, presenter: &mut R) -> Result<(), AlloyError> {
-        self.dirty = false;
-        let Some(document) = self.browsing.document() else {
-            return Ok(());
+    /// Rasters whatever the accumulated damage invalidated, composes the
+    /// layers and presents once.
+    ///
+    /// Chrome damage re-rasters the chrome strip only. Content damage is the
+    /// relayout — the only path that bumps `stats.relayouts`, and only once a
+    /// frame laid out from a document was actually presented (the I4
+    /// coalescing proof and `run_browser_until_first_frame` both rest on that).
+    /// With no document yet there is nothing to lay out, and that damage is
+    /// dropped. A render that fails puts its damage back, so nothing it
+    /// consumed is lost.
+    pub fn render<R: Presenter>(&mut self, presenter: &mut R) -> Result<Presented, AlloyError> {
+        let damage = self.damage.take();
+        let rendered = match self.render_damage(damage, presenter) {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                self.damage.restore(damage);
+                return Err(error);
+            }
         };
-        let graphics_size = self.ui_tree.content_size()?;
-        let (content_framebuffer, links) = render_dom_with_links(
-            document.tree(),
-            document.sheets().clone(),
-            document.images(),
-            graphics_size,
-            Arc::clone(self.services.font_provider()),
-        )?;
-        let chrome_framebuffer = render_chrome(
-            self.omnibox.state(),
-            self.theme.omnibox(),
-            self.ui_tree.chrome_size()?,
-            Arc::clone(self.services.font_provider()),
-        )?;
-        let frame = CachedFrame::compose(&chrome_framebuffer, &content_framebuffer, self.viewport)?;
-        frame.present(presenter)?;
-        self.commit_layout(links, frame);
-        Ok(())
+        let shown = rendered.presented();
+        self.commit_layout(rendered.into_layout(), shown);
+        Ok(shown)
     }
 
-    /// Adopts a presented layout in one step, so the link regions, the UI tree
-    /// hit-testing them and the cached frame never describe different layouts.
-    /// Nothing here can fail: everything fallible ran before the frame was shown.
-    fn commit_layout(&mut self, links: LinkTargets, frame: CachedFrame) {
+    fn render_damage<R: Presenter>(
+        &mut self,
+        damage: PendingDamage,
+        presenter: &mut R,
+    ) -> Result<Rendered, AlloyError> {
+        let scene = Scene::new(
+            ChromeScene::new(
+                self.omnibox.state(),
+                self.theme.omnibox(),
+                self.ui_tree.chrome_size()?,
+            ),
+            ContentScene::new(self.browsing.document(), self.ui_tree.content_size()?),
+            self.services.font_provider(),
+            self.viewport,
+        );
+        self.compositor.render(damage, &scene, presenter)
+    }
+
+    /// Adopts a rastered layout in one step, so the link regions and the UI
+    /// tree hit-testing them never describe a different layout than the
+    /// content layer. Nothing here can fail: everything fallible ran before the
+    /// frame was shown.
+    fn commit_layout(&mut self, layout: Layout, shown: Presented) {
+        let links = match layout {
+            Layout::Untouched => return,
+            Layout::NoRows => LinkTargets::default(),
+            Layout::Done(links) => {
+                self.count_relayout(shown);
+                links
+            }
+        };
         self.browsing.layout_completed(links);
         self.ui_tree = ui_tree_for(self.viewport, &self.theme, self.browsing.content_regions());
-        self.last_frame = Some(frame);
-        self.relayouts = self.relayouts.saturating_add(1);
     }
 
-    /// Re-blits the frame [`Session::relayout`] last produced, with no
-    /// pipeline work and without touching `stats.relayouts`. A no-op before
-    /// the first frame. Serves `RedrawRequested`: a compositor
-    /// expose/occlusion, or the redraw winit re-arms once a Wayland surface
-    /// that dropped the first present is finally configured.
+    const fn count_relayout(&mut self, shown: Presented) {
+        if shown.is_shown() {
+            self.relayouts = self.relayouts.saturating_add(1);
+        }
+    }
+
+    /// Presents the last composed frame again, with no raster work and without
+    /// touching `stats.relayouts`.
     pub fn repaint<R: Presenter>(&self, presenter: &mut R) -> Result<(), AlloyError> {
-        let Some(frame) = self.last_frame.as_ref() else {
-            return Ok(());
-        };
-        frame.present(presenter)
+        self.compositor.repaint(presenter)
     }
 }
 
 /// The UI tree for `viewport`, or the inert fallback when the viewport cannot
-/// hold the chrome (#118 tracks making that a visible state).
+/// hold the chrome; the compositor then shows the chrome alone (#118).
 fn ui_tree_for(
     viewport: SurfaceSize,
     theme: &Theme,
@@ -266,34 +291,9 @@ fn ui_tree_for(
         .unwrap_or_else(|_| UiRenderTree::fallback(viewport, theme.omnibox()))
 }
 
-fn render_chrome<F: FontProvider + 'static>(
-    omnibox: &OmniboxState,
-    theme: &OmniboxTheme,
-    chrome_size: graphics::SurfaceSize,
-    font_provider: Arc<F>,
-) -> Result<graphics::Framebuffer, AlloyError> {
-    let mut builder = DisplayListBuilder::new();
-    let painter = OmniboxPainter::new(font_provider.as_ref())
-        .with_theme(*theme)
-        .with_font(DEFAULT_FONT);
-    painter.paint(
-        omnibox,
-        surface_length_to_au(chrome_size.width())?.to_px(),
-        &mut builder,
-    )?;
-    let display_list = builder.build()?;
-
-    let mut backend = SoftwareCpuBackend::with_font_provider(font_provider);
-    backend.begin_frame(chrome_size)?;
-    backend.submit(&display_list)?;
-    backend.end_frame()?;
-    let framebuffer = backend.read_back()?;
-    Ok(framebuffer)
-}
-
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
-impl<F, T, P> Session<F, T, P> {
+impl<F, T, P, B> Session<F, T, P, B> {
     pub const fn omnibox(&self) -> &OmniboxController {
         &self.omnibox
     }
@@ -319,7 +319,7 @@ impl<F, T, P> Session<F, T, P> {
     }
 
     pub const fn has_frame(&self) -> bool {
-        self.last_frame.is_some()
+        self.compositor.has_frame()
     }
 
     pub fn has_links(&self) -> bool {
