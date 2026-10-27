@@ -17,7 +17,7 @@
 
 use window::{KeyCode, KeyEvent, Modifiers};
 
-use crate::application::omnibox::{EditKey, OmniboxInput};
+use ui::{EditKey, OmniboxInput};
 
 /// The omnibox input `event` stands for, or `None` when it stands for none.
 ///

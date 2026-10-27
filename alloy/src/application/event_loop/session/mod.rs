@@ -7,21 +7,23 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use browser::{
-    BrowserEffect, BrowsingContext, ContentRegion, Effects, FetchResult, LinkTargets,
-    MarkupDiscoverer,
+    BrowserEffect, BrowsingContext, Effects, FetchResult, LinkTargets, MarkupDiscoverer,
 };
 use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
 use network::{HttpTransport, RequestPolicy, Url};
+use region::ContentRegion;
+use ui::{
+    OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
+    UiHitTarget, UiRenderTree,
+};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
 
 use super::frame::CachedFrame;
-use super::render_tree::{UiHitTarget, UiRenderTree};
 use super::stats::LoopStats;
 use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
-use crate::application::omnibox::{OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState};
+use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::{render_dom_with_links, surface_length_to_au};
-use crate::application::theme::{OmniboxTheme, Theme};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
@@ -271,7 +273,9 @@ fn render_chrome<F: FontProvider + 'static>(
     font_provider: Arc<F>,
 ) -> Result<graphics::Framebuffer, AlloyError> {
     let mut builder = DisplayListBuilder::new();
-    let painter = OmniboxPainter::new(font_provider.as_ref()).with_theme(*theme);
+    let painter = OmniboxPainter::new(font_provider.as_ref())
+        .with_theme(*theme)
+        .with_font(DEFAULT_FONT);
     painter.paint(
         omnibox,
         surface_length_to_au(chrome_size.width())?.to_px(),

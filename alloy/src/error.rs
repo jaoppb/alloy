@@ -93,3 +93,11 @@ pub enum AlloyError {
     #[error("{url} returned a document body that is not valid UTF-8 text")]
     NonTextualDocument { url: String },
 }
+
+impl From<ui::UiError> for AlloyError {
+    fn from(error: ui::UiError) -> Self {
+        match error {
+            ui::UiError::InvalidDimensions => Self::InvalidDimensions,
+        }
+    }
+}

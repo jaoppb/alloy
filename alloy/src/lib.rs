@@ -12,11 +12,6 @@ pub mod error;
 pub mod logging;
 
 pub use application::browser_services::BrowserServices;
-pub use application::omnibox::{
-    ChromeHeight, CursorPosition, OmniboxBuffer, OmniboxController, OmniboxEffect, OmniboxInput,
-    OmniboxPainter, OmniboxState, OmniboxTheme, Theme, compute_cursor_offset, paint_omnibox,
-    paint_omnibox_with_theme,
-};
 pub use application::paint::paint_box_tree;
 pub use application::pipeline::{
     DEFAULT_FONT_SIZE, RenderOptions, default_runtime_font_provider, render_dom,
@@ -24,10 +19,8 @@ pub use application::pipeline::{
     render_html_with_font_provider, run_render,
 };
 pub use application::runtime_font::RuntimeFontProvider;
-pub use application::theme;
 pub use application::{
-    LoopStats, UiHitTarget, UiNode, UiNodeChildren, UiNodeKind, UiRenderTree,
-    initial_window_attributes, navigate, run_browser, run_browser_until,
+    LoopStats, initial_window_attributes, navigate, run_browser, run_browser_until,
     run_browser_until_first_frame,
 };
 pub use error::AlloyError;

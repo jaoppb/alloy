@@ -52,6 +52,12 @@ typed defect enum rather than a free-form string: `UrlDefect` (malformed URL tex
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
 | **1**   | Surface introduced in v0.5 Phase C1 (transport) and Phase M (policy); frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`/`navigation`/`subresource`). | —              |
 
+**Not a migration — `OmniboxClassifier`, `OmniboxDestination` and `SearchTemplate` left the crate (#109, epic #110
+decision 11).** They moved to `core/ui` with `core/network/tests/omnibox_classifier.rs`, and `network` no longer
+re-exports them. They were never part of this port: the boundary aggregates of item 3 are `HttpRequest`, `HttpResponse`,
+`NetworkError` and `PolicyVerdict`, and the classifier is address-bar policy that only consumes `Url`/`NetworkError`. No
+transport or policy adapter names them, so `PORT_SCHEMA_VERSION` stays `1`.
+
 ---
 
 ## 5. Lifecycle and concurrency contract (item 5)

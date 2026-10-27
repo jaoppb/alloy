@@ -96,7 +96,6 @@ pub use domain::error::NetworkError;
 pub use domain::header_map::{HeaderMap, HeaderName, HeaderValue};
 pub use domain::media_type::{Charset, MediaType, MediaTypeName};
 pub use domain::method::Method;
-pub use domain::omnibox::{OmniboxClassifier, OmniboxDestination, SearchTemplate};
 pub use domain::phase::ProtocolPhase;
 pub use domain::request::HttpRequest;
 pub use domain::response::HttpResponse;

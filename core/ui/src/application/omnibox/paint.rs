@@ -9,14 +9,14 @@ use graphics::{
     GraphicsError, Point, Px, PxRect, Rect, Size,
 };
 
-use super::state::OmniboxState;
-use crate::application::paint::DEFAULT_FONT;
-pub use crate::application::theme::{
-    CARET_COLOR, CARET_WIDTH, CHROME_BACKGROUND_COLOR, ChromeHeight, DEFAULT_CHROME_HEIGHT,
-    FOCUS_BORDER_COLOR, FOCUS_BORDER_WIDTH, FOCUS_INNER_RADIUS, INPUT_BACKGROUND_COLOR,
-    INPUT_BOX_HEIGHT, INPUT_BOX_MARGIN_X, INPUT_BOX_RADIUS, OmniboxTheme, TEXT_COLOR,
-    TEXT_PADDING_X, Theme,
-};
+use crate::domain::omnibox::OmniboxState;
+use crate::domain::theme::{ChromeHeight, OmniboxTheme};
+
+/// The font the chrome draws with unless told otherwise.
+///
+/// The id the default face is registered under in the font provider; `alloy`'s
+/// page painter uses the same id (`DEFAULT_FONT`), pinned equal by a test there.
+pub const CHROME_FONT: FontId = FontId::new(1);
 
 /// Declarative painter for the browser omnibox navigation chrome.
 pub struct OmniboxPainter<'a, F: FontProvider> {
@@ -48,7 +48,7 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
     pub const fn new(font_provider: &'a F) -> Self {
         Self {
             font_provider,
-            font: DEFAULT_FONT,
+            font: CHROME_FONT,
             theme: OmniboxTheme::DEFAULT,
         }
     }
@@ -101,6 +101,10 @@ impl<'a, F: FontProvider> OmniboxPainter<'a, F> {
     }
 
     /// Paints the omnibox chrome into the display list builder.
+    ///
+    /// # Errors
+    ///
+    /// [`GraphicsError`] when the font provider lacks the face or a glyph.
     pub fn paint(
         &self,
         state: &OmniboxState,
@@ -274,6 +278,10 @@ fn paint_unfocused_border(
 }
 
 /// Paints the browser omnibox chrome bar into a [`DisplayListBuilder`].
+///
+/// # Errors
+///
+/// [`GraphicsError`] when the font provider lacks the face or a glyph.
 pub fn paint_omnibox<F: FontProvider>(
     state: &OmniboxState,
     width: Px,
@@ -284,6 +292,10 @@ pub fn paint_omnibox<F: FontProvider>(
 }
 
 /// Paints the browser omnibox chrome bar using a custom [`OmniboxTheme`].
+///
+/// # Errors
+///
+/// [`GraphicsError`] when the font provider lacks the face or a glyph.
 pub fn paint_omnibox_with_theme<F: FontProvider>(
     state: &OmniboxState,
     width: Px,
@@ -297,6 +309,10 @@ pub fn paint_omnibox_with_theme<F: FontProvider>(
 }
 
 /// Computes the horizontal advance in [`Au`] from the start of the text to the cursor.
+///
+/// # Errors
+///
+/// [`GraphicsError`] when the font provider lacks the face or a glyph.
 pub fn compute_cursor_offset<F: FontProvider>(
     state: &OmniboxState,
     font: FontId,

@@ -1,7 +1,8 @@
-//! The links of the last layout, addressed by [`RegionId`] (see [`super::region`]).
+//! The links of the last layout, addressed by [`RegionId`].
 
-use super::region::{ContentRegion, LayoutEpoch, LinkTargets, RegionId};
-use crate::domain::ContextId;
+use region::{ContentRegion, ContextId, LayoutEpoch, RegionId};
+
+use super::link_target::LinkTargets;
 
 /// Why a [`RegionId`] could not be resolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -36,7 +37,7 @@ impl ContentRegions {
     pub const fn new(context: ContextId) -> Self {
         Self {
             context,
-            epoch: LayoutEpoch(0),
+            epoch: LayoutEpoch::INITIAL,
             targets: LinkTargets::none(),
         }
     }
@@ -63,13 +64,9 @@ impl ContentRegions {
         (&self.targets)
             .into_iter()
             .enumerate()
-            .map(|(index, target)| ContentRegion {
-                id: RegionId {
-                    context: self.context,
-                    epoch: self.epoch,
-                    index,
-                },
-                bounds: target.area(),
+            .map(|(index, target)| {
+                let id = RegionId::new(self.context, self.epoch, index);
+                ContentRegion::new(id, target.area())
             })
     }
 
@@ -80,19 +77,20 @@ impl ContentRegions {
     /// [`RegionError`] when `id` belongs to another context, to an earlier
     /// layout or document, or to no link at all.
     pub fn href(&self, id: RegionId) -> Result<&str, RegionError> {
-        if id.context != self.context {
-            return Err(RegionError::WrongContext(id.context));
+        if id.context() != self.context {
+            return Err(RegionError::WrongContext(id.context()));
         }
-        if id.epoch != self.epoch {
+        if id.epoch() != self.epoch {
             return Err(RegionError::Stale {
-                minted: id.epoch,
+                minted: id.epoch(),
                 current: self.epoch,
             });
         }
+        let index = id.index();
         self.targets
-            .get(id.index)
-            .map(super::region::LinkTarget::href)
-            .ok_or(RegionError::Unknown(id.index))
+            .get(index)
+            .map(super::link_target::LinkTarget::href)
+            .ok_or(RegionError::Unknown(index))
     }
 }
 
@@ -100,8 +98,9 @@ impl ContentRegions {
 mod tests {
     use graphics::{Au, Point, Rect, Size};
 
+    use region::ContextId;
+
     use super::{ContentRegions, RegionError};
-    use crate::domain::ContextId;
     use crate::domain::LinkTarget;
 
     fn link(href: &str) -> LinkTarget {

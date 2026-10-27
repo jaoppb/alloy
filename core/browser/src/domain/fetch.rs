@@ -8,8 +8,9 @@ use css::MediaQuery;
 use dom::DomTree;
 use graphics::{Framebuffer, ImageId};
 use network::Url;
+use region::ContextId;
 
-use crate::domain::{ContextId, NavigationId, SubresourceRequest};
+use crate::domain::{NavigationId, SubresourceRequest};
 
 /// Something for an executor to fetch.
 #[derive(Clone, Debug, PartialEq)]

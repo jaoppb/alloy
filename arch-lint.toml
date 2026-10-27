@@ -165,6 +165,25 @@ paths = ["core/browser/src/application/**"]
 name = "browser"
 paths = ["core/browser/**"]
 
+# The browser chrome (#109, ADR-0026): the other sibling. It sees the page only as opaque
+# `region::ContentRegion`s, so it names neither `browser` nor the document crates.
+[[scopes]]
+name = "ui-domain"
+paths = ["core/ui/src/domain/**"]
+
+[[scopes]]
+name = "ui-application"
+paths = ["core/ui/src/application/**"]
+
+[[scopes]]
+name = "ui"
+paths = ["core/ui/**"]
+
+# The ids `ui` and `browser` share so neither depends on the other (ADR-0026). A leaf.
+[[scopes]]
+name = "region"
+paths = ["core/region/**"]
+
 [[scopes]]
 name = "platform-domain"
 paths = ["core/platform/src/domain/**"]
@@ -257,8 +276,29 @@ message = "Browser domain layer must not depend on application ports, engine, ru
 # engine, a script runtime, the bindings crate, the CLI, or the window system.
 [[deny-scope-dep]]
 from = "browser"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "core/browser must not depend on engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
+to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "ui"]
+message = "core/browser must not depend on core/ui, engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
+
+# UI domain layer must not depend on the application layer or any adapter crate.
+[[deny-scope-dep]]
+from = "ui-domain"
+to = ["ui-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
+message = "UI domain layer must not depend on application, engine, runtime, bindings, or CLI."
+
+# core/ui is the chrome: it may use graphics, window and network (domain types) and the shared
+# `region` ids — never the browsing context, the document crates, the engine, a script runtime
+# or the CLI (ADR-0026).
+[[deny-scope-dep]]
+from = "ui"
+to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "browser", "dom", "css", "html"]
+message = "core/ui must not depend on core/browser, dom, css, html, engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
+
+# core/region is a leaf: the one vocabulary `ui` and `browser` share. It carries a `Rect`
+# and nothing else (ADR-0026).
+[[deny-scope-dep]]
+from = "region"
+to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "browser", "ui", "dom", "css", "html", "network", "window"]
+message = "core/region is a leaf shared by ui and browser; it may depend on graphics only (ADR-0026)."
 
 # core/network is a pure transport-and-policy domain: no engine, no runtime, no
 # other subsystem. The scriptable RequestPolicy of Phase M lives in
@@ -429,6 +469,46 @@ name = "browser-isolated"
 scope = "browser"
 deny = ["engine::*", "ui::*", "window::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
 message = "core/browser must not import the engine, a script runtime, core/ui, or the window system — alloy's executor mediates between the sibling effect enums (ADR-0026)."
+
+# #109 / ADR-0026: the chrome and the browsing context are siblings joined by `alloy`'s executor.
+# `ui` takes its hit regions as `region::ContentRegion`, so it never imports `browser`, and it
+# owns no thread (the converse of `browser-isolated`).
+[[restrict-use]]
+name = "ui-isolated"
+scope = "ui"
+deny = [
+    "browser::*",
+    "dom::*",
+    "css::*",
+    "html::*",
+    "engine::*",
+    "rhai::*",
+    "rhai_runtime::*",
+    "rhai_bindings::*",
+    "std::thread",
+    "std::thread::*",
+]
+message = "core/ui must not import core/browser, the document crates, the engine, a script runtime, or std::thread — alloy's executor mediates between the sibling effect enums (ADR-0026)."
+
+[[restrict-use]]
+name = "region-isolated"
+scope = "region"
+deny = [
+    "browser::*",
+    "ui::*",
+    "dom::*",
+    "css::*",
+    "html::*",
+    "network::*",
+    "window::*",
+    "engine::*",
+    "rhai::*",
+    "rhai_runtime::*",
+    "rhai_bindings::*",
+    "std::thread",
+    "std::thread::*",
+]
+message = "core/region is the leaf ui and browser share; it imports graphics and nothing else (ADR-0026)."
 
 [[restrict-use]]
 name = "platform-isolated"

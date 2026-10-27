@@ -360,3 +360,15 @@ impl Theme {
         &self.omnibox
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ChromeHeight;
+
+    #[test]
+    fn chrome_height_display_formats_with_pixels_unit() {
+        let default_height = ChromeHeight::DEFAULT;
+        let formatted = format!("{default_height}");
+        assert_eq!(formatted, "42px");
+    }
+}

@@ -19,6 +19,8 @@ html = { path = "../html" }
 graphics = { path = "../graphics", default-features = false }
 # `Url`, `HttpRequest`-side vocabulary; the sockets and TLS stay off.
 network = { path = "../network", default-features = false }
+# `RegionId`/`ContextId`, the ids it mints and `core/ui` hands back (ADR-0026).
+region = { path = "../region" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
