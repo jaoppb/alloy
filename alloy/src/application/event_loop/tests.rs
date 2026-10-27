@@ -309,7 +309,7 @@ fn a_resize_before_any_document_counts_no_relayout() {
     );
     assert_eq!(presenter.present_count(), 0);
     assert!(
-        !session.needs_relayout(),
+        !session.has_pending_damage(),
         "the dropped request is not retried"
     );
 }

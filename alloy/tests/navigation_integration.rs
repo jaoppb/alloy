@@ -12,8 +12,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
-use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
-use graphics::SyntheticFontProvider;
+use alloy::{BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until};
+use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
@@ -30,12 +30,21 @@ use window::{
 fn services(
     transport: MockTransport,
 ) -> BrowserServices<SyntheticFontProvider, MockTransport, AllowAllPolicy> {
-    let font_provider =
-        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
     BrowserServices::new(
-        font_provider,
+        font_provider(),
         Arc::new(transport),
         Arc::new(AllowAllPolicy::new()),
+    )
+}
+
+fn font_provider() -> Arc<SyntheticFontProvider> {
+    Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE))
+}
+
+fn compositor() -> Compositor<SoftwareCpuBackend<SyntheticFontProvider>> {
+    Compositor::new(
+        SoftwareCpuBackend::with_font_provider(font_provider()),
+        SoftwareCpuBackend::with_font_provider(font_provider()),
     )
 }
 
@@ -160,6 +169,7 @@ fn clicking_a_link_navigates_to_destination_page() {
     let stats = run_browser_until(
         &url_a,
         services(transport),
+        compositor(),
         &mut system,
         &mut presenter,
         size,
@@ -206,6 +216,7 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
     let stats = run_browser_until(
         &start_url,
         services(transport),
+        compositor(),
         &mut system,
         &mut presenter,
         size,
@@ -239,6 +250,7 @@ fn navigate_once(start_url: &Url, response: HttpResponse) -> alloy::LoopStats {
     let stats = run_browser_until(
         start_url,
         services(transport),
+        compositor(),
         &mut system,
         &mut presenter,
         size,

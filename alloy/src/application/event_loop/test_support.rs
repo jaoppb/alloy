@@ -5,27 +5,37 @@
 use std::sync::Arc;
 
 use browser::{FetchPayload, FetchResult, LoadedDocument};
-use graphics::SyntheticFontProvider;
+use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::{AllowAllPolicy, MockTransport};
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
 use super::session::Session;
 use super::{initial_window_attributes, pump_once};
 use crate::application::browser_services::BrowserServices;
+use crate::application::compositor::Compositor;
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
 
-pub(super) type TestSession = Session<SyntheticFontProvider, MockTransport, AllowAllPolicy>;
+pub(super) type TestSession = Session<
+    SyntheticFontProvider,
+    MockTransport,
+    AllowAllPolicy,
+    SoftwareCpuBackend<SyntheticFontProvider>,
+>;
 
 pub(super) fn session_over(transport: MockTransport, viewport: SurfaceSize) -> TestSession {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    let compositor = Compositor::new(
+        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
+        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
+    );
     let services = BrowserServices::new(
         font_provider,
         Arc::new(transport),
         Arc::new(AllowAllPolicy::new()),
     );
-    Session::new(viewport, services)
+    Session::new(viewport, services, compositor)
 }
 
 /// The URL a link click navigated to: keeps pumping until the click's

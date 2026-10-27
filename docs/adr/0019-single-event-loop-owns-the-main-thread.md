@@ -114,4 +114,38 @@ with no threads and no sleeps. `alloy/src/application/event_loop/worker.rs` is t
 Link clicks use the same discipline: a `RegionId` carries a `LayoutEpoch` that bumps on every layout and document swap,
 and a stale one is logged and ignored instead of resolving to whatever now sits at its index.
 
-The `Damage` signal (`Chrome` / `Content` / `Viewport`) amends this ADR separately with #108.
+---
+
+## Amendment — 2026-10-27: three damage signals and a layered compositor (#108, epic #110)
+
+The addendum above has two signals: relayout (everything) and repaint (re-present the cached frame). A change to the
+chrome alone — omnibox text, focus, selection — fits neither: it needs new chrome pixels but not a new layout. With only
+two signals it had no correct path, so typing was invisible until the next relayout (#116), and a viewport shorter than
+the chrome made the relayout fail and end the session (#118).
+
+**Decision.** `alloy`'s `Compositor` (`alloy/src/application/compositor/`) owns the raster backends, reaches them only
+through the `RenderBackend` port (injected at the composition root), and caches the **chrome** and **content** layers as
+separate pixel buffers. A change is reported as `Damage`, accumulated per pump cycle:
+
+| Signal                 | Re-rasters                       | Bumps `stats.relayouts` |
+| ---------------------- | -------------------------------- | ----------------------- |
+| `Damage::Chrome`       | the chrome strip, then recompose | **never**               |
+| `Damage::Content`      | cascade → layout → paint → content raster, then recompose | yes — the only path |
+| `Damage::Viewport`     | both layers, at sizes recomputed from the viewport | only if content rows were laid out |
+| `RedrawRequested`      | nothing — re-presents the composed frame | no       |
+
+- **`Damage::Chrome` never increments `stats.relayouts`.** Typing in the omnibox must not relayout the DOM (epic #43),
+  and the presented chrome rows must show the typed text.
+- **Coalescing is unchanged in kind:** damage is one flag per layer, so N signals in a pump cycle cost at most one
+  chrome raster and one content relayout, and one present.
+- **An empty content layer is valid.** A viewport no taller than the chrome composes the top of the chrome and no
+  content; the document is not laid out and `relayouts` does not move. Growing the viewport lays it out again.
+- **Nothing is presented until both layers exist:** a chrome change before the first document is rastered but not shown,
+  as a resize before the first document always was.
+- `RenderBackend` gains `bind_images` (`graphics::PORT_SCHEMA_VERSION` 3 → 4, `PRD-005` §6): the compositor keeps one
+  long-lived backend per layer, so the content backend's image source must follow the current document instead of being
+  fixed at construction. Fonts stay constructor-bound.
+
+The trade: two backends and two cached buffers instead of one, and a compose (a memory copy of the viewport) on every
+chrome change. What it buys is that the chrome and the page invalidate independently, and that the compositor is the one
+place that knows how a viewport divides into layers.
