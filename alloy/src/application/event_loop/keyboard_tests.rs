@@ -208,7 +208,7 @@ fn an_editing_key_under_a_command_modifier_is_dropped() {
     assert_eq!(
         session.omnibox().text(),
         "abc",
-        "Ctrl/Alt/Super+Backspace are chords for the keymap (#113), not edits"
+        "Ctrl/Alt/Super+Backspace are chords for the keymap, not edits"
     );
 }
 
@@ -279,9 +279,10 @@ fn altgr_with_a_command_modifier_still_types_when_no_binding_matches() {
 }
 
 #[test]
-fn a_bound_chord_wins_over_altgr_insert() {
-    // ADR-0027: the keymap match comes before AltGr insert, so Ctrl+AltGr+L is
-    // the focus shortcut, not the text "l".
+fn the_default_keymap_binds_no_altgr_chord_so_ctrl_altgr_l_types() {
+    // Chords match modifiers exactly (`ui::KeyChord`), so the default Ctrl+L
+    // does not fire with AltGr also held. A keymap that binds Ctrl+AltGr+L wins
+    // over the AltGr insert: pinned by `ui`'s router tests (ADR-0027 step 1).
     let (mut system, mut presenter, mut session) = focused_omnibox_holding_abc();
 
     chord(
@@ -292,8 +293,7 @@ fn a_bound_chord_wins_over_altgr_insert() {
     );
     pump(&mut system, &mut presenter, &mut session);
 
-    assert_eq!(session.omnibox().text(), "abc");
-    assert!(session.omnibox().is_all_selected());
+    assert_eq!(session.omnibox().text(), "abcl");
 }
 
 #[test]

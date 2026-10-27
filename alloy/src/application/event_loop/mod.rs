@@ -12,7 +12,6 @@
 //! pump cycles cost one relayout, not ten or fifty.
 
 mod frame;
-mod key_mapping;
 mod pixel;
 mod session;
 mod stats;
@@ -29,13 +28,11 @@ use std::thread;
 
 use graphics::FontProvider;
 use network::{HttpTransport, RequestPolicy, Url};
-use ui::OmniboxInput;
 use window::{
-    PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
-    WindowEvent, WindowSystem, WindowTitle,
+    InputText, KeyEvent, PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize,
+    WindowAttributes, WindowEvent, WindowSystem, WindowTitle,
 };
 
-use self::key_mapping::omnibox_input;
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
@@ -201,12 +198,15 @@ where
         session.resize(viewport);
     }
     if let Some(position) = events.clicked_at {
-        session.follow_link_at(position);
+        session.handle_click(position);
     }
 
-    let omnibox_modified = dispatch_omnibox_inputs(session, &events.omnibox_inputs);
-    if omnibox_modified {
+    for input in &events.keyboard {
+        input.dispatch(session);
+    }
+    if session.wants_redraw() {
         system.request_redraw();
+        session.redraw_issued();
     }
 
     let saw_message = session.drain_messages();
@@ -227,18 +227,26 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-fn dispatch_omnibox_inputs<F, T, P>(session: &mut Session<F, T, P>, inputs: &[OmniboxInput]) -> bool
-where
-    F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
-{
-    let mut modified = false;
-    for input in inputs {
-        let effect = session.omnibox_mut().handle_input(input);
-        modified |= session.execute_omnibox_effect(effect);
+/// Keyboard input as the window reported it, held until the pump cycle has
+/// handled the pointer: the chrome's router, not this loop, decides what each
+/// one means (`ADR-0027`).
+enum KeyboardInput {
+    Key(KeyEvent),
+    TextCommitted(InputText),
+}
+
+impl KeyboardInput {
+    fn dispatch<F, T, P>(&self, session: &mut Session<F, T, P>)
+    where
+        F: FontProvider + 'static,
+        T: HttpTransport + 'static,
+        P: RequestPolicy + 'static,
+    {
+        match self {
+            Self::Key(event) => session.handle_key(event),
+            Self::TextCommitted(text) => session.handle_text_committed(text.clone()),
+        }
     }
-    modified
 }
 
 /// What one `pump_events` drain observed, folded so `pump_once` decides once
@@ -253,7 +261,7 @@ struct PumpEvents {
     needs_repaint: bool,
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
-    omnibox_inputs: Vec<OmniboxInput>,
+    keyboard: Vec<KeyboardInput>,
 }
 
 impl PumpEvents {
@@ -275,9 +283,10 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
-            WindowEvent::Key(key) => self.omnibox_inputs.extend(omnibox_input(key)),
+            WindowEvent::Key(key) => self.keyboard.push(KeyboardInput::Key(key.clone())),
             WindowEvent::TextCommitted(text) => {
-                self.omnibox_inputs.push(OmniboxInput::Insert(text.clone()));
+                self.keyboard
+                    .push(KeyboardInput::TextCommitted(text.clone()));
             }
             _ => {}
         }

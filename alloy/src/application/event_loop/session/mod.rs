@@ -11,12 +11,12 @@ use browser::{
 };
 use graphics::{DisplayListBuilder, FontProvider, RenderBackend, SoftwareCpuBackend};
 use network::{HttpTransport, RequestPolicy, Url};
+use platform::HostPlatform;
 use region::ContentRegion;
 use ui::{
-    OmniboxController, OmniboxEffect, OmniboxPainter, OmniboxState, OmniboxTheme, Theme,
-    UiHitTarget, UiRenderTree,
+    Keymap, OmniboxPainter, OmniboxState, OmniboxTheme, Theme, UiController, UiEffect, UiRenderTree,
 };
-use window::{PhysicalPosition, Presenter, SurfaceSize};
+use window::{InputText, KeyEvent, PhysicalPosition, Presenter, SurfaceSize};
 
 use super::frame::CachedFrame;
 use super::stats::LoopStats;
@@ -46,7 +46,13 @@ pub struct Session<F, T, P> {
     viewport: SurfaceSize,
     last_frame: Option<CachedFrame>,
     relayouts: usize,
-    omnibox: OmniboxController,
+    /// Focus, key routing and the omnibox. The keymap is `Keymap::default()`
+    /// until the composition root resolves one (#115 builds the hook, #50
+    /// plugs the script into it).
+    ui: UiController,
+    /// A `UiEffect` asked for a platform redraw that the loop has not yet
+    /// issued.
+    redraw_requested: bool,
     /// Where the fetch workers report. One channel for the session's life: a
     /// result from a page the user left is not cut off here but dropped by the
     /// browsing context, because it is stamped with a superseded
@@ -77,7 +83,8 @@ where
             viewport,
             last_frame: None,
             relayouts: 0,
-            omnibox: OmniboxController::new(),
+            ui: UiController::new(Keymap::default(), HostPlatform::new().os()),
+            redraw_requested: false,
             inbox,
             outbox,
             theme,
@@ -96,21 +103,45 @@ where
         }
     }
 
-    /// Mutable access to the session's omnibox controller.
-    pub const fn omnibox_mut(&mut self) -> &mut OmniboxController {
-        &mut self.omnibox
+    /// Routes a key event through the chrome and executes what it asks for.
+    pub fn handle_key(&mut self, event: &KeyEvent) {
+        let effect = self.ui.handle_key(event);
+        self.execute_ui_effect(effect);
     }
 
-    /// Executes an effect emitted by the omnibox controller.
-    ///
-    /// Returns `true` if a platform redraw is requested.
-    pub fn execute_omnibox_effect(&mut self, effect: OmniboxEffect) -> bool {
+    /// Routes an input-method commit through the chrome.
+    pub fn handle_text_committed(&mut self, text: InputText) {
+        let effect = self.ui.handle_text_committed(text);
+        self.execute_ui_effect(effect);
+    }
+
+    /// Dispatches a primary-button press at `position` through the chrome.
+    pub fn handle_click(&mut self, position: PhysicalPosition) {
+        let effect = self.ui.handle_click(&self.ui_tree, position);
+        self.execute_ui_effect(effect);
+    }
+
+    /// Whether an executed effect asked for a platform redraw.
+    pub const fn wants_redraw(&self) -> bool {
+        self.redraw_requested
+    }
+
+    /// Records that the pending redraw request was issued.
+    pub const fn redraw_issued(&mut self) {
+        self.redraw_requested = false;
+    }
+
+    fn execute_ui_effect(&mut self, effect: UiEffect) {
         match effect {
-            OmniboxEffect::None => false,
-            OmniboxEffect::Redraw => true,
-            OmniboxEffect::Navigate(url) => {
+            UiEffect::None => {}
+            UiEffect::ChromeDamaged => self.redraw_requested = true,
+            UiEffect::Navigate(url) => {
                 self.navigate(url);
-                true
+                self.redraw_requested = true;
+            }
+            UiEffect::FollowLink(region) => {
+                let effects = self.browsing.follow_link(region);
+                self.execute_browser_effects(effects);
             }
         }
     }
@@ -169,7 +200,7 @@ where
             match effect {
                 BrowserEffect::NavigationStarted(_, url)
                 | BrowserEffect::DocumentLoaded(_, url) => {
-                    self.omnibox.reset_to_url(&url);
+                    self.ui.reset_to_url(&url);
                 }
                 BrowserEffect::Fetch(request, navigation) => {
                     let transport = Arc::clone(self.services.transport());
@@ -178,26 +209,6 @@ where
                 }
                 BrowserEffect::ContentDamaged(_) => self.dirty = true,
             }
-        }
-    }
-
-    /// Dispatches a pointer click at `position` through the UI render tree:
-    /// - Clicks on the omnibox or chrome top bar focus the omnibox.
-    /// - Clicks on a hyperlink navigate to the resolved destination.
-    /// - Clicks on empty page content do nothing.
-    pub fn follow_link_at(&mut self, position: PhysicalPosition) {
-        let Some(target) = self.ui_tree.hit_test(position) else {
-            return;
-        };
-        match target {
-            UiHitTarget::Omnibox | UiHitTarget::Chrome => {
-                self.omnibox.focus();
-            }
-            UiHitTarget::PageLink(region) => {
-                let effects = self.browsing.follow_link(region);
-                self.execute_browser_effects(effects);
-            }
-            UiHitTarget::PageContent => {}
         }
     }
 
@@ -221,7 +232,7 @@ where
             Arc::clone(self.services.font_provider()),
         )?;
         let chrome_framebuffer = render_chrome(
-            self.omnibox.state(),
+            self.ui.omnibox().state(),
             self.theme.omnibox(),
             self.ui_tree.chrome_size()?,
             Arc::clone(self.services.font_provider()),
@@ -294,8 +305,8 @@ fn render_chrome<F: FontProvider + 'static>(
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
 impl<F, T, P> Session<F, T, P> {
-    pub const fn omnibox(&self) -> &OmniboxController {
-        &self.omnibox
+    pub const fn omnibox(&self) -> &ui::OmniboxController {
+        self.ui.omnibox()
     }
 
     /// A clone of the sender the fetch workers hold.

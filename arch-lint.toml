@@ -63,6 +63,20 @@ paths = ["core/runtime/rhai-bindings/**"]
 name = "alloy-cli"
 paths = ["alloy/**"]
 
+# The event loop forwards window events and executes effects; which key is a shortcut and which
+# is typing is `core/ui`'s router and keymap (ADR-0027). The scope lists the production files:
+# the `*tests.rs` fixtures build raw key events on purpose and name the key types.
+[[scopes]]
+name = "alloy-event-loop"
+paths = [
+    "alloy/src/application/event_loop/mod.rs",
+    "alloy/src/application/event_loop/session/**",
+    "alloy/src/application/event_loop/worker.rs",
+    "alloy/src/application/event_loop/frame.rs",
+    "alloy/src/application/event_loop/pixel.rs",
+    "alloy/src/application/event_loop/stats.rs",
+]
+
 [[scopes]]
 name = "dom-domain"
 paths = ["core/dom/src/domain/**"]
@@ -489,6 +503,18 @@ deny = [
     "std::thread::*",
 ]
 message = "core/ui must not import core/browser, the document crates, the engine, a script runtime, or std::thread — alloy's executor mediates between the sibling effect enums (ADR-0026)."
+
+[[restrict-use]]
+name = "event-loop-no-key-policy"
+scope = "alloy-event-loop"
+deny = [
+    "window::KeyCode",
+    "window::LogicalKey",
+    "window::Modifiers",
+    "window::KeyState",
+    "window::FunctionKey",
+]
+message = "No key code, modifier combination or shortcut constant in the event loop: key policy is core/ui's Keymap and InputRouter (ADR-0027, #113). Forward the KeyEvent whole."
 
 [[restrict-use]]
 name = "region-isolated"

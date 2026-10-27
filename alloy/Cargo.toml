@@ -27,6 +27,7 @@ graphics = { path = "../core/graphics", features = ["software-backend"] }
 html = { path = "../core/html" }
 network = { path = "../core/network", features = ["real-transport"] }
 window = { path = "../core/window" }
+platform = { path = "../core/platform" }
 ui = { path = "../core/ui" }
 clap = { workspace = true }
 thiserror = { workspace = true }
