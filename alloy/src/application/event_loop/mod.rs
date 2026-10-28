@@ -11,6 +11,7 @@
 //! once** per cycle. Ten resizes or fifty image arrivals queued between two
 //! pump cycles cost one relayout, not ten or fifty.
 
+mod keyboard_input;
 mod session;
 mod stats;
 mod worker;
@@ -33,6 +34,7 @@ use window::{
     WindowEvent, WindowSystem, WindowTitle,
 };
 
+use self::keyboard_input::KeyboardInput;
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
@@ -223,8 +225,8 @@ where
     if let Some(position) = events.clicked_at {
         session.handle_click(position);
     }
-    for event in &events.keyboard {
-        session.handle_keyboard(event);
+    for input in std::mem::take(&mut events.keyboard) {
+        session.handle_keyboard(input);
     }
 
     let saw_message = session.drain_messages();
@@ -258,7 +260,7 @@ struct PumpEvents {
     clicked_at: Option<PhysicalPosition>,
     /// Key presses and input-method commits, handled after the pointer so the
     /// chrome's router, not this loop, decides what each means (`ADR-0027`).
-    keyboard: Vec<WindowEvent>,
+    keyboard: Vec<KeyboardInput>,
 }
 
 impl PumpEvents {
@@ -280,11 +282,9 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
-            WindowEvent::Key(_) | WindowEvent::TextCommitted(_) => {
-                self.keyboard.push(event.clone());
-            }
             _ => {}
         }
+        self.keyboard.extend(KeyboardInput::from_event(event));
     }
 
     fn status(&self, window_status: PumpStatus) -> PumpStatus {

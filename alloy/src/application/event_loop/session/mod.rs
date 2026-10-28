@@ -16,8 +16,9 @@ use region::ContentRegion;
 #[cfg(test)]
 use ui::OmniboxController;
 use ui::{Keymap, Theme, UiController, UiEffect, UiEffects, UiRenderTree};
-use window::{PhysicalPosition, Presenter, SurfaceSize, WindowEvent};
+use window::{PhysicalPosition, Presenter, SurfaceSize};
 
+use super::keyboard_input::KeyboardInput;
 use super::stats::LoopStats;
 use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
@@ -108,13 +109,12 @@ where
         }
     }
 
-    /// Routes a keyboard event (a key press or an input-method commit) through
-    /// the chrome and executes what it asks for. Any other event is ignored.
-    pub fn handle_keyboard(&mut self, event: &WindowEvent) {
-        let effects = match event {
-            WindowEvent::Key(key) => self.ui.handle_key(key),
-            WindowEvent::TextCommitted(text) => self.ui.handle_text_committed(text.clone()),
-            _ => return,
+    /// Routes a key press or an input-method commit through the chrome and
+    /// executes what it asks for.
+    pub fn handle_keyboard(&mut self, input: KeyboardInput) {
+        let effects = match input {
+            KeyboardInput::Key(key) => self.ui.handle_key(&key),
+            KeyboardInput::Committed(text) => self.ui.handle_text_committed(text),
         };
         self.execute_ui_effects(effects);
     }
