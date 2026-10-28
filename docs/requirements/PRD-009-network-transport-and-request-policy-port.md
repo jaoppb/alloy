@@ -154,3 +154,4 @@ exercise instead of real sockets. `AllowAllPolicy` is the reference policy.
 | Version | Change                                                                                                       | Adapter action |
 | ------- | ------------------------------------------------------------------------------------------------------------ | -------------- |
 | **1**   | Surface introduced in v0.5 Phase C1; frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`). | —              |
+| **2**   | `PolicyVerdict::request_to_send` removed, replaced by `PolicyVerdict::into_request` (#114). | None — no adapter called it. |
