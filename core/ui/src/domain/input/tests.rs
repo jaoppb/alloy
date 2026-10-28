@@ -45,6 +45,30 @@ fn chords_match_the_physical_key_when_the_logical_key_is_not_latin() {
 }
 
 #[test]
+fn a_latin_layout_never_falls_back_to_the_physical_key() {
+    // Dvorak: the key at the QWERTY-L position types `n`, and the one at D types `e`.
+    let keymap = Keymap::default();
+    let ctrl_n = press(
+        character("n"),
+        KeyCode::KEY_L,
+        Modifiers::NONE.with_control(),
+    );
+    assert_eq!(keymap.resolve(&ctrl_n), None, "Ctrl+N is not Ctrl+L");
+    let alt_e = press(character("e"), KeyCode::KEY_D, Modifiers::NONE.with_alt());
+    assert_eq!(keymap.resolve(&alt_e), None, "Alt+E is not Alt+D");
+}
+
+#[test]
+fn a_non_ascii_logical_key_falls_back_to_the_physical_key() {
+    let keymap = Keymap::default();
+    let alt_d_on_russian = press(character("в"), KeyCode::KEY_D, Modifiers::NONE.with_alt());
+    assert_eq!(
+        keymap.resolve(&alt_d_on_russian),
+        Some(BrowserCommand::FocusOmnibox)
+    );
+}
+
+#[test]
 fn chords_match_modifiers_exactly_and_ignore_character_case() {
     let keymap = Keymap::default();
     let shifted = Modifiers::NONE.with_control().with_shift();

@@ -4,7 +4,7 @@ use core::str::FromStr;
 
 use window::{InputText, KeyCode, KeyEvent, LogicalKey, Modifiers};
 
-use super::keymap_binding::ChordText;
+use super::keymap_binding::{ChordText, ChordWord};
 use super::keymap_error::KeymapError;
 
 /// The key half of a chord.
@@ -13,8 +13,9 @@ pub enum ChordKey {
     /// What the key means under the active layout. Characters are compared
     /// case-folded; Shift is part of the chord's modifiers.
     Logical(LogicalKey),
-    /// The key's position, for layouts whose logical key is not Latin
-    /// (`ADR-0027`).
+    /// The key's position. A chord is matched against it only when the logical
+    /// key is a non-ASCII character (`ADR-0027`); explicit `code:` chords are
+    /// for those layouts.
     Physical(KeyCode),
 }
 
@@ -44,13 +45,24 @@ impl KeyChord {
         Self { modifiers, key }
     }
 
-    /// The chords `event` can match, logical first, physical second.
-    pub(super) fn candidates(event: &KeyEvent) -> [Self; 2] {
-        let modifiers = event.modifiers();
-        [
-            Self::new(modifiers, ChordKey::logical(event.logical().clone())),
-            Self::new(modifiers, ChordKey::Physical(event.physical())),
-        ]
+    /// The chord for `event`'s logical key.
+    pub(super) fn logical_of(event: &KeyEvent) -> Self {
+        Self::new(
+            event.modifiers(),
+            ChordKey::logical(event.logical().clone()),
+        )
+    }
+
+    /// The chord for `event`'s position, or `None` when the logical key already
+    /// says what was pressed. Only a logical character outside ASCII (Cyrillic,
+    /// Greek, ...) falls back to its position: on Dvorak or Colemak the logical
+    /// key is Latin and is the whole truth, so Ctrl+N is never Ctrl+L.
+    pub(super) fn physical_of(event: &KeyEvent) -> Option<Self> {
+        let LogicalKey::Character(text) = event.logical() else {
+            return None;
+        };
+        let non_latin = !text.as_str().is_ascii();
+        non_latin.then(|| Self::new(event.modifiers(), ChordKey::Physical(event.physical())))
     }
 
     /// Parses `text`, remembering it for the error if it is malformed.
@@ -63,7 +75,7 @@ impl KeyChord {
         let modifiers = parse_modifiers(&chord, modifier_words)?;
         let key = parse_key(key_word).ok_or_else(|| KeymapError::UnknownKey {
             chord,
-            key: key_word.to_owned(),
+            key: ChordWord::from(key_word),
         })?;
         Ok(Self::new(modifiers, key))
     }
@@ -103,7 +115,7 @@ fn parse_modifiers(chord: &ChordText, words: &str) -> Result<Modifiers, KeymapEr
             _ => {
                 return Err(KeymapError::UnknownModifier {
                     chord: chord.clone(),
-                    modifier: word.to_owned(),
+                    modifier: ChordWord::from(word),
                 });
             }
         };

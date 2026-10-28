@@ -24,8 +24,8 @@ pub use application::omnibox::{
 };
 pub use domain::error::UiError;
 pub use domain::input::{
-    ActionName, BrowserCommand, ChordKey, ChordText, FocusTarget, KeyChord, Keymap, KeymapBinding,
-    KeymapError, UiEffect, UiEffects, UiInput,
+    ActionName, BrowserCommand, ChordKey, ChordText, ChordWord, FocusTarget, KeyChord, Keymap,
+    KeymapBinding, KeymapError, UiEffect, UiEffects, UiInput,
 };
 pub use domain::omnibox::{
     CursorPosition, EditKey, GapBuffer, OmniboxBuffer, OmniboxClassifier, OmniboxDestination,

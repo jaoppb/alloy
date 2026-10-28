@@ -1,6 +1,6 @@
 //! Why one keymap binding was rejected.
 
-use super::keymap_binding::{ActionName, ChordText};
+use super::keymap_binding::{ActionName, ChordText, ChordWord};
 
 /// A binding that could not be loaded. The rest of the set is kept
 /// (epic #110 decision 15).
@@ -15,9 +15,12 @@ pub enum KeymapError {
     MissingKey(ChordText),
     /// A word before the key is not a modifier.
     #[error("unknown modifier `{modifier}` in chord `{chord}`")]
-    UnknownModifier { chord: ChordText, modifier: String },
+    UnknownModifier {
+        chord: ChordText,
+        modifier: ChordWord,
+    },
     /// The key word is neither one character, a `code:` position nor a known
     /// key name.
     #[error("unknown key `{key}` in chord `{chord}`")]
-    UnknownKey { chord: ChordText, key: String },
+    UnknownKey { chord: ChordText, key: ChordWord },
 }

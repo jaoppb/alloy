@@ -48,12 +48,15 @@ impl Keymap {
     }
 
     /// The command bound to `event`'s chord: the logical key is tried first,
-    /// then the physical key (non-Latin layouts).
+    /// then, for a non-ASCII logical key only, the physical key.
     #[must_use]
     pub fn resolve(&self, event: &KeyEvent) -> Option<BrowserCommand> {
-        KeyChord::candidates(event)
-            .iter()
-            .find_map(|chord| self.bindings.get(chord).copied())
+        let logical = self.bindings.get(&KeyChord::logical_of(event));
+        let physical = || {
+            let chord = KeyChord::physical_of(event)?;
+            self.bindings.get(&chord)
+        };
+        logical.or_else(physical).copied()
     }
 
     fn parse_all(bindings: impl IntoIterator<Item = KeymapBinding>) -> (Self, Vec<KeymapError>) {

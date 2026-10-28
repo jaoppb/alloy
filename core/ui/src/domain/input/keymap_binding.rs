@@ -25,6 +25,29 @@ impl fmt::Display for ChordText {
     }
 }
 
+/// One word of a chord (`"hyper"`, `"ll"`), kept for the error that names it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChordWord(String);
+
+impl ChordWord {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for ChordWord {
+    fn from(word: &str) -> Self {
+        Self(word.to_owned())
+    }
+}
+
+impl fmt::Display for ChordWord {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
 /// An action name as written by a script or config (`"focus_omnibox"`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActionName(String);
