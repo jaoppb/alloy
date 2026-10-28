@@ -28,12 +28,17 @@
 // carve-out `core/engine/src/conformance.rs:32-40` already takes.
 #![allow(clippy::panic, clippy::expect_used)]
 
+use std::sync::Arc;
+
 use crate::application::builder::{DisplayListBuilder, PxRect};
+use crate::application::image_provider::ImageProvider;
 use crate::application::ports::RenderBackend;
 use crate::domain::color::Color;
 use crate::domain::display_list::DisplayList;
 use crate::domain::error::GraphicsError;
+use crate::domain::framebuffer::Framebuffer;
 use crate::domain::geometry::SurfaceSize;
+use crate::domain::image::ImageId;
 
 /// Runs every rule a [`RenderBackend`] must obey.
 ///
@@ -47,6 +52,7 @@ pub fn run_backend_suite(backend: &mut dyn RenderBackend) {
     check_submit_before_begin_frame_is_refused(backend);
     check_end_frame_before_begin_frame_is_refused(backend);
     check_a_second_begin_frame_is_refused(backend);
+    check_images_can_be_rebound_between_frames(backend);
 }
 
 /// A 2×2 surface — the smallest one that has more than one row, so a backend
@@ -183,4 +189,24 @@ fn assert_out_of_order(error: &GraphicsError, attempted: &str) {
         attempted,
         "the error must name the operation that was attempted"
     );
+}
+
+fn check_images_can_be_rebound_between_frames(backend: &mut dyn RenderBackend) {
+    // A long-lived backend follows the current document's images (#108), so
+    // rebinding between frames must neither disturb nor break the next frame.
+    backend.bind_images(Arc::new(NoImages));
+    paint_one_frame(backend, "after rebinding images");
+    backend.bind_images(Arc::new(NoImages));
+    backend.read_back().unwrap_or_else(|error| {
+        panic!("rebinding images after a frame must keep its read-back: {error}")
+    });
+}
+
+/// Resolves nothing: the suite checks the lifecycle, not image pixels.
+struct NoImages;
+
+impl ImageProvider for NoImages {
+    fn get(&self, image: ImageId) -> Result<Arc<Framebuffer>, GraphicsError> {
+        Err(GraphicsError::ImageUnavailable { image })
+    }
 }

@@ -16,19 +16,21 @@ impl UiRenderTree {
             .ok_or(UiError::InvalidDimensions)
     }
 
-    /// The surface size available for laying out web content.
+    /// The surface size available for laying out web content, or `None` when
+    /// the viewport leaves the content no rows below the chrome (#118) — a
+    /// valid state, not an error.
     ///
     /// # Errors
     ///
-    /// Returns [`UiError::InvalidDimensions`] if the content height is zero.
-    pub fn content_size(&self) -> Result<graphics::SurfaceSize, UiError> {
-        let content_height = self
-            .viewport()
-            .height()
-            .checked_sub(self.chrome_rows()?)
-            .ok_or(UiError::InvalidDimensions)?;
-        graphics::SurfaceSize::new(self.viewport().width(), content_height)
-            .ok_or(UiError::InvalidDimensions)
+    /// Returns [`UiError::InvalidDimensions`] if the chrome height itself
+    /// cannot be measured.
+    pub fn content_size(&self) -> Result<Option<graphics::SurfaceSize>, UiError> {
+        let chrome_rows = self.chrome_rows()?;
+        let content_rows = self.viewport().height().saturating_sub(chrome_rows);
+        Ok(graphics::SurfaceSize::new(
+            self.viewport().width(),
+            content_rows,
+        ))
     }
 
     /// The whole pixel rows the chrome bar covers. Content takes the rows

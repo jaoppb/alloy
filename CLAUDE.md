@@ -108,6 +108,10 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
 - **#109 — `core/ui`** (epic #110, ADR-0026): the render tree, hit testing, theme, omnibox and `OmniboxClassifier` moved
   out of `alloy` (and `network`) into `core/ui`, with no re-export left behind. `core/region` holds the ids `ui` and
   `browser` share; `arch-lint.toml` (`ui-isolated`, `region-isolated`) keeps the two siblings apart.
+- **#108 — layered compositor** (epic #110, ADR-0019 amendment): `alloy/src/application/compositor/` caches the chrome
+  and content layers separately behind the `RenderBackend` port and takes `Damage::{Chrome, Content, Viewport}`; chrome
+  damage never bumps `stats.relayouts` (fixes #116), a viewport no taller than the chrome shows the chrome alone
+  (fixes #118). `graphics::PORT_SCHEMA_VERSION = 4` (`RenderBackend::bind_images`, `PRD-005` §6).
 - **I4 — `alloy <url>`, native window rendering**: **not part of this delivered set** — in progress separately.
 
 Still **stubs** (a doc comment and `#![forbid(unsafe_code)]`, no functions): `core/js`, `devtools`, `extension`. Open

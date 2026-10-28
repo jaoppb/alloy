@@ -308,7 +308,7 @@ fn the_port_schema_version_is_recorded_in_exactly_one_place() {
     // 3 since v0.5 Phase X: GraphicsError::ImageUnavailable (additive, the
     // enum is #[non_exhaustive]) and the new ImageProvider port alongside
     // RenderBackend and FontProvider.
-    assert_eq!(graphics::PORT_SCHEMA_VERSION, 3);
+    assert_eq!(graphics::PORT_SCHEMA_VERSION, 4);
 }
 
 #[test]

@@ -25,7 +25,7 @@ use alloy::error::AlloyError;
 use alloy::logging;
 use alloy::{
     BrowserServices, RenderOptions, default_runtime_font_provider, initial_window_attributes,
-    render_html_with_font_provider, run_browser,
+    render_html_with_font_provider, run_browser, software_compositor,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use dom::serialize_html;
@@ -111,8 +111,10 @@ fn run(cli: &Cli) -> Result<(), AlloyError> {
 /// not this binary's default). Runs until the window closes.
 fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     let url = Url::parse(raw_url)?;
+    let font_provider = default_runtime_font_provider();
+    let compositor = software_compositor(&font_provider);
     let services = BrowserServices::new(
-        default_runtime_font_provider(),
+        font_provider,
         Arc::new(RealHttpTransport::new()?),
         Arc::new(AllowAllPolicy::new()),
     );
@@ -133,6 +135,7 @@ fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     let stats = run_browser(
         &url,
         services,
+        compositor,
         &mut system,
         &mut presenter,
         attributes.initial_size(),
@@ -149,7 +152,7 @@ fn run_render_command(args: &RenderArgs) -> Result<(), AlloyError> {
 
     let options = RenderOptions::new(args.width, args.height);
     let font_provider = default_runtime_font_provider();
-    let png_bytes = render_html_with_font_provider(&html, &options, font_provider)?;
+    let png_bytes = render_html_with_font_provider(&html, &options, &font_provider)?;
 
     std::fs::write(&args.output, &png_bytes).map_err(|source| AlloyError::OutputWrite {
         path: args.output.clone(),
