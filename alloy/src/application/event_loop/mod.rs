@@ -11,7 +11,7 @@
 //! once** per cycle. Ten resizes or fifty image arrivals queued between two
 //! pump cycles cost one relayout, not ten or fifty.
 
-mod key_mapping;
+mod keyboard_input;
 mod session;
 mod stats;
 mod worker;
@@ -29,13 +29,12 @@ use std::thread;
 
 use graphics::{FontProvider, RenderBackend};
 use network::{HttpTransport, RequestPolicy, Url};
-use ui::OmniboxInput;
 use window::{
     PhysicalPosition, PointerButton, Presenter, PumpStatus, SurfaceSize, WindowAttributes,
     WindowEvent, WindowSystem, WindowTitle,
 };
 
-use self::key_mapping::omnibox_input;
+use self::keyboard_input::KeyboardInput;
 use self::session::Session;
 pub use self::stats::LoopStats;
 use crate::application::browser_services::BrowserServices;
@@ -224,10 +223,12 @@ where
         session.resize(viewport);
     }
     if let Some(position) = events.clicked_at {
-        session.follow_link_at(position);
+        session.handle_click(position);
+    }
+    for input in std::mem::take(&mut events.keyboard) {
+        session.handle_keyboard(input);
     }
 
-    dispatch_omnibox_inputs(session, &events.omnibox_inputs);
     let saw_message = session.drain_messages();
 
     let shown = session.render(presenter)?;
@@ -245,19 +246,6 @@ where
     Ok((events.status(window_status), did_work))
 }
 
-fn dispatch_omnibox_inputs<F, T, P, B>(session: &mut Session<F, T, P, B>, inputs: &[OmniboxInput])
-where
-    F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
-    B: RenderBackend,
-{
-    for input in inputs {
-        let effect = session.omnibox_mut().handle_input(input);
-        session.execute_omnibox_effect(effect);
-    }
-}
-
 /// What one `pump_events` drain observed, folded so `pump_once` decides once
 /// per cycle: only the *last* resize counts, any number of redraw requests
 /// cost one repaint, and a click lands wherever the pointer was at that
@@ -270,7 +258,9 @@ struct PumpEvents {
     needs_repaint: bool,
     pointer_position: Option<PhysicalPosition>,
     clicked_at: Option<PhysicalPosition>,
-    omnibox_inputs: Vec<OmniboxInput>,
+    /// Key presses and input-method commits, handled after the pointer so the
+    /// chrome's router, not this loop, decides what each means (`ADR-0027`).
+    keyboard: Vec<KeyboardInput>,
 }
 
 impl PumpEvents {
@@ -292,12 +282,9 @@ impl PumpEvents {
                 button: PointerButton::Left,
                 pressed: true,
             } => self.clicked_at = self.pointer_position.or(self.clicked_at),
-            WindowEvent::Key(key) => self.omnibox_inputs.extend(omnibox_input(key)),
-            WindowEvent::TextCommitted(text) => {
-                self.omnibox_inputs.push(OmniboxInput::Insert(text.clone()));
-            }
             _ => {}
         }
+        self.keyboard.extend(KeyboardInput::from_event(event));
     }
 
     fn status(&self, window_status: PumpStatus) -> PumpStatus {

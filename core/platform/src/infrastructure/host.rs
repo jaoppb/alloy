@@ -2,6 +2,7 @@
 
 use crate::application::FontLocator;
 use crate::domain::font::{FontCandidates, FontDirectories, GenericFamily};
+use crate::domain::host_os::HostOs;
 use crate::infrastructure::os;
 
 /// The operating system this binary was built for.
@@ -13,6 +14,12 @@ impl HostPlatform {
     #[must_use]
     pub const fn new() -> Self {
         Self
+    }
+
+    /// The operating system family this binary was built for.
+    #[must_use]
+    pub const fn os(&self) -> HostOs {
+        os::host_os()
     }
 }
 

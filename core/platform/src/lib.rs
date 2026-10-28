@@ -25,4 +25,5 @@ pub mod infrastructure;
 
 pub use application::FontLocator;
 pub use domain::font::{FontCandidates, FontDirectories, GenericFamily};
+pub use domain::host_os::HostOs;
 pub use infrastructure::HostPlatform;

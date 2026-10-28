@@ -5,10 +5,9 @@ use window::LogicalKey;
 /// A key the omnibox acts on by itself: caret movement, deletion, submit and
 /// cancel.
 ///
-/// A closed enum so the set lives in one place: the event loop converts a
-/// [`LogicalKey`] once with [`Self::from_logical`], and the controller's
-/// `match` over it is exhaustive. Interim (epic #110): `core/ui`'s
-/// `UiInput::Edit` replaces it (#113).
+/// A closed enum so the set lives in one place: the input router converts a
+/// [`LogicalKey`] once with [`Self::from_logical`] into a `UiInput::Edit`, and
+/// the controller's `match` over it is exhaustive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditKey {
     Enter,
