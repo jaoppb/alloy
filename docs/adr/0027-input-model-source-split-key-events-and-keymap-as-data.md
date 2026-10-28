@@ -100,11 +100,14 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
 
 - **Chords.** A `KeyChord` is a modifier set plus a key, matched with the modifiers **exactly** (Ctrl+Shift+L is not
   Ctrl+L, and a chord that includes AltGr is a different chord). The key is matched on the logical key first (single
-  characters case-folded) and on the physical key second, so a non-Latin layout still reaches Ctrl+L.
+  characters case-folded). The physical key is consulted second **only when the logical key is a non-ASCII character**,
+  so a Russian layout still reaches Ctrl+L while on a Latin layout (Dvorak, Colemak) the logical key is the whole truth
+  and Ctrl+N is never Ctrl+L.
 - **Commands.** `BrowserCommand` is a closed enum parsed from action names (`focus_omnibox`); the default keymap binds
-  Ctrl+L, Super+L (Cmd+L on macOS, on every platform) and Alt+D to it, by logical and by physical key, and no Ctrl+Alt
-  chord. The default is written in the same chord text a script supplies and parsed by the same code (`ctrl+l`,
-  `ctrl+code:l`: `code:` names a Latin letter or digit by position).
+  Ctrl+L, Super+L (Cmd+L on macOS, on every platform) and Alt+D to it, by logical key and by position (the position
+  chords only ever match a non-ASCII logical key), and no Ctrl+Alt chord. The default is written in the same chord text
+  a script supplies and parsed by the same code (`ctrl+l`, `ctrl+code:l`: `code:` names a Latin letter or digit by
+  position).
 - **The seam.** `Keymap::from_bindings` takes unvalidated `(chord text, action name)` pairs and returns the keymap with
   the `KeymapError`s of the rejected bindings. A malformed chord or an unknown action rejects that binding alone, a
   later binding of the same chord replaces an earlier one, and a set with no valid binding yields `Keymap::default()`.
@@ -116,8 +119,9 @@ The `Keymap`, the input router and `UiInput::{Command, Edit, Insert}` live in `c
 
 ### Router order for a `Pressed` or `Repeated` key event
 
-1. A keymap binding matches → the bound `Command`. Chords match the logical key first and the physical key as the
-   fallback. This comes first so a chord that includes AltGr (Ctrl+AltGr+L) stays bindable.
+1. A keymap binding matches → the bound `Command`. Chords match the logical key first and, for a non-ASCII logical key
+   only, the physical key as the fallback. This comes first so a chord that includes AltGr (Ctrl+AltGr+L) stays
+   bindable.
 2. `alt_graph` and `text` → insert the text.
 3. Windows only, exactly Ctrl+Alt and `text` → insert the text (the fallback for the left Ctrl+Alt that Windows accepts
    as AltGr).
@@ -145,7 +149,10 @@ The same version bump adds `WindowSystem::set_title(WindowTitle)` and `WindowSys
 - Good: the whole mapping is unit-testable through `KeyInput`, because `winit::event::KeyEvent` cannot be constructed
   outside `winit`.
 - Bad: every consumer must read `modifiers` before treating `text` as typing. `core/ui`'s `InputRouter` is the one place
-  that does; `alloy`'s event loop forwards `KeyEvent`s whole (`arch-lint` rule `event-loop-no-key-policy`).
+  that does; `alloy`'s event loop forwards `KeyEvent`s whole. The `arch-lint` rule `event-loop-no-key-policy` guarantees
+  that no production file under `event_loop/` names a key type (`KeyCode`, `LogicalKey`, `Modifiers`, `KeyState`,
+  `FunctionKey`), imported or by path; calling an accessor such as `KeyEvent::modifiers()` is outside what the tool can
+  see, so review still covers that.
 - Bad: exact-modifier matching means the default Ctrl+L does not fire while AltGr is also held; that chord types its
   text unless a keymap binds it.
 - Bad: `PORT_SCHEMA_VERSION` 3 → 4 breaks every `WindowSystem` implementer and every `match` on `WindowEvent`.

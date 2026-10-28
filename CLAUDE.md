@@ -77,7 +77,8 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `set_cursor`; `ControlKey` and key-produced `TextInput` are gone, no alias). Frozen at `I4`: a bump needs a `PRD-010`
   §6 note. The adapter never decides shortcut versus typing — `KeyEvent::text` ignores Ctrl on Linux (Ctrl+L carries
   `"l"`), so a consumer reads `modifiers` first; `core/ui`'s `InputRouter` + data-driven `Keymap` (#113, ADR-0027) now
-  decide shortcut versus typing; `alloy` forwards `KeyEvent`s whole (`arch-lint` `event-loop-no-key-policy`).
+  decide shortcut versus typing; `alloy` forwards `KeyEvent`s whole (`arch-lint` `event-loop-no-key-policy`: no key type
+  named under `event_loop/`; accessor calls are left to review).
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
 - **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;

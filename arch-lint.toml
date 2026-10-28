@@ -64,17 +64,15 @@ name = "alloy-cli"
 paths = ["alloy/**"]
 
 # The event loop forwards window events and executes effects; which key is a shortcut and which
-# is typing is `core/ui`'s router and keymap (ADR-0027). The scope lists the production files:
-# the `*tests.rs` fixtures build raw key events on purpose and name the key types.
+# is typing is `core/ui`'s router and keymap (ADR-0027). Every production file under `event_loop/`
+# is in scope, so a new file cannot escape the rule; the `*tests.rs` and `test_support.rs`
+# fixtures build raw key events on purpose and name the key types, so they are subtracted.
 [[scopes]]
 name = "alloy-event-loop"
-paths = [
-    "alloy/src/application/event_loop/mod.rs",
-    "alloy/src/application/event_loop/session/**",
-    "alloy/src/application/event_loop/worker.rs",
-    "alloy/src/application/event_loop/frame.rs",
-    "alloy/src/application/event_loop/pixel.rs",
-    "alloy/src/application/event_loop/stats.rs",
+paths = ["alloy/src/application/event_loop/**"]
+exclude = [
+    "alloy/src/application/event_loop/**/*tests.rs",
+    "alloy/src/application/event_loop/test_support.rs",
 ]
 
 [[scopes]]
@@ -509,12 +507,17 @@ name = "event-loop-no-key-policy"
 scope = "alloy-event-loop"
 deny = [
     "window::KeyCode",
+    "window::KeyCode::*",
     "window::LogicalKey",
+    "window::LogicalKey::*",
     "window::Modifiers",
+    "window::Modifiers::*",
     "window::KeyState",
+    "window::KeyState::*",
     "window::FunctionKey",
+    "window::FunctionKey::*",
 ]
-message = "No key code, modifier combination or shortcut constant in the event loop: key policy is core/ui's Keymap and InputRouter (ADR-0027, #113). Forward the KeyEvent whole."
+message = "The event loop names no key type (KeyCode, LogicalKey, Modifiers, KeyState, FunctionKey), imported or by path: key policy is core/ui's Keymap and InputRouter (ADR-0027, #113). Forward the KeyEvent whole. Calling a KeyEvent accessor such as `modifiers()` is not visible to this rule; review still covers it."
 
 [[restrict-use]]
 name = "region-isolated"
