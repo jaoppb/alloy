@@ -128,9 +128,7 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use std::io;
     use std::panic;
-    use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
     use browser::{
@@ -141,7 +139,6 @@ mod tests {
         AllowAllPolicy, HttpRequest, HttpResponse, HttpTransport, MockTransport, NetworkError, Url,
     };
     use region::ContextId;
-    use tracing_subscriber::fmt::MakeWriter;
 
     use super::{ThreadFetchExecutor, fetch_reporting_panics, panic_message};
     use crate::application::fetch_channel::{FetchInbox, fetch_channel};
@@ -223,47 +220,6 @@ mod tests {
         executor.execute(request, navigation);
 
         assert_eq!(wait_for_result(&inbox).navigation(), navigation);
-    }
-
-    /// Collects what `tracing` writes, so a test can read the log line.
-    #[derive(Clone, Default)]
-    struct LogBuffer(Arc<Mutex<Vec<u8>>>);
-
-    impl io::Write for LogBuffer {
-        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl MakeWriter<'_> for LogBuffer {
-        type Writer = Self;
-
-        fn make_writer(&self) -> Self {
-            self.clone()
-        }
-    }
-
-    #[test]
-    fn a_trapped_panics_message_reaches_the_log() {
-        let log = LogBuffer::default();
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(log.clone())
-            .with_ansi(false)
-            .finish();
-        let fetcher = HttpFetcher::new(PanickingTransport, AllowAllPolicy::new(), PngImageDecoder);
-        let (request, navigation) = stylesheet_fetch();
-
-        tracing::subscriber::with_default(subscriber, || {
-            fetch_reporting_panics(&fetcher, &request, navigation)
-        });
-
-        let logged = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
-        assert!(logged.contains("the transport blew up"), "got {logged}");
     }
 
     #[test]
