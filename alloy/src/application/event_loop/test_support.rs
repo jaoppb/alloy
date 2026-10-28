@@ -7,13 +7,14 @@ use std::sync::Arc;
 use browser::{
     FetchFailure, FetchPayload, FetchRequest, FetchResult, LoadedDocument, NavigationId,
 };
-use graphics::SyntheticFontProvider;
+use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::Url;
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
 use super::session::Session;
 use super::{initial_window_attributes, pump_once};
 use crate::application::browser_services::BrowserServices;
+use crate::application::compositor::Compositor;
 use crate::application::fetch_channel::{FetchOutbox, fetch_channel};
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
@@ -83,15 +84,24 @@ impl IdlePause for NoPause {
     fn pause(&self) {}
 }
 
-pub(super) type TestSession = Session<SyntheticFontProvider, InlineFetchExecutor, NoPause>;
+pub(super) type TestSession = Session<
+    SyntheticFontProvider,
+    InlineFetchExecutor,
+    NoPause,
+    SoftwareCpuBackend<SyntheticFontProvider>,
+>;
 
 pub(super) fn session_over(web: FakeWeb, viewport: SurfaceSize) -> TestSession {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    let compositor = Compositor::new(
+        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
+        SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
+    );
     let (outbox, inbox) = fetch_channel();
     let fetch_executor = InlineFetchExecutor { web, outbox };
     let services = BrowserServices::new(font_provider, fetch_executor, inbox, NoPause);
-    Session::new(viewport, services)
+    Session::new(viewport, services, compositor)
 }
 
 /// Hands `result` to the session as if a fetch had just finished.

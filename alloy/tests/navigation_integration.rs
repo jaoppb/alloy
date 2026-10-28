@@ -13,8 +13,10 @@ use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
 use alloy::infrastructure::{PngImageDecoder, SleepPause, ThreadFetchExecutor};
-use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until};
-use graphics::SyntheticFontProvider;
+use alloy::{
+    BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until, software_compositor,
+};
+use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
@@ -35,11 +37,17 @@ fn services(
     ThreadFetchExecutor<MockTransport, AllowAllPolicy, PngImageDecoder>,
     SleepPause,
 > {
-    let font_provider =
-        Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
     let (fetch_executor, fetch_inbox) =
         ThreadFetchExecutor::connected(transport, AllowAllPolicy::new());
-    BrowserServices::new(font_provider, fetch_executor, fetch_inbox, SleepPause)
+    BrowserServices::new(font_provider(), fetch_executor, fetch_inbox, SleepPause)
+}
+
+fn font_provider() -> Arc<SyntheticFontProvider> {
+    Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE))
+}
+
+fn compositor() -> Compositor<SoftwareCpuBackend<SyntheticFontProvider>> {
+    software_compositor(&font_provider())
 }
 
 /// 20 px into the page, which starts below the default theme's chrome bar —
@@ -163,6 +171,7 @@ fn clicking_a_link_navigates_to_destination_page() {
     let stats = run_browser_until(
         &url_a,
         services(transport),
+        compositor(),
         &mut system,
         &mut presenter,
         size,
@@ -209,6 +218,7 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
     let stats = run_browser_until(
         &start_url,
         services(transport),
+        compositor(),
         &mut system,
         &mut presenter,
         size,
@@ -242,6 +252,7 @@ fn navigate_once(start_url: &Url, response: HttpResponse) -> alloy::LoopStats {
     let stats = run_browser_until(
         start_url,
         services(transport),
+        compositor(),
         &mut system,
         &mut presenter,
         size,

@@ -1,6 +1,7 @@
 //! Application layer for the Alloy browser.
 
 pub mod browser_services;
+pub mod compositor;
 pub mod event_loop;
 pub mod fetch_channel;
 pub mod html_parse;
@@ -10,6 +11,8 @@ pub mod ports;
 pub mod runtime_font;
 
 pub use browser_services::BrowserServices;
+pub use compositor::{Compositor, Damage};
+
 pub use event_loop::{
     LoopStats, initial_window_attributes, run_browser, run_browser_until,
     run_browser_until_first_frame,

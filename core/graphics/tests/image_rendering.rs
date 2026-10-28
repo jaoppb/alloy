@@ -172,3 +172,21 @@ fn renders_image_loaded_from_disk_png() {
     assert_eq!(result.width(), 32);
     assert_eq!(result.height(), 32);
 }
+
+#[test]
+fn a_backend_draws_the_images_bound_after_it_was_built() {
+    // The layered compositor keeps one backend for a session and rebinds the
+    // current document's images before each raster (#108).
+    let list = scene();
+    let mut backend = SoftwareCpuBackend::new();
+    backend.bind_images(image_provider());
+    backend
+        .begin_frame(SurfaceSize::new(96, 64).expect("a non-zero surface"))
+        .unwrap();
+    backend.submit(&list).unwrap();
+    backend.end_frame().unwrap();
+
+    let bound = backend.read_back().unwrap();
+
+    assert_eq!(bound, render(&list));
+}

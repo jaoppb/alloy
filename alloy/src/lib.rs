@@ -21,7 +21,8 @@ pub use application::pipeline::{
 };
 pub use application::runtime_font::RuntimeFontProvider;
 pub use application::{
-    LoopStats, initial_window_attributes, run_browser, run_browser_until,
+    Compositor, Damage, LoopStats, initial_window_attributes, run_browser, run_browser_until,
     run_browser_until_first_frame,
 };
 pub use error::AlloyError;
+pub use infrastructure::software_compositor;

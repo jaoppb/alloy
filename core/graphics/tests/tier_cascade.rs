@@ -14,10 +14,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use core::cell::RefCell;
+use std::sync::Arc;
 
 use graphics::{
-    BackendPreference, BackendTier, DisplayList, DisplayListBuilder, GraphicsError, PxRect,
-    RenderBackend, SurfaceSize, select_backend, select_backend_with,
+    BackendPreference, BackendTier, DisplayList, DisplayListBuilder, GraphicsError, ImageProvider,
+    PxRect, RenderBackend, SurfaceSize, select_backend, select_backend_with,
 };
 
 mod recording_backend;
@@ -54,6 +55,10 @@ impl TieredBackend {
 impl RenderBackend for TieredBackend {
     fn tier(&self) -> BackendTier {
         self.tier
+    }
+
+    fn bind_images(&mut self, images: Arc<dyn ImageProvider>) {
+        self.inner.bind_images(images);
     }
 
     fn begin_frame(&mut self, size: SurfaceSize) -> Result<(), GraphicsError> {

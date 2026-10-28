@@ -16,9 +16,11 @@
 // every accessor on it.
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use graphics::{
     BackendTier, Color, CommandKind, DisplayList, DisplayListBuilder, FrameOperation, FrameState,
-    Framebuffer, GraphicsError, PxRect, RenderBackend, SurfaceSize,
+    Framebuffer, GraphicsError, ImageProvider, PxRect, RenderBackend, SurfaceSize,
 };
 
 /// A backend that logs commands and paints a flat colour.
@@ -74,6 +76,8 @@ impl RenderBackend for RecordingBackend {
         // than rasterizes. The tier cascade never selects it — only tests do.
         BackendTier::Software
     }
+
+    fn bind_images(&mut self, _images: Arc<dyn ImageProvider>) {}
 
     fn begin_frame(&mut self, size: SurfaceSize) -> Result<(), GraphicsError> {
         // Valid from `Idle` *and* from `Presented`: a backend is reusable, and a

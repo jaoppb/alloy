@@ -87,7 +87,7 @@ pub fn render_html_to_png(html_str: &str, options: &RenderOptions) -> Result<Vec
 pub fn render_html_with_font_provider<F: FontProvider + 'static>(
     html_str: &str,
     options: &RenderOptions,
-    font_provider: Arc<F>,
+    font_provider: &Arc<F>,
 ) -> Result<Vec<u8>, AlloyError> {
     let surface_size = options.surface_size()?;
     let dom_tree = crate::application::html_parse::parse_html(html_str)?;
@@ -122,13 +122,15 @@ pub fn render_dom(
 ) -> Result<Framebuffer, AlloyError> {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
+    let mut backend = SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider));
     let (framebuffer, _) = render_document(
         dom_tree,
         extra_sheets,
         images,
         surface_size,
-        font_provider,
+        font_provider.as_ref(),
         &BlockLayout::monospace(),
+        &mut backend,
     )?;
     Ok(framebuffer)
 }
@@ -139,10 +141,19 @@ pub fn render_dom_with_font_provider<F: FontProvider + 'static>(
     extra_sheets: StyleSheetSet,
     images: &ImageStore,
     surface_size: SurfaceSize,
-    font_provider: Arc<F>,
+    font_provider: &Arc<F>,
 ) -> Result<Framebuffer, AlloyError> {
-    let (framebuffer, _) =
-        render_dom_with_links(dom_tree, extra_sheets, images, surface_size, font_provider)?;
+    // The headless entry points are their own composition root: the CLI render
+    // path has no compositor to borrow a backend from.
+    let mut backend = SoftwareCpuBackend::with_font_provider(Arc::clone(font_provider));
+    let (framebuffer, _) = render_dom_with_links(
+        dom_tree,
+        extra_sheets,
+        images,
+        surface_size,
+        font_provider,
+        &mut backend,
+    )?;
     Ok(framebuffer)
 }
 
@@ -153,19 +164,21 @@ pub fn render_dom_with_links<F: FontProvider + 'static>(
     extra_sheets: StyleSheetSet,
     images: &ImageStore,
     surface_size: SurfaceSize,
-    font_provider: Arc<F>,
+    font_provider: &Arc<F>,
+    backend: &mut impl RenderBackend,
 ) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     // `FontBackedMeasurer` (core/css) still takes a trait object; the `Arc<F>`
     // coerces at this one boundary, so alloy names no `dyn` itself.
-    let measured_fonts = Arc::clone(&font_provider);
+    let measured_fonts = Arc::clone(font_provider);
     let measurer = FontBackedMeasurer::new(measured_fonts, DEFAULT_FONT);
     render_document(
         dom_tree,
         extra_sheets,
         images,
         surface_size,
-        font_provider,
+        font_provider.as_ref(),
         &BlockLayout::new(measurer),
+        backend,
     )
 }
 
@@ -174,8 +187,9 @@ fn render_document<F: FontProvider + 'static, M: TextMeasurer + Send + Sync>(
     extra_sheets: StyleSheetSet,
     images: &ImageStore,
     surface_size: SurfaceSize,
-    font_provider: Arc<F>,
+    font_provider: &F,
     layout: &BlockLayout<M>,
+    backend: &mut impl RenderBackend,
 ) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
     let mut sheets = css::collect_style_sheets(&snapshot)?;
@@ -194,17 +208,10 @@ fn render_document<F: FontProvider + 'static, M: TextMeasurer + Send + Sync>(
     let link_targets = collect_link_targets(&box_tree, &snapshot);
 
     let mut builder = DisplayListBuilder::new();
-    paint_box_tree(
-        &box_tree,
-        &styled_tree,
-        images,
-        font_provider.as_ref(),
-        &mut builder,
-    )?;
+    paint_box_tree(&box_tree, &styled_tree, images, font_provider, &mut builder)?;
     let display_list = builder.build()?;
 
-    let image_provider = Arc::new(images.snapshot());
-    let mut backend = SoftwareCpuBackend::with_providers(font_provider, image_provider);
+    backend.bind_images(Arc::new(images.snapshot()));
     backend.begin_frame(surface_size)?;
     backend.submit(&display_list)?;
     backend.end_frame()?;
