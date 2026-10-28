@@ -33,6 +33,11 @@ pub trait IdlePause {
 }
 
 /// Turns the bytes of a fetched image into pixels.
+///
+/// Declared here with its sibling ports (#114), though nothing in `application`
+/// calls it: `infrastructure` composes it inside `HttpFetcher::fetch_image`. It
+/// is `Send + Sync + 'static` because that fetcher crosses threads in an `Arc`,
+/// which the two sibling ports, driven from the loop's own thread, never do.
 pub trait ImageDecoder: Send + Sync + 'static {
     /// Decodes `bytes`, or says why they are not a supported image.
     fn decode(&self, bytes: &[u8]) -> Result<Framebuffer, AlloyError>;
