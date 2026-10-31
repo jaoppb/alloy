@@ -3,25 +3,20 @@
 //! fetch results may change it — live in `core/browser`; this type executes the
 //! [`BrowserEffect`]s it returns.
 
-use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender};
-
-use browser::{
-    BrowserEffect, BrowsingContext, Effects, FetchResult, LinkTargets, MarkupDiscoverer,
-};
+use browser::{BrowserEffect, BrowsingContext, Effects, LinkTargets, MarkupDiscoverer};
 use graphics::{FontProvider, RenderBackend};
-use network::{HttpTransport, RequestPolicy, Url};
+use network::Url;
 use region::ContentRegion;
 use ui::{OmniboxController, OmniboxEffect, Theme, UiHitTarget, UiRenderTree};
 use window::{PhysicalPosition, Presenter, SurfaceSize};
 
 use super::stats::LoopStats;
-use super::worker::spawn_fetch;
 use crate::application::browser_services::BrowserServices;
 use crate::application::compositor::{
     ChromeScene, Compositor, ContentScene, Damage, Layout, PendingDamage, Presented, Rendered,
     Scene,
 };
+use crate::application::ports::{FetchExecutor, IdlePause};
 use crate::error::AlloyError;
 
 /// Everything one pump cycle can mutate, bundled so `pump_once` stays under
@@ -36,8 +31,8 @@ use crate::error::AlloyError;
 /// Every field is private: `damage` → [`Session::render`] → clean, and the
 /// context's link regions always describing the content layer last rastered,
 /// are invariants only this type's methods may move.
-pub struct Session<F, T, P, B> {
-    services: BrowserServices<F, T, P>,
+pub struct Session<F, X, W, B> {
+    services: BrowserServices<F, X, W>,
     browsing: BrowsingContext<MarkupDiscoverer>,
     pointer_position: Option<PhysicalPosition>,
     damage: PendingDamage,
@@ -45,31 +40,24 @@ pub struct Session<F, T, P, B> {
     compositor: Compositor<B>,
     relayouts: usize,
     omnibox: OmniboxController,
-    /// Where the fetch workers report. One channel for the session's life: a
-    /// result from a page the user left is not cut off here but dropped by the
-    /// browsing context, because it is stamped with a superseded
-    /// `NavigationId` (ADR-0019 amendment).
-    inbox: Receiver<FetchResult>,
-    outbox: Sender<FetchResult>,
     /// The one source of chrome geometry: the chrome is painted with it and
     /// `ui_tree` is laid out from it, so clicks land where pixels are drawn.
     theme: Theme,
     ui_tree: UiRenderTree,
 }
 
-impl<F, T, P, B> Session<F, T, P, B>
+impl<F, X, W, B> Session<F, X, W, B>
 where
     F: FontProvider + 'static,
-    T: HttpTransport + 'static,
-    P: RequestPolicy + 'static,
+    X: FetchExecutor,
+    W: IdlePause,
     B: RenderBackend,
 {
     pub fn new(
         viewport: SurfaceSize,
-        services: BrowserServices<F, T, P>,
+        services: BrowserServices<F, X, W>,
         compositor: Compositor<B>,
     ) -> Self {
-        let (outbox, inbox) = mpsc::channel();
         let theme = Theme::DEFAULT;
         let ui_tree = ui_tree_for(viewport, &theme, []);
         let mut damage = PendingDamage::default();
@@ -84,8 +72,6 @@ where
             compositor,
             relayouts: 0,
             omnibox: OmniboxController::new(),
-            inbox,
-            outbox,
             theme,
             ui_tree,
         }
@@ -141,6 +127,11 @@ where
         self.damage.record(Damage::Viewport);
     }
 
+    /// Waits briefly after a pump cycle that found nothing to do.
+    pub fn pause_idle(&self) {
+        self.services.pause_idle();
+    }
+
     #[cfg(test)]
     pub const fn has_pending_damage(&self) -> bool {
         !self.damage.is_empty()
@@ -158,7 +149,7 @@ where
     /// were any.
     pub fn drain_messages(&mut self) -> bool {
         let mut saw_message = false;
-        while let Ok(result) = self.inbox.try_recv() {
+        while let Some(result) = self.services.next_ready_fetch() {
             saw_message = true;
             let effects = self.browsing.complete(result);
             self.execute_browser_effects(effects);
@@ -166,8 +157,8 @@ where
         saw_message
     }
 
-    /// Carries out what the browsing context asked for: fetches run on worker
-    /// threads, the omnibox follows the URL (chrome damage), document damage
+    /// Carries out what the browsing context asked for: fetches go to the
+    /// executor, the omnibox follows the URL (chrome damage), document damage
     /// schedules a relayout.
     fn execute_browser_effects(&mut self, effects: Effects) {
         for effect in effects {
@@ -178,9 +169,7 @@ where
                     self.damage.record(Damage::Chrome);
                 }
                 BrowserEffect::Fetch(request, navigation) => {
-                    let transport = Arc::clone(self.services.transport());
-                    let policy = Arc::clone(self.services.policy());
-                    spawn_fetch(request, navigation, transport, policy, self.outbox.clone());
+                    self.services.execute(request, navigation);
                 }
                 BrowserEffect::ContentDamaged(_) => self.damage.record(Damage::Content),
             }
@@ -293,14 +282,14 @@ fn ui_tree_for(
 
 /// Read-only views the `pump_once` tests assert on.
 #[cfg(test)]
-impl<F, T, P, B> Session<F, T, P, B> {
+impl<F, X, W, B> Session<F, X, W, B> {
     pub const fn omnibox(&self) -> &OmniboxController {
         &self.omnibox
     }
 
-    /// A clone of the sender the fetch workers hold.
-    pub fn outbox_for_test(&self) -> Sender<FetchResult> {
-        self.outbox.clone()
+    /// The executor the session fetches through.
+    pub const fn fetch_executor(&self) -> &X {
+        self.services.fetch_executor()
     }
 
     /// The navigation results are accepted under right now.

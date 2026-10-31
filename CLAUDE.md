@@ -68,7 +68,8 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `hook-benchmark` CI job close that.
 - **C0/C1 — `core/network`**: hand-written HTTP/1.1 client, `rustls`+`ring` TLS (the C0 spike found the pure-Rust
   RustCrypto alternative NO-GO — `docs/reports/SPIKE-C0-TLS-PROVIDER.md`), `HttpTransport`/`RequestPolicy` ports
-  (`PRD-009`). `network::PORT_SCHEMA_VERSION = 1`, **not yet frozen** — freezes at `I4`.
+  (`PRD-009`). `network::PORT_SCHEMA_VERSION = 2`, frozen at `I4` (`1→2` #114: `PolicyVerdict::request_to_send` replaced
+  by `into_request`; `docs/architecture/http-transport-port-contract.md` §4).
 - **C2 — `core/window`**: `winit`+`softbuffer` adapter, `WindowSystem`/`Presenter` ports (`PRD-010`), headless reference
   (`HeadlessWindowSystem`/`RecordingPresenter`). `window::PORT_SCHEMA_VERSION = 4` (`1→2`:
   `WindowSystem::request_redraw` added during I4; `2→3`: `TextInput`/`ControlKey` for Omnibox #44; `3→4` (#112,
@@ -99,8 +100,9 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
 - **#111 — `core/browser`** (epic #110, ADR-0026): the document state, fetch-result application, subresource discovery,
   `ImageStore` and the error page moved out of `alloy`'s `Session` into a pure, thread-free `BrowsingContext`.
   Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment); `arch-lint.toml` (`browser-pure`)
-  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/.../event_loop/worker.rs` is the thin executor
-  of `BrowserEffect::Fetch`.
+  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/src/infrastructure/thread_fetch.rs` is the
+  `FetchExecutor` adapter of `BrowserEffect::Fetch` (#114: fetch threads, PNG decoding and the idle sleep sit behind
+  ports; an `arch-lint.toml` rule keeps `std::thread` and `png::decode` out of `alloy/src/application/**`).
 - **#109 — `core/ui`** (epic #110, ADR-0026): the render tree, hit testing, theme, omnibox and `OmniboxClassifier` moved
   out of `alloy` (and `network`) into `core/ui`, with no re-export left behind. `core/region` holds the ids `ui` and
   `browser` share; `arch-lint.toml` (`ui-isolated`, `region-isolated`) keeps the two siblings apart.
@@ -241,10 +243,10 @@ are the reference.
   `Attachment::Before`).
 - **Errors, not surprises.** Library code returns a typed `Result` (`DomError`, `EngineError`); no `unwrap` / `expect` /
   `panic!` on a path a caller can reach. `expect` is allowed only for a genuinely impossible state, with a message
-  saying why it can't happen. Trapped script panics are the one deliberate exception (`catch_unwind`, C-09). Derive
-  error enums with `thiserror` (ADR-0015) from the start — `core/engine` is the one deliberate hand-rolled
-  `Display`/`Error` exception (see Object Calisthenics below); everywhere else a hand-written impl is a mistake to fix
-  before it ships, not after review.
+  saying why it can't happen. Trapped script panics (`catch_unwind`, C-09) and a panicking fetch worker (#114, ADR-0019)
+  are the deliberate exceptions. Derive error enums with `thiserror` (ADR-0015) from the start — `core/engine` is the
+  one deliberate hand-rolled `Display`/`Error` exception (see Object Calisthenics below); everywhere else a hand-written
+  impl is a mistake to fix before it ships, not after review.
 - **Comments explain _why_, not _what_.** Cite the ADR/PRD/criterion a decision serves. Delete commented-out code.
 - **DRY, and the Boy Scout Rule.** No copy-paste logic; leave every file you touch a little cleaner than you found it.
 

@@ -73,7 +73,8 @@ The first `alloy <url>` sessions on Wayland opened a window that stayed blank. T
    path, no further frame is ever produced.
 2. **The main-document fetch rendered a silently-empty document.** A non-`2xx`, an empty body, or a non-UTF-8 body all
    became `html::parse("")` → a blank white window, logged only as success. (Fixed in
-   `alloy/src/application/navigation.rs`: those are now typed `AlloyError`s that fall back to the visible error card.)
+   `alloy/src/infrastructure/http_fetch/document.rs`: those are now typed `AlloyError`s that fall back to the visible
+   error card.)
 
 **Decision.** _Relayout_ (rebuild the display list, bump `LoopStats::relayouts`) and _repaint_ (re-blit the cached
 frame, no pipeline) are separate operations. `WindowSystem` gains **`request_redraw(&mut self)`** — a
@@ -108,11 +109,30 @@ an `ImageId` — a DOM node index every document reuses — cannot name an `<img
 
 The trade: stamping is a comparison the channel swap did not need, and one channel now lives for the whole session. What
 it buys is a browser crate whose supersession rules are plain unit tests (`core/browser` `browsing_context/tests.rs`)
-with no threads and no sleeps. `alloy/src/application/event_loop/worker.rs` is the thin executor: one `std::thread` per
+with no threads and no sleeps. The executor is `alloy/src/infrastructure/thread_fetch.rs` (below): one `std::thread` per
 `FetchRequest`, unchanged in spirit (thread per fetch, no pool, no cancellation).
 
 Link clicks use the same discipline: a `RegionId` carries a `LayoutEpoch` that bumps on every layout and document swap,
 and a stale one is logged and ignored instead of resolving to whatever now sits at its index.
+
+## Amendment — 2026-10-24: fetch workers behind a port (#114)
+
+The decision above — blocking I/O on `std::thread` workers, results over `std::sync::mpsc` as an event the same loop
+drains — stands. What moves is _who names the thread_: `alloy`'s application layer calls the `FetchExecutor` port
+(`execute(FetchRequest, NavigationId)`, returning at once) and `alloy/src/infrastructure/thread_fetch.rs` implements it
+with a thread per fetch. The executor is built over a `FetchOutbox`; the loop's session owns the matching `FetchInbox`
+and drains it, so every `FetchResult` still arrives stamped with its `NavigationId` and therefore its `ContextId`.
+`ImageDecoder` (`PngImageDecoder`) and `IdlePause` (`SleepPause`, the 4 ms idle poll) are ports for the same reason: the
+only code in `alloy` that spawns a thread, sleeps, calls `HttpTransport::execute` or decodes image bytes is under
+`alloy/src/infrastructure/`, and `arch-lint.toml` (`alloy-application-no-threads-or-decoding`) keeps `std::thread` and
+`graphics::png::decode` out of `alloy/src/application/**`. A test injects a synchronous executor that fetches on the
+caller's thread, so the pump tests need no sleep.
+
+A worker thread nobody joins would die silently, so the adapter names its threads (`alloy-fetch`) and traps a panic in
+the fetch (`catch_unwind`, a second deliberate exception beside trapped script panics) or a refused thread spawn, and
+answers with `FetchRequest::failed`: a failure payload shaped like the request's success, stamped with its
+`NavigationId`, so the page shows an error instead of loading forever. Every request, document or subresource, goes
+through the `RequestPolicy` before the transport (PRD-009 §3.3).
 
 ---
 

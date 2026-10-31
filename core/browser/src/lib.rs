@@ -28,8 +28,8 @@ pub use application::{
     error_page, parse_author_stylesheet,
 };
 pub use domain::{
-    BrowserEffect, ContextStats, Document, Effects, FetchFailure, FetchPayload, FetchRequest,
-    FetchResult, ImageRequest, ImageStore, LinkDestination, LinkTarget, LinkTargets,
+    BrowserEffect, ContextStats, Document, DocumentRequest, Effects, FetchFailure, FetchPayload,
+    FetchRequest, FetchResult, ImageRequest, ImageStore, LinkDestination, LinkTarget, LinkTargets,
     LoadedDocument, NavigationId, Navigations, RegionError, StoreSnapshot, StylesheetRequest,
     SubresourceRequest, Subresources,
 };

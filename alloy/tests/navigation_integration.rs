@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
+use alloy::infrastructure::{PngImageDecoder, SleepPause, ThreadFetchExecutor};
 use alloy::{
     BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until, software_compositor,
 };
@@ -31,12 +32,14 @@ use window::{
 /// host's installed fonts.
 fn services(
     transport: MockTransport,
-) -> BrowserServices<SyntheticFontProvider, MockTransport, AllowAllPolicy> {
-    BrowserServices::new(
-        font_provider(),
-        Arc::new(transport),
-        Arc::new(AllowAllPolicy::new()),
-    )
+) -> BrowserServices<
+    SyntheticFontProvider,
+    ThreadFetchExecutor<MockTransport, AllowAllPolicy, PngImageDecoder>,
+    SleepPause,
+> {
+    let (fetch_executor, fetch_inbox) =
+        ThreadFetchExecutor::connected(transport, AllowAllPolicy::new());
+    BrowserServices::new(font_provider(), fetch_executor, fetch_inbox, SleepPause)
 }
 
 fn font_provider() -> Arc<SyntheticFontProvider> {

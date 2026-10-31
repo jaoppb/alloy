@@ -71,7 +71,7 @@ pub mod infrastructure;
 /// `ADR-0011` item 3. Bumped on any change a transport, a policy or a consumer
 /// could notice; **frozen at I4**, after which a change also needs a migration
 /// note in `PRD-009`.
-pub const PORT_SCHEMA_VERSION: u32 = 1;
+pub const PORT_SCHEMA_VERSION: u32 = 2;
 
 /// The content codings [`decode_payload`](infrastructure::decode::decode_payload)
 /// can undo — exactly what the request's `Accept-Encoding` advertises.
