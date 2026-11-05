@@ -9,8 +9,8 @@ use region::ContextId;
 
 use super::BrowsingContext;
 use crate::domain::{
-    BrowserEffect, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult, LinkTarget,
-    LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
+    BrowserEffect, DocumentRequest, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult,
+    LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
 };
 use crate::infrastructure::MarkupDiscoverer;
 
@@ -115,7 +115,10 @@ fn navigating_announces_the_url_and_asks_for_the_document_under_a_fresh_id() {
         effects.as_slice(),
         [
             BrowserEffect::NavigationStarted(ContextId::ROOT, target.clone()),
-            BrowserEffect::Fetch(FetchRequest::Document(target), navigation),
+            BrowserEffect::Fetch(
+                FetchRequest::Document(DocumentRequest::get(target)),
+                navigation
+            ),
         ]
     );
 }
@@ -390,7 +393,10 @@ fn following_a_link_resolves_against_the_base_and_supersedes_what_is_in_flight()
         effects.as_slice(),
         [
             BrowserEffect::NavigationStarted(ContextId::ROOT, target.clone()),
-            BrowserEffect::Fetch(FetchRequest::Document(target), navigation),
+            BrowserEffect::Fetch(
+                FetchRequest::Document(DocumentRequest::get(target)),
+                navigation
+            ),
         ]
     );
     assert!(

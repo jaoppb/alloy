@@ -19,9 +19,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::Arc;
 
 use alloy::error::AlloyError;
+use alloy::infrastructure::{SleepPause, ThreadFetchExecutor};
 use alloy::logging;
 use alloy::{
     BrowserServices, RenderOptions, default_runtime_font_provider, initial_window_attributes,
@@ -113,11 +113,9 @@ fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     let url = Url::parse(raw_url)?;
     let font_provider = default_runtime_font_provider();
     let compositor = software_compositor(&font_provider);
-    let services = BrowserServices::new(
-        font_provider,
-        Arc::new(RealHttpTransport::new()?),
-        Arc::new(AllowAllPolicy::new()),
-    );
+    let (fetch_executor, fetch_inbox) =
+        ThreadFetchExecutor::connected(RealHttpTransport::new()?, AllowAllPolicy::new());
+    let services = BrowserServices::new(font_provider, fetch_executor, fetch_inbox, SleepPause);
 
     let mut system = WinitSystem::new()?;
     let attributes = initial_window_attributes()?;

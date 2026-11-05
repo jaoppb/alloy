@@ -2,7 +2,6 @@
 //! way `winit` really delivers them (#117, `ADR-0027`).
 #![allow(clippy::unwrap_used)]
 
-use network::MockTransport;
 use window::{
     HeadlessWindowSystem, InputText, KeyCode, KeyEvent, KeyState, LogicalKey, Modifiers,
     RecordingPresenter, WindowEvent, WindowSystem as _,
@@ -10,7 +9,7 @@ use window::{
 
 use super::initial_window_attributes;
 use super::test_support::{
-    TestSession, completed_navigation, load, loaded_window, pump, session_over,
+    FakeWeb, TestSession, completed_navigation, load, loaded_window, pump, session_over,
 };
 
 // ---- keyboard fixtures ----
@@ -382,13 +381,8 @@ fn end_to_end_shortcut_typing_and_navigation_dispatch() {
     let mut presenter = RecordingPresenter::new();
 
     let target = network::Url::parse("https://rust-lang.org/").unwrap();
-    let response = network::HttpResponse::new(
-        network::StatusCode::OK,
-        network::HeaderMap::new(),
-        network::Body::from_text("<html><body>Rust</body></html>"),
-    );
     let mut session = session_over(
-        MockTransport::new().with_response(target.clone(), response),
+        FakeWeb::new().with_page(target.clone(), "<html><body>Rust</body></html>"),
         attributes.initial_size(),
     );
     load(
