@@ -97,7 +97,7 @@ and leaks no DNS query — this is the seam Phase M's scriptable network policy 
 Both traits are synchronous and blocking, by decision of `ADR-0019` — there is no async runtime in this workspace and
 the window event loop owns the main thread. A consumer runs `HttpTransport::execute` on a worker of a `std::thread` pool
 and receives the `HttpResponse` back over `std::sync::mpsc` as one more event the loop drains
-(`alloy/src/application/event_loop.rs`, Phase I4). `RequestPolicy::decide` is pure and cheap enough to run inline on
+(`alloy/src/application/event_loop/`, Phase I4). `RequestPolicy::decide` is pure and cheap enough to run inline on
 whichever thread calls it.
 
 ### 3.5 Script-driven adapters
@@ -144,7 +144,7 @@ exercise instead of real sockets. `AllowAllPolicy` is the reference policy.
 - [x] `NETWORK_BINDINGS` scriptable policy: a script without `NETWORK_FETCH` that calls `fetch` gets
       `EngineError::PermissionDenied`; a script that panics inside a guarded binding falls back to `AllowAllPolicy` and
       the request still resolves (`core/runtime/rhai-bindings/tests/scriptable_network.rs`, v0.5 Phase M).
-- [x] `network::PORT_SCHEMA_VERSION` and the message aggregates frozen at integration point `I4` (`alloy::run_browser`,
+- [x] `network::PORT_SCHEMA_VERSION` and the message aggregates frozen at integration point `I4` (`alloy::BrowserApp`,
       `docs/v0-5-handoff/06-i4-alloy-url.md`) — see §6.
 
 ---
@@ -153,5 +153,5 @@ exercise instead of real sockets. `AllowAllPolicy` is the reference policy.
 
 | Version | Change                                                                                                       | Adapter action |
 | ------- | ------------------------------------------------------------------------------------------------------------ | -------------- |
-| **1**   | Surface introduced in v0.5 Phase C1; frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`). | —              |
+| **1**   | Surface introduced in v0.5 Phase C1; frozen at integration point `I4` (v0.5 Phase I4, `alloy::BrowserApp`). | —              |
 | **2**   | `PolicyVerdict::request_to_send` removed, replaced by `PolicyVerdict::into_request` (#114). | None — no adapter called it. |

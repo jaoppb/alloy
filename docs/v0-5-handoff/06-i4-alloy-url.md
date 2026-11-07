@@ -13,7 +13,7 @@ arquivo antes de I2, C1, C2, M e X estarem todos commitados.
 
 ## Passos
 
-1. **`alloy/src/application/event_loop.rs`** — o laço único dono da _thread_ principal (ADR-0019).
+1. **`alloy/src/application/event_loop/`** — o laço único dono da _thread_ principal (ADR-0019).
    `WindowSystem::pump_events` o dirige; I/O bloqueante (`HttpTransport::execute`, DNS) roda num _pool_ de
    `std::thread`, resultado volta por `std::sync::mpsc` como um evento do laço. **Sem runtime assíncrono** — decisão já
    tomada e registrada em ADR-0019.
@@ -55,9 +55,9 @@ arquivo antes de I2, C1, C2, M e X estarem todos commitados.
       `HeadlessWindowSystem`/`RecordingPresenter`, CSS de autor via `<link rel=stylesheet>` (não só inline) + texto +
       imagem.
 - [x] Resize coalescing: N `WindowEvent::Resized` num só `pump_events` custam **1** relayout, e o viewport reflete o
-      último (`alloy/src/application/event_loop.rs`'s `tests::multiple_resizes_in_one_pump_coalesce_to_one_relayout`).
-      Prova direta sobre `pump_once` (thread-free), não sobre `run_browser` inteiro — ver o comentário do módulo de
-      teste para o porquê.
+      último (`alloy/src/application/event_loop/coalescing_tests.rs`'s
+      `multiple_resizes_in_one_pump_coalesce_to_one_relayout`). Prova direta sobre `pump_once` (thread-free), não sobre
+      `BrowserApp::run` inteiro — ver o comentário do módulo de teste para o porquê.
 - [x] 50 imagens = relayouts limitados, não 50 — mesma técnica
       (`tests::fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout`, assert `relayouts == 1`).
 - [x] `network::PORT_SCHEMA_VERSION`, `window::PORT_SCHEMA_VERSION` congelados e documentados
@@ -72,8 +72,8 @@ arquivo antes de I2, C1, C2, M e X estarem todos commitados.
 
 ## Estado atual (verificado nesta sessão, v0.5 Fase I4)
 
-Implementado: `alloy/src/application/{navigation,subresource,event_loop}.rs`, `alloy/src/main.rs`'s `alloy <url>`.
-`event_loop.rs` é o laço único (`ADR-0019`) — thread pool via `std::thread::spawn` por fetch, resultado por
+Implementado: `alloy/src/application/{browser_app,effects,event_loop}`, `alloy/src/main.rs`'s `alloy <url>`.
+`event_loop/` é o laço único (`ADR-0019`) — thread pool via `std::thread::spawn` por fetch, resultado por
 `std::sync::mpsc`, sem runtime assíncrono. Coalescência: um `pump_once` drena todo evento de janela e toda mensagem de
 fetch já disponíveis antes de decidir relayout, no máximo um por ciclo. `core/css`'s `collect_style_sheets` só via
 `<style>`/`style=`; o `<link rel=stylesheet>` externo é buscado por `subresource.rs` e absorvido via

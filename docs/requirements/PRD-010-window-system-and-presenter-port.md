@@ -139,7 +139,7 @@ golden e2e test run against instead of a real display.
       `EngineError::PermissionDenied`; a panic inside a guarded binding falls back safely and the window keeps pumping
       events (`core/runtime/rhai-bindings/tests/scriptable_window.rs`, v0.5 Phase M).
 - [x] `window::PORT_SCHEMA_VERSION` and the event/attribute vocabulary frozen at integration point `I4`
-      (`alloy::run_browser`, `docs/v0-5-handoff/06-i4-alloy-url.md`) — see §6.
+      (`alloy::BrowserApp`, `docs/v0-5-handoff/06-i4-alloy-url.md`) — see §6.
 
 ---
 
@@ -147,7 +147,7 @@ golden e2e test run against instead of a real display.
 
 | Version | Change                                                                                                       | Adapter action |
 | ------- | ------------------------------------------------------------------------------------------------------------ | -------------- |
-| **1**   | Surface introduced in v0.5 Phase C2; frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`). | —              |
+| **1**   | Surface introduced in v0.5 Phase C2; frozen at integration point `I4` (v0.5 Phase I4, `alloy::BrowserApp`). | —              |
 | **2**   | `WindowSystem::request_redraw` added during I4, before the freeze (Wayland first-present recovery, expose/occlusion redraws). | Add the method; a no-op is conformant. |
 | **3**   | `WindowEvent::TextInput` and `WindowEvent::ControlKey` added for the omnibox (#44). Landed after the freeze; this row backfills the note it lacked. | Handle the new variants or use a `_` arm. |
 | **4**   | One `WindowEvent::Key(KeyEvent)` per physical press (logical key, physical key, `text`, `Modifiers` incl. `alt_graph()`, `Pressed \| Repeated \| Released`); `TextInput` and `ControlKey` removed; `TextCommitted(InputText)` for input-method commits; `WindowSystem::set_title` and `set_cursor` added (`ADR-0027`, #112). | Migration note below. |
