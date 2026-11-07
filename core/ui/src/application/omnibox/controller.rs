@@ -4,9 +4,8 @@ use std::borrow::Cow;
 
 use network::Url;
 
-use crate::domain::omnibox::{
-    EditKey, OmniboxClassifier, OmniboxEffect, OmniboxInput, OmniboxState,
-};
+use crate::domain::input::{BrowserCommand, UiEffect, UiInput};
+use crate::domain::omnibox::{EditKey, OmniboxClassifier, OmniboxState};
 
 /// Coordinates omnibox state mutations and translates inputs into high-level effects.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -63,57 +62,57 @@ impl OmniboxController {
         self.state.reset_to_url(url);
     }
 
-    /// Process an omnibox input and translate it into a high-level effect.
-    pub fn handle_input(&mut self, input: &OmniboxInput) -> OmniboxEffect {
+    /// Process resolved input and translate it into a high-level effect.
+    pub fn handle_input(&mut self, input: &UiInput) -> UiEffect {
         match input {
-            OmniboxInput::Focus => self.focus(),
-            OmniboxInput::Insert(text) => self.handle_text_input(text.as_str()),
-            OmniboxInput::Edit(key) => self.handle_edit_key(*key),
+            UiInput::Command(BrowserCommand::FocusOmnibox) => self.focus(),
+            UiInput::Insert(text) => self.handle_text_input(text.as_str()),
+            UiInput::Edit(key) => self.handle_edit_key(*key),
         }
     }
 
     /// Grants focus to the omnibox and selects all existing text.
-    pub const fn focus(&mut self) -> OmniboxEffect {
+    pub const fn focus(&mut self) -> UiEffect {
         self.state.focus();
         self.state.select_all();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
     /// Inserts typed text into the omnibox when focused.
-    pub fn handle_text_input(&mut self, text: &str) -> OmniboxEffect {
+    pub fn handle_text_input(&mut self, text: &str) -> UiEffect {
         if !self.state.is_focused() {
-            return OmniboxEffect::None;
+            return UiEffect::None;
         }
         self.state.insert_text(text);
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
     /// Cancels editing in the omnibox, reverts to active URL, and unfocuses.
-    pub fn handle_escape(&mut self) -> OmniboxEffect {
+    pub fn handle_escape(&mut self) -> UiEffect {
         if !self.state.is_focused() {
-            return OmniboxEffect::None;
+            return UiEffect::None;
         }
         self.state.cancel_editing();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
     /// Submits the current omnibox input, classifying it into a URL or search query.
-    pub fn handle_enter(&mut self) -> OmniboxEffect {
+    pub fn handle_enter(&mut self) -> UiEffect {
         if !self.state.is_focused() {
-            return OmniboxEffect::None;
+            return UiEffect::None;
         }
         self.state.blur();
         let text = self.state.text();
         let Ok(destination) = self.classifier.classify(&text) else {
-            return OmniboxEffect::Redraw;
+            return UiEffect::ChromeDamaged;
         };
-        OmniboxEffect::Navigate(destination.into_url())
+        UiEffect::Navigate(destination.into_url())
     }
 
     /// Routes logical editing/navigation keys to the omnibox when active.
-    pub fn handle_edit_key(&mut self, key: EditKey) -> OmniboxEffect {
+    pub fn handle_edit_key(&mut self, key: EditKey) -> UiEffect {
         if !self.state.is_focused() {
-            return OmniboxEffect::None;
+            return UiEffect::None;
         }
         match key {
             EditKey::Enter => self.handle_enter(),
@@ -127,33 +126,33 @@ impl OmniboxController {
         }
     }
 
-    fn execute_backspace(&mut self) -> OmniboxEffect {
+    fn execute_backspace(&mut self) -> UiEffect {
         self.state.backspace();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
-    fn execute_delete(&mut self) -> OmniboxEffect {
+    fn execute_delete(&mut self) -> UiEffect {
         self.state.delete();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
-    fn execute_move_left(&mut self) -> OmniboxEffect {
+    fn execute_move_left(&mut self) -> UiEffect {
         self.state.move_left();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
-    fn execute_move_right(&mut self) -> OmniboxEffect {
+    fn execute_move_right(&mut self) -> UiEffect {
         self.state.move_right();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
-    fn execute_move_start(&mut self) -> OmniboxEffect {
+    fn execute_move_start(&mut self) -> UiEffect {
         self.state.move_start();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 
-    fn execute_move_end(&mut self) -> OmniboxEffect {
+    fn execute_move_end(&mut self) -> UiEffect {
         self.state.move_end();
-        OmniboxEffect::Redraw
+        UiEffect::ChromeDamaged
     }
 }

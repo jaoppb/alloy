@@ -53,6 +53,7 @@ dependencies = [
  "graphics",
  "html",
  "network",
+ "platform",
  "region",
  "rhai-bindings",
  "rhai-runtime",
@@ -2284,6 +2285,7 @@ version = "0.1.0"
 dependencies = [
  "graphics",
  "network",
+ "platform",
  "region",
  "thiserror 2.0.17",
  "window",

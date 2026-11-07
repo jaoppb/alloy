@@ -2,6 +2,7 @@
 //! no I/O (`ADR-0010`).
 
 pub mod error;
+pub mod input;
 pub mod omnibox;
 pub mod render_tree;
 pub mod theme;

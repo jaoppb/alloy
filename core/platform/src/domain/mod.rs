@@ -2,3 +2,4 @@
 //! (`ADR-0010` §1).
 
 pub mod font;
+pub mod host_os;

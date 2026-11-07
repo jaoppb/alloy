@@ -16,6 +16,7 @@ description = "The browser chrome as a widget domain: UI render tree, hit testin
 graphics = { path = "../graphics", default-features = false }
 # `Url`, `NetworkError`; the sockets and TLS stay off.
 network = { path = "../network", default-features = false }
+platform = { path = "../platform" }
 region = { path = "../region" }
 thiserror = { workspace = true }
 # Event vocabulary only (`SurfaceSize`, `PhysicalPosition`, `LogicalKey`, `InputText`); no winit.

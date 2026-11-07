@@ -2,9 +2,8 @@ use network::Url;
 use window::{InputText, LogicalKey};
 
 use super::controller::OmniboxController;
-use crate::domain::omnibox::{
-    CursorPosition, EditKey, GapBuffer, OmniboxBuffer, OmniboxEffect, OmniboxInput, OmniboxState,
-};
+use crate::domain::input::{BrowserCommand, UiEffect, UiInput};
+use crate::domain::omnibox::{CursorPosition, EditKey, GapBuffer, OmniboxBuffer, OmniboxState};
 
 #[test]
 fn cursor_position_value_object() {
@@ -332,16 +331,16 @@ fn controller_focus_and_text_input_lifecycle() {
     let mut controller = OmniboxController::new();
 
     let effect = controller.handle_text_input("ignored");
-    assert_eq!(effect, OmniboxEffect::None);
+    assert_eq!(effect, UiEffect::None);
     assert_eq!(controller.text(), "");
 
     let effect = controller.focus();
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert!(controller.is_focused());
     assert!(controller.is_all_selected());
 
     let effect = controller.handle_text_input("hello");
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert_eq!(controller.text(), "hello");
     assert!(!controller.is_all_selected());
 }
@@ -352,14 +351,14 @@ fn controller_escape_reverts_to_active_url() {
     let mut controller = OmniboxController::with_url(url);
 
     let effect = controller.handle_escape();
-    assert_eq!(effect, OmniboxEffect::None);
+    assert_eq!(effect, UiEffect::None);
 
     controller.focus();
     controller.handle_text_input("edits");
     assert_eq!(controller.text(), "edits");
 
     let effect = controller.handle_escape();
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert!(!controller.is_focused());
     assert_eq!(controller.text(), "https://example.com/");
 }
@@ -369,7 +368,7 @@ fn controller_enter_classifies_and_navigates() {
     let mut controller = OmniboxController::new();
 
     let effect = controller.handle_enter();
-    assert_eq!(effect, OmniboxEffect::None);
+    assert_eq!(effect, UiEffect::None);
 
     controller.focus();
     controller.handle_text_input("rust-lang.org");
@@ -377,7 +376,7 @@ fn controller_enter_classifies_and_navigates() {
     let effect = controller.handle_enter();
     assert!(!controller.is_focused());
     let expected_url = Url::parse("https://rust-lang.org/").expect("valid url");
-    assert_eq!(effect, OmniboxEffect::Navigate(expected_url));
+    assert_eq!(effect, UiEffect::Navigate(expected_url));
 }
 
 #[test]
@@ -385,59 +384,59 @@ fn controller_control_key_handling() {
     let mut controller = OmniboxController::new();
 
     let effect = controller.handle_edit_key(EditKey::Backspace);
-    assert_eq!(effect, OmniboxEffect::None);
+    assert_eq!(effect, UiEffect::None);
 
     controller.focus();
     controller.handle_text_input("cat");
     assert_eq!(controller.text(), "cat");
 
     let effect = controller.handle_edit_key(EditKey::Backspace);
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert_eq!(controller.text(), "ca");
 
     let effect = controller.handle_edit_key(EditKey::ArrowLeft);
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
 
     controller.handle_text_input("o");
     assert_eq!(controller.text(), "coa");
 
     let effect = controller.handle_edit_key(EditKey::Home);
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert_eq!(controller.state().cursor_position(), CursorPosition::ZERO);
 
     let effect = controller.handle_edit_key(EditKey::End);
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert_eq!(controller.state().cursor_position(), CursorPosition::new(3));
 
     let effect = controller.handle_edit_key(EditKey::Delete);
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    assert_eq!(effect, UiEffect::ChromeDamaged);
 }
 
 #[test]
 fn controller_handle_input_routes_all_variants() {
     let mut controller = OmniboxController::new();
 
-    let effect = controller.handle_input(&OmniboxInput::Focus);
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    let effect = controller.handle_input(&UiInput::Command(BrowserCommand::FocusOmnibox));
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert!(controller.is_focused());
 
-    let effect = controller.handle_input(&OmniboxInput::Insert(InputText::new("query").unwrap()));
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    let effect = controller.handle_input(&UiInput::Insert(InputText::new("query").unwrap()));
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert_eq!(controller.text(), "query");
 
-    let effect = controller.handle_input(&OmniboxInput::Edit(EditKey::Backspace));
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    let effect = controller.handle_input(&UiInput::Edit(EditKey::Backspace));
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert_eq!(controller.text(), "quer");
 
-    let effect = controller.handle_input(&OmniboxInput::Edit(EditKey::Escape));
-    assert_eq!(effect, OmniboxEffect::Redraw);
+    let effect = controller.handle_input(&UiInput::Edit(EditKey::Escape));
+    assert_eq!(effect, UiEffect::ChromeDamaged);
     assert!(!controller.is_focused());
 
-    controller.handle_input(&OmniboxInput::Focus);
-    let effect = controller.handle_input(&OmniboxInput::Edit(EditKey::Enter));
+    controller.handle_input(&UiInput::Command(BrowserCommand::FocusOmnibox));
+    let effect = controller.handle_input(&UiInput::Edit(EditKey::Enter));
     let expected_url =
         Url::parse("https://duckduckgo.com/?q=quer").expect("valid search destination url");
-    assert_eq!(effect, OmniboxEffect::Navigate(expected_url));
+    assert_eq!(effect, UiEffect::Navigate(expected_url));
 }
 
 #[test]
