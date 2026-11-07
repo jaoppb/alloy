@@ -65,22 +65,23 @@ paths = ["alloy/**"]
 
 # The event loop forwards window events and executes effects; which key is a shortcut and which
 # is typing is `core/ui`'s router and keymap (ADR-0027). Every production file under `event_loop/`
-# is in scope, so a new file cannot escape the rule; the `*tests.rs` and `test_support.rs`
-# fixtures build raw key events on purpose and name the key types, so they are subtracted.
+# is in scope, so a new file cannot escape the rule; the `*tests.rs` fixtures
+# build raw key events on purpose and name the key types, so they are subtracted.
 [[scopes]]
 name = "alloy-event-loop"
 paths = ["alloy/src/application/event_loop/**"]
-exclude = [
-    "alloy/src/application/event_loop/**/*tests.rs",
-    "alloy/src/application/event_loop/test_support.rs",
-]
+exclude = ["alloy/src/application/event_loop/**/*tests.rs"]
 
 # The application layer of `alloy` (#110 decision 26, #114): ports and orchestration only.
-# `alloy/src/infrastructure/**` holds the adapters; #115 adds its own scope and the
-# `event_loop` rules.
 [[scopes]]
 name = "alloy-application"
 paths = ["alloy/src/application/**"]
+
+# The adapters of those ports (#115): the only code in `alloy` that spawns a thread, sleeps, calls
+# `HttpTransport::execute` or decodes image bytes.
+[[scopes]]
+name = "alloy-infrastructure"
+paths = ["alloy/src/infrastructure/**"]
 
 [[scopes]]
 name = "dom-domain"
@@ -525,6 +526,35 @@ deny = [
     "window::FunctionKey::*",
 ]
 message = "The event loop names no key type (KeyCode, LogicalKey, Modifiers, KeyState, FunctionKey), imported or by path: key policy is core/ui's Keymap and InputRouter (ADR-0027, #113). Forward the KeyEvent whole. Calling a KeyEvent accessor such as `modifiers()` is not visible to this rule; review still covers it."
+
+# #115: the loop pumps, folds and dispatches; every effect is carried out by `EffectExecutor` and every
+# raster by the `Compositor` behind the `RenderBackend` port. It names no document, cascade or worker.
+[[restrict-use]]
+name = "event-loop-pump-fold-dispatch-only"
+scope = "alloy-event-loop"
+deny = [
+    "css::*",
+    "dom::*",
+    "std::thread",
+    "std::thread::*",
+    "graphics::SoftwareCpuBackend",
+    "graphics::infrastructure::*",
+]
+message = "The event loop imports nothing from graphics infrastructure, css, dom or std::thread: it pumps window events, folds them and dispatches to BrowserApp; the EffectExecutor and the Compositor do the rest (#115, ADR-0019, ADR-0026)."
+
+# #115: adapters implement ports; they never drive the loop or reach into the browser state.
+[[restrict-use]]
+name = "alloy-infrastructure-driven-by-application"
+scope = "alloy-infrastructure"
+deny = [
+    "crate::application::event_loop",
+    "crate::application::event_loop::*",
+    "crate::application::browser_app",
+    "crate::application::browser_app::*",
+    "crate::application::effects",
+    "crate::application::effects::*",
+]
+message = "alloy's infrastructure adapters implement application ports; they must not call the event loop, BrowserApp or the EffectExecutor (#115, ADR-0010)."
 
 [[restrict-use]]
 name = "region-isolated"
