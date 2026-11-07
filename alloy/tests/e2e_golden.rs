@@ -1,6 +1,6 @@
 //! v0.5 Phase I4 end-to-end golden test.
 //!
-//! Drives [`alloy::run_browser_until`] — the exact loop `alloy <url>` runs —
+//! Drives [`alloy::BrowserApp`] — the exact loop `alloy <url>` runs —
 //! over `network::MockTransport` and `window::{HeadlessWindowSystem,
 //! RecordingPresenter}` instead of real sockets and a real display: a page
 //! with author CSS (an external `<link rel=stylesheet>`, proving the
@@ -24,13 +24,14 @@ use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
 use alloy::infrastructure::{SleepPause, ThreadFetchExecutor};
-use alloy::{BrowserServices, DEFAULT_FONT_SIZE, run_browser_until, software_compositor};
+use alloy::{BrowserApp, BrowserServices, DEFAULT_FONT_SIZE, software_compositor};
 use graphics::golden::assert_matches_golden;
 use graphics::{Color, Framebuffer, SurfaceSize as GraphicsSurfaceSize, SyntheticFontProvider};
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
 };
+use ui::Keymap;
 use window::{
     FrameView, HeadlessWindowSystem, RecordingPresenter, WindowAttributes, WindowSystem,
     WindowTitle,
@@ -124,20 +125,20 @@ fn navigated_page_with_stylesheet_and_image_matches_golden_reference() {
         .expect("headless window always creates");
     let mut presenter = RecordingPresenter::new();
 
-    let stats = run_browser_until(
-        &page_url,
+    let stats = BrowserApp::new(
+        attributes.initial_size(),
         services,
         compositor,
-        &mut system,
-        &mut presenter,
-        attributes.initial_size(),
-        |stats| stats.stylesheets_loaded >= 1 && stats.images_loaded >= 1,
+        Keymap::default(),
     )
+    .run_until(&page_url, &mut system, &mut presenter, |stats| {
+        stats.stylesheets_loaded() >= 1 && stats.images_loaded() >= 1
+    })
     .expect("the session runs to the requested stopping point without error");
 
-    assert!(stats.navigations >= 1, "the page must have navigated");
+    assert!(stats.navigations() >= 1, "the page must have navigated");
     assert!(
-        stats.relayouts >= 1,
+        stats.relayouts() >= 1,
         "at least one frame must have been presented"
     );
 

@@ -1,7 +1,8 @@
-//! Fixtures shared by the event-loop test modules: a session over a fake web, a
+//! Fixtures shared by the application test modules: a browser over a fake web, a
 //! loaded page, a headless window, and the pump.
 #![allow(clippy::unwrap_used)]
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use browser::{
@@ -9,30 +10,32 @@ use browser::{
 };
 use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::Url;
+use ui::Keymap;
 use window::{HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowSystem as _};
 
-use super::session::Session;
-use super::{initial_window_attributes, pump_once};
+use crate::application::browser_app::BrowserApp;
 use crate::application::browser_services::BrowserServices;
 use crate::application::compositor::Compositor;
+use crate::application::event_loop::pump_once;
 use crate::application::fetch_channel::{FetchOutbox, fetch_channel};
 use crate::application::paint::DEFAULT_FONT;
 use crate::application::pipeline::DEFAULT_FONT_SIZE;
 use crate::application::ports::{FetchExecutor, IdlePause};
+use crate::composition::initial_window_attributes;
 
 /// The pages a test's fake network serves, by address. Anything else is a
 /// failed fetch, like a host that does not answer.
 #[derive(Default)]
-pub(super) struct FakeWeb {
+pub struct FakeWeb {
     pages: HashMap<Url, &'static str>,
 }
 
 impl FakeWeb {
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    pub(super) fn with_page(mut self, url: Url, markup: &'static str) -> Self {
+    pub fn with_page(mut self, url: Url, markup: &'static str) -> Self {
         self.pages.insert(url, markup);
         self
     }
@@ -51,16 +54,9 @@ impl FakeWeb {
 /// [`FakeWeb`]: the result is already waiting on the inbox when `execute`
 /// returns, so a test pumps the loop and asserts — no thread to outwait, no
 /// sleep, and none of the HTTP stack.
-pub(super) struct InlineFetchExecutor {
+pub struct InlineFetchExecutor {
     web: FakeWeb,
     outbox: FetchOutbox,
-}
-
-impl InlineFetchExecutor {
-    /// Reports `result` as if a fetch had just finished; tests send results of their own.
-    pub(super) fn deliver(&self, result: FetchResult) {
-        self.outbox.send(result);
-    }
 }
 
 impl FetchExecutor for InlineFetchExecutor {
@@ -78,20 +74,41 @@ impl FetchExecutor for InlineFetchExecutor {
 }
 
 /// Never waits: a pump test has nothing to idle for.
-pub(super) struct NoPause;
+pub struct NoPause;
 
 impl IdlePause for NoPause {
     fn pause(&self) {}
 }
 
-pub(super) type TestSession = Session<
+type TestBrowser = BrowserApp<
     SyntheticFontProvider,
     InlineFetchExecutor,
     NoPause,
     SoftwareCpuBackend<SyntheticFontProvider>,
 >;
 
-pub(super) fn session_over(web: FakeWeb, viewport: SurfaceSize) -> TestSession {
+/// A browser plus the outbox a test reports finished fetches on, as a worker
+/// thread would.
+pub struct TestApp {
+    app: TestBrowser,
+    outbox: FetchOutbox,
+}
+
+impl Deref for TestApp {
+    type Target = TestBrowser;
+
+    fn deref(&self) -> &TestBrowser {
+        &self.app
+    }
+}
+
+impl DerefMut for TestApp {
+    fn deref_mut(&mut self) -> &mut TestBrowser {
+        &mut self.app
+    }
+}
+
+pub fn app_over(web: FakeWeb, viewport: SurfaceSize) -> TestApp {
     let font_provider =
         Arc::new(SyntheticFontProvider::new().with_size(DEFAULT_FONT, DEFAULT_FONT_SIZE));
     let compositor = Compositor::new(
@@ -99,75 +116,87 @@ pub(super) fn session_over(web: FakeWeb, viewport: SurfaceSize) -> TestSession {
         SoftwareCpuBackend::with_font_provider(Arc::clone(&font_provider)),
     );
     let (outbox, inbox) = fetch_channel();
-    let fetch_executor = InlineFetchExecutor { web, outbox };
+    let fetch_executor = InlineFetchExecutor {
+        web,
+        outbox: outbox.clone(),
+    };
     let services = BrowserServices::new(font_provider, fetch_executor, inbox, NoPause);
-    Session::new(viewport, services, compositor)
+    let app = BrowserApp::new(viewport, services, compositor, Keymap::default());
+    TestApp { app, outbox }
 }
 
-/// Hands `result` to the session as if a fetch had just finished.
-pub(super) fn deliver(session: &TestSession, result: FetchResult) {
-    session.fetch_executor().deliver(result);
+/// Hands `result` to the app as if a fetch had just finished.
+pub fn deliver(app: &TestApp, result: FetchResult) {
+    app.outbox.send(result);
 }
 
 /// The URL a link click navigated to, after the pump that applies the result
 /// the inline executor already produced.
-pub(super) fn completed_navigation(
+pub fn completed_navigation(
     system: &mut HeadlessWindowSystem,
     presenter: &mut RecordingPresenter,
-    session: &mut TestSession,
+    app: &mut TestApp,
     navigations_before_click: usize,
 ) -> network::Url {
-    pump(system, presenter, session);
+    pump(system, presenter, app);
     assert!(
-        session.stats().navigations > navigations_before_click,
+        app.stats().navigations() > navigations_before_click,
         "the click's navigation never arrived"
     );
-    session
-        .base_url()
+    app.browsing()
+        .document()
+        .and_then(browser::Document::base_url)
         .cloned()
         .expect("an applied navigation sets the document base")
 }
 
-/// A finished navigation to `url`, stamped with the one the session accepts.
-pub(super) fn navigation_to(session: &TestSession, markup: &str, url: &str) -> FetchResult {
+/// A finished navigation to `url`, stamped with the one the app accepts.
+pub fn navigation_to(app: &TestApp, markup: &str, url: &str) -> FetchResult {
     let document = dom::parse(markup).unwrap().into_tree();
     let loaded = LoadedDocument::new(document, network::Url::parse(url).unwrap());
     FetchResult::new(
-        session.current_navigation_for_test(),
+        app.browsing().current_navigation(),
         FetchPayload::Document(Ok(loaded)),
     )
 }
 
 /// Installs `markup` as a navigated document at `url`, the same way a
 /// finished navigation does.
-pub(super) fn load(session: &mut TestSession, markup: &str, url: &str) {
-    deliver(session, navigation_to(session, markup, url));
-    session.drain_messages();
+pub fn load(app: &mut TestApp, markup: &str, url: &str) {
+    deliver(app, navigation_to(app, markup, url));
+    drain(app);
 }
 
-pub(super) fn loaded_session(viewport: SurfaceSize) -> TestSession {
-    let mut session = session_over(FakeWeb::new(), viewport);
+/// Applies every finished fetch waiting, without a pump.
+fn drain(app: &mut TestApp) {
+    while let Some(result) = app.next_ready_fetch() {
+        app.complete_fetch(result);
+    }
+}
+
+pub fn loaded_app(viewport: SurfaceSize) -> TestApp {
+    let mut app = app_over(FakeWeb::new(), viewport);
     load(
-        &mut session,
+        &mut app,
         "<html><body>hi</body></html>",
         "http://example.com/",
     );
-    session
+    app
 }
 
-pub(super) fn pump(
+pub fn pump(
     system: &mut HeadlessWindowSystem,
     presenter: &mut RecordingPresenter,
-    session: &mut TestSession,
+    app: &mut TestApp,
 ) {
-    pump_once(system, presenter, session).unwrap();
+    pump_once(system, presenter, &mut app.app).unwrap();
 }
 
 /// A headless window and a loaded page, before the first pump.
-pub(super) fn loaded_window() -> (HeadlessWindowSystem, RecordingPresenter, TestSession) {
+pub fn loaded_window() -> (HeadlessWindowSystem, RecordingPresenter, TestApp) {
     let attributes = initial_window_attributes().unwrap();
     let mut system = HeadlessWindowSystem::new();
     system.create_window(&attributes).unwrap();
-    let session = loaded_session(attributes.initial_size());
-    (system, RecordingPresenter::new(), session)
+    let app = loaded_app(attributes.initial_size());
+    (system, RecordingPresenter::new(), app)
 }

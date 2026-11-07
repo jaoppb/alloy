@@ -13,15 +13,13 @@ use std::sync::Arc;
 
 use alloy::application::paint::DEFAULT_FONT;
 use alloy::infrastructure::{PngImageDecoder, SleepPause, ThreadFetchExecutor};
-use alloy::{
-    BrowserServices, Compositor, DEFAULT_FONT_SIZE, run_browser_until, software_compositor,
-};
+use alloy::{BrowserApp, BrowserServices, Compositor, DEFAULT_FONT_SIZE, software_compositor};
 use graphics::{SoftwareCpuBackend, SyntheticFontProvider};
 use network::{
     AllowAllPolicy, HeaderMap, HeaderName, HeaderValue, HttpResponse, MockTransport, StatusCode,
     Url,
 };
-use ui::OmniboxTheme;
+use ui::{Keymap, OmniboxTheme};
 use window::{
     CursorIcon, HeadlessWindowSystem, PhysicalPosition, PointerButton, PumpStatus,
     RecordingPresenter, WindowAttributes, WindowError, WindowEvent, WindowId, WindowSystem,
@@ -132,7 +130,7 @@ const MAX_LOOP_CYCLES: usize = 2_500;
 /// Whether the first document has been applied and laid out, so its link
 /// targets exist and a click can hit one.
 const fn first_page_laid_out(stats: &alloy::LoopStats) -> bool {
-    stats.navigations >= 1 && stats.relayouts >= 1
+    stats.navigations() >= 1 && stats.relayouts() >= 1
 }
 
 #[test]
@@ -168,23 +166,17 @@ fn clicking_a_link_navigates_to_destination_page() {
     system.create_window(&attributes).unwrap();
 
     let mut cycles = 0_usize;
-    let stats = run_browser_until(
-        &url_a,
-        services(transport),
-        compositor(),
-        &mut system,
-        &mut presenter,
-        size,
-        |stats| {
+    let stats = BrowserApp::new(size, services(transport), compositor(), Keymap::default())
+        .run_until(&url_a, &mut system, &mut presenter, |stats| {
             cycles += 1;
             page_ready.set(first_page_laid_out(stats));
-            stats.navigations >= 2 || cycles >= MAX_LOOP_CYCLES
-        },
-    )
-    .expect("browser loop runs and navigates");
+            stats.navigations() >= 2 || cycles >= MAX_LOOP_CYCLES
+        })
+        .expect("browser loop runs and navigates");
 
     assert_eq!(
-        stats.navigations, 2,
+        stats.navigations(),
+        2,
         "must have completed 2 navigations (initial load + clicked link)"
     );
 }
@@ -215,26 +207,20 @@ fn clicking_an_anchor_fragment_does_not_trigger_network_navigation() {
     // the chance to start (wrongly) a network navigation.
     let mut cycles = 0_usize;
     let mut cycles_since_ready = 0_usize;
-    let stats = run_browser_until(
-        &start_url,
-        services(transport),
-        compositor(),
-        &mut system,
-        &mut presenter,
-        size,
-        |stats| {
+    let stats = BrowserApp::new(size, services(transport), compositor(), Keymap::default())
+        .run_until(&start_url, &mut system, &mut presenter, |stats| {
             cycles += 1;
             page_ready.set(first_page_laid_out(stats));
             if page_ready.get() {
                 cycles_since_ready += 1;
             }
             cycles_since_ready >= 15 || cycles >= MAX_LOOP_CYCLES
-        },
-    )
-    .expect("browser loop runs");
+        })
+        .expect("browser loop runs");
 
     assert_eq!(
-        stats.navigations, 1,
+        stats.navigations(),
+        1,
         "in-page anchor must not trigger additional network navigation"
     );
 }
@@ -249,16 +235,11 @@ fn navigate_once(start_url: &Url, response: HttpResponse) -> alloy::LoopStats {
     let attributes = WindowAttributes::new(WindowTitle::from("test"), size);
     system.create_window(&attributes).unwrap();
 
-    let stats = run_browser_until(
-        start_url,
-        services(transport),
-        compositor(),
-        &mut system,
-        &mut presenter,
-        size,
-        |stats| stats.navigation_errors >= 1,
-    )
-    .expect("browser loop runs");
+    let stats = BrowserApp::new(size, services(transport), compositor(), Keymap::default())
+        .run_until(start_url, &mut system, &mut presenter, |stats| {
+            stats.navigation_errors() >= 1
+        })
+        .expect("browser loop runs");
 
     assert!(
         presenter.last_frame().is_some(),
@@ -275,11 +256,13 @@ fn navigating_to_an_empty_body_shows_the_error_card_not_a_blank_window() {
     let stats = navigate_once(&start_url, empty_ok);
 
     assert_eq!(
-        stats.navigations, 0,
+        stats.navigations(),
+        0,
         "an empty body is not a rendered document"
     );
     assert_eq!(
-        stats.navigation_errors, 1,
+        stats.navigation_errors(),
+        1,
         "it must fall back to the error card"
     );
 }
@@ -295,8 +278,8 @@ fn navigating_to_a_204_shows_the_error_card() {
 
     let stats = navigate_once(&start_url, no_content);
 
-    assert_eq!(stats.navigations, 0);
-    assert_eq!(stats.navigation_errors, 1);
+    assert_eq!(stats.navigations(), 0);
+    assert_eq!(stats.navigation_errors(), 1);
 }
 
 #[test]
@@ -310,6 +293,6 @@ fn navigating_to_a_non_utf8_body_shows_the_error_card() {
 
     let stats = navigate_once(&start_url, binary);
 
-    assert_eq!(stats.navigations, 0);
-    assert_eq!(stats.navigation_errors, 1);
+    assert_eq!(stats.navigations(), 0);
+    assert_eq!(stats.navigation_errors(), 1);
 }
