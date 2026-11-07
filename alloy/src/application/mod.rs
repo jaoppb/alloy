@@ -14,9 +14,6 @@ pub mod pipeline;
 pub mod ports;
 pub mod runtime_font;
 
-#[cfg(test)]
-mod test_support;
-
 pub use browser_app::BrowserApp;
 pub use browser_services::BrowserServices;
 pub use compositor::{Compositor, Damage};

@@ -16,9 +16,7 @@ use window::{
     HeadlessWindowSystem, RecordingPresenter, SurfaceSize, WindowEvent, WindowSystem as _,
 };
 
-use crate::application::test_support::{
-    FakeWeb, app_over, deliver, loaded_app, loaded_window, pump,
-};
+use super::test_support::{FakeWeb, app_over, deliver, loaded_app, loaded_window, pump};
 use crate::composition::initial_window_attributes;
 
 fn placeholder_framebuffer() -> Framebuffer {
@@ -47,8 +45,7 @@ fn multiple_resizes_in_one_pump_coalesce_to_one_relayout() {
         "three coalesced Resized events (the initial one plus two scheduled) must cost exactly one relayout"
     );
     assert_eq!(
-        app.viewport(),
-        smaller,
+        app.viewport, smaller,
         "the viewport must reflect the LAST resize in the coalesced batch"
     );
 }
@@ -63,7 +60,7 @@ fn fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout() {
     let mut app = loaded_app(attributes.initial_size());
     for index in 0..50u32 {
         let image = FetchPayload::Image(ImageId::new(index), Ok(placeholder_framebuffer()));
-        let navigation = app.browsing().current_navigation();
+        let navigation = app.browsing.current_navigation();
         deliver(&app, FetchResult::new(navigation, image));
     }
 

@@ -6,8 +6,9 @@ use crate::application::ports::KeymapSource;
 
 /// The keymap `source` supplies.
 ///
-/// Each rejected binding is reported and skipped; when none is valid the result is `Keymap::default()`, so a failing script
-/// never leaves the browser without shortcuts (`ADR-0004`).
+/// Each rejected binding is reported and skipped; when none is valid the result is
+/// `Keymap::default()`, so a failing script never leaves the browser without shortcuts
+/// (`ADR-0004`).
 #[must_use]
 pub fn resolve_keymap(source: &impl KeymapSource) -> Keymap {
     let (keymap, rejected) = Keymap::from_bindings(source.bindings());

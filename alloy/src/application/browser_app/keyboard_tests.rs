@@ -7,7 +7,7 @@ use window::{
     RecordingPresenter, WindowEvent, WindowSystem as _,
 };
 
-use crate::application::test_support::{
+use super::test_support::{
     FakeWeb, TestApp, app_over, completed_navigation, load, loaded_window, pump,
 };
 use crate::composition::initial_window_attributes;
@@ -84,18 +84,18 @@ fn focus_shortcuts_focus_the_omnibox_and_select_all_text() {
     for (name, press) in shortcuts {
         let (mut system, mut presenter, mut app) = loaded_window();
         pump(&mut system, &mut presenter, &mut app);
-        assert!(!app.ui().omnibox().is_focused());
-        assert!(!app.ui().omnibox().is_all_selected());
+        assert!(!app.ui.omnibox().is_focused());
+        assert!(!app.ui.omnibox().is_all_selected());
 
         press(&mut system);
         pump(&mut system, &mut presenter, &mut app);
 
         assert!(
-            app.ui().omnibox().is_focused(),
+            app.ui.omnibox().is_focused(),
             "{name} must focus the omnibox"
         );
         assert!(
-            app.ui().omnibox().is_all_selected(),
+            app.ui.omnibox().is_all_selected(),
             "{name} must select existing omnibox text"
         );
     }
@@ -113,7 +113,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
     // Focus omnibox via Ctrl+L.
     ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut app);
-    assert!(app.ui().omnibox().is_focused());
+    assert!(app.ui.omnibox().is_focused());
     assert_eq!(
         app.stats().relayouts(),
         relayouts_before,
@@ -123,7 +123,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
     // First character replaces selected text.
     type_text(&mut system, "h");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "h");
+    assert_eq!(app.ui.omnibox().text(), "h");
     assert_eq!(
         app.stats().relayouts(),
         relayouts_before,
@@ -133,7 +133,7 @@ fn typing_when_focused_appends_to_buffer_and_requests_redraw_without_relayout() 
     // Subsequent characters append to the buffer.
     type_text(&mut system, "ello");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "hello");
+    assert_eq!(app.ui.omnibox().text(), "hello");
     assert_eq!(
         app.stats().relayouts(),
         relayouts_before,
@@ -146,13 +146,13 @@ fn typing_when_unfocused_is_ignored() {
     let (mut system, mut presenter, mut app) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut app);
-    let initial_text = app.ui().omnibox().text().to_string();
+    let initial_text = app.ui.omnibox().text().to_string();
 
     type_text(&mut system, "ignored");
     pump(&mut system, &mut presenter, &mut app);
 
     assert_eq!(
-        app.ui().omnibox().text(),
+        app.ui.omnibox().text(),
         initial_text.as_str(),
         "typing without omnibox focus must not mutate the buffer"
     );
@@ -166,7 +166,7 @@ fn focused_omnibox_holding_abc() -> (HeadlessWindowSystem, RecordingPresenter, T
     ctrl_l(&mut system);
     type_text(&mut system, "abc");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "abc");
+    assert_eq!(app.ui.omnibox().text(), "abc");
     (system, presenter, app)
 }
 
@@ -183,7 +183,7 @@ fn an_unbound_ctrl_chord_inserts_nothing_even_though_winit_reports_its_letter_as
     pump(&mut system, &mut presenter, &mut app);
 
     assert_eq!(
-        app.ui().omnibox().text(),
+        app.ui.omnibox().text(),
         "abc",
         "Ctrl+K carries text \"k\" on Linux; it must not be typed"
     );
@@ -205,7 +205,7 @@ fn an_editing_key_under_a_command_modifier_is_dropped() {
     pump(&mut system, &mut presenter, &mut app);
 
     assert_eq!(
-        app.ui().omnibox().text(),
+        app.ui.omnibox().text(),
         "abc",
         "Ctrl/Alt/Super+Backspace are chords for the keymap, not edits"
     );
@@ -218,8 +218,8 @@ fn alt_d_refocuses_and_selects_instead_of_typing_its_letter() {
     alt_d(&mut system);
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abc");
-    assert!(app.ui().omnibox().is_all_selected());
+    assert_eq!(app.ui.omnibox().text(), "abc");
+    assert!(app.ui.omnibox().is_all_selected());
 }
 
 #[test]
@@ -229,7 +229,7 @@ fn a_plain_l_types_a_letter_and_is_not_a_shortcut() {
     chord(&mut system, Modifiers::NONE, KeyCode::KEY_L, "l");
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abcl");
+    assert_eq!(app.ui.omnibox().text(), "abcl");
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn shift_does_not_stop_a_letter_from_typing() {
     );
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abcD");
+    assert_eq!(app.ui.omnibox().text(), "abcD");
 }
 
 #[test]
@@ -259,7 +259,7 @@ fn altgr_q_on_a_german_layout_types_the_at_sign() {
     );
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abc@");
+    assert_eq!(app.ui.omnibox().text(), "abc@");
 }
 
 #[test]
@@ -274,7 +274,7 @@ fn altgr_with_a_command_modifier_still_types_when_no_binding_matches() {
     );
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abc@");
+    assert_eq!(app.ui.omnibox().text(), "abc@");
 }
 
 #[test]
@@ -292,7 +292,7 @@ fn the_default_keymap_binds_no_altgr_chord_so_ctrl_altgr_l_types() {
     );
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abcl");
+    assert_eq!(app.ui.omnibox().text(), "abcl");
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn text_committed_by_an_input_method_is_inserted_into_the_focused_omnibox() {
     system.schedule(WindowEvent::TextCommitted(input_text("日本語")));
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abc日本語");
+    assert_eq!(app.ui.omnibox().text(), "abc日本語");
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn a_held_backspace_keeps_deleting_but_its_release_does_nothing() {
     system.schedule(backspace(KeyState::Released));
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "a");
+    assert_eq!(app.ui.omnibox().text(), "a");
 }
 
 #[test]
@@ -339,7 +339,7 @@ fn a_shortcut_fires_on_the_press_not_on_every_auto_repeat() {
     system.schedule(WindowEvent::Key(repeated_ctrl_l));
     pump(&mut system, &mut presenter, &mut app);
 
-    assert!(!app.ui().omnibox().is_focused());
+    assert!(!app.ui.omnibox().is_focused());
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn escape_cancels_editing_reverts_to_active_url_and_unfocuses() {
     let (mut system, mut presenter, mut app) = loaded_window();
 
     pump(&mut system, &mut presenter, &mut app);
-    let original_url_text = app.ui().omnibox().text().to_string();
+    let original_url_text = app.ui.omnibox().text().to_string();
 
     // Focus and type.
     ctrl_l(&mut system);
@@ -355,19 +355,19 @@ fn escape_cancels_editing_reverts_to_active_url_and_unfocuses() {
 
     type_text(&mut system, "draft query");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "draft query");
-    assert!(app.ui().omnibox().is_focused());
+    assert_eq!(app.ui.omnibox().text(), "draft query");
+    assert!(app.ui.omnibox().is_focused());
 
     // Press Escape.
     press_named(&mut system, LogicalKey::Escape, KeyCode::ESCAPE);
     pump(&mut system, &mut presenter, &mut app);
 
     assert!(
-        !app.ui().omnibox().is_focused(),
+        !app.ui.omnibox().is_focused(),
         "Escape must release omnibox focus"
     );
     assert_eq!(
-        app.ui().omnibox().text(),
+        app.ui.omnibox().text(),
         original_url_text.as_str(),
         "Escape must revert omnibox text to active page URL"
     );
@@ -396,12 +396,12 @@ fn end_to_end_shortcut_typing_and_navigation_dispatch() {
     // 1. Press Ctrl+L to focus omnibox.
     ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut app);
-    assert!(app.ui().omnibox().is_focused());
+    assert!(app.ui.omnibox().is_focused());
 
     // 2. Type "rust-lang.org" (without scheme).
     type_text(&mut system, "rust-lang.org");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "rust-lang.org");
+    assert_eq!(app.ui.omnibox().text(), "rust-lang.org");
 
     // 3. Press Enter.
     press_named(&mut system, LogicalKey::Enter, KeyCode::ENTER);
@@ -409,7 +409,7 @@ fn end_to_end_shortcut_typing_and_navigation_dispatch() {
 
     // Focus must be released immediately.
     assert!(
-        !app.ui().omnibox().is_focused(),
+        !app.ui.omnibox().is_focused(),
         "pressing Enter must release omnibox focus"
     );
 
@@ -431,16 +431,16 @@ fn control_keys_backspace_and_arrows_operate_on_focused_omnibox() {
     ctrl_l(&mut system);
     type_text(&mut system, "cat");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "cat");
+    assert_eq!(app.ui.omnibox().text(), "cat");
 
     // Backspace removes 't' -> "ca"
     press_named(&mut system, LogicalKey::Backspace, KeyCode::BACKSPACE);
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "ca");
+    assert_eq!(app.ui.omnibox().text(), "ca");
 
     // ArrowLeft moves cursor between 'c' and 'a', then type 'o' -> "coa"
     press_named(&mut system, LogicalKey::ArrowLeft, KeyCode::ARROW_LEFT);
     type_text(&mut system, "o");
     pump(&mut system, &mut presenter, &mut app);
-    assert_eq!(app.ui().omnibox().text(), "coa");
+    assert_eq!(app.ui.omnibox().text(), "coa");
 }

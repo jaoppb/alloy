@@ -10,6 +10,17 @@
 //! methods may move.
 
 mod render;
+
+#[cfg(test)]
+mod click_tests;
+#[cfg(test)]
+mod coalescing_tests;
+#[cfg(test)]
+mod damage_tests;
+#[cfg(test)]
+mod keyboard_tests;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;
 
@@ -199,26 +210,6 @@ where
     /// touching the relayout count.
     pub fn repaint<R: Presenter>(&self, presenter: &mut R) -> Result<(), AlloyError> {
         self.compositor.repaint(presenter)
-    }
-
-    /// The chrome: focus and omnibox state.
-    pub const fn ui(&self) -> &UiController {
-        &self.ui
-    }
-
-    /// The browsing context: document, links and navigation state.
-    pub const fn browsing(&self) -> &BrowsingContext<MarkupDiscoverer> {
-        &self.browsing
-    }
-
-    /// The hit-testable layout of the chrome and the page's link regions.
-    pub const fn ui_tree(&self) -> &UiRenderTree {
-        &self.ui_tree
-    }
-
-    /// The surface size the next frame is rendered for.
-    pub const fn viewport(&self) -> SurfaceSize {
-        self.viewport
     }
 
     const fn executor(&mut self) -> EffectExecutor<'_, X> {

@@ -5,10 +5,16 @@ use browser::{FetchPayload, FetchResult};
 use ui::OmniboxTheme;
 use window::{HeadlessWindowSystem, RecordingPresenter, WindowEvent, WindowSystem as _};
 
-use crate::application::test_support::{
+use super::test_support::{
     FakeWeb, TestApp, app_over, completed_navigation, deliver, load, loaded_app, pump,
 };
 use crate::composition::initial_window_attributes;
+
+/// A page whose only content is a 100x50 block link at the top.
+const LINK_PAGE: &str = concat!(
+    "<html><body><a href=\"target.html\" ",
+    "style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>"
+);
 
 #[test]
 fn clicking_a_link_triggers_navigation_to_resolved_url() {
@@ -22,17 +28,13 @@ fn clicking_a_link_triggers_navigation_to_resolved_url() {
         FakeWeb::new().with_page(target_url, "<html><body>target</body></html>"),
         attributes.initial_size(),
     );
-    load(
-        &mut app,
-        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
-        "http://example.com/index.html",
-    );
+    load(&mut app, LINK_PAGE, "http://example.com/index.html");
 
     // First pump: renders the document and collects its link areas
     pump(&mut system, &mut presenter, &mut app);
 
     assert!(
-        app.browsing().content_regions().next().is_some(),
+        app.browsing.content_regions().next().is_some(),
         "link target must be collected"
     );
 
@@ -81,7 +83,7 @@ fn a_link_click_resolves_against_the_documents_base_href_not_the_navigation_url(
     );
 
     assert_eq!(
-        app.browsing()
+        app.browsing
             .document()
             .and_then(browser::Document::base_url)
             .map(ToString::to_string)
@@ -135,7 +137,7 @@ fn pump_queued(app: &mut TestApp) {
 #[test]
 fn the_session_drops_a_result_stamped_for_a_navigation_the_user_left() {
     let mut app = loaded_app(initial_window_attributes().unwrap().initial_size());
-    let left = app.browsing().current_navigation();
+    let left = app.browsing.current_navigation();
     app.navigate(network::Url::parse(&page_url("next.html")).unwrap());
     let late_sheet =
         FetchPayload::Stylesheet(css::MediaQuery::always(), Ok("p { color: red }".into()));
@@ -144,7 +146,7 @@ fn the_session_drops_a_result_stamped_for_a_navigation_the_user_left() {
     pump_queued(&mut app);
 
     assert_eq!(app.stats().stylesheets_loaded(), 0);
-    assert_ne!(app.browsing().current_navigation(), left);
+    assert_ne!(app.browsing.current_navigation(), left);
 }
 
 #[test]
@@ -154,13 +156,9 @@ fn clicks_in_chrome_region_target_omnibox_and_do_not_trigger_links() {
     system.create_window(&attributes).unwrap();
     let mut presenter = RecordingPresenter::new();
     let mut app = app_over(FakeWeb::new(), attributes.initial_size());
-    load(
-        &mut app,
-        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
-        &page_url("index.html"),
-    );
+    load(&mut app, LINK_PAGE, &page_url("index.html"));
     pump(&mut system, &mut presenter, &mut app);
-    assert!(!app.ui().omnibox().is_focused());
+    assert!(!app.ui.omnibox().is_focused());
     let navigations_before_click = app.stats().navigations();
 
     // y = 20 is inside the chrome bar, above the link at the top of the page.
@@ -174,7 +172,7 @@ fn clicks_in_chrome_region_target_omnibox_and_do_not_trigger_links() {
     pump(&mut system, &mut presenter, &mut app);
 
     assert!(
-        app.ui().omnibox().is_focused(),
+        app.ui.omnibox().is_focused(),
         "clicking within the chrome bar must focus the omnibox"
     );
     assert_eq!(
@@ -195,11 +193,7 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
         FakeWeb::new().with_page(target.clone(), "<html><body>target</body></html>"),
         attributes.initial_size(),
     );
-    load(
-        &mut app,
-        "<html><body><a href=\"target.html\" style=\"display: block; width: 100px; height: 50px;\">Click me</a></body></html>",
-        "http://example.com/index.html",
-    );
+    load(&mut app, LINK_PAGE, "http://example.com/index.html");
     pump(&mut system, &mut presenter, &mut app);
     let navigations_before_click = app.stats().navigations();
 

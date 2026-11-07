@@ -10,7 +10,8 @@ use super::keyboard_input::KeyboardInput;
 /// batch.
 #[derive(Default)]
 pub(super) struct PumpEvents {
-    saw_window_event: bool,
+    /// A window event or a finished fetch was seen this cycle.
+    did_work: bool,
     close_requested: bool,
     latest_resize: Option<SurfaceSize>,
     needs_repaint: bool,
@@ -30,7 +31,7 @@ impl PumpEvents {
     }
 
     pub(super) fn observe(&mut self, event: &WindowEvent) {
-        self.saw_window_event = true;
+        self.did_work = true;
         match event {
             WindowEvent::CloseRequested => self.close_requested = true,
             WindowEvent::Resized(viewport) => self.latest_resize = Some(*viewport),
@@ -52,8 +53,13 @@ impl PumpEvents {
         PumpStatus::Continue
     }
 
-    pub(super) const fn saw_window_event(&self) -> bool {
-        self.saw_window_event
+    pub(super) const fn observe_fetch(&mut self) {
+        self.did_work = true;
+    }
+
+    /// Whether the cycle saw a window event or a finished fetch.
+    pub(super) const fn did_work(&self) -> bool {
+        self.did_work
     }
 
     pub(super) const fn needs_repaint(&self) -> bool {
@@ -138,7 +144,12 @@ mod tests {
     }
 
     #[test]
-    fn a_batch_with_no_events_saw_nothing() {
-        assert!(!PumpEvents::default().saw_window_event());
+    fn a_batch_with_no_events_did_no_work_and_a_fetch_alone_is_work() {
+        let mut events = PumpEvents::default();
+        assert!(!events.did_work());
+
+        events.observe_fetch();
+
+        assert!(events.did_work());
     }
 }

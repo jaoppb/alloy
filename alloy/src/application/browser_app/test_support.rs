@@ -143,7 +143,7 @@ pub fn completed_navigation(
         app.stats().navigations() > navigations_before_click,
         "the click's navigation never arrived"
     );
-    app.browsing()
+    app.browsing
         .document()
         .and_then(browser::Document::base_url)
         .cloned()
@@ -155,7 +155,7 @@ pub fn navigation_to(app: &TestApp, markup: &str, url: &str) -> FetchResult {
     let document = dom::parse(markup).unwrap().into_tree();
     let loaded = LoadedDocument::new(document, network::Url::parse(url).unwrap());
     FetchResult::new(
-        app.browsing().current_navigation(),
+        app.browsing.current_navigation(),
         FetchPayload::Document(Ok(loaded)),
     )
 }

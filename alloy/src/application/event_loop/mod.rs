@@ -15,22 +15,13 @@
 //!
 //! [`FetchExecutor`]: crate::application::ports::FetchExecutor
 
+mod dispatch;
 mod keyboard_input;
 mod pump_events;
-
-#[cfg(test)]
-mod click_tests;
-#[cfg(test)]
-mod coalescing_tests;
-#[cfg(test)]
-mod damage_tests;
-#[cfg(test)]
-mod keyboard_tests;
 
 use graphics::{FontProvider, RenderBackend};
 use window::{Presenter, PumpStatus, WindowSystem};
 
-use self::keyboard_input::KeyboardInput;
 use self::pump_events::PumpEvents;
 use crate::application::browser_app::BrowserApp;
 use crate::application::loop_stats::LoopStats;
@@ -53,30 +44,34 @@ where
     B: RenderBackend,
 {
     loop {
-        let (outcome, did_work) = pump_once(system, presenter, app)?;
-        if outcome == PumpStatus::Exit || should_stop(&app.stats()) {
+        let cycle = pump_once(system, presenter, app)?;
+        if cycle.status == PumpStatus::Exit || should_stop(&app.stats()) {
             return Ok(app.stats());
         }
-        if !did_work {
+        if !cycle.did_work {
             app.pause_idle();
         }
     }
 }
 
+/// What one pump cycle ended with: whether to keep going, and whether it
+/// observed *anything* (a window event, a background message). The caller idle-sleeps
+/// on a cycle that did no work, purely to avoid busy-spinning a CPU core; it plays no
+/// part in the coalescing invariant.
+pub(crate) struct Cycle {
+    pub(crate) status: PumpStatus,
+    pub(crate) did_work: bool,
+}
+
 /// One iteration: drain every window event, drain every background-fetch
 /// result waiting right now, and — only if something actually changed —
-/// relay out and present exactly once.
-///
-/// The returned `bool` says whether this cycle observed *anything* (a window
-/// event, a background message) — the caller uses it to decide whether to
-/// idle-sleep before the next cycle, purely to avoid busy-spinning a CPU core;
-/// it plays no part in the coalescing invariant itself, which is entirely
-/// "drain everything currently available, then relay out at most once".
+/// relay out and present exactly once ("drain everything currently available,
+/// then relay out at most once").
 pub(crate) fn pump_once<S, R, F, X, W, B>(
     system: &mut S,
     presenter: &mut R,
     app: &mut BrowserApp<F, X, W, B>,
-) -> Result<(PumpStatus, bool), AlloyError>
+) -> Result<Cycle, AlloyError>
 where
     S: WindowSystem,
     R: Presenter,
@@ -89,8 +84,8 @@ where
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
     app.track_pointer(events.pointer_position());
 
-    dispatch_window_events(app, &mut events);
-    let saw_message = drain_fetches(app);
+    app.dispatch_window_events(&mut events);
+    app.apply_ready_fetches(&mut events);
 
     let shown = app.render(presenter)?;
     if shown.is_shown() {
@@ -103,46 +98,8 @@ where
         app.repaint(presenter)?;
     }
 
-    let did_work = events.saw_window_event() || saw_message;
-    Ok((events.status(window_status), did_work))
-}
-
-/// Hands the folded window events to `app`: the last resize, the click, then
-/// every keyboard input in arrival order.
-fn dispatch_window_events<F, X, W, B>(app: &mut BrowserApp<F, X, W, B>, events: &mut PumpEvents)
-where
-    F: FontProvider + 'static,
-    X: FetchExecutor,
-    W: IdlePause,
-    B: RenderBackend,
-{
-    if let Some(viewport) = events.latest_resize() {
-        app.resize(viewport);
-    }
-    if let Some(position) = events.clicked_at() {
-        app.handle_click(position);
-    }
-    for input in events.take_keyboard() {
-        match input {
-            KeyboardInput::Key(key) => app.handle_key(&key),
-            KeyboardInput::Committed(text) => app.handle_text_committed(text),
-        }
-    }
-}
-
-/// Applies every fetch result waiting now; tells the caller whether there were
-/// any.
-fn drain_fetches<F, X, W, B>(app: &mut BrowserApp<F, X, W, B>) -> bool
-where
-    F: FontProvider + 'static,
-    X: FetchExecutor,
-    W: IdlePause,
-    B: RenderBackend,
-{
-    let mut saw_message = false;
-    while let Some(result) = app.next_ready_fetch() {
-        saw_message = true;
-        app.complete_fetch(result);
-    }
-    saw_message
+    Ok(Cycle {
+        status: events.status(window_status),
+        did_work: events.did_work(),
+    })
 }

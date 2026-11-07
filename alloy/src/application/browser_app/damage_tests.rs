@@ -11,8 +11,8 @@ use window::{
     RecordingPresenter, SurfaceSize, WindowEvent,
 };
 
-use super::pump_once;
-use crate::application::test_support::{TestApp, loaded_window, pump};
+use super::test_support::{TestApp, loaded_window, pump};
+use crate::application::event_loop::pump_once;
 
 /// The rows the chrome strip covers, from the same theme the painter uses.
 fn chrome_rows() -> usize {
@@ -94,7 +94,7 @@ fn typing_in_the_omnibox_changes_the_presented_chrome_rows_and_not_the_content()
     type_text(&mut system, "abc");
     pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(app.ui().omnibox().text(), "abc");
+    assert_eq!(app.ui.omnibox().text(), "abc");
     assert_only_chrome_changed(&before, &presented(&presenter));
     assert_eq!(
         app.stats().relayouts(),
@@ -111,7 +111,7 @@ fn focusing_the_omnibox_changes_the_presented_chrome_rows() {
     press_ctrl_l(&mut system);
     pump(&mut system, &mut presenter, &mut app);
 
-    assert!(app.ui().omnibox().is_focused());
+    assert!(app.ui.omnibox().is_focused());
     assert_only_chrome_changed(&before, &presented(&presenter));
     assert_eq!(app.stats().relayouts(), 1);
 }
@@ -198,7 +198,9 @@ fn an_idle_session_neither_presents_nor_rearms_the_redraw() {
     let presents_settled = presenter.present_count();
 
     for cycle in 0..5 {
-        let (_, did_work) = pump_once(&mut system, &mut presenter, &mut app).unwrap();
+        let did_work = pump_once(&mut system, &mut presenter, &mut app)
+            .unwrap()
+            .did_work;
         assert!(!did_work, "idle cycle {cycle} must let the loop sleep");
     }
 
