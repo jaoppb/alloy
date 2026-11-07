@@ -230,10 +230,3 @@ impl<B: RenderBackend> Compositor<B> {
         Ok(Presented::Shown)
     }
 }
-
-impl<B> Compositor<B> {
-    #[cfg(test)]
-    pub const fn has_frame(&self) -> bool {
-        self.frame.is_some()
-    }
-}

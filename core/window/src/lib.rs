@@ -40,7 +40,7 @@
 //! there. [`Presenter`] **is** `Send`: [`SoftbufferPresenter`] may be handed
 //! to a render worker. Blocking I/O (`core/network`'s `HttpTransport`, DNS,
 //! file reads) never runs on this loop's thread — that is Phase I4's
-//! `alloy/src/application/event_loop.rs`, not this crate.
+//! `alloy/src/application/event_loop/`, not this crate.
 //!
 //! ## `unsafe` (`ADR-0018`)
 //!

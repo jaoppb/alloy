@@ -2,12 +2,13 @@
 //!
 //! Provides the headless render pipeline (`render_html_to_png`, `run_render`),
 //! display list generation (`paint_box_tree`), the native-window event loop
-//! (`run_browser`, v0.5 Phase I4), error types, and logging.
+//! (`BrowserApp`, v0.5 Phase I4), error types, and logging.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc)]
 
 pub mod application;
+pub mod composition;
 pub mod error;
 pub mod infrastructure;
 pub mod logging;
@@ -20,9 +21,7 @@ pub use application::pipeline::{
     render_html_with_font_provider, run_render,
 };
 pub use application::runtime_font::RuntimeFontProvider;
-pub use application::{
-    Compositor, Damage, LoopStats, initial_window_attributes, run_browser, run_browser_until,
-    run_browser_until_first_frame,
-};
+pub use application::{BrowserApp, Compositor, Damage, KeymapSource, LoopStats, resolve_keymap};
+pub use composition::initial_window_attributes;
 pub use error::AlloyError;
 pub use infrastructure::software_compositor;

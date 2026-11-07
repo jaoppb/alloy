@@ -4,6 +4,7 @@
 
 use browser::{FetchRequest, NavigationId};
 use graphics::Framebuffer;
+use ui::KeymapBinding;
 
 use crate::error::AlloyError;
 
@@ -41,4 +42,17 @@ pub trait IdlePause {
 pub trait ImageDecoder: Send + Sync + 'static {
     /// Decodes `bytes`, or says why they are not a supported image.
     fn decode(&self, bytes: &[u8]) -> Result<Framebuffer, AlloyError>;
+}
+
+/// Where the key bindings come from (#110 decision 25).
+///
+/// The composition root asks once before the loop and again on reload; the loop
+/// itself never calls it, so a script that supplies bindings costs nothing on
+/// the key-press path (PRD-001's 10 µs budget). Bindings are unvalidated text:
+/// [`resolve_keymap`] keeps the valid ones and the Rust default when none is.
+///
+/// [`resolve_keymap`]: crate::application::keymap::resolve_keymap
+pub trait KeymapSource {
+    /// The bindings this source supplies right now; empty means "the default".
+    fn bindings(&self) -> Vec<KeymapBinding>;
 }

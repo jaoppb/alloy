@@ -81,7 +81,7 @@ frame, no pipeline) are separate operations. `WindowSystem` gains **`request_red
 Command–Query-Separation command, no return, no failure channel, a silent no-op before a window exists — asking the
 backend to deliver a `RedrawRequested` on a following `pump_events`. The loop:
 
-- caches the pixels of each presented frame in the `Session`;
+- caches the pixels of each presented frame in the `Compositor`;
 - calls `request_redraw()` after every relayout, so a compositor that dropped the present re-delivers a redraw once the
   surface is live;
 - serves `RedrawRequested` (compositor expose/occlusion included) with a **repaint** — no relayout, `relayouts`
@@ -169,3 +169,27 @@ separate pixel buffers. A change is reported as `Damage`, accumulated per pump c
 The trade: two backends and two cached buffers instead of one, and a compose (a memory copy of the viewport) on every
 chrome change. What it buys is that the chrome and the page invalidate independently, and that the compositor is the one
 place that knows how a viewport divides into layers.
+
+## Amendment — 2026-10-28: the loop pumps, folds and dispatches; one executor carries effects out (#115, epic #110)
+
+`Session` held sixteen fields and ran every effect itself. It is gone. The pieces are:
+
+- **`event_loop/`** is only the loop: `pump_once` drains the window and the fetch inbox, `PumpEvents` folds one drain
+  (last resize wins, any number of redraws are one repaint, a click lands where the pointer was), and the result is
+  handed to `BrowserApp`. An `arch-lint` rule (`event-loop-pump-fold-dispatch-only`) keeps `css`, `dom`, `std::thread`
+  and the software backend out of it.
+- **`BrowserApp`** (`application/browser_app/`) owns the browsing context, the chrome, the pending damage and the
+  compositor, and is the entry point (`run`, `run_until`, `run_until_first_frame`; the free `run_browser*` functions
+  were deleted, no alias).
+- **`EffectExecutor`** (`application/effects/`) is the only place the chrome and the browsing context meet: it borrows
+  both for one dispatch and carries out `UiEffect` and `BrowserEffect` (`Navigate`, `FollowLink`, `ChromeDamaged`,
+  `Fetch`, `NavigationStarted`/`DocumentLoaded`, `ContentDamaged`). It owns nothing and is not generic over the window.
+  `TitleChanged` → `set_title` (#84) and hover → `cursor_for` → `set_cursor` (#68) are not wired: the browser emits
+  neither effect yet.
+- **Keymap seam (#110 decision 25):** `KeymapSource` is a port; the composition root resolves it once with
+  `resolve_keymap` (default `DefaultKeymapSource`, which supplies nothing and so resolves to `Keymap::default()`), and
+  `BrowserApp::reload_keymap` re-resolves it. No script call sits on the key-press path; #50 plugs a script in here.
+- `LoopStats` is a value object with private fields; only the loop records a relayout.
+- `initial_window_attributes` moved to `alloy/src/composition.rs`.
+
+`ImageDecoder`, `IdlePause` and the `FetchInbox` channel stay separate ports (#114's decision stands).
