@@ -9,6 +9,7 @@
 //! describing the content layer last rastered, are invariants only this type's
 //! methods may move.
 
+mod dispatch;
 mod render;
 
 #[cfg(test)]

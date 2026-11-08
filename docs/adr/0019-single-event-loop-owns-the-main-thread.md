@@ -193,3 +193,9 @@ place that knows how a viewport divides into layers.
 - `initial_window_attributes` moved to `alloy/src/composition.rs`.
 
 `ImageDecoder`, `IdlePause` and the `FetchInbox` channel stay separate ports (#114's decision stands).
+
+2026-11-08, epic #110 Definition-of-Done pass: the `impl BrowserApp` block that applies one cycle's folded window input
+(`apply_input`, over the `WindowInput` value `PumpEvents` yields) moved from `event_loop/dispatch.rs` to
+`browser_app/dispatch.rs`, where the type it extends lives; the fetch-inbox drain stayed in `pump_once`. `event_loop/`
+is only the loop and its fold (`run_loop`/`pump_once`, `Cycle`, `PumpEvents`, `KeyboardInput`), as #115's acceptance
+asked.

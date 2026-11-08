@@ -70,86 +70,34 @@ impl PumpEvents {
         self.pointer_position
     }
 
-    pub(super) const fn latest_resize(&self) -> Option<SurfaceSize> {
-        self.latest_resize
-    }
-
-    pub(super) const fn clicked_at(&self) -> Option<PhysicalPosition> {
-        self.clicked_at
-    }
-
-    pub(super) fn take_keyboard(&mut self) -> Vec<KeyboardInput> {
-        std::mem::take(&mut self.keyboard)
+    /// What this cycle hands to `BrowserApp`; the keyboard inputs leave with it.
+    pub(super) fn take_input(&mut self) -> WindowInput {
+        WindowInput {
+            latest_resize: self.latest_resize,
+            clicked_at: self.clicked_at,
+            keyboard: std::mem::take(&mut self.keyboard),
+        }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
+/// The folded window input of one cycle, as `BrowserApp` consumes it: the last
+/// resize, the click, and every keyboard input in arrival order.
+pub struct WindowInput {
+    latest_resize: Option<SurfaceSize>,
+    clicked_at: Option<PhysicalPosition>,
+    keyboard: Vec<KeyboardInput>,
+}
 
-    use window::{PhysicalPosition, PointerButton, PumpStatus, SurfaceSize, WindowEvent};
-
-    use super::PumpEvents;
-
-    fn size(width: u32) -> SurfaceSize {
-        SurfaceSize::new(width, 600).unwrap()
+impl WindowInput {
+    pub const fn latest_resize(&self) -> Option<SurfaceSize> {
+        self.latest_resize
     }
 
-    fn click() -> WindowEvent {
-        WindowEvent::PointerButton {
-            button: PointerButton::Left,
-            pressed: true,
-        }
+    pub const fn clicked_at(&self) -> Option<PhysicalPosition> {
+        self.clicked_at
     }
 
-    #[test]
-    fn only_the_last_resize_of_a_batch_counts() {
-        let mut events = PumpEvents::default();
-
-        events.observe(&WindowEvent::Resized(size(1024)));
-        events.observe(&WindowEvent::Resized(size(640)));
-
-        assert_eq!(events.latest_resize(), Some(size(640)));
-    }
-
-    #[test]
-    fn a_click_lands_where_the_pointer_was_when_it_came() {
-        let mut events = PumpEvents::default();
-        let first = PhysicalPosition::new(1.0, 2.0);
-
-        events.observe(&WindowEvent::PointerMoved { position: first });
-        events.observe(&click());
-        events.observe(&WindowEvent::PointerMoved {
-            position: PhysicalPosition::new(9.0, 9.0),
-        });
-
-        assert_eq!(events.clicked_at(), Some(first));
-        assert_eq!(
-            events.pointer_position(),
-            Some(PhysicalPosition::new(9.0, 9.0))
-        );
-    }
-
-    #[test]
-    fn many_redraw_requests_are_one_repaint_and_a_close_exits() {
-        let mut events = PumpEvents::default();
-        events.observe(&WindowEvent::RedrawRequested);
-        events.observe(&WindowEvent::RedrawRequested);
-        assert!(events.needs_repaint());
-        assert_eq!(events.status(PumpStatus::Continue), PumpStatus::Continue);
-
-        events.observe(&WindowEvent::CloseRequested);
-
-        assert_eq!(events.status(PumpStatus::Continue), PumpStatus::Exit);
-    }
-
-    #[test]
-    fn a_batch_with_no_events_did_no_work_and_a_fetch_alone_is_work() {
-        let mut events = PumpEvents::default();
-        assert!(!events.did_work());
-
-        events.observe_fetch();
-
-        assert!(events.did_work());
+    pub fn into_keyboard(self) -> Vec<KeyboardInput> {
+        self.keyboard
     }
 }

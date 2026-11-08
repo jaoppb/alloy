@@ -15,9 +15,13 @@
 //!
 //! [`FetchExecutor`]: crate::application::ports::FetchExecutor
 
-mod dispatch;
 mod keyboard_input;
 mod pump_events;
+#[cfg(test)]
+mod pump_events_tests;
+
+pub(crate) use self::keyboard_input::KeyboardInput;
+pub(crate) use self::pump_events::WindowInput;
 
 use graphics::{FontProvider, RenderBackend};
 use window::{Presenter, PumpStatus, WindowSystem};
@@ -84,8 +88,11 @@ where
     let window_status = system.pump_events(&mut |event| events.observe(&event))?;
     app.track_pointer(events.pointer_position());
 
-    app.dispatch_window_events(&mut events);
-    app.apply_ready_fetches(&mut events);
+    app.apply_input(events.take_input());
+    while let Some(result) = app.next_ready_fetch() {
+        events.observe_fetch();
+        app.complete_fetch(result);
+    }
 
     let shown = app.render(presenter)?;
     if shown.is_shown() {
