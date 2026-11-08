@@ -46,8 +46,7 @@ impl<F, X, W> BrowserServices<F, X, W> {
         &self.font_provider
     }
 
-    /// The executor itself, for tests that feed it results of their own.
-    #[cfg(test)]
+    /// The executor fetches go through.
     #[must_use]
     pub const fn fetch_executor(&self) -> &X {
         &self.fetch_executor

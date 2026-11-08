@@ -2,7 +2,7 @@
 
 The `HttpTransport` / `RequestPolicy` seam in `core/network` is a **Replaceable Subsystem Port** under `ADR-0011`. This
 document is its contract record: the state of all seven mandatory items at the `I4` freeze point (v0.5 Phase I4,
-`alloy <url>` native-window rendering — `alloy/src/application/{navigation,subresource,event_loop}.rs`).
+`alloy <url>` native-window rendering — `alloy/src/application/{browser_app,effects,event_loop}`).
 
 | Item | Contract requirement                                                      | State                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ---- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -11,7 +11,7 @@ document is its contract record: the state of all seven mandatory items at the `
 | 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `HttpRequest`, `HttpResponse`, `NetworkError`, `PolicyVerdict` all domain/application-owned in `core/network`, `#[non_exhaustive]`; `network::PORT_SCHEMA_VERSION = 2`, frozen — see item 7                                                                                                                                                                                                                                    |
 | 4    | Exactly one typed error, source location                                  | ✅ `NetworkError`, `#[non_exhaustive]`, one `thiserror` enum; every variant carries a `ProtocolPhase` (the location metadata) and, where the cause is a closed set, a typed defect enum (`UrlDefect`, `FramingDefect`, `MalformedPart`, `RedirectDefect`, `DecodeDefect`, `WireLimit`)                                                                                                                                            |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `network::conformance::run_transport_suite`; `MockTransport` + `AllowAllPolicy` (reference) and `RealHttpTransport` (real, feature `real-transport`) both pass it. `cargo test -p network --no-default-features` builds and tests with no real transport linked — the `layering` CI job holds this. `alloy/tests/e2e_golden.rs` additionally proves `MockTransport` drives the real `alloy::run_browser_until` loop end to end |
+| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `network::conformance::run_transport_suite`; `MockTransport` + `AllowAllPolicy` (reference) and `RealHttpTransport` (real, feature `real-transport`) both pass it. `cargo test -p network --no-default-features` builds and tests with no real transport linked — the `layering` CI job holds this. `alloy/tests/e2e_golden.rs` additionally proves `MockTransport` drives the real `alloy::BrowserApp::run_until` loop end to end |
 | 7    | Frozen-API milestone                                                      | ✅ **Frozen at `I4`.** `network::PORT_SCHEMA_VERSION` (now 2, see §4) is that surface. Any future boundary change bumps it and adds a row to §4's migration table below                                                                                                                                                                                                                                                                       |
 
 ---
@@ -50,7 +50,7 @@ typed defect enum rather than a free-form string: `UrlDefect` (malformed URL tex
 
 | Version | Change                                                                                                                                                                   | Adapter action |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| **1**   | Surface introduced in v0.5 Phase C1 (transport) and Phase M (policy); frozen at integration point `I4` (v0.5 Phase I4, `alloy::run_browser`/`navigation`/`subresource`). | —              |
+| **1**   | Surface introduced in v0.5 Phase C1 (transport) and Phase M (policy); frozen at integration point `I4` (v0.5 Phase I4, `alloy::BrowserApp`). | —              |
 | **2**   | `PolicyVerdict::request_to_send(&self, &HttpRequest) -> Option<&HttpRequest>` removed; `PolicyVerdict::into_request(self, HttpRequest) -> Result<HttpRequest, NetworkError>` replaces it and turns a `Deny` into `NetworkError::PolicyDenied` (#114, epic #110). | None — no transport or policy adapter called it; a consumer matching on the verdict is unaffected. |
 
 **Not a migration — `OmniboxClassifier`, `OmniboxDestination` and `SearchTemplate` left the crate (#109, epic #110
@@ -78,7 +78,7 @@ required to be pure — see §5.3.
 - **Synchronous and blocking, by `ADR-0019` decision.** There is no async runtime in this workspace and the window event
   loop owns the main thread. A consumer runs `HttpTransport::execute` on a worker of a `std::thread` pool and receives
   the `HttpResponse` back over `std::sync::mpsc` as one more loop event — Phase I4's
-  `alloy/src/application/event_loop.rs`, not this crate's job. `RequestPolicy::decide` is required to be cheap enough to
+  `alloy/src/application/event_loop/`, not this crate's job. `RequestPolicy::decide` is required to be cheap enough to
   run inline on whichever thread calls it (§5.3).
 
 ### 5.3 Purity and determinism

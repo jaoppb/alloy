@@ -10,7 +10,7 @@
 //! - `alloy <url>` opens a native window and renders the page at `url`
 //!   (v0.5 Phase I4) — real network I/O and a real display, so this path has
 //!   no automated coverage; the golden e2e suite (`alloy/tests/e2e_golden.rs`)
-//!   exercises the same [`alloy::run_browser`] loop over mocks instead.
+//!   exercises the same [`alloy::BrowserApp`] loop over mocks instead.
 //!   `ALLOY_LOG=alloy=debug,network=debug alloy <url> 2>alloy.log` reports how
 //!   much author CSS survived the v0.5 cut (stylesheet fetches, rules kept vs.
 //!   dropped, the final `css cascade input`).
@@ -21,11 +21,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use alloy::error::AlloyError;
-use alloy::infrastructure::{SleepPause, ThreadFetchExecutor};
+use alloy::infrastructure::{DefaultKeymapSource, SleepPause, ThreadFetchExecutor};
 use alloy::logging;
 use alloy::{
-    BrowserServices, RenderOptions, default_runtime_font_provider, initial_window_attributes,
-    render_html_with_font_provider, run_browser, software_compositor,
+    BrowserApp, BrowserServices, RenderOptions, default_runtime_font_provider,
+    initial_window_attributes, render_html_with_font_provider, resolve_keymap, software_compositor,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use dom::serialize_html;
@@ -130,15 +130,10 @@ fn run_browse_command(raw_url: &str) -> Result<(), AlloyError> {
     };
     let mut presenter = SoftbufferPresenter::new(window_id, handle)?;
 
-    let stats = run_browser(
-        &url,
-        services,
-        compositor,
-        &mut system,
-        &mut presenter,
-        attributes.initial_size(),
-    )?;
-    tracing::info!(relayouts = stats.relayouts, "browser session ended");
+    let keymap = resolve_keymap(&DefaultKeymapSource);
+    let mut app = BrowserApp::new(attributes.initial_size(), services, compositor, keymap);
+    let stats = app.run(&url, &mut system, &mut presenter)?;
+    tracing::info!(relayouts = stats.relayouts(), "browser session ended");
     Ok(())
 }
 

@@ -115,6 +115,15 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   and content layers separately behind the `RenderBackend` port and takes `Damage::{Chrome, Content, Viewport}`; chrome
   damage never bumps `stats.relayouts` (fixes #116), a viewport no taller than the chrome shows the chrome alone
   (fixes #118). `graphics::PORT_SCHEMA_VERSION = 4` (`RenderBackend::bind_images`, `PRD-005` §6).
+- **#115 — slim event loop** (epic #110, ADR-0019 amendment, closes the epic): `alloy/src/application/event_loop/` is
+  only `pump_once` + `PumpEvents` (the fold); `Session` is gone. `BrowserApp` (`application/browser_app/`) owns the
+  browsing context, chrome, pending damage and compositor and is the entry point (`run`/`run_until`/
+  `run_until_first_frame`; the free `run_browser*` fns were deleted). `EffectExecutor` (`application/effects/`) is the
+  one place `UiEffect`/`BrowserEffect` are carried out, over borrows. `KeymapSource` port + `resolve_keymap` +
+  `BrowserApp::reload_keymap` are the keymap seam #50 plugs a script into (`DefaultKeymapSource` in infrastructure).
+  `LoopStats` is a value object (`relayouts()`, `navigations()` …, no pub fields); `initial_window_attributes` lives in
+  `alloy/src/composition.rs`. `arch-lint.toml`: `alloy-infrastructure` scope and `event-loop-pump-fold-dispatch-only`.
+  Not wired (no effect emitted yet): `TitleChanged` → `set_title` (#84), hover → `set_cursor` (#68).
 - **I4 — `alloy <url>`, native window rendering**: **not part of this delivered set** — in progress separately.
 
 Still **stubs** (a doc comment and `#![forbid(unsafe_code)]`, no functions): `core/js`, `devtools`, `extension`. Open
@@ -181,6 +190,7 @@ to; hardcoding user-facing policy into Rust violates the core pattern.
 | `core/window`                | `window`        | `WindowSystem` / `Presenter` ports, `winit`+`softbuffer` adapter, headless reference (v0.5 C2)                            |
 | `core/network`               | `network`       | `HttpTransport` / `RequestPolicy` ports, hand-written HTTP/1.1 + `rustls`/`ring` TLS (v0.5 C0/C1)                         |
 | `core/platform`              | `platform`      | Host-OS facts (font install paths, env lookups) behind the `FontLocator` port — the only `target_os` branch (ADR-0022)    |
+| `alloy`                      | `alloy`         | CLI + composition root (`composition.rs`, `main.rs`); `application/`: `BrowserApp`, `EffectExecutor`, the single `event_loop/` (pump/fold/dispatch), layered `Compositor`, ports (`FetchExecutor`, `IdlePause`, `ImageDecoder`, `KeymapSource`); `infrastructure/`: fetch threads, PNG decoding, idle sleep, default keymap |
 | `devtools`                   | `devtools`      | Debug protocol, inspector, hot-reload orchestration. **Stub (v0.9+)**                                                     |
 | `extension`                  | `extension`     | WebExtensions bridge. **Stub**                                                                                            |
 

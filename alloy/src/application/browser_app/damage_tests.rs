@@ -11,8 +11,8 @@ use window::{
     RecordingPresenter, SurfaceSize, WindowEvent,
 };
 
-use super::pump_once;
-use super::test_support::{TestSession, loaded_window, pump};
+use super::test_support::{TestApp, loaded_window, pump};
+use crate::application::event_loop::pump_once;
 
 /// The rows the chrome strip covers, from the same theme the painter uses.
 fn chrome_rows() -> usize {
@@ -61,11 +61,11 @@ fn press_ctrl_l(system: &mut HeadlessWindowSystem) {
 }
 
 /// A page laid out and presented once, the omnibox untouched.
-fn presented_page() -> (HeadlessWindowSystem, RecordingPresenter, TestSession) {
-    let (mut system, mut presenter, mut session) = loaded_window();
-    pump(&mut system, &mut presenter, &mut session);
-    assert_eq!(session.stats().relayouts, 1);
-    (system, presenter, session)
+fn presented_page() -> (HeadlessWindowSystem, RecordingPresenter, TestApp) {
+    let (mut system, mut presenter, mut app) = loaded_window();
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(app.stats().relayouts(), 1);
+    (system, presenter, app)
 }
 
 /// Asserts `after` differs from `before` in the chrome rows and nowhere else.
@@ -86,18 +86,18 @@ fn assert_only_chrome_changed(before: &(usize, usize, Vec<u32>), after: &(usize,
 
 #[test]
 fn typing_in_the_omnibox_changes_the_presented_chrome_rows_and_not_the_content() {
-    let (mut system, mut presenter, mut session) = presented_page();
+    let (mut system, mut presenter, mut app) = presented_page();
     press_ctrl_l(&mut system);
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
     let before = presented(&presenter);
 
     type_text(&mut system, "abc");
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(session.omnibox().text(), "abc");
+    assert_eq!(app.ui.omnibox().text(), "abc");
     assert_only_chrome_changed(&before, &presented(&presenter));
     assert_eq!(
-        session.stats().relayouts,
+        app.stats().relayouts(),
         1,
         "typing must never relayout the document"
     );
@@ -105,46 +105,46 @@ fn typing_in_the_omnibox_changes_the_presented_chrome_rows_and_not_the_content()
 
 #[test]
 fn focusing_the_omnibox_changes_the_presented_chrome_rows() {
-    let (mut system, mut presenter, mut session) = presented_page();
+    let (mut system, mut presenter, mut app) = presented_page();
     let before = presented(&presenter);
 
     press_ctrl_l(&mut system);
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
 
-    assert!(session.omnibox().is_focused());
+    assert!(app.ui.omnibox().is_focused());
     assert_only_chrome_changed(&before, &presented(&presenter));
-    assert_eq!(session.stats().relayouts, 1);
+    assert_eq!(app.stats().relayouts(), 1);
 }
 
 #[test]
 fn many_chrome_damages_in_one_pump_cost_one_present() {
-    let (mut system, mut presenter, mut session) = presented_page();
+    let (mut system, mut presenter, mut app) = presented_page();
     press_ctrl_l(&mut system);
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
     let presents_before = presenter.present_count();
 
     type_text(&mut system, "a long run of typed characters");
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
 
     assert_eq!(
         presenter.present_count(),
         presents_before + 1,
         "thirty keystrokes coalesce into a single chrome raster and present"
     );
-    assert_eq!(session.stats().relayouts, 1);
+    assert_eq!(app.stats().relayouts(), 1);
 }
 
 #[test]
 fn a_viewport_change_and_typing_in_one_pump_cost_one_relayout() {
-    let (mut system, mut presenter, mut session) = presented_page();
+    let (mut system, mut presenter, mut app) = presented_page();
     press_ctrl_l(&mut system);
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
 
     system.schedule(WindowEvent::Resized(SurfaceSize::new(640, 480).unwrap()));
     type_text(&mut system, "abc");
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(session.stats().relayouts, 2);
+    assert_eq!(app.stats().relayouts(), 2);
     let (width, height, _) = presented(&presenter);
     assert_eq!((width, height), (640, 480));
 }
@@ -153,11 +153,11 @@ fn a_viewport_change_and_typing_in_one_pump_cost_one_relayout() {
 fn a_viewport_no_taller_than_the_chrome_keeps_the_session_alive() {
     let chrome = u32::try_from(chrome_rows()).unwrap();
     for height in [1, chrome, chrome + 1] {
-        let (mut system, mut presenter, mut session) = presented_page();
+        let (mut system, mut presenter, mut app) = presented_page();
         let small = SurfaceSize::new(800, height).unwrap();
 
         system.schedule(WindowEvent::Resized(small));
-        pump(&mut system, &mut presenter, &mut session);
+        pump(&mut system, &mut presenter, &mut app);
 
         let (width, presented_height, pixels) = presented(&presenter);
         assert_eq!(
@@ -170,21 +170,21 @@ fn a_viewport_no_taller_than_the_chrome_keeps_the_session_alive() {
 
 #[test]
 fn growing_back_from_a_chrome_only_viewport_renders_the_page_again() {
-    let (mut system, mut presenter, mut session) = presented_page();
+    let (mut system, mut presenter, mut app) = presented_page();
     let chrome_only = presented(&presenter).2[..chrome_rows() * 800].to_vec();
 
     system.schedule(WindowEvent::Resized(SurfaceSize::new(800, 30).unwrap()));
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
     assert_eq!(
-        session.stats().relayouts,
+        app.stats().relayouts(),
         1,
         "a viewport with no content rows has nothing to lay out"
     );
 
     system.schedule(WindowEvent::Resized(SurfaceSize::new(800, 600).unwrap()));
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
 
-    assert_eq!(session.stats().relayouts, 2);
+    assert_eq!(app.stats().relayouts(), 2);
     let (width, height, pixels) = presented(&presenter);
     assert_eq!((width, height), (800, 600));
     assert_eq!(pixels[..chrome_only.len()], chrome_only[..]);
@@ -192,16 +192,18 @@ fn growing_back_from_a_chrome_only_viewport_renders_the_page_again() {
 
 #[test]
 fn an_idle_session_neither_presents_nor_rearms_the_redraw() {
-    let (mut system, mut presenter, mut session) = presented_page();
+    let (mut system, mut presenter, mut app) = presented_page();
     // The first present re-armed one redraw (Wayland); that re-blit settles it.
-    pump(&mut system, &mut presenter, &mut session);
+    pump(&mut system, &mut presenter, &mut app);
     let presents_settled = presenter.present_count();
 
     for cycle in 0..5 {
-        let (_, did_work) = pump_once(&mut system, &mut presenter, &mut session).unwrap();
+        let did_work = pump_once(&mut system, &mut presenter, &mut app)
+            .unwrap()
+            .did_work;
         assert!(!did_work, "idle cycle {cycle} must let the loop sleep");
     }
 
     assert_eq!(presenter.present_count(), presents_settled);
-    assert_eq!(session.stats().relayouts, 1);
+    assert_eq!(app.stats().relayouts(), 1);
 }
