@@ -24,9 +24,10 @@ dependency — Vulkan/OpenGL tiers are ADR-0009's roadmap, not yet implemented),
 golden-image gate, and real text rasterization (`FontProvider`, `DrawText`, `TextMeasurer`, `ttf-parser` for font
 parsing). `graphics::PORT_SCHEMA_VERSION = 2`. `docs/reports/IMPLEMENTACAO-DETALHADA-V0-3.md`.
 
-**v0.5 ("página real") is in progress on `feat/v0-5`, not yet merged to `main`.** Full phase-by-phase status, evidence
-and DoD checklists: `docs/v0-5-handoff/README.md` (the phase package) and `docs/reports/V0-5-PROGRESSO-E-PENDENCIAS.md`.
-Delivered and independently verified (`cargo test`/`clippy` per crate, this session):
+**v0.5 ("página real") delivered and merged to `main`** as the `split/01`–`split/11` PR series (#10, #11, #25, #13–#20,
+merged 2026-09-14 → 2026-10-04); the monolithic `feat/v0-5` PR #8 was closed unmerged in their favour, so that branch is
+history, not a pending merge. `docs/v0-5-handoff/README.md` (the phase package) and
+`docs/reports/V0-5-PROGRESSO-E-PENDENCIAS.md` are dated snapshots of the campaign, not current status. Delivered:
 
 - **B4 — `core/css`**: a full layout engine over the B0–B3 port skeleton — box model (`BoxEdges`, margin collapse,
   `box-sizing`), a complete inline formatting context (word segmentation, whitespace collapse, `text-align` incl.
@@ -50,22 +51,18 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   Windows-1252 numeric remap) and `dom` escapes only the §13.3 set. `tests/html5lib_entities.rs` replays html5lib's
   4,290 character-reference cases (output, codes, locations) with no skip list.
 - **X — `core/graphics`**: PNG decoder (`IHDR`/`IDAT`/`IEND`, RGB/RGBA 8-bit) over `network::inflate`, `DrawImage` on
-  `SoftwareCpuBackend`, integer box-sample scaling (ADR-0016 — no floating-point in the geometry). Fuzz targets exist
-  (`fuzz/fuzz_targets/{inflate,png_decode}.rs`) but were not run for 10 minutes/target in this session — CI's new `fuzz`
-  job is the first place that will actually prove it.
+  `SoftwareCpuBackend`, integer box-sample scaling (ADR-0016 — no floating-point in the geometry). Fuzz targets
+  (`fuzz/fuzz_targets/{inflate,png_decode,css_parse,html_parse}.rs`) run in CI's `fuzz` job (green on `main`).
 - **I2 — `alloy`**: the full headless pipeline,
   `bytes → html::parse → css cascade/layout → paint → DisplayList → SoftwareCpuBackend → png::encode`, wired in
   `alloy/src/application/{pipeline,paint}.rs` behind `alloy render <file.html> -o <out.png>`.
-  `alloy/tests/render_golden.rs` proves byte-identical determinism over 100 runs. **Gap found this session**: the
-  phase's own checkpoint (`git push` + PR draft) never happened — `feat/v0-5` has no remote counterpart and no PR exists
-  yet.
+  `alloy/tests/render_golden.rs` proves byte-identical determinism over 100 runs.
 - **M — `core/runtime/rhai-bindings`**: `NETWORK_BINDINGS`/`WINDOW_BINDINGS` (same self-guarding-per-method pattern as
   `dom_bindings.rs`) plus a scriptable `.rhai` cascade adapter, all mapping errors through the generalized
   `EngineError::Subsystem` (Phase EE, `engine::PORT_SCHEMA_VERSION` 2→3, `Dom` since removed at `PORT_SCHEMA_VERSION`
   3→4 by issue #23 — `PRD-002` §4.2/§4.5/§4.6). `rhai-bindings/tests/fault_injection.rs` covers the panic matrix for all
-  three binding tables. **Gap found this session, now fixed in Phase P**: the DoD's "committed benchmark baseline" for
-  `core/runtime/rhai/benches/hook_overhead.rs` was never actually committed — a new baseline file and the blocking
-  `hook-benchmark` CI job close that.
+  three binding tables. The committed benchmark baseline for `core/runtime/rhai/benches/hook_overhead.rs` lives in
+  `core/runtime/rhai/benches/baselines/` and the blocking `hook-benchmark` CI job checks it.
 - **C0/C1 — `core/network`**: hand-written HTTP/1.1 client, `rustls`+`ring` TLS (the C0 spike found the pure-Rust
   RustCrypto alternative NO-GO — `docs/reports/SPIKE-C0-TLS-PROVIDER.md`), `HttpTransport`/`RequestPolicy` ports
   (`PRD-009`). `network::PORT_SCHEMA_VERSION = 2`, frozen at `I4` (`1→2` #114: `PolicyVerdict::request_to_send` replaced
@@ -82,28 +79,24 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   named under `event_loop/`; accessor calls are left to review).
 - **EE — `core/engine`**: `EngineError::Subsystem { subsystem: SubsystemName, .. }` generalizes the v0.2 `Dom` variant
   to cover Css/Graphics/Network/Window uniformly (`PRD-002` §4.5).
-- **P (this phase, docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`;
-  N-02 rewritten in `PRD-001`; `PRD-009`/`PRD-010` written; `http-transport-port-contract.md` and
-  `window-system-port-contract.md` written (both honestly marked "not yet frozen" — `I4` hasn't happened).
-  `html-tree-sink-port-contract.md` (the fourth item-4 contract record) is **still outstanding** —
-  `core/html/src/lib.rs` already references it and carries `PORT_SCHEMA_VERSION`, but the record itself was not written
-  in this session; it should also document the `HtmlError` source-location gap above. New blocking CI gates:
+- **P (docs/CI only)**: ADR-0018 (`unsafe` by threat surface) and ADR-0019 (single event loop) → `Accepted`; N-02
+  rewritten in `PRD-001`; `PRD-009`/`PRD-010` written; `http-transport-port-contract.md`,
+  `window-system-port-contract.md` and `html-tree-sink-port-contract.md` written (the first two frozen at `I4`, see
+  C0/C1 and C2 above; the HTML one records `HtmlError` carrying `SourceLocation`). New blocking CI gates:
   `hook-benchmark`, `unsafe-audit` (flipped from advisory — `ci/unsafe_audit.sh` scans direct dependencies via
   `cargo-geiger` JSON output against `unsafe-allowlist.toml`; found and allowlisted a real gap,
   `tracing`/`tracing-subscriber`, which don't cleanly fit any of ADR-0018's three nominal rows — flagged there for a
   future ADR revision), `css-conformance` (extended to `-p html`), `layering` (renamed from `no-engine`, `no-engine`
-  kept as a `just` alias, extended to `core/html`), `fuzz` (`{inflate, png_decode, css_parse}`, wiring only — not run to
-  completion in this sandbox: no `cargo-fuzz`/nightly toolchain available here), `coverage` (extended to
-  `css`/`network`/`window`/`html` `domain/` only, via `--ignore-filename-regex`).
-  **Known gap this session did not close**: that coverage extension currently measures **~66% lines**, not the 85% the
-  gate requires — it is wired as specified and will fail until more domain-level tests are written for `network` (`Url`,
-  `HeaderMap`, error variants) and `window` (`error`, `attributes`) especially.
+  kept as a `just` alias, extended to `core/html`), `fuzz` (`{inflate, png_decode, css_parse, html_parse}`, nightly +
+  `cargo-fuzz`, CI-only), `coverage` (extended to `css`/`network`/`window`/`html` `domain/` only, via
+  `--ignore-filename-regex`; passes the 85% line gate on `main`).
 - **#111 — `core/browser`** (epic #110, ADR-0026): the document state, fetch-result application, subresource discovery,
-  `ImageStore` and the error page moved out of `alloy`'s `Session` into a pure, thread-free `BrowsingContext`.
-  Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment); `arch-lint.toml` (`browser-pure`)
-  forbids `std::thread`, `mpsc` and `HttpTransport` in the crate. `alloy/src/infrastructure/thread_fetch.rs` is the
-  `FetchExecutor` adapter of `BrowserEffect::Fetch` (#114: fetch threads, PNG decoding and the idle sleep sit behind
-  ports; an `arch-lint.toml` rule keeps `std::thread` and `png::decode` out of `alloy/src/application/**`).
+  `ImageStore` and the error page moved out of `alloy`'s then-`Session` (now `BrowserApp`, #115) into a pure,
+  thread-free `BrowsingContext`. Supersession is by `NavigationId`, not by replacing a channel (ADR-0019 amendment);
+  `arch-lint.toml` (`browser-pure`) forbids `std::thread`, `mpsc` and `HttpTransport` in the crate.
+  `alloy/src/infrastructure/thread_fetch.rs` is the `FetchExecutor` adapter of `BrowserEffect::Fetch` (#114: fetch
+  threads, PNG decoding and the idle sleep sit behind ports; an `arch-lint.toml` rule keeps `std::thread` and
+  `png::decode` out of `alloy/src/application/**`).
 - **#113 — input router and keymap** (epic #110, ADR-0027):
   `ui::{Keymap, KeyChord, BrowserCommand, InputRouter, UiController}` and `UiInput`/`UiEffect`; `Keymap::from_bindings`
   is the seam #50/#115 plug a script into. The router takes `platform::HostOs` for the Windows Ctrl+Alt and macOS Option
@@ -124,7 +117,9 @@ Delivered and independently verified (`cargo test`/`clippy` per crate, this sess
   `LoopStats` is a value object (`relayouts()`, `navigations()` …, no pub fields); `initial_window_attributes` lives in
   `alloy/src/composition.rs`. `arch-lint.toml`: `alloy-infrastructure` scope and `event-loop-pump-fold-dispatch-only`.
   Not wired (no effect emitted yet): `TitleChanged` → `set_title` (#84), hover → `set_cursor` (#68).
-- **I4 — `alloy <url>`, native window rendering**: **not part of this delivered set** — in progress separately.
+- **I4 — `alloy <url>`, native window rendering**: on `main` since PR #16 (`split/07`); `alloy/tests/e2e_golden.rs` is
+  the mock-driven golden (`MockTransport` + `HeadlessWindowSystem`/`RecordingPresenter`), the coalescing invariants are
+  unit tests in `browser_app/coalescing_tests.rs`, and the loop itself has the #115 shape above.
 
 Still **stubs** (a doc comment and `#![forbid(unsafe_code)]`, no functions): `core/js`, `devtools`, `extension`. Open
 criteria: C-10 … C-18, F10/F11 (v0.7+). Follow the `domain/` / `application/` / `infrastructure/` layering every

@@ -1,6 +1,6 @@
 //! # `browser` — the browsing context
 //!
-//! Everything the old `alloy` `Session` knew about *the document*: the DOM
+//! Everything `alloy`'s former `Session` (`BrowserApp` since #115) knew about *the document*: the DOM
 //! tree, its base URL, the fetched stylesheets and images, the clickable link
 //! regions of the last layout, and which navigation is the current one. It is
 //! a **pure state machine** (#110 decision 4): commands go in, [`BrowserEffect`]s

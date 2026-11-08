@@ -11,11 +11,12 @@
 //!
 //! The two coalescing invariants this phase is named for — a burst of
 //! resizes or image arrivals costs at most one relayout — are proven as
-//! direct, thread-free unit tests of `pump_once` inside
-//! `alloy/src/application/event_loop.rs` itself (that function is private,
-//! so an external `tests/` file cannot reach it, and the property under test
-//! has nothing to do with real thread timing — see that module's own test
-//! doc comment for why).
+//! direct, thread-free unit tests in
+//! `alloy/src/application/browser_app/coalescing_tests.rs`, which drive the
+//! loop's `pump_once` (`pub(crate)` in `alloy/src/application/event_loop/`,
+//! so an external `tests/` file cannot reach it) over a `BrowserApp`; the
+//! property under test has nothing to do with real thread timing — see that
+//! module's own doc comment for why.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
