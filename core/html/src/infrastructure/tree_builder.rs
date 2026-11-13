@@ -168,12 +168,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             return self.process_body_start_tag(tag);
         }
 
-        if self.in_head
-            && !matches!(
-                tag_str,
-                "title" | "meta" | "style" | "link" | "script" | "noscript"
-            )
-        {
+        if self.in_head && !tag.tag_name().is_head_content() {
             self.pop_head();
         }
 

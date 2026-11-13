@@ -150,3 +150,65 @@ fn title_rcdata_yields_one_text_child_and_no_element_child() {
         "text node must be a child of <title>"
     );
 }
+
+fn text_children_of(events: &[MockEvent], parent: NodeHandle) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            MockEvent::CreateText { id, content } if parent_of(events, *id) == Some(parent) => {
+                Some(content.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn only_element_named(events: &[MockEvent], name: &str) -> NodeHandle {
+    match elements_named(events, name).as_slice() {
+        [only] => *only,
+        found => panic!("must create exactly one <{name}> element, found {found:?}"),
+    }
+}
+
+#[test]
+fn title_rcdata_keeps_markup_literal_and_decodes_references() {
+    let events = events_of("<title>a <b>b</b> &amp;</title>");
+    let title = only_element_named(&events, "title");
+
+    assert!(
+        elements_named(&events, "b").is_empty(),
+        "<b> must stay text"
+    );
+    assert_eq!(text_children_of(&events, title), ["a <b>b</b> &"]);
+}
+
+#[test]
+fn base_keeps_head_open_for_the_following_title() {
+    let events = events_of("<head><base href=\"/\"><title>x</title></head>");
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "base")),
+        Some(head)
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head),
+        "<base> must not end <head> before <title>"
+    );
+}
+
+#[test]
+fn template_stays_in_head() {
+    let events = events_of("<head><template></template><title>x</title></head>");
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "template")),
+        Some(head)
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head)
+    );
+}
