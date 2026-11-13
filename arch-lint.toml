@@ -370,7 +370,8 @@ message = "core/platform is a leaf: it must not depend on any other workspace cr
 
 # --- import restrictions ---------------------------------------------------
 #
-# A deny pattern is matched against the `use` path segment by segment, anchored at both ends:
+# A deny pattern is matched against every path as written — a `use` path or a qualified path in
+# code (`window::domain::key::KeyCode` in a signature) — segment by segment, anchored at both ends:
 # `*` is exactly one segment, `**` any number including zero (arch-lint 0.6 `path_matches`, #128).
 # So "anything under a crate or module" is `<path>::**` (it also matches the bare `<path>`), never
 # `<path>::*`, which misses `winit::window::Window`; and a fenced item is `<crate>::**::<Item>`, so
