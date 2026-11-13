@@ -111,20 +111,25 @@ impl Line {
 /// `input` is what a child of that container is laid out with: an atomic
 /// inline in the run is laid out against it, one level deeper than the
 /// container, so `MAX_LAYOUT_DEPTH` still bounds the recursion.
+///
+/// An item split by block-level descendants contributes only its stretch
+/// between them (CSS 2.1 §9.2.1.1, [`window`]); its inline boxes then get
+/// fragments only on the lines that stretch fills.
 pub fn layout<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
-    items: &[SnapshotId],
+    items: &[InlineItem],
     input: BlockInput,
     align: TextAlign,
 ) -> Result<ContentFlow, CssError> {
     let mut run = Run::new();
     for item in items {
-        collect(context, *item, input, &mut run)?;
+        run.walk = item.walk();
+        collect(context, item.node(), input, &mut run)?;
     }
     let placements = place_run(&run.pieces, input.containing_width(), align);
     let mut emitter = Emitter::new(context, &placements, run.atoms);
     for item in items {
-        emitter.emit_node(*item)?;
+        emitter.emit_node(item.node())?;
     }
     Ok(ContentFlow::new(placements.height, emitter.finish()))
 }
@@ -157,10 +162,12 @@ fn place_run(pieces: &[Piece], content_width: Au, align: TextAlign) -> Placement
 // ---- collection and white-space processing --------------------------------
 
 /// What collecting a run produced: its measured pieces in document order, and
-/// the laid-out atomic inlines some of those pieces stand for.
+/// the laid-out atomic inlines some of those pieces stand for; with where the
+/// walk of the item being collected stands against that item's stretch.
 struct Run {
     pieces: Vec<Piece>,
     atoms: Atoms,
+    walk: Walk,
 }
 
 impl Run {
@@ -168,6 +175,7 @@ impl Run {
         Self {
             pieces: Vec::new(),
             atoms: Atoms::new(),
+            walk: Walk::unbounded(),
         }
     }
 }
@@ -197,7 +205,9 @@ impl Atoms {
 /// Walks one inline-level node, appending its measured pieces in document
 /// order. An inline box contributes nothing itself; its descendants do. An
 /// atomic inline contributes one piece for its whole box, and a `display:
-/// none` node contributes nothing at all.
+/// none` node contributes nothing at all. A block-level descendant is never
+/// walked into: it only moves the walk across the item's stretch, and only
+/// content inside that stretch is kept.
 fn collect<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node_id: SnapshotId,
@@ -205,12 +215,16 @@ fn collect<M: TextMeasurer>(
     run: &mut Run,
 ) -> Result<(), CssError> {
     let styled = context.node(node_id)?;
-    if styled.is_foreign_descendant() {
+    if styled.is_foreign_descendant() || run.walk.is_done() {
         return Ok(());
     }
     let style = styled.style();
     let display = style.display();
     if display.is_none() {
+        return Ok(());
+    }
+    if !display.is_inline_level() {
+        run.walk.cross(node_id);
         return Ok(());
     }
     if display.is_atomic_inline() {
@@ -219,6 +233,9 @@ fn collect<M: TextMeasurer>(
     let font_size = box_model::font_size_of(style, input.parent_font_size());
     if styled.text().is_none() {
         return collect_children(context, styled, input.with_parent_font_size(font_size), run);
+    }
+    if !run.walk.takes_content() {
+        return Ok(());
     }
     collect_text(context, styled, font_size, &mut run.pieces)
 }
@@ -243,6 +260,9 @@ fn collect_atom<M: TextMeasurer>(
     input: BlockInput,
     run: &mut Run,
 ) -> Result<(), CssError> {
+    if !run.walk.takes_content() {
+        return Ok(());
+    }
     let node_id = styled.node();
     let result = block::layout_inline_block(context, node_id, input)?;
     let metrics = TextMetrics::new(result.outer_width(), result.outer_height());
@@ -759,5 +779,8 @@ fn widened_width(piece: &Piece, extra: Extra, index: usize) -> Au {
 // ---- fragment emission ----------------------------------------------------
 
 mod emit;
+mod window;
 
 use emit::Emitter;
+use window::Walk;
+pub use window::{InlineItem, block_descendants};
