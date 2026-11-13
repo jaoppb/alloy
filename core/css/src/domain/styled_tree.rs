@@ -34,6 +34,7 @@ pub struct StyledNode {
     text: Option<TextRun>,
     intrinsic_size: IntrinsicSize,
     is_foreign_descendant: bool,
+    is_body_of_root: bool,
 }
 
 impl StyledNode {
@@ -58,6 +59,14 @@ impl StyledNode {
     #[must_use]
     pub const fn is_foreign_descendant(&self) -> bool {
         self.is_foreign_descendant
+    }
+
+    /// Whether this is the root element's first `<body>`, whose `overflow`
+    /// goes to the viewport while the root's is `visible` (CSS Overflow L3
+    /// §3.3) — a structural fact layout needs, since it never sees tags.
+    #[must_use]
+    pub const fn is_body_of_root(&self) -> bool {
+        self.is_body_of_root
     }
 
     #[must_use]
@@ -135,6 +144,7 @@ impl StyledTree {
                 text: character_data_of(node_ref),
                 intrinsic_size: intrinsic::for_tag(node_ref.tag()),
                 is_foreign_descendant: node_ref.is_foreign_descendant(),
+                is_body_of_root: node_ref.is_body_of_root(),
             });
         }
         Self {

@@ -23,11 +23,8 @@
 
 use std::collections::BTreeMap;
 
-use html::TagName;
-
 use crate::application::ports::CascadeResolver;
 use crate::domain::computed::display::Display;
-use crate::domain::computed::overflow::OverflowStyle;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
 use crate::domain::error::CssError;
@@ -145,45 +142,7 @@ fn cascade_style(
     sheets: &StyleSheetSet,
 ) -> (ComputedStyle, InheritedContext) {
     let base = base_style(node_ref, parent);
-    let (style, context) =
-        apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts();
-    (
-        overflow_given_to_viewport(style, node_ref, parent, dom),
-        context,
-    )
-}
-
-/// `body`'s `overflow` belongs to the viewport while the root's is `visible`
-/// (CSS Overflow L3 §3.3), so `body` itself is laid out with `visible`: it is
-/// never a scroll container, and its margins still collapse with its
-/// children's — the common `body { overflow-x: hidden }` must not move a
-/// page's first heading. This engine has no viewport scroller to hand the
-/// value to, so only `body`'s side of the propagation is applied.
-fn overflow_given_to_viewport(
-    style: ComputedStyle,
-    node_ref: NodeRef<'_>,
-    parent: Option<&ComputedStyle>,
-    dom: &DomSnapshot,
-) -> ComputedStyle {
-    let root_is_visible = parent.is_some_and(|root| root.overflow() == OverflowStyle::initial());
-    if !root_is_visible || !is_body_of_root(node_ref, dom) {
-        return style;
-    }
-    style.with_overflow(OverflowStyle::initial())
-}
-
-/// Whether `node_ref` is a `<body>` whose parent is the root `<html>`.
-fn is_body_of_root(node_ref: NodeRef<'_>, dom: &DomSnapshot) -> bool {
-    let Some(parent) = node_ref.parent().and_then(|id| dom.node(id)) else {
-        return false;
-    };
-    let parent_is_root = parent
-        .parent()
-        .and_then(|id| dom.node(id))
-        .is_some_and(|grandparent| grandparent.kind() == SnapshotNodeKind::Document);
-    node_ref.tag().is_some_and(TagName::is_body)
-        && parent.tag().is_some_and(TagName::is_html)
-        && parent_is_root
+    apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts()
 }
 
 /// The style before any rule applies: inherit from the parent (or take the
