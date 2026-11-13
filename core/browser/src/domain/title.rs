@@ -1,7 +1,5 @@
 //! The name a document gives the window it is shown in.
 
-use std::fmt;
-
 use network::Url;
 
 /// A document's title as WHATWG `document.title` defines it (§4.2.2): the
@@ -42,12 +40,6 @@ impl DocumentTitle {
     }
 }
 
-impl fmt::Display for DocumentTitle {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,7 +49,7 @@ mod tests {
         let title = DocumentTitle::collapsed("\n\t Example \x0c\r\n Domain  ");
 
         assert_eq!(
-            title.map(|title| title.to_string()).as_deref(),
+            title.as_ref().map(DocumentTitle::as_str),
             Some("Example Domain")
         );
     }

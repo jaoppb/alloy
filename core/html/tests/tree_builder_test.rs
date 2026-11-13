@@ -199,3 +199,13 @@ fn a_noscript_inside_a_head_template_does_not_end_head() {
         Some(head)
     );
 }
+
+#[test]
+fn body_content_inside_nested_head_noscripts_ends_head() {
+    let events = events_of("<head><noscript><noscript><p>hi");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(only_element_named(&events, "body")),
+    );
+}
