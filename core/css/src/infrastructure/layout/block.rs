@@ -398,14 +398,14 @@ fn assemble<M: TextMeasurer>(
     let metrics = resolved.metrics;
     let edges = metrics.edges();
     let margin = edges.margin();
-    let contains = establishes_formatting_context(context, node);
+    let starts_formatting_context = establishes_formatting_context(context, node)?;
     let (top_margin, children_offset) = top_arrangement(
-        collapses_at_top(edges) && !contains,
+        collapses_at_top(edges) && !starts_formatting_context,
         CollapsedMargin::from_length(margin.top()),
         children.leading_margin(),
     );
     let (bottom_margin, trailing_extra) = bottom_arrangement(
-        collapses_at_bottom(edges, metrics.height()) && !contains,
+        collapses_at_bottom(edges, metrics.height()) && !starts_formatting_context,
         CollapsedMargin::from_length(margin.bottom()),
         children.trailing_margin(),
     );
@@ -416,7 +416,13 @@ fn assemble<M: TextMeasurer>(
         input,
         children_offset.saturating_add(trailing_extra),
     );
-    let flow = flow_of(&children, metrics, content_height, input);
+    let flow = flow_of(
+        &children,
+        metrics,
+        content_height,
+        input,
+        starts_formatting_context,
+    );
     let fragments = assemble_fragments(
         context,
         node,
@@ -445,15 +451,16 @@ fn assemble<M: TextMeasurer>(
 fn establishes_formatting_context<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node: &StyledNode,
-) -> bool {
+) -> Result<bool, CssError> {
     let style = node.style();
     if style.display().is_atomic_inline() || style.overflow().is_scroll_container() {
-        return true;
+        return Ok(true);
     }
-    let Some(parent) = node.parent().and_then(|id| context.node(id).ok()) else {
-        return true;
+    let Some(parent_id) = node.parent() else {
+        return Ok(true);
     };
-    parent.parent().is_none() || parent.style().display() == Display::Flex
+    let parent = context.node(parent_id)?;
+    Ok(parent.parent().is_none() || parent.style().display() == Display::Flex)
 }
 
 /// A box that collapses through reports **one** margin set holding all four
@@ -515,14 +522,17 @@ fn used_content_height(
 }
 
 /// Whether this box's own top and bottom margins end up adjoining: nothing of
-/// its own may separate them, and its children must have collapsed through too.
+/// its own may separate them, its children must have collapsed through too,
+/// and it must not start a block formatting context (CSS 2.1 §8.3.1).
 const fn flow_of(
     children: &ContentFlow,
     metrics: BoxMetrics,
     content_height: Au,
     input: BlockInput,
+    starts_formatting_context: bool,
 ) -> MarginFlow {
-    let separated = !children.flow().collapses_through()
+    let separated = starts_formatting_context
+        || !children.flow().collapses_through()
         || !content_height.is_zero()
         || !metrics.inner_vertical().is_zero()
         || metrics.height().is_some()
