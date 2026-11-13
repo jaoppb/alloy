@@ -15,27 +15,27 @@ use crate::domain::error::CssError;
 use crate::infrastructure::layout::context::LayoutContext;
 
 /// One inline-level child of a block container, as one run sees it: the whole
-/// node, or — when block-level descendants split it — only the stretch after
-/// one of them and before the next.
+/// node, or — when block-level descendants split it — only the stretch opened
+/// by one of them and closed by the next.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InlineItem {
     node: SnapshotId,
-    after: Option<SnapshotId>,
-    before: Option<SnapshotId>,
+    opened_by: Option<SnapshotId>,
+    closed_by: Option<SnapshotId>,
 }
 
 impl InlineItem {
-    /// `node`'s content after the block-level descendant `after` (from its
-    /// start when `None`) and before `before` (to its end when `None`).
+    /// `node`'s content after the block-level descendant `opened_by` (from
+    /// its start when `None`) and before `closed_by` (to its end when `None`).
     pub const fn between(
         node: SnapshotId,
-        after: Option<SnapshotId>,
-        before: Option<SnapshotId>,
+        opened_by: Option<SnapshotId>,
+        closed_by: Option<SnapshotId>,
     ) -> Self {
         Self {
             node,
-            after,
-            before,
+            opened_by,
+            closed_by,
         }
     }
 
@@ -45,22 +45,34 @@ impl InlineItem {
 
     /// A fresh document-order walk over this item.
     pub(super) const fn walk(self) -> Walk {
+        let stretch = match self.opened_by {
+            Some(_) => Stretch::Before,
+            None => Stretch::Inside,
+        };
         Walk {
-            after: self.after,
-            before: self.before,
-            inside: self.after.is_none(),
-            past: false,
+            opened_by: self.opened_by,
+            closed_by: self.closed_by,
+            stretch,
         }
     }
 }
 
-/// Where a document-order walk of one [`InlineItem`] stands: before its
-/// stretch, inside it, or past it.
+/// Where a document-order walk stands against the stretch its item keeps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stretch {
+    /// Not yet at the block that opens the stretch.
+    Before,
+    /// Inside the stretch: content met now belongs to the run.
+    Inside,
+    /// Past the block that closes it: nothing later belongs to the run.
+    Past,
+}
+
+/// A document-order walk of one [`InlineItem`] against the stretch it keeps.
 pub(super) struct Walk {
-    after: Option<SnapshotId>,
-    before: Option<SnapshotId>,
-    inside: bool,
-    past: bool,
+    opened_by: Option<SnapshotId>,
+    closed_by: Option<SnapshotId>,
+    stretch: Stretch,
 }
 
 impl Walk {
@@ -68,33 +80,32 @@ impl Walk {
     /// meets belongs to the run.
     pub(super) const fn unbounded() -> Self {
         Self {
-            after: None,
-            before: None,
-            inside: true,
-            past: false,
+            opened_by: None,
+            closed_by: None,
+            stretch: Stretch::Inside,
         }
     }
 
     /// Whether text or an atomic inline met now belongs to this run.
-    pub(super) const fn takes_content(&self) -> bool {
-        self.inside && !self.past
+    pub(super) fn takes_content(&self) -> bool {
+        self.stretch == Stretch::Inside
     }
 
     /// Whether the walk has left its stretch: nothing later belongs to it.
-    pub(super) const fn is_done(&self) -> bool {
-        self.past
+    pub(super) fn is_done(&self) -> bool {
+        self.stretch == Stretch::Past
     }
 
     /// Records passing the block-level descendant `block`, which no run
-    /// walks into: it opens the stretch when it is the item's `after`
-    /// bound and closes it when it is the `before` bound.
+    /// walks into: it opens the stretch when it is the item's `opened_by`
+    /// bound and closes it when it is the `closed_by` bound.
     pub(super) fn cross(&mut self, block: SnapshotId) {
-        if self.before == Some(block) {
-            self.past = true;
+        if self.closed_by == Some(block) {
+            self.stretch = Stretch::Past;
             return;
         }
-        if self.after == Some(block) {
-            self.inside = true;
+        if self.opened_by == Some(block) {
+            self.stretch = Stretch::Inside;
         }
     }
 }

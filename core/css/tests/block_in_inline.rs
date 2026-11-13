@@ -172,3 +172,46 @@ fn an_inline_box_holding_only_a_block_gets_no_line_fragment() {
         "no content before or after the block, so no line holds any of the span"
     );
 }
+
+#[test]
+fn a_split_block_collapses_margins_with_its_sibling_through_the_empty_runs() {
+    let laid = Laid::new(
+        "<div id=first style='height:10px;margin-bottom:30px'></div>\
+         <span><div id=d style='height:10px;margin-top:30px'></div></span>",
+    );
+    let first = laid.fragments("first")[0].content();
+    let split = laid.fragments("d")[0].content();
+
+    assert_eq!(
+        split.min_y().saturating_sub(first.max_y()),
+        Au::from_whole_px(30).unwrap(),
+        "30px and 30px collapse to 30px (CSS 2.1 §8.3.1), as for siblings"
+    );
+}
+
+#[test]
+fn a_split_blocks_top_margin_escapes_its_parent_through_an_empty_run() {
+    let laid = Laid::new(
+        "<div id=parent><span><div id=d style='height:10px;margin-top:40px'></div></span></div>",
+    );
+    let parent = laid.fragments("parent")[0].content();
+    let split = laid.fragments("d")[0].content();
+
+    assert_eq!(
+        split.min_y(),
+        parent.min_y(),
+        "the parent starts where its first in-flow child does: the margin escapes"
+    );
+}
+
+#[test]
+fn a_block_inside_an_inline_block_or_hidden_does_not_split_the_outer_run() {
+    let laid = Laid::new(
+        "<span>aa<span style='display:inline-block;width:40px'><div>bb</div></span>cc\
+         <div style='display:none'>xx</div>dd</span>",
+    );
+    let row = laid.only_text_line("aa").content().min_y();
+
+    assert_eq!(laid.only_text_line("cc").content().min_y(), row);
+    assert_eq!(laid.only_text_line("dd").content().min_y(), row);
+}
