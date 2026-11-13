@@ -10,7 +10,7 @@ use graphics::{Au, Point, Rect, Size};
 
 use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
-use crate::domain::layout_box_tree::{BoxEdges, LayoutBox};
+use crate::domain::layout_box_tree::{BoxEdges, FragmentText, LayoutBox};
 
 /// One box with a relative rectangle.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +20,7 @@ pub struct Fragment {
     edges: BoxEdges,
     intrinsic_size: IntrinsicSize,
     children: ChildIds,
+    text: Option<FragmentText>,
 }
 
 impl Fragment {
@@ -36,6 +37,15 @@ impl Fragment {
             edges,
             intrinsic_size,
             children,
+            text: None,
+        }
+    }
+
+    /// This fragment holding `text` — a text node's share of one line.
+    pub fn with_text(self, text: FragmentText) -> Self {
+        Self {
+            text: Some(text),
+            ..self
         }
     }
 
@@ -71,13 +81,17 @@ impl Fragment {
     }
 
     fn into_layout_box(self) -> LayoutBox {
-        LayoutBox::new(
+        let laid_out = LayoutBox::new(
             self.node,
             self.content,
             self.edges,
             self.intrinsic_size,
             self.children,
-        )
+        );
+        let Some(text) = self.text else {
+            return laid_out;
+        };
+        laid_out.with_text(text)
     }
 }
 

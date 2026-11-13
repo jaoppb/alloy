@@ -66,17 +66,28 @@ fn find(dom: &DomSnapshot, id: &str) -> SnapshotId {
         .unwrap_or_else(|| panic!("no element with id=\"{id}\""))
 }
 
-/// The text node's own box — the fragment `inline.rs` emits for the run,
-/// found through the `id`-bearing `div` that contains it.
-fn text_box<'a>(boxes: &'a css::LayoutBoxTree, dom: &DomSnapshot, id: &str) -> &'a LayoutBox {
+/// The text node under the `id`-bearing `div`.
+fn text_node(dom: &DomSnapshot, id: &str) -> SnapshotId {
     let element_id = find(dom, id);
-    let text_id = dom
-        .node(element_id)
+    dom.node(element_id)
         .and_then(|node| node.children().next())
-        .unwrap_or_else(|| panic!("id=\"{id}\" has no text child"));
+        .unwrap_or_else(|| panic!("id=\"{id}\" has no text child"))
+}
+
+/// The text node's first fragment — its first line (#134: one per line).
+fn text_box<'a>(boxes: &'a css::LayoutBoxTree, dom: &DomSnapshot, id: &str) -> &'a LayoutBox {
     boxes
-        .box_of(text_id)
+        .box_of(text_node(dom, id))
         .unwrap_or_else(|| panic!("no box for the text under id=\"{id}\""))
+}
+
+/// Every fragment of the text node — one per line it occupies.
+fn text_lines<'a>(
+    boxes: &'a css::LayoutBoxTree,
+    dom: &DomSnapshot,
+    id: &str,
+) -> Vec<&'a LayoutBox> {
+    boxes.fragments_of(text_node(dom, id)).collect()
 }
 
 // ---- overflow forces a line break -------------------------------------------
@@ -96,18 +107,23 @@ fn a_container_narrower_than_the_text_wraps_to_a_second_line() {
     let dom = snapshot(&tree, root);
     let boxes = layout_boxes(&tree, root, source);
 
-    let wide = text_box(&boxes, &dom, "wide");
-    let narrow = text_box(&boxes, &dom, "narrow");
+    let wide = text_lines(&boxes, &dom, "wide");
+    let narrow = text_lines(&boxes, &dom, "narrow");
 
     assert_eq!(
-        wide.content().size().height(),
-        Au::from_raw(LINE_HEIGHT),
+        wide.len(),
+        1,
         "100px comfortably fits \"aaaa bbbb\" on one line"
     );
     assert_eq!(
-        narrow.content().size().height(),
-        Au::from_raw(2 * LINE_HEIGHT),
+        narrow.len(),
+        2,
         "47px fits \"aaaa\" but not \" bbbb\" too, forcing a second line"
+    );
+    assert_eq!(
+        narrow[1].content().min_y(),
+        narrow[0].content().max_y(),
+        "the second line starts where the first ends"
     );
 }
 
@@ -173,14 +189,15 @@ fn white_space_pre_preserves_runs_of_space_and_line_breaks() {
     );
 
     // `pre` keeps both spaces of "a  b" as one 4-glyph line, and the `\n`
-    // forces a second line holding just "c" — two lines, the widest being
-    // "a  b" at 4 glyphs.
-    assert_eq!(
-        preserved.content().size().height(),
-        Au::from_raw(2 * LINE_HEIGHT)
-    );
+    // forces a second line holding just "c" — two fragments, one per line.
+    let preserved_lines = text_lines(&boxes, &dom, "preserved");
+    assert_eq!(preserved_lines.len(), 2);
     assert_eq!(
         preserved.content().size().width(),
         Au::from_raw(4 * CHAR_ADVANCE)
+    );
+    assert_eq!(
+        preserved_lines[1].content().size().width(),
+        Au::from_raw(CHAR_ADVANCE)
     );
 }
