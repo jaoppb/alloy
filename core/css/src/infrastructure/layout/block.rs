@@ -24,6 +24,7 @@ use crate::domain::computed::display::Display;
 use crate::domain::computed::inline_style::TextAlign;
 use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::computed::logical::Direction;
+use crate::domain::computed::overflow::OverflowStyle;
 use crate::domain::computed::position::PositionType;
 use crate::domain::computed::sizing::Sizing;
 use crate::domain::computed::style::ComputedStyle;
@@ -398,14 +399,14 @@ fn assemble<M: TextMeasurer>(
     let metrics = resolved.metrics;
     let edges = metrics.edges();
     let margin = edges.margin();
-    let starts_formatting_context = establishes_formatting_context(context, node)?;
+    let child_margins = child_margins_of(context, node)?;
     let (top_margin, children_offset) = top_arrangement(
-        collapses_at_top(edges) && !starts_formatting_context,
+        collapses_at_top(edges) && child_margins.adjoin_own(),
         CollapsedMargin::from_length(margin.top()),
         children.leading_margin(),
     );
     let (bottom_margin, trailing_extra) = bottom_arrangement(
-        collapses_at_bottom(edges, metrics.height()) && !starts_formatting_context,
+        collapses_at_bottom(edges, metrics.height()) && child_margins.adjoin_own(),
         CollapsedMargin::from_length(margin.bottom()),
         children.trailing_margin(),
     );
@@ -416,13 +417,7 @@ fn assemble<M: TextMeasurer>(
         input,
         children_offset.saturating_add(trailing_extra),
     );
-    let flow = flow_of(
-        &children,
-        metrics,
-        content_height,
-        input,
-        starts_formatting_context,
-    );
+    let flow = flow_of(&children, metrics, content_height, input, child_margins);
     let fragments = assemble_fragments(
         context,
         node,
@@ -444,23 +439,55 @@ fn assemble<M: TextMeasurer>(
     ))
 }
 
-/// Whether `node` starts a new block formatting context (CSS 2.1 §9.4.1), so
-/// its children's margins never collapse with its own: an `inline-block`, a
+/// Whether a box's children's margins may adjoin its own (CSS 2.1 §8.3.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChildMargins {
+    /// An ordinary block: its first and last child's margins may collapse
+    /// with its own, and its own two margins may collapse through it.
+    Adjoin,
+    /// A box that starts a new block formatting context (CSS 2.1 §9.4.1): it
+    /// keeps its children's margins inside and its own two margins apart.
+    Contained,
+}
+
+impl ChildMargins {
+    const fn adjoin_own(self) -> bool {
+        matches!(self, Self::Adjoin)
+    }
+}
+
+/// Whether `node` starts a new block formatting context: an `inline-block`, a
 /// flex item, a scroll container, the root element — and the document box
 /// above it, which stands for the initial containing block.
-fn establishes_formatting_context<M: TextMeasurer>(
+fn child_margins_of<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node: &StyledNode,
-) -> Result<bool, CssError> {
-    let style = node.style();
-    if style.display().is_atomic_inline() || style.overflow().is_scroll_container() {
-        return Ok(true);
+) -> Result<ChildMargins, CssError> {
+    if node.style().display().is_atomic_inline() {
+        return Ok(ChildMargins::Contained);
     }
     let Some(parent_id) = node.parent() else {
-        return Ok(true);
+        return Ok(ChildMargins::Contained);
     };
     let parent = context.node(parent_id)?;
-    Ok(parent.parent().is_none() || parent.style().display() == Display::Flex)
+    let contained = is_scroll_container(node, parent)
+        || parent.parent().is_none()
+        || parent.style().display() == Display::Flex;
+    if contained {
+        return Ok(ChildMargins::Contained);
+    }
+    Ok(ChildMargins::Adjoin)
+}
+
+/// Whether `node` is laid out as a scroll container. The root's first
+/// `<body>` gives its `overflow` to the viewport while the root's is
+/// `visible` (CSS Overflow L3 §3.3), so its used value is `visible` — the
+/// common `body { overflow-x: hidden }` must not stop its margins collapsing.
+/// Its computed value, which its children inherit, is untouched.
+fn is_scroll_container(node: &StyledNode, parent: &StyledNode) -> bool {
+    let gives_overflow_to_viewport =
+        node.is_body_of_root() && parent.style().overflow() == OverflowStyle::initial();
+    node.style().overflow().is_scroll_container() && !gives_overflow_to_viewport
 }
 
 /// A box that collapses through reports **one** margin set holding all four
@@ -529,9 +556,9 @@ const fn flow_of(
     metrics: BoxMetrics,
     content_height: Au,
     input: BlockInput,
-    starts_formatting_context: bool,
+    child_margins: ChildMargins,
 ) -> MarginFlow {
-    let separated = starts_formatting_context
+    let separated = !child_margins.adjoin_own()
         || !children.flow().collapses_through()
         || !content_height.is_zero()
         || !metrics.inner_vertical().is_zero()

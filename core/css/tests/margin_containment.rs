@@ -202,3 +202,27 @@ fn an_empty_scroll_container_does_not_collapse_its_own_margins_through() {
         "a box that starts a formatting context keeps its top and bottom margins apart"
     );
 }
+
+#[test]
+fn a_child_inheriting_bodys_overflow_is_a_scroll_container() {
+    let markup = "<!doctype html><html><head><style>body { margin: 0; overflow: hidden } \
+                  #c { overflow: inherit } p { margin: 30px 0 }</style></head>\
+                  <body><div id=c><p id=a>x</p></div></body></html>";
+    let tree = dom::parse(markup).expect("the fixture parses").into_tree();
+    let dom = snapshot(&tree, tree.document());
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let viewport = ViewportConstraints::new(px(800), px(600));
+    let boxes = BlockLayout::monospace()
+        .layout(&styled, &viewport)
+        .expect("lays out");
+    let laid = Laid { dom, boxes };
+    let container = laid.border_box("c");
+
+    assert_eq!(
+        laid.border_box("a").min_y(),
+        container.min_y().saturating_add(px(30)),
+        "body's computed overflow stays `hidden` — only its used value goes to the viewport — \
+         so #c inherits `hidden` and keeps a's margin inside"
+    );
+}

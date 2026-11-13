@@ -353,6 +353,26 @@ impl<'snapshot> NodeRef<'snapshot> {
         false
     }
 
+    /// Whether this is the root `<html>` element's first `<body>` child — the
+    /// element whose `overflow` CSS Overflow L3 §3.3 gives to the viewport.
+    #[must_use]
+    pub fn is_body_of_root(self) -> bool {
+        let Some(parent) = self.parent().and_then(|id| self.snapshot.node(id)) else {
+            return false;
+        };
+        let parent_is_root = parent
+            .parent()
+            .and_then(|id| self.snapshot.node(id))
+            .is_some_and(|grandparent| grandparent.kind() == SnapshotNodeKind::Document);
+        let first_body = parent.children().find(|&child| {
+            self.snapshot
+                .node(child)
+                .and_then(Self::tag)
+                .is_some_and(TagName::is_body)
+        });
+        parent_is_root && parent.tag().is_some_and(TagName::is_html) && first_body == Some(self.id)
+    }
+
     /// The value of attribute `name`, or `None`.
     #[must_use]
     pub fn attribute(self, name: &str) -> Option<&'snapshot str> {
