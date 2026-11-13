@@ -217,3 +217,75 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
         "clicking below chrome height must trigger the link with offset compensation"
     );
 }
+
+/// The middle of `length` from `start`, in whole document pixels.
+fn middle_px(start: graphics::Au, length: graphics::Au) -> f64 {
+    let middle = start.saturating_add(graphics::Au::from_raw(length.raw().saturating_div(2)));
+    f64::from(middle.to_px().get())
+}
+
+fn click(system: &mut HeadlessWindowSystem, x: f64, document_y: f64) {
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(x, window_y(document_y)),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+}
+
+#[test]
+fn a_wrapped_link_is_hit_on_its_lines_and_missed_on_the_text_before_it() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/next.html").unwrap();
+    let mut app = app_over(
+        FakeWeb::new().with_page(target.clone(), "<html><body>next</body></html>"),
+        attributes.initial_size(),
+    );
+    load(
+        &mut app,
+        "<html><body style=\"margin: 0\"><div style=\"width: 90px\">xx \
+         <a href=\"next.html\">bbbb cccc dddd eeee ffff gggg</a></div></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut app);
+
+    // The link's first line, from the regions layout produced.
+    let first_line = app
+        .browsing
+        .content_regions()
+        .map(|region| region.bounds())
+        .min_by_key(|area| area.min_y())
+        .unwrap();
+    assert!(
+        first_line.min_x() > graphics::Au::ZERO,
+        "the link's first line starts after \"xx \""
+    );
+    let line_y = middle_px(first_line.min_y(), first_line.size().height());
+
+    // On "xx", left of the link but on its first line: the old single
+    // bounding box of the wrapped link covered this point.
+    let navigations_before = app.stats().navigations();
+    click(&mut system, 1.0, line_y);
+    // A hit's navigation is counted one pump after the click, when its
+    // result is applied (`completed_navigation`); pump that far before
+    // concluding it missed.
+    pump(&mut system, &mut presenter, &mut app);
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        app.stats().navigations(),
+        navigations_before,
+        "a click on the text before a wrapped link must miss it"
+    );
+
+    let on_link = middle_px(first_line.min_x(), first_line.size().width());
+    click(&mut system, on_link, line_y);
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        completed_navigation(&mut system, &mut presenter, &mut app, navigations_before),
+        target
+    );
+}

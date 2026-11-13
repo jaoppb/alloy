@@ -206,3 +206,21 @@ The rest is additive or confined to the cascade helpers:
 - **Painting honors outline without changing layout.** `alloy/src/application/paint.rs` draws outline rectangles
   expanded by `outline-offset` outside the border box, using `paint_border_sides`, while leaving `LayoutBoxTree`
   byte-identical.
+
+### `10 → 11` — Issue #134 (#81): one `LayoutBox` fragment per line
+
+**Not additive.** What a consumer has to change:
+
+- **A node may own several `LayoutBox`es.** An inline box (`span`, `a`, …) or a text node gets one fragment per line box
+  it touches — the bounding rectangle of what its subtree put on that line — instead of one rectangle spanning every
+  line, which also covered the space between its pieces. Block-level and atomic boxes are still one fragment, except
+  that a box laying its own text out (an `<input>`'s or `<select>`'s label, a flex-blockified text node) also owns that
+  text's line fragments. `LayoutBoxTree::fragments_of(node)` lists a node's fragments in order; `box_of(node)` answers
+  the first one; `boxes_in_document_order` and `len` count fragments.
+- **A text fragment carries its text.** `LayoutBox::text() -> Option<&FragmentText>` is the text layout placed on that
+  fragment's line, white space already processed; an element's fragment answers `None`. A painter draws it as one line
+  from the fragment's origin and never wraps it again: `alloy/src/application/paint.rs` no longer re-wraps a text node's
+  whole string inside one rectangle, which had painted a run that starts mid-line from the container's left edge and
+  dropped the space after a closing inline tag.
+- **Link regions follow the lines.** `alloy`'s `collect_link_targets` already made one region per box under an
+  `<a href>`, so a link that wraps now has one region per line, and a click between them misses.

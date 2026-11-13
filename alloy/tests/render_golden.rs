@@ -188,6 +188,32 @@ fn a_hidden_attribute_renders_byte_identical_to_an_empty_body() {
     );
 }
 
+/// Text paints exactly where layout put it (#134): splitting the same words
+/// across inline elements, including a run that starts with a space after a
+/// closing tag or wraps mid-run, renders the same pixels as one plain run.
+#[test]
+fn text_split_across_inline_elements_renders_like_one_plain_run() {
+    let page = |body: &str| {
+        format!(
+            "<!doctype html><html><head><style>body{{margin:0;background:#fff;color:#000}}\
+             div{{width:120px}}</style></head><body><div>{body}</div></body></html>"
+        )
+    };
+    let options = RenderOptions::new(200, 200);
+    let plain = render_html_to_png(&page("marked here and more words that wrap"), &options)
+        .expect("plain render succeeds");
+    let split = render_html_to_png(
+        &page("<span>marked here</span> and <span>more words that</span> wrap"),
+        &options,
+    )
+    .expect("split render succeeds");
+
+    assert_eq!(
+        split, plain,
+        "a space after a closing inline tag and a mid-run wrap must not move any glyph"
+    );
+}
+
 #[test]
 fn visibility_hidden_renders_same_as_empty_box_while_preserving_sibling_layout() {
     let with_visibility_hidden = "<!doctype html><html><head><style>\

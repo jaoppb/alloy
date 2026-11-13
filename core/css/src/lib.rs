@@ -109,7 +109,13 @@ pub mod infrastructure;
 /// `10` adds the outline properties (`outline`, `outline-offset`,
 /// `outline-color`, `outline-width`, `outline-style`; CSS UI 4 §3),
 /// expanding [`SUPPORTED_PROPERTIES`] from 138 to 143 (issue #64).
-pub const PORT_SCHEMA_VERSION: u32 = 10;
+///
+/// `11` is **not additive**: an inline box or a text node gets one
+/// [`LayoutBox`] fragment per line it touches instead of one bounding box, so
+/// a node may own several boxes ([`LayoutBoxTree::fragments_of`]), and a text
+/// fragment carries the [`FragmentText`] layout placed on its line (issue
+/// #134). `PRD-007` §6 carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 11;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -325,7 +331,7 @@ pub use domain::dom_snapshot::{
 pub use domain::error::{CssError, CssStage, SourceSpan};
 pub use domain::identifier::Identifier;
 pub use domain::input_type::InputType;
-pub use domain::layout_box_tree::{EdgeSizes, LayoutBox, LayoutBoxTree};
+pub use domain::layout_box_tree::{EdgeSizes, FragmentText, LayoutBox, LayoutBoxTree};
 pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
 pub use domain::parse_notes::{ParseNote, ParseNotes};
