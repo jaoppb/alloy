@@ -377,9 +377,10 @@ message = "core/platform is a leaf: it must not depend on any other workspace cr
 # `<path>::*`, which misses `winit::window::Window`; and a fenced item is `<crate>::**::<Item>`, so
 # a re-export and its defining module (`network::HttpTransport`,
 # `network::application::ports::HttpTransport`) are both denied. arch-lint compares the path as
-# written: a relative path (`super::…`) escapes every rule, and a glob import (`ports::*`) or a
-# crate alias (`use network as net;`) escapes an item fence, though a crate-wide `<crate>::**`
-# fence still catches it. Those cases are left to review.
+# written: a relative path (`super::…`) escapes every rule, and a glob import (`ports::*`) or an
+# alias of a parent path (`use network as net;`, `use std::sync as s;`) escapes every fence
+# narrower than the crate — an item fence or a module fence such as `std::sync::mpsc::**` — while
+# a crate-wide `<crate>::**` fence still catches it. Those cases are left to review.
 
 # Engine must not import any concrete script runtime crate (ADR-0002:49 / ADR-0011 item 2)
 [[restrict-use]]
@@ -480,8 +481,8 @@ message = "core/window must not import the engine, another subsystem, or a scrip
 # #110 decision 4 / #111: the browsing context is pure. It never spawns a thread, never owns a
 # channel, and never executes a request. Calling `execute` / `decide` needs the `HttpTransport` /
 # `RequestPolicy` trait in scope, so the rule denies the traits and the transports under every
-# absolute module path; a relative path, or a glob or aliased import of `network`, escapes these
-# item fences (see the section comment) and is left to review. The `ui` ↔ `browser` sibling rule
+# absolute module path; a relative path, or a glob or aliased import of a parent (`network`,
+# `std::sync`), escapes these fences (see the section comment) and is left to review. The `ui` ↔ `browser` sibling rule
 # (ADR-0026) is the `ui::**` / `window::**` entries of `browser-isolated`; `core/ui` adds the
 # converse.
 [[restrict-use]]
@@ -582,7 +583,8 @@ message = "core/region is the leaf ui and browser share; it imports graphics and
 # `FetchExecutor` / `ImageDecoder` / `IdlePause` ports. `HttpTransport` / `RequestPolicy` and the transports are
 # fenced as `browser-pure` fences them, under every absolute module path (relative, glob and aliased imports are left
 # to review). `graphics::png::encode` stays allowed (the headless `alloy render` path writes PNGs), so the rule names
-# the `png` module import and the two decoders (`png::decode`, `png_decode::decode_png`), not `png::**`.
+# the `png` and `png_decode` module imports and the two decoders (`png::decode`, `png_decode::decode_png`), not
+# `png::**`.
 [[restrict-use]]
 name = "alloy-application-no-threads-or-decoding"
 scope = "alloy-application"
