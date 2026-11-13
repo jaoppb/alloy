@@ -217,3 +217,54 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
         "clicking below chrome height must trigger the link with offset compensation"
     );
 }
+
+/// Whether `point` (document space) lies inside `area`.
+fn covers(area: graphics::Rect, point: graphics::Point) -> bool {
+    let (x, y) = (point.horizontal(), point.vertical());
+    area.min_x() <= x && x < area.max_x() && area.min_y() <= y && y < area.max_y()
+}
+
+#[test]
+fn a_link_that_wraps_has_one_region_per_line_and_none_over_the_text_before_it() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let mut app = app_over(FakeWeb::new(), attributes.initial_size());
+    load(
+        &mut app,
+        "<html><body style=\"margin: 0\"><div style=\"width: 90px\">xx \
+         <a href=\"next.html\">bbbb cccc dddd eeee ffff gggg</a></div></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut app);
+
+    let areas: Vec<graphics::Rect> = app
+        .browsing
+        .content_regions()
+        .map(|region| region.bounds())
+        .collect();
+    let first_line = areas
+        .iter()
+        .min_by_key(|area| area.min_y())
+        .copied()
+        .unwrap();
+    assert!(
+        first_line.min_x() > graphics::Au::ZERO,
+        "the link's first line starts after \"xx \""
+    );
+    assert!(
+        areas.iter().any(|area| area.min_y() >= first_line.max_y()),
+        "the link wraps onto further lines, each with its own region"
+    );
+
+    let middle =
+        graphics::Au::from_raw(first_line.min_y().raw() + first_line.size().height().raw() / 2);
+    let over_xx = graphics::Point::new(graphics::Au::from_raw(1), middle);
+    assert!(
+        !areas.iter().any(|area| covers(*area, over_xx)),
+        "a click on \"xx\", before the link on its first line, must miss it"
+    );
+    let on_link = graphics::Point::new(first_line.min_x(), middle);
+    assert!(areas.iter().any(|area| covers(*area, on_link)));
+}

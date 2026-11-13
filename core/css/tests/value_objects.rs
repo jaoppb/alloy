@@ -272,8 +272,8 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 10,
-        "version 10 adds the outline properties (issue #64, ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 11,
+        "version 11 gives inline boxes and text one LayoutBox fragment per line (issue #134, ADR-0011 item 3)"
     );
     assert_eq!(SUPPORTED_PROPERTIES.len(), 143);
     assert!(SUPPORTED_PROPERTIES.contains(&"outline"));

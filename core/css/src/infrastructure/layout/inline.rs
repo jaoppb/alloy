@@ -14,26 +14,26 @@
 //! to every inline-block here). A `display: none` descendant contributes
 //! nothing.
 //!
-//! Two simplifications are declared in `core/css/tests/data/MANIFEST.md`:
-//! an inline box's fragment is the bounding box of its pieces (so an inline
-//! that spans two lines gets one rectangle, not two), and inline boxes carry no
-//! border or padding of their own.
+//! An inline box or a text node gets one fragment per line it touches, and a
+//! text fragment carries the text on its line (`inline/emit.rs`, #134). Inline boxes
+//! carry no border or padding of their own (MANIFEST, "Inline formatting
+//! simplifications").
 
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use graphics::{Au, Point, Rect};
 
 use crate::application::ports::TextMeasurer;
 use crate::domain::computed::inline_style::{TextAlign, WhiteSpace};
-use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
+use crate::domain::dom_snapshot::SnapshotId;
 use crate::domain::error::CssError;
-use crate::domain::layout_box_tree::BoxEdges;
 use crate::domain::styled_tree::StyledNode;
 use crate::domain::text::TextMetrics;
 use crate::infrastructure::layout::block;
 use crate::infrastructure::layout::box_model;
 use crate::infrastructure::layout::context::{BlockInput, BlockResult, ContentFlow, LayoutContext};
-use crate::infrastructure::layout::fragment::{Fragment, Fragments, rect_at};
+use crate::infrastructure::layout::fragment::rect_at;
 
 /// The one space a collapsed run of white space becomes.
 const COLLAPSED_SPACE: &str = " ";
@@ -51,13 +51,15 @@ enum PieceKind {
     Atomic,
 }
 
-/// One measured piece of an inline run.
-#[derive(Clone, Copy)]
+/// One measured piece of an inline run, with the text it draws — `None` for
+/// an atomic inline and a forced break, which draw none.
+#[derive(Clone)]
 struct Piece {
     node: SnapshotId,
     kind: PieceKind,
     metrics: TextMetrics,
     white_space: WhiteSpace,
+    text: Option<Rc<str>>,
 }
 
 /// One line box: the pieces on it and the extents that position them.
@@ -250,6 +252,7 @@ fn collect_atom<M: TextMeasurer>(
         kind: PieceKind::Atomic,
         metrics,
         white_space: style.white_space(),
+        text: None,
     });
     run.atoms.insert(node_id, result);
     Ok(())
@@ -371,7 +374,7 @@ fn append_word_parts<M: TextMeasurer>(
 ) -> Result<(), CssError> {
     for part in hyphen_parts(word) {
         let metrics = context.measure(&part, setting.font_size)?;
-        pieces.push(piece(node_id, PieceKind::Word, metrics, setting));
+        pieces.push(piece(node_id, PieceKind::Word, metrics, setting).drawing(&part));
     }
     Ok(())
 }
@@ -413,7 +416,7 @@ fn append_space_when<M: TextMeasurer>(
         return Ok(());
     }
     let metrics = context.measure(COLLAPSED_SPACE, setting.font_size)?;
-    pieces.push(piece(node_id, PieceKind::Space, metrics, setting));
+    pieces.push(piece(node_id, PieceKind::Space, metrics, setting).drawing(COLLAPSED_SPACE));
     Ok(())
 }
 
@@ -458,7 +461,7 @@ fn append_preserved_line<M: TextMeasurer>(
         return Ok(());
     }
     let metrics = context.measure(line, setting.font_size)?;
-    pieces.push(piece(node_id, PieceKind::Word, metrics, setting));
+    pieces.push(piece(node_id, PieceKind::Word, metrics, setting).drawing(line));
     Ok(())
 }
 
@@ -468,6 +471,17 @@ const fn piece(node: SnapshotId, kind: PieceKind, metrics: TextMetrics, setting:
         kind,
         metrics,
         white_space: setting.white_space,
+        text: None,
+    }
+}
+
+impl Piece {
+    /// This piece drawing `text`.
+    fn drawing(self, text: &str) -> Self {
+        Self {
+            text: Some(Rc::from(text)),
+            ..self
+        }
     }
 }
 
@@ -479,7 +493,7 @@ const fn piece(node: SnapshotId, kind: PieceKind, metrics: TextMetrics, setting:
 fn fill_lines(pieces: &[Piece], limit: Au) -> Vec<Line> {
     let mut filler = LineFiller::new(limit);
     for piece in pieces {
-        filler.absorb(*piece);
+        filler.absorb(piece.clone());
     }
     filler.finish()
 }
@@ -523,7 +537,7 @@ impl LineFiller {
         self.current.push(piece);
     }
 
-    const fn hold_space(&mut self, piece: Piece) {
+    fn hold_space(&mut self, piece: Piece) {
         if self.current.is_empty() {
             return;
         }
@@ -531,7 +545,7 @@ impl LineFiller {
     }
 
     fn place_word(&mut self, piece: Piece) {
-        if self.overflows(piece) {
+        if self.overflows(&piece) {
             self.pending_space = None;
             self.close();
         }
@@ -539,7 +553,7 @@ impl LineFiller {
         self.current.push(piece);
     }
 
-    fn overflows(&self, piece: Piece) -> bool {
+    fn overflows(&self, piece: &Piece) -> bool {
         if self.current.is_empty() || !piece.white_space.allows_soft_wrap() {
             return false;
         }
@@ -555,6 +569,7 @@ impl LineFiller {
 
     fn pending_width(&self) -> Au {
         self.pending_space
+            .as_ref()
             .map_or(Au::ZERO, |space| space.metrics.width())
     }
 
@@ -583,24 +598,34 @@ impl LineFiller {
 /// Where every piece ended up, and how tall the whole run is.
 struct Placements {
     height: Au,
-    rects: Vec<(SnapshotId, Rect)>,
+    pieces: Vec<Placed>,
+}
+
+/// One piece on its line: whose it is, where it sits, which line box holds it
+/// (0-based), and the text it draws.
+struct Placed {
+    node: SnapshotId,
+    rect: Rect,
+    line: usize,
+    text: Option<Rc<str>>,
 }
 
 fn place(lines: &[Line], content_width: Au, align: TextAlign) -> Placements {
     let mut cursor = Au::ZERO;
-    let mut rects = Vec::new();
+    let mut pieces = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         let last = index.saturating_add(1) == lines.len();
         place_line(
             line,
             LinePlacement::new(content_width, align, cursor, last),
-            &mut rects,
+            index,
+            &mut pieces,
         );
         cursor = cursor.saturating_add(line.height());
     }
     Placements {
         height: cursor,
-        rects,
+        pieces,
     }
 }
 
@@ -624,28 +649,33 @@ impl LinePlacement {
     }
 }
 
-fn place_line(line: &Line, placement: LinePlacement, rects: &mut Vec<(SnapshotId, Rect)>) {
+fn place_line(line: &Line, placement: LinePlacement, line_index: usize, placed: &mut Vec<Placed>) {
     let mut cursor = start_offset(line, placement);
     let extra = justification(line, placement);
     for (index, piece) in line.pieces.iter().enumerate() {
-        let widened = widened_width(*piece, extra, index);
-        push_rect(line, *piece, Point::new(cursor, placement.top), rects);
+        let widened = widened_width(piece, extra, index);
+        let rect = piece_rect(line, piece, Point::new(cursor, placement.top));
+        placed.push(Placed {
+            node: piece.node,
+            rect,
+            line: line_index,
+            text: piece.text.clone(),
+        });
         cursor = cursor.saturating_add(widened);
     }
 }
 
-fn push_rect(line: &Line, piece: Piece, origin: Point, rects: &mut Vec<(SnapshotId, Rect)>) {
+fn piece_rect(line: &Line, piece: &Piece, origin: Point) -> Rect {
     let metrics = piece.metrics;
     let top = origin
         .vertical()
         .saturating_add(line.ascent)
         .saturating_sub(metrics.baseline());
-    let placed = rect_at(
+    rect_at(
         Point::new(origin.horizontal(), top),
         metrics.width(),
         metrics.height(),
-    );
-    rects.push((piece.node, placed));
+    )
 }
 
 /// The `text-align` offset of a line's first piece. `justify` starts flush
@@ -715,7 +745,7 @@ impl Extra {
 
 /// A gap's advance under justification is its own width plus its share; every
 /// other piece advances by its own width.
-fn widened_width(piece: Piece, extra: Extra, index: usize) -> Au {
+fn widened_width(piece: &Piece, extra: Extra, index: usize) -> Au {
     let metrics = piece.metrics;
     if piece.kind != PieceKind::Space {
         return metrics.width();
@@ -728,129 +758,6 @@ fn widened_width(piece: Piece, extra: Extra, index: usize) -> Au {
 
 // ---- fragment emission ----------------------------------------------------
 
-/// Turns placed pieces into fragments: one per inline node, in document
-/// order (an inline box first, then the boxes it contains), and an atomic
-/// inline's own laid-out fragments moved onto its slot on the line.
-struct Emitter<'run, 'tree, M> {
-    context: &'run LayoutContext<'tree, M>,
-    placements: &'run Placements,
-    atoms: Atoms,
-    fragments: Fragments,
-}
+mod emit;
 
-impl<'run, 'tree, M: TextMeasurer> Emitter<'run, 'tree, M> {
-    const fn new(
-        context: &'run LayoutContext<'tree, M>,
-        placements: &'run Placements,
-        atoms: Atoms,
-    ) -> Self {
-        Self {
-            context,
-            placements,
-            atoms,
-            fragments: Fragments::new(),
-        }
-    }
-
-    fn emit_node(&mut self, node_id: SnapshotId) -> Result<(), CssError> {
-        let styled = self.context.node(node_id)?;
-        let display = styled.style().display();
-        if display.is_none() {
-            return Ok(());
-        }
-        if display.is_atomic_inline() {
-            self.emit_atom(node_id);
-            return Ok(());
-        }
-        self.emit_box(styled)
-    }
-
-    /// An inline box's bounding fragment, then its children's.
-    fn emit_box(&mut self, styled: &StyledNode) -> Result<(), CssError> {
-        let node_id = styled.node();
-        let Some(bounds) = union_of(self.context, node_id, self.placements)? else {
-            return Ok(());
-        };
-        self.fragments.push(Fragment::new(
-            node_id,
-            bounds,
-            BoxEdges::ZERO,
-            styled.intrinsic_size(),
-            ChildIds::from_ids(styled.children().iter()),
-        ));
-        for child in styled.children().iter() {
-            self.emit_node(child)?;
-        }
-        Ok(())
-    }
-
-    /// The atom's piece occupies its margin box; its fragments are relative to
-    /// its border-box origin, one margin in from that.
-    fn emit_atom(&mut self, node_id: SnapshotId) {
-        let Some(result) = self.atoms.take(node_id) else {
-            return;
-        };
-        let Some(slot) = own_rect(node_id, self.placements) else {
-            return;
-        };
-        let margin = result.edges().margin();
-        let horizontal = slot.min_x().saturating_add(margin.left());
-        let vertical = slot.min_y().saturating_add(margin.top());
-        self.fragments
-            .absorb(result.into_fragments().translated(horizontal, vertical));
-    }
-
-    fn finish(self) -> Fragments {
-        self.fragments
-    }
-}
-
-/// The bounding rectangle of everything `node_id`'s subtree put on a line.
-fn union_of<M: TextMeasurer>(
-    context: &LayoutContext<'_, M>,
-    node_id: SnapshotId,
-    placements: &Placements,
-) -> Result<Option<Rect>, CssError> {
-    let mut bounds = own_rect(node_id, placements);
-    let styled = context.node(node_id)?;
-    for child in styled.children().iter() {
-        let child_bounds = union_of(context, child, placements)?;
-        bounds = merged(bounds, child_bounds);
-    }
-    Ok(bounds)
-}
-
-fn own_rect(node_id: SnapshotId, placements: &Placements) -> Option<Rect> {
-    placements
-        .rects
-        .iter()
-        .filter(|(id, _)| *id == node_id)
-        .map(|(_, rect)| *rect)
-        .reduce(union)
-}
-
-fn merged(left: Option<Rect>, right: Option<Rect>) -> Option<Rect> {
-    let Some(first) = left else {
-        return right;
-    };
-    let Some(second) = right else {
-        return Some(first);
-    };
-    Some(union(first, second))
-}
-
-fn union(left: Rect, right: Rect) -> Rect {
-    let origin = Point::new(
-        left.min_x().smaller(right.min_x()),
-        left.min_y().smaller(right.min_y()),
-    );
-    let width = left
-        .max_x()
-        .larger(right.max_x())
-        .saturating_sub(origin.horizontal());
-    let height = left
-        .max_y()
-        .larger(right.max_y())
-        .saturating_sub(origin.vertical());
-    rect_at(origin, width, height)
-}
+use emit::Emitter;

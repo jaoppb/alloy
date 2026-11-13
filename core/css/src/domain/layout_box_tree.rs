@@ -73,8 +73,33 @@ impl EdgeSizes {
     }
 }
 
-/// One laid-out box: which node it belongs to, its content rectangle, the three
-/// edges around it, and whether its size is still provisional.
+/// The text one fragment of a text node holds.
+///
+/// It is what layout placed on that fragment's line, white space already
+/// processed (CSS Text L3 §4.1.1), so a painter draws it as one line from the
+/// fragment's origin and never wraps it again (#134).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FragmentText(String);
+
+impl FragmentText {
+    #[must_use]
+    pub const fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// One laid-out box fragment: which node it belongs to, its content
+/// rectangle, the three edges around it, whether its size is still
+/// provisional, and — for a text node — the text on it.
+///
+/// A block-level or atomic box is one fragment. An inline box or a text node
+/// has one fragment per line it touches (#134), so a node may own several
+/// `LayoutBox`es; [`LayoutBoxTree::fragments_of`] lists them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LayoutBox {
@@ -85,6 +110,7 @@ pub struct LayoutBox {
     padding: EdgeSizes,
     intrinsic_size: IntrinsicSize,
     children: ChildIds,
+    text: Option<FragmentText>,
 }
 
 impl LayoutBox {
@@ -104,6 +130,16 @@ impl LayoutBox {
             padding: edges.padding,
             intrinsic_size,
             children,
+            text: None,
+        }
+    }
+
+    /// This fragment holding `text` — a text node's share of one line.
+    #[must_use]
+    pub fn with_text(self, text: FragmentText) -> Self {
+        Self {
+            text: Some(text),
+            ..self
         }
     }
 
@@ -142,6 +178,12 @@ impl LayoutBox {
     #[must_use]
     pub const fn children(&self) -> &ChildIds {
         &self.children
+    }
+
+    /// The text on this fragment, or `None` for a fragment of an element.
+    #[must_use]
+    pub const fn text(&self) -> Option<&FragmentText> {
+        self.text.as_ref()
     }
 
     /// The content box grown by padding and border — what a background and a
@@ -255,10 +297,21 @@ impl LayoutBoxTree {
         self.root
     }
 
-    /// The box for `node`, or `None` when it generated none.
+    /// The first fragment of `node`, or `None` when it generated none — the
+    /// whole box for a block-level or atomic node, the first line's for an
+    /// inline box or a text node ([`Self::fragments_of`] has the rest).
     #[must_use]
     pub fn box_of(&self, node: SnapshotId) -> Option<&LayoutBox> {
         self.boxes.iter().find(|laid_out| laid_out.node == node)
+    }
+
+    /// Every fragment of `node`, in document order: one for a block-level or
+    /// atomic node, one per line for an inline box or a text node, none when
+    /// it generated no box.
+    pub fn fragments_of(&self, node: SnapshotId) -> impl Iterator<Item = &LayoutBox> + '_ {
+        self.boxes
+            .iter()
+            .filter(move |laid_out| laid_out.node == node)
     }
 
     /// Every box in document order.
