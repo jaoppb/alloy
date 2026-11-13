@@ -55,11 +55,11 @@ arquivo antes de I2, C1, C2, M e X estarem todos commitados.
       `HeadlessWindowSystem`/`RecordingPresenter`, CSS de autor via `<link rel=stylesheet>` (não só inline) + texto +
       imagem.
 - [x] Resize coalescing: N `WindowEvent::Resized` num só `pump_events` custam **1** relayout, e o viewport reflete o
-      último (`alloy/src/application/event_loop/coalescing_tests.rs`'s
+      último (`alloy/src/application/browser_app/coalescing_tests.rs`'s
       `multiple_resizes_in_one_pump_coalesce_to_one_relayout`). Prova direta sobre `pump_once` (thread-free), não sobre
       `BrowserApp::run` inteiro — ver o comentário do módulo de teste para o porquê.
 - [x] 50 imagens = relayouts limitados, não 50 — mesma técnica
-      (`tests::fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout`, assert `relayouts == 1`).
+      (`coalescing_tests::fifty_image_arrivals_in_one_pump_coalesce_to_one_relayout`, assert `relayouts == 1`).
 - [x] `network::PORT_SCHEMA_VERSION`, `window::PORT_SCHEMA_VERSION` congelados e documentados
       (`docs/architecture/{http-transport,window-system}-port-contract.md` item 7 → ✅, `PRD-009`/`PRD-010` §6). Como
       bônus desta fase, `html::PORT_SCHEMA_VERSION` (que nem existia) também foi introduzido e documentado
@@ -81,6 +81,21 @@ fetch já disponíveis antes de decidir relayout, no máximo um por ciclo. `core
 carregado ou não — por isso todo id descoberto ganha um placeholder 1×1 transparente
 (`subresource::placeholder_framebuffer`) assim que descoberto, e a imagem real substitui esse placeholder quando o fetch
 termina. `cargo clippy --workspace --all-targets --all-features -- -D warnings` e `cargo fmt --all -- --check` limpos.
+
+## Onde isso vive hoje (pós-epic #110, 2026-11)
+
+Este arquivo é um instantâneo datado. O epic #110 (ADR-0019, emendas de 2026-10-23 a 2026-10-28; ADR-0026; ADR-0027)
+repartiu o que os passos 1–4 e o "Estado atual" acima atribuem a `alloy/src/application/event_loop/`:
+
+- `event_loop/` guarda só o laço: `pump_once` + `PumpEvents` (drenar, dobrar, despachar) — #115.
+- `BrowserApp` (`alloy/src/application/browser_app/`) substituiu `Session` e é o ponto de entrada (`run`, `run_until`,
+  `run_until_first_frame`); os testes de coalescência desta fase vivem em `browser_app/coalescing_tests.rs` — #115.
+- `EffectExecutor` (`alloy/src/application/effects/`) é o único lugar que executa `UiEffect`/`BrowserEffect` — #115.
+- O documento, a navegação e a descoberta de subrecursos (`navigation.rs`/`subresource.rs` dos passos 2–3) estão em
+  `core/browser` (`BrowsingContext`, `application/subresource.rs`), puro e sem threads — #111.
+- O chrome (omnibox, hit testing, tema) está em `core/ui`; `core/region` é o que os dois irmãos compartilham — #109.
+- Os fetches rodam atrás do port `FetchExecutor` (`alloy/src/infrastructure/thread_fetch.rs`), não mais por
+  `std::thread::spawn` direto no laço — #114.
 
 ## Convenção de commit
 

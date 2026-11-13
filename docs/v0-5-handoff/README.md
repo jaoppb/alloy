@@ -1,5 +1,9 @@
 # v0.5 — pacote de handoff para as fases restantes
 
+> **Instantâneo datado.** A v0.5 está em `main` (PRs `split/01`–`split/11`: #10, #11, #25, #13–#20) e o epic #110
+> reorganizou `alloy/src/application/` depois disto — ver "Onde isso vive hoje" em
+> [`06-i4-alloy-url.md`](06-i4-alloy-url.md).
+
 Este é o índice de continuação da campanha de implementação da v0.5. Existe porque a campanha não cabe numa sessão só:
 nove fases já foram entregues, e as sete que faltam são grandes demais para chegar ao fim antes de qualquer limite de
 sessão. Cada arquivo abaixo é **autocontido** — uma sessão nova (ou um sub-agente novo) deve conseguir abrir só aquele
