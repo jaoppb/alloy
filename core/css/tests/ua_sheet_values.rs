@@ -7,8 +7,11 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use css::domain::computed::BorderColor;
 use css::domain::computed::inline_style::{TextAlign, WhiteSpace};
-use css::domain::computed::text_advance::{FontStyle, FontWeight, TextDecoration};
+use css::domain::computed::text_advance::{
+    FontStyle, FontWeight, LetterSpacing, LineHeight, TextDecoration, TextTransform, WordSpacing,
+};
 use css::{
     CascadeResolver, ComputedStyle, CssColor, FontFamily, GenericFamily, Length, LengthEdges,
     UaCascade, collect_style_sheets, snapshot,
@@ -184,4 +187,35 @@ fn a_form_control_does_not_inherit_its_parents_alignment() {
         ));
         assert_eq!(style.text_align(), TextAlign::Left, "<{tag}>");
     }
+}
+
+#[test]
+fn a_form_control_resets_the_text_settings_it_would_inherit() {
+    let parent = "letter-spacing:3px;word-spacing:4px;line-height:30px;text-transform:uppercase";
+    for tag in ["input", "select", "button", "textarea"] {
+        let style = style_of(&format!("<div style='{parent}'><{tag} id=target></div>"));
+        let text = style.text_advance();
+        assert_eq!(text.letter_spacing(), LetterSpacing::Normal, "<{tag}>");
+        assert_eq!(text.word_spacing(), WordSpacing::Normal, "<{tag}>");
+        assert_eq!(text.line_height(), LineHeight::Normal, "<{tag}>");
+        assert_eq!(text.text_transform(), TextTransform::None, "<{tag}>");
+    }
+}
+
+#[test]
+fn table_parts_take_their_border_colour_from_the_table() {
+    let table =
+        "<table style='border-color:#ff0000'><tbody id=target><tr><td>x</td></tr></tbody></table>";
+    let style = style_of(table);
+    let red = CssColor::rgb(0xFF, 0x00, 0x00);
+    assert_eq!(
+        style.visual().border_colors().top(),
+        BorderColor::Color(red)
+    );
+}
+
+#[test]
+fn a_form_directly_inside_a_table_part_generates_no_box() {
+    let style = style_of("<table><tr><form id=target></form><td>x</td></tr></table>");
+    assert_eq!(style.display(), css::Display::None);
 }

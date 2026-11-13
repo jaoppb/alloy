@@ -159,8 +159,9 @@ fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> Computed
 /// A non-element node: no selector ever chooses one (`application/matching.rs`
 /// doc-comment), so its `display` stays a fixed Rust rule rather than a CSS
 /// one. An element's `display` is `assets/ua.css`'s, which states it for every
-/// element WHATWG HTML §15.3 does not leave at CSS's initial `inline` (#133),
-/// so non-element nodes are the only ones that still need Rust.
+/// element WHATWG HTML §15.3 does not leave at CSS's initial `inline`, or lists
+/// the value as a MANIFEST cut (#133), so non-element nodes are the only ones
+/// that still need Rust.
 fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
     match kind {
         SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),

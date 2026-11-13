@@ -373,13 +373,44 @@ th {
 	font-weight: bold;
 }
 
+thead,
+tbody,
+tfoot,
+tr {
+	border-color: inherit;
+}
+
+table > form,
+thead > form,
+tbody > form,
+tfoot > form,
+tr > form {
+	display: none !important;
+}
+
 /* ---- §15.3.10 Form controls (issue #87) ---------------------------------- */
 
+/*
+ * Wider than the spec, which gives `border-box` to buttons, `select` and a few
+ * `input` types only: every control here (issue #87), so a text input's 12em
+ * width includes its border.
+ */
 input,
 button,
 select,
 textarea {
 	box-sizing: border-box;
+}
+
+/* A control does not take its text setting from the surrounding text. */
+input,
+select,
+button,
+textarea {
+	letter-spacing: initial;
+	word-spacing: initial;
+	line-height: initial;
+	text-transform: initial;
 }
 
 input,
@@ -433,6 +464,7 @@ textarea {
 	border: 1px solid #767676;
 	background-color: #ffffff;
 	padding: 2px;
+	/* Refused until `pre-wrap` is supported (MANIFEST cut); kept as the intended value. */
 	white-space: pre-wrap;
 	font-family: monospace;
 	width: 12em;
