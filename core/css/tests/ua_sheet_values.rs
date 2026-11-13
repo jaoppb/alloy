@@ -271,3 +271,13 @@ fn a_div_align_hint_sets_its_text_alignment() {
         assert_eq!(style.text_align(), expected, "align={hint}");
     }
 }
+
+#[test]
+fn a_definition_term_is_not_bold() {
+    let style = style_of("<dl><dt id=target>term</dt><dd>x</dd></dl>");
+    assert_eq!(
+        style.text_advance().font_weight(),
+        FontWeight::NORMAL,
+        "§15.3.7 gives `dt` only `display: block`"
+    );
+}

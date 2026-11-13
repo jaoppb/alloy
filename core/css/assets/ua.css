@@ -123,10 +123,6 @@ dialog[hidden] {
 	display: none;
 }
 
-input[type="hidden"] {
-	display: none !important;
-}
-
 address {
 	font-style: italic;
 }
@@ -334,10 +330,6 @@ dd {
 	margin-left: 40px;
 }
 
-dt {
-	font-weight: bold;
-}
-
 /*
  * A list nested in a list has no block margins: the spec's
  * `:is(dir, dl, menu, ol, ul) :is(dir, dl, menu, ol, ul)`, spelled out because
@@ -428,6 +420,12 @@ tr > form {
 }
 
 /* ---- §15.3.10 Form controls (issue #87) ---------------------------------- */
+
+/*
+ * The spec draws controls with `appearance: auto` (MANIFEST cut); the borders,
+ * backgrounds, paddings and sizes below are #87's stand-in for that native
+ * look, not spec values.
+ */
 
 /*
  * Wider than the spec, which gives `border-box` to buttons, `select` and a few
@@ -536,7 +534,12 @@ summary {
 	display: block;
 }
 
-/* ---- Embedded content: an `<svg>` sits on a line as one atomic box --------- */
+/* ---- Embedded content ------------------------------------------------------ */
+
+/*
+ * Not a spec rule: `<svg>` is inline replaced content, which has no layout of
+ * its own here yet, so it stands in as one atomic `inline-block` box.
+ */
 
 svg {
 	display: inline-block;
