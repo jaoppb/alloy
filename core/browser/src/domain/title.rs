@@ -29,6 +29,12 @@ impl DocumentTitle {
         Self(url.to_string())
     }
 
+    /// The title text, by value.
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+
     /// The title text.
     #[must_use]
     pub fn as_str(&self) -> &str {

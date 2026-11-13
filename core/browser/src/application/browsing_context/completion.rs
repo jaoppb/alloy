@@ -70,13 +70,16 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
                 return Effects::none();
             }
         };
+        // The embedded template always has a `<title>` (pinned by the
+        // browsing-context tests); without one the window keeps its name.
         let title = document_title(&tree);
         self.install(Document::generated(tree));
-        let renamed = title.map(|title| BrowserEffect::TitleChanged(self.id, title));
-        renamed
-            .into_iter()
-            .chain([self.content_damaged()])
-            .collect()
+        let mut effects = Effects::none();
+        if let Some(title) = title {
+            effects.push(BrowserEffect::TitleChanged(self.id, title));
+        }
+        effects.push(self.content_damaged());
+        effects
     }
 
     fn absorb_stylesheet(&mut self, text: &str, media: &MediaQuery) -> Effects {

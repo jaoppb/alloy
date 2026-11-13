@@ -10,4 +10,4 @@ pub use browsing_context::BrowsingContext;
 pub use error_page::{ErrorPageError, error_page};
 pub use stylesheet::{StylesheetRejected, parse_author_stylesheet};
 pub use subresource::{SubresourceDiscoverer, document_base_url};
-pub use title::document_title;
+pub(crate) use title::document_title;

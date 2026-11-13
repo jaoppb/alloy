@@ -91,7 +91,7 @@ impl<'a, X: FetchExecutor> EffectExecutor<'a, X> {
                     self.fetcher.execute(request, navigation);
                 }
                 BrowserEffect::ContentDamaged(_) => self.damage.record(Damage::Content),
-                BrowserEffect::TitleChanged(_, title) => self.title.record(&title),
+                BrowserEffect::TitleChanged(_, title) => self.title.record(title),
             }
         }
     }

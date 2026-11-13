@@ -111,6 +111,14 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         Ok(handle)
     }
 
+    fn head_can_end(&self) -> bool {
+        self.in_head
+            && self
+                .open_elements
+                .last()
+                .is_some_and(|open| matches!(open.tag, TagName::Head | TagName::Noscript))
+    }
+
     fn pop_head(&mut self) {
         while let Some(index) = self.open_elements.iter().rposition(|e| e.tag == "head") {
             self.open_elements.truncate(index);
@@ -157,18 +165,16 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             self.pop_to_html_namespace();
         }
 
-        let tag_str = tag.name();
-        if tag_str == "html" {
-            return self.process_html_start_tag(tag);
-        }
-        if tag_str == "head" {
-            return self.process_head_start_tag(tag);
-        }
-        if tag_str == "body" {
-            return self.process_body_start_tag(tag);
+        match tag.tag_name() {
+            TagName::Html => return self.process_html_start_tag(tag),
+            TagName::Head => return self.process_head_start_tag(tag),
+            TagName::Body => return self.process_body_start_tag(tag),
+            _ => {}
         }
 
-        if self.in_head && !tag.tag_name().is_head_content() {
+        // Only a tag directly in `<head>` (or its `<noscript>`, §13.2.6.4.5) can
+        // end it: a `<template>`'s children stay inside the template (#84).
+        if self.head_can_end() && !tag.tag_name().is_head_content() {
             self.pop_head();
         }
 
@@ -178,7 +184,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
 
         self.apply_omission_rules(tag.tag_name(), tag.location());
 
-        let namespace = namespace_for_tag(tag_str);
+        let namespace = namespace_for_tag(tag.name());
         let parent = self.current_parent();
         let handle =
             self.sink

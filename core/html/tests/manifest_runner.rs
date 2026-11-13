@@ -265,7 +265,9 @@ fn test_syntax_rawtext_and_omissions() {
     );
 
     // 4. head content keeps head open
-    let events = events_of("<head><base href=\"/\"><template></template><title>x</title></head>");
+    let events = events_of(
+        "<head><base href=\"/\"><template><div>x</div></template><title>x</title></head>",
+    );
     let head = elements_named(&events, "head")[0].0;
     for name in ["base", "template", "title"] {
         let element = elements_named(&events, name)[0].0;
@@ -275,6 +277,13 @@ fn test_syntax_rawtext_and_omissions() {
             "<{name}> must stay in <head>"
         );
     }
+    let template = elements_named(&events, "template")[0].0;
+    let div = elements_named(&events, "div")[0].0;
+    assert_eq!(
+        parent_of(&events, div),
+        Some(template),
+        "template content must not end <head>"
+    );
 
     // 5. p tag omission
     let events = events_of("<p>First<p>Second");

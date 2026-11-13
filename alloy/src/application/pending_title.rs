@@ -13,8 +13,8 @@ pub struct PendingTitle(Option<WindowTitle>);
 
 impl PendingTitle {
     /// Queues `title`, replacing any title the loop has not applied yet.
-    pub fn record(&mut self, title: &DocumentTitle) {
-        self.0 = Some(WindowTitle::from(title.as_str()));
+    pub fn record(&mut self, title: DocumentTitle) {
+        self.0 = Some(WindowTitle::from(title.into_string()));
     }
 
     /// Hands over the queued title, leaving none.

@@ -25,7 +25,7 @@ pub mod infrastructure;
 
 pub use application::{
     BrowsingContext, ErrorPageError, StylesheetRejected, SubresourceDiscoverer, document_base_url,
-    document_title, error_page, parse_author_stylesheet,
+    error_page, parse_author_stylesheet,
 };
 pub use domain::{
     BrowserEffect, ContextStats, Document, DocumentRequest, DocumentTitle, Effects, FetchFailure,
