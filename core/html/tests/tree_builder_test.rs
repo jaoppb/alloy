@@ -219,3 +219,43 @@ fn content_after_html_closed_inside_head_goes_to_body() {
         Some(only_element_named(&events, "body")),
     );
 }
+
+#[test]
+fn a_template_after_html_closed_inside_head_goes_to_body() {
+    let events = events_of("<head></html><template><p>x");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "template")),
+        Some(only_element_named(&events, "body")),
+    );
+}
+
+#[test]
+fn a_body_tag_inside_a_head_template_is_ignored() {
+    let events = events_of("<head><template><body><p>x");
+    let template = only_element_named(&events, "template");
+
+    assert!(
+        elements_named(&events, "body").is_empty(),
+        "no body may be created"
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(template)
+    );
+}
+
+#[test]
+fn a_head_end_tag_inside_a_head_template_is_ignored() {
+    let events = events_of("<head><template></head><p>x</template><title>t</title>");
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(only_element_named(&events, "template"))
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head)
+    );
+}

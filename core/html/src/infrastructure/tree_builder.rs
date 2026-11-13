@@ -263,6 +263,11 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
 
     fn process_body_start_tag(&mut self, tag: &TagToken) -> Result<TokenSinkResult, HtmlError> {
         self.ensure_html_element()?;
+        // Inside a head `<template>` a `<body>` tag is ignored (WHATWG "in body").
+        if self.in_head && !self.head_can_end() {
+            self.report(ParseErrorCode::UnexpectedBodyStartTag, tag.location());
+            return Ok(TokenSinkResult::Continue);
+        }
         if self.in_head {
             self.pop_head();
         }
@@ -370,7 +375,7 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         let name = tag.name();
         let location = tag.location();
         if *tag.tag_name() == TagName::Head && self.in_head {
-            self.pop_head();
+            self.close_head(location);
             return;
         }
 
@@ -384,6 +389,25 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             ParseErrorCode::EndTagDoesNotMatchCurrentNode,
             location,
         );
+        // An end tag such as `</html>` can close `<head>` with the rest of the
+        // stack; the head is then over, as `pop_head` would have recorded.
+        if !self
+            .open_elements
+            .iter()
+            .any(|open| open.tag == TagName::Head)
+        {
+            self.in_head = false;
+        }
+    }
+
+    /// `</head>`: ends the head, except inside a head `<template>`, where it
+    /// is a stray end tag (WHATWG "in template" → "in head").
+    fn close_head(&mut self, location: SourceLocation) {
+        if self.head_can_end() {
+            self.pop_head();
+            return;
+        }
+        self.report(ParseErrorCode::StrayEndTag, location);
     }
 
     /// The doctype is consumed by design: the DOM has no `DocumentType` node and no quirks mode
