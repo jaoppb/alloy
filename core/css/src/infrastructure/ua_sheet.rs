@@ -158,13 +158,182 @@ fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> Computed
 
 /// A non-element node: no selector ever chooses one (`application/matching.rs`
 /// doc-comment), so its `display` stays a fixed Rust rule rather than a CSS
-/// one. An element's default is already [`Display::Block`] from
-/// [`ComputedStyle::initial`], which is why this arm is the only one that
-/// still needs Rust after `assets/ua.css` took over every per-tag exception.
+/// one. An element's `display` is `assets/ua.css`'s, which states it for every
+/// element WHATWG HTML §15.3 does not leave at CSS's initial `inline`, or lists
+/// the value as a MANIFEST cut (#133), so non-element nodes are the only ones
+/// that still need Rust.
 fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
     match kind {
         SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
         SnapshotNodeKind::Text => base.with_display(Display::Inline),
         SnapshotNodeKind::Comment => base.with_display(Display::None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use crate::application::snapshot::snapshot;
+
+    /// Every element WHATWG HTML §15.3 / §15.5.5 lays out as a block, outside
+    /// the table family. `hr` is listed for its `display` only (#82 owns the
+    /// rest).
+    const BLOCK_ELEMENTS: [&str; 41] = [
+        "html",
+        "body",
+        "address",
+        "blockquote",
+        "center",
+        "div",
+        "figure",
+        "figcaption",
+        "footer",
+        "form",
+        "header",
+        "hr",
+        "legend",
+        "listing",
+        "main",
+        "p",
+        "plaintext",
+        "pre",
+        "search",
+        "xmp",
+        "article",
+        "aside",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hgroup",
+        "nav",
+        "section",
+        "dir",
+        "dd",
+        "dl",
+        "dt",
+        "menu",
+        "ol",
+        "ul",
+        "details",
+        "summary",
+        "fieldset",
+    ];
+
+    /// The table family this engine stacks as blocks until it has table
+    /// layout (MANIFEST cut).
+    const TABLE_BLOCKS: [&str; 8] = [
+        "table", "caption", "thead", "tbody", "tfoot", "tr", "td", "th",
+    ];
+
+    /// The column elements, which generate nothing while tables stack as blocks.
+    const TABLE_COLUMNS: [&str; 2] = ["colgroup", "col"];
+
+    /// The §15.3.1 elements that render nothing, outside the table family.
+    const HIDDEN_ELEMENTS: [&str; 8] = [
+        "area", "basefont", "datalist", "noembed", "noframes", "param", "rp", "template",
+    ];
+
+    /// Every phrasing element the sheet styles: each must be `inline` even
+    /// over a `block` base, or it renders as a styled block until #136.
+    const STYLED_PHRASING: [&str; 25] = [
+        "a", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd", "label", "mark", "nobr",
+        "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "tt", "u", "var", "wbr",
+    ];
+
+    /// A table holding every element of [`TABLE_BLOCKS`] and [`TABLE_COLUMNS`]:
+    /// table-internal elements only survive tree construction inside one.
+    const TABLE_MARKUP: &str = "<!doctype html><html><body><table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table></body></html>";
+
+    /// The `display` the UA sheet alone gives the first `tag` element of
+    /// `markup`, cascaded over an `inline` base — so a missing UA rule shows
+    /// up as `inline` instead of hiding behind today's `block` initial value
+    /// (#81: the initial value becomes `inline`).
+    fn ua_display(markup: &str, tag: &str) -> Display {
+        ua_display_over(Display::Inline, markup, tag)
+    }
+
+    /// [`ua_display`] over an explicit `base` display.
+    fn ua_display_over(base: Display, markup: &str, tag: &str) -> Display {
+        let tree = dom::parse(markup).expect("the fixture parses").into_tree();
+        let dom = snapshot(&tree, tree.document());
+        let node = dom
+            .nodes_in_document_order()
+            .filter_map(|id| dom.node(id))
+            .find(|node| node.tag_str() == Some(tag))
+            .unwrap_or_else(|| panic!("the fixture has a <{tag}>"));
+        let cascaded = apply_author_rules(
+            ComputedStyle::initial().with_display(base),
+            None,
+            &InheritedContext::root(),
+            node,
+            &dom,
+            &UaCascade::new().ua_rules,
+        );
+        cascaded.into_parts().0.display()
+    }
+
+    fn markup_with(tag: &str) -> String {
+        format!("<!doctype html><html><body><{tag}></{tag}></body></html>")
+    }
+
+    #[test]
+    fn the_ua_sheet_itself_makes_every_flow_element_a_block() {
+        for tag in BLOCK_ELEMENTS {
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::Block,
+                "<{tag}>"
+            );
+        }
+    }
+
+    #[test]
+    fn the_table_family_stacks_as_blocks_and_columns_generate_nothing() {
+        for tag in TABLE_BLOCKS {
+            assert_eq!(ua_display(TABLE_MARKUP, tag), Display::Block, "<{tag}>");
+        }
+        for tag in TABLE_COLUMNS {
+            assert_eq!(ua_display(TABLE_MARKUP, tag), Display::None, "<{tag}>");
+        }
+    }
+
+    #[test]
+    fn the_ua_sheet_hides_the_elements_html_never_renders() {
+        for tag in HIDDEN_ELEMENTS {
+            assert_eq!(ua_display(&markup_with(tag), tag), Display::None, "<{tag}>");
+        }
+    }
+
+    #[test]
+    fn a_dialog_is_hidden_until_it_is_open() {
+        let closed = "<!doctype html><body><dialog></dialog></body>";
+        let open = "<!doctype html><body><dialog open></dialog></body>";
+        assert_eq!(ua_display(closed, "dialog"), Display::None);
+        assert_eq!(ua_display(open, "dialog"), Display::Block);
+    }
+
+    #[test]
+    fn the_hidden_attribute_beats_an_open_dialog() {
+        let markup = "<!doctype html><body><dialog open hidden></dialog></body>";
+        assert_eq!(ua_display(markup, "dialog"), Display::None);
+    }
+
+    #[test]
+    fn the_hidden_attribute_removes_the_box_of_any_element() {
+        let markup = "<!doctype html><body><span hidden>x</span></body>";
+        assert_eq!(ua_display(markup, "span"), Display::None);
+    }
+
+    #[test]
+    fn every_styled_phrasing_element_is_inline_even_over_a_block_base() {
+        for tag in STYLED_PHRASING {
+            let display = ua_display_over(Display::Block, &markup_with(tag), tag);
+            assert_eq!(display, Display::Inline, "<{tag}>");
+        }
     }
 }

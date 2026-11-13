@@ -2,112 +2,308 @@
  * The embedded user-agent stylesheet (v0.5 B2, `plano:435-443`).
  *
  * Parsed once by `UaCascade::new()` (`core/css/src/infrastructure/ua_sheet.rs`)
- * and cascaded as `Origin::UserAgent` rules, ahead of the document's own —
- * this file *is* the base layer B1 used to hard-code in
- * `style_for_tag` (removed in this change). Every value here reproduces
- * exactly what that Rust function set, so a document with no author CSS
- * renders unchanged.
+ * and cascaded as `Origin::UserAgent` rules, ahead of the document's own.
  *
- * Everything not overridden here already has the right computed value from
- * `ComputedStyle::initial()` — block display and zero margin — so an
- * ordinary element (`div`, `html`, …) needs no rule at all.
+ * Laid out section by section after WHATWG HTML §15.3 ("Rendering") and
+ * §15.5.5 (`details`), and each element's `display` is declared exactly once,
+ * in its section's display rule: the sheet must not lean on
+ * `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines as
+ * `inline` (#81). Box and font values follow the spec except where a value
+ * below says it keeps an older one. Every §15.3.1–§15.3.12 rule this sheet
+ * does not carry is listed in `core/css/tests/data/MANIFEST.md` ("UA sheet
+ * rules the cascade cannot express yet"): per rule, or per category for the
+ * presentational hints, the quirks-mode rules and the prose-only rules.
  */
 
+/* ---- §15.3.1 Hidden elements ------------------------------------------- */
+
+area,
+base,
+basefont,
+datalist,
 head,
-style,
-script,
-title,
-meta,
 link,
-base {
+meta,
+noembed,
+noframes,
+param,
+rp,
+script,
+style,
+template,
+title {
 	display: none;
 }
 
-span,
+/*
+ * The spec's selector is `[hidden]:not([hidden=until-found i]):not(embed)`;
+ * without `:not()` it is plain `[hidden]` (MANIFEST cut).
+ */
+[hidden] {
+	display: none;
+}
+
+input[type="hidden"] {
+	display: none !important;
+}
+
+/* ---- §15.3.2 The page --------------------------------------------------- */
+
+html,
+body {
+	display: block;
+}
+
+body {
+	margin: 8px;
+}
+
+/* ---- §15.3.3 Flow content ---------------------------------------------- */
+
+address,
+blockquote,
+center,
+div,
+figure,
+figcaption,
+footer,
+form,
+header,
+hr,
+legend,
+listing,
+main,
+p,
+plaintext,
+pre,
+search,
+xmp {
+	display: block;
+}
+
+/*
+ * `blockquote` and `p` keep the 16px they had before #133, where the spec says
+ * `1em`: the same length at the default font size.
+ */
+blockquote {
+	margin: 16px 40px;
+}
+
+figure {
+	margin: 1em 40px;
+}
+
+p {
+	margin: 16px 0;
+}
+
+listing,
+plaintext,
+pre,
+xmp {
+	font-family: monospace;
+	white-space: pre;
+	margin: 1em 0;
+}
+
+dialog {
+	display: none;
+}
+
+dialog[open] {
+	display: block;
+}
+
+/*
+ * The spec's `[hidden]` rule weighs (0,2,1) and so beats `dialog[open]`; the
+ * plain `[hidden]` above weighs (0,1,0), so `dialog[hidden]` restates it here,
+ * after `dialog[open]`, to win at equal specificity.
+ */
+dialog[hidden] {
+	display: none;
+}
+
+address {
+	font-style: italic;
+}
+
+/* Obsolete, kept for web compatibility (§15.3.3); `<center>` centres its content (issue #4). */
+center {
+	text-align: center;
+}
+
+/* The `align` hint of `div`, without the spec's `i` flag (MANIFEST: presentational hints). */
+div[align="left"] {
+	text-align: left;
+}
+
+div[align="right"] {
+	text-align: right;
+}
+
+div[align="center"],
+div[align="middle"] {
+	text-align: center;
+}
+
+div[align="justify"] {
+	text-align: justify;
+}
+
+/* ---- §15.3.4 Phrasing content ------------------------------------------ */
+
+/*
+ * `inline` is CSS's initial `display`, so the spec needs no rule here; this
+ * one stands in until `ComputedStyle::initial()` says `inline` too (#136,
+ * which deletes it). It must name every phrasing element this sheet styles:
+ * one left out would be a styled block until then (a full-width `<mark>`).
+ */
 a,
-em,
-strong,
 b,
-i,
+cite,
 code,
+del,
+dfn,
+em,
+i,
+ins,
+kbd,
+label,
+mark,
+nobr,
+s,
+samp,
 small,
-label {
+span,
+strike,
+strong,
+sub,
+sup,
+tt,
+u,
+var,
+wbr {
 	display: inline;
 }
 
-a {
+cite,
+dfn,
+em,
+i,
+var {
+	font-style: italic;
+}
+
+b,
+strong {
+	font-weight: bolder;
+}
+
+code,
+kbd,
+samp,
+tt {
+	font-family: monospace;
+}
+
+/* `:link` is `a[href]` here: there is no link-state pseudo-class (MANIFEST cut). */
+a[href] {
 	color: #0000ee;
+	text-decoration: underline;
+}
+
+mark {
+	background-color: yellow;
+	color: black;
+}
+
+ins,
+u {
+	text-decoration: underline;
+}
+
+del,
+s,
+strike {
+	text-decoration: line-through;
+}
+
+nobr {
+	white-space: nowrap;
+}
+
+nobr wbr {
+	white-space: normal;
+}
+
+/* Their `vertical-align` and `font-size: smaller` are MANIFEST cuts. */
+sub,
+sup {
+	line-height: normal;
+}
+
+/* ---- §15.3.6 Sections and headings -------------------------------------- */
+
+article,
+aside,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+hgroup,
+nav,
+section {
+	display: block;
 }
 
 h1 {
-	display: block;
 	font-size: 2em;
 	font-weight: bold;
 	margin: 0.67em 0;
 }
 
 h2 {
-	display: block;
 	font-size: 1.5em;
 	font-weight: bold;
 	margin: 0.83em 0;
 }
 
 h3 {
-	display: block;
 	font-size: 1.17em;
 	font-weight: bold;
 	margin: 1em 0;
 }
 
 h4 {
-	display: block;
 	font-size: 1em;
 	font-weight: bold;
 	margin: 1.33em 0;
 }
 
 h5 {
-	display: block;
 	font-size: 0.83em;
 	font-weight: bold;
 	margin: 1.67em 0;
 }
 
 h6 {
-	display: block;
 	font-size: 0.67em;
 	font-weight: bold;
 	margin: 2.33em 0;
 }
 
-p {
-	display: block;
-	margin: 16px 0;
-}
+/* ---- §15.3.7 Lists ------------------------------------------------------ */
 
-body {
-	display: block;
-	margin: 8px;
-}
-
-blockquote {
-	display: block;
-	margin: 16px 40px;
-}
-
-pre {
-	display: block;
-	font-family: monospace;
-	white-space: pre;
-	margin: 1em 0;
-}
-
+dir,
+dd,
+dl,
+dt,
+menu,
 ol,
 ul {
 	display: block;
-	margin: 1em 0;
-	padding-left: 40px;
 }
 
 /* Lays out as a block; the `::marker` is not generated yet (MANIFEST `display`). */
@@ -115,33 +311,154 @@ li {
 	display: list-item;
 }
 
-dt {
-	display: block;
-	font-weight: bold;
+dir,
+dl,
+menu,
+ol,
+ul {
+	margin: 1em 0;
+}
+
+dir,
+menu,
+ol,
+ul {
+	padding-left: 40px;
 }
 
 dd {
-	display: block;
 	margin-left: 40px;
 }
 
 /*
- * Obsolete presentational element — kept for web-compat (HTML §13 Obsolete).
- * `<center>` is equivalent to a block with `text-align: center` (issue #4).
+ * A list nested in a list has no block margins: the spec's
+ * `:is(dir, dl, menu, ol, ul) :is(dir, dl, menu, ol, ul)`, spelled out because
+ * the cascade has no `:is()`.
  */
-center {
+dir dir,
+dir dl,
+dir menu,
+dir ol,
+dir ul,
+dl dir,
+dl dl,
+dl menu,
+dl ol,
+dl ul,
+menu dir,
+menu dl,
+menu menu,
+menu ol,
+menu ul,
+ol dir,
+ol dl,
+ol menu,
+ol ol,
+ol ul,
+ul dir,
+ul dl,
+ul menu,
+ul ol,
+ul ul {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+/* ---- §15.3.8 Tables ------------------------------------------------------ */
+
+/*
+ * There is no table layout (MANIFEST cut), so the table family keeps stacking
+ * as blocks, the look it had while the initial `display` was `block`, and the
+ * column elements generate nothing.
+ */
+table,
+caption,
+thead,
+tbody,
+tfoot,
+tr,
+td,
+th {
 	display: block;
+}
+
+colgroup,
+col {
+	display: none;
+}
+
+table {
+	box-sizing: border-box;
+}
+
+caption {
 	text-align: center;
 }
 
+td,
+th {
+	padding: 1px;
+}
+
+th {
+	font-weight: bold;
+}
+
+thead,
+tbody,
+tfoot,
+tr {
+	border-color: inherit;
+}
+
+table > form,
+thead > form,
+tbody > form,
+tfoot > form,
+tr > form {
+	display: none !important;
+}
+
+/* ---- §15.3.10 Form controls (issue #87) ---------------------------------- */
+
 /*
- * Form controls — styling according to WHATWG HTML §15.5 Widgets & §15.3.12 (issue #87).
+ * The spec draws controls with `appearance: auto` (MANIFEST cut); the borders,
+ * backgrounds, paddings and sizes below are #87's stand-in for that native
+ * look, not spec values.
+ */
+
+/*
+ * Wider than the spec, which gives `border-box` to buttons, `select` and a few
+ * `input` types only: every control here (issue #87), so a text input's 12em
+ * width includes its border.
  */
 input,
 button,
 select,
 textarea {
 	box-sizing: border-box;
+}
+
+/* A control does not take its text setting from the surrounding text. */
+input,
+button,
+textarea {
+	letter-spacing: initial;
+	word-spacing: initial;
+	line-height: initial;
+}
+
+input,
+select,
+button,
+textarea {
+	text-transform: initial;
+}
+
+input,
+select,
+textarea {
+	text-align: initial;
 }
 
 button {
@@ -169,10 +486,6 @@ input[type="reset"] {
 	width: auto;
 }
 
-input[type="hidden"] {
-	display: none;
-}
-
 select {
 	display: inline-block;
 	border: 1px solid #767676;
@@ -189,12 +502,20 @@ textarea {
 	border: 1px solid #767676;
 	background-color: #ffffff;
 	padding: 2px;
+	/* Refused until `pre-wrap` is supported (MANIFEST cut); kept as the intended value. */
 	white-space: pre-wrap;
 	font-family: monospace;
 	width: 12em;
 	height: 2.4em;
 }
 
+/* ---- §15.3.12 The fieldset and legend elements --------------------------- */
+
+/*
+ * The border keeps #87's `2px solid #767676` where the spec says
+ * `groove 2px ThreeDFace`: `groove` paints solid (MANIFEST border cut) and
+ * system colours are not supported.
+ */
 fieldset {
 	display: block;
 	margin: 0 2px;
@@ -203,10 +524,22 @@ fieldset {
 }
 
 legend {
-	display: block;
 	padding-left: 2px;
 	padding-right: 2px;
 }
+
+/* ---- §15.5.5 The details and summary elements ---------------------------- */
+details,
+summary {
+	display: block;
+}
+
+/* ---- Embedded content ------------------------------------------------------ */
+
+/*
+ * Not a spec rule: `<svg>` is inline replaced content, which has no layout of
+ * its own here yet, so it stands in as one atomic `inline-block` box.
+ */
 
 svg {
 	display: inline-block;
