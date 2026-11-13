@@ -377,8 +377,9 @@ message = "core/platform is a leaf: it must not depend on any other workspace cr
 # `<path>::*`, which misses `winit::window::Window`; and a fenced item is `<crate>::**::<Item>`, so
 # a re-export and its defining module (`network::HttpTransport`,
 # `network::application::ports::HttpTransport`) are both denied. arch-lint compares the path as
-# written: a relative path (`super::…`), a glob import (`ports::*`) or a crate alias
-# (`use network as net;`) is not matched by any rule here and is left to review.
+# written: a relative path (`super::…`) escapes every rule, and a glob import (`ports::*`) or a
+# crate alias (`use network as net;`) escapes an item fence, though a crate-wide `<crate>::**`
+# fence still catches it. Those cases are left to review.
 
 # Engine must not import any concrete script runtime crate (ADR-0002:49 / ADR-0011 item 2)
 [[restrict-use]]
