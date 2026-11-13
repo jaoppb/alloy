@@ -209,3 +209,13 @@ fn body_content_inside_nested_head_noscripts_ends_head() {
         Some(only_element_named(&events, "body")),
     );
 }
+
+#[test]
+fn content_after_html_closed_inside_head_goes_to_body() {
+    let events = events_of("<head></html><p>x");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(only_element_named(&events, "body")),
+    );
+}

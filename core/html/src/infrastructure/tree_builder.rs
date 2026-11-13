@@ -111,11 +111,15 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         Ok(handle)
     }
 
-    /// Whether the current node is `<head>` or a run of `<noscript>`s directly
-    /// in it — never anything inside a head `<template>`.
+    /// Whether a start tag may end the head: always, unless a `<template>` is
+    /// open above `<head>` — its children belong to the template (#84).
     fn head_can_end(&self) -> bool {
-        let mut innermost = self.open_elements.iter().rev().map(|open| &open.tag);
-        self.in_head && innermost.find(|tag| **tag != TagName::Noscript) == Some(&TagName::Head)
+        let mut above_head = self
+            .open_elements
+            .iter()
+            .rev()
+            .take_while(|open| open.tag != TagName::Head);
+        self.in_head && !above_head.any(|open| open.tag == TagName::Template)
     }
 
     fn pop_head(&mut self) {
@@ -175,10 +179,8 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
             _ => {}
         }
 
-        // Only a tag directly in `<head>` or in a head `<noscript>` can end it: a
-        // `<template>`'s children stay inside the template (#84). Of
-        // §13.2.6.4.5 only "body content in a head noscript ends the head" is
-        // followed; head content stays inside the `<noscript>`.
+        // Body content ends the head, also from inside a head `<noscript>`
+        // (§13.2.6.4.5); a `<template>`'s children stay in the template (#84).
         if self.head_can_end() && !tag.tag_name().is_head_content() {
             self.pop_head();
         }
