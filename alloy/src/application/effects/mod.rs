@@ -10,6 +10,7 @@ use network::Url;
 use ui::{UiController, UiEffect, UiEffects};
 
 use crate::application::compositor::{Damage, PendingDamage};
+use crate::application::pending_title::PendingTitle;
 use crate::application::ports::FetchExecutor;
 
 #[cfg(test)]
@@ -20,6 +21,7 @@ pub struct EffectExecutor<'a, X> {
     browsing: &'a mut BrowsingContext<MarkupDiscoverer>,
     ui: &'a mut UiController,
     damage: &'a mut PendingDamage,
+    title: &'a mut PendingTitle,
     fetcher: &'a X,
 }
 
@@ -28,12 +30,14 @@ impl<'a, X: FetchExecutor> EffectExecutor<'a, X> {
         browsing: &'a mut BrowsingContext<MarkupDiscoverer>,
         ui: &'a mut UiController,
         damage: &'a mut PendingDamage,
+        title: &'a mut PendingTitle,
         fetcher: &'a X,
     ) -> Self {
         Self {
             browsing,
             ui,
             damage,
+            title,
             fetcher,
         }
     }
@@ -74,7 +78,7 @@ impl<'a, X: FetchExecutor> EffectExecutor<'a, X> {
 
     /// Carries out what the browsing context asked for: fetches go to the
     /// fetch executor, the omnibox follows the URL (chrome damage), document
-    /// damage schedules a relayout.
+    /// damage schedules a relayout, a new title waits for the loop to apply it.
     fn execute_browser(&mut self, effects: Effects) {
         for effect in effects {
             match effect {
@@ -87,6 +91,7 @@ impl<'a, X: FetchExecutor> EffectExecutor<'a, X> {
                     self.fetcher.execute(request, navigation);
                 }
                 BrowserEffect::ContentDamaged(_) => self.damage.record(Damage::Content),
+                BrowserEffect::TitleChanged(_, title) => self.title.record(title),
             }
         }
     }

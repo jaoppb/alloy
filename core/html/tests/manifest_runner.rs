@@ -252,13 +252,46 @@ fn test_syntax_rawtext_and_omissions() {
         "<textarea> rcdata decodes character references and preserves markup as text"
     );
 
-    // 3. p tag omission
+    // 3. title rcdata
+    let events = events_of("<title>a <b>b</b> &amp;</title>");
+    assert!(
+        elements_named(&events, "b").is_empty(),
+        "<title> rcdata must not parse inner markup as elements"
+    );
+    assert_eq!(
+        texts(&events).as_slice(),
+        &["a <b>b</b> &"],
+        "<title> rcdata decodes character references and preserves markup as text"
+    );
+
+    // 4. head content keeps head open
+    let events = events_of(
+        "<head><base href=\"/\"><template><div>x</div></template><title>x</title></head>",
+    );
+    let head = elements_named(&events, "head")[0].0;
+    for name in ["base", "template", "title"] {
+        let element = elements_named(&events, name)[0].0;
+        assert_eq!(
+            parent_of(&events, element),
+            Some(head),
+            "<{name}> must stay in <head>"
+        );
+    }
+    let template = elements_named(&events, "template")[0].0;
+    let div = elements_named(&events, "div")[0].0;
+    assert_eq!(
+        parent_of(&events, div),
+        Some(template),
+        "template content must not end <head>"
+    );
+
+    // 5. p tag omission
     let events = events_of("<p>First<p>Second");
     let paragraphs = elements_named(&events, "p");
     assert_eq!(paragraphs.len(), 2);
     assert_ne!(parent_of(&events, paragraphs[1].0), Some(paragraphs[0].0));
 
-    // 4. li tag omission
+    // 6. li tag omission
     let events = events_of("<ul><li>One<li>Two</ul>");
     let items = elements_named(&events, "li");
     assert_eq!(items.len(), 2);

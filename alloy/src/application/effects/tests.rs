@@ -10,9 +10,11 @@ use browser::{
 use network::Url;
 use platform::HostOs;
 use ui::{Keymap, UiController, UiEffect, UiEffects};
+use window::WindowTitle;
 
 use super::EffectExecutor;
 use crate::application::compositor::PendingDamage;
+use crate::application::pending_title::PendingTitle;
 use crate::application::ports::FetchExecutor;
 
 /// Remembers every request instead of fetching it.
@@ -32,6 +34,7 @@ struct Fixture {
     browsing: BrowsingContext<MarkupDiscoverer>,
     ui: UiController,
     damage: PendingDamage,
+    title: PendingTitle,
     fetcher: RecordingFetcher,
 }
 
@@ -41,6 +44,7 @@ impl Fixture {
             browsing: BrowsingContext::new(MarkupDiscoverer),
             ui: UiController::new(Keymap::default(), HostOs::Other),
             damage: PendingDamage::default(),
+            title: PendingTitle::default(),
             fetcher: RecordingFetcher::default(),
         }
     }
@@ -50,6 +54,7 @@ impl Fixture {
             &mut self.browsing,
             &mut self.ui,
             &mut self.damage,
+            &mut self.title,
             &self.fetcher,
         )
     }
@@ -113,4 +118,39 @@ fn a_finished_document_damages_the_content_and_counts_one_navigation() {
 
     assert!(fixture.damage.needs_content());
     assert_eq!(fixture.browsing.stats().navigations(), 1);
+}
+
+fn complete_navigation(fixture: &mut Fixture, markup: &str, at: &str) {
+    fixture.executor().navigate(url(at));
+    let page = dom::parse(markup).unwrap().into_tree();
+    let loaded = LoadedDocument::new(page, url(at));
+    let navigation = fixture.browsing.current_navigation();
+    fixture.executor().complete(FetchResult::new(
+        navigation,
+        FetchPayload::Document(Ok(loaded)),
+    ));
+}
+
+#[test]
+fn a_loaded_documents_title_waits_for_the_loop_to_name_the_window() {
+    let mut fixture = Fixture::new();
+
+    complete_navigation(&mut fixture, "<title>x</title>", "http://example.com/x");
+
+    assert_eq!(fixture.title.take(), Some(WindowTitle::from("x")));
+    assert_eq!(fixture.title.take(), None, "a title is applied once");
+}
+
+#[test]
+fn only_the_latest_title_is_kept_when_two_documents_load_in_one_cycle() {
+    let mut fixture = Fixture::new();
+
+    complete_navigation(&mut fixture, "<title>first</title>", "http://example.com/1");
+    complete_navigation(
+        &mut fixture,
+        "<title>second</title>",
+        "http://example.com/2",
+    );
+
+    assert_eq!(fixture.title.take(), Some(WindowTitle::from("second")));
 }

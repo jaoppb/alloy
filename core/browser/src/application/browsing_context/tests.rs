@@ -472,3 +472,93 @@ fn a_region_from_before_a_relayout_does_not_follow_the_new_layouts_link_at_its_i
 
     assert!(context.follow_link(before).is_empty());
 }
+
+/// The titles `effects` asked the window to show, in order.
+fn titles(effects: &Effects) -> Vec<String> {
+    effects
+        .as_slice()
+        .iter()
+        .filter_map(|effect| match effect {
+            BrowserEffect::TitleChanged(_, title) => Some(title.as_str().to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn titles_after_loading(markup: &str, at: &Url) -> Vec<String> {
+    let mut context = context();
+    let navigation = started(&context.navigate(at.clone()));
+    titles(&context.complete(document_result(navigation, markup, at)))
+}
+
+#[test]
+fn a_loaded_document_names_the_window_with_its_collapsed_first_title() {
+    let titles = titles_after_loading(
+        "<head><title>\n  Example \t Domain  </title></head><body><title>second</title></body>",
+        &page("a.html"),
+    );
+
+    assert_eq!(titles, ["Example Domain"]);
+}
+
+#[test]
+fn a_document_without_a_title_is_named_by_its_url() {
+    let target = page("untitled.html");
+
+    let titles = titles_after_loading("<body>no title</body>", &target);
+
+    assert_eq!(titles, [target.to_string()]);
+}
+
+#[test]
+fn a_blank_title_falls_back_to_the_url() {
+    let target = page("blank.html");
+
+    let titles = titles_after_loading("<title> \n\t </title>", &target);
+
+    assert_eq!(titles, [target.to_string()]);
+}
+
+#[test]
+fn an_svg_title_does_not_name_the_document() {
+    let target = page("svg.html");
+
+    let titles = titles_after_loading("<body><svg><title>icon</title></svg></body>", &target);
+
+    assert_eq!(titles, [target.to_string()]);
+}
+
+#[test]
+fn a_failed_navigation_names_the_window_after_the_error_page() {
+    let mut context = context();
+    let navigation = started(&context.navigate(page("broken.html")));
+
+    let effects = context.complete(failure_result(navigation, "connection reset"));
+
+    assert_eq!(titles(&effects), ["Navigation Error"]);
+}
+
+#[test]
+fn a_superseded_document_does_not_rename_the_window() {
+    let mut context = context();
+    let slow = started(&context.navigate(page("slow.html")));
+    started(&context.navigate(page("fast.html")));
+
+    let effects = context.complete(document_result(
+        slow,
+        "<title>slow</title>",
+        &page("slow.html"),
+    ));
+
+    assert!(titles(&effects).is_empty());
+}
+
+#[test]
+fn a_title_inside_a_template_does_not_name_the_document() {
+    let titles = titles_after_loading(
+        "<head><template><title>tpl</title></template><title>real</title></head>",
+        &page("template.html"),
+    );
+
+    assert_eq!(titles, ["real"]);
+}

@@ -12,6 +12,7 @@ mod navigation;
 mod regions;
 mod stats;
 mod subresource;
+mod title;
 
 pub use document::Document;
 pub use document_request::DocumentRequest;
@@ -25,3 +26,4 @@ pub use regions::{ContentRegions, RegionError};
 pub(crate) use stats::Accepted;
 pub use stats::ContextStats;
 pub use subresource::{ImageRequest, StylesheetRequest, SubresourceRequest, Subresources};
+pub use title::DocumentTitle;
