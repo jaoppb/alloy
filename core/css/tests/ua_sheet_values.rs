@@ -169,3 +169,19 @@ fn table_cells_and_captions_carry_the_spec_values() {
     let data = table("<tr><td id=target>x</td></tr>");
     assert_eq!(data.padding(), LengthEdges::uniform(Length::Pixels(1.0)));
 }
+
+#[test]
+fn a_word_break_opportunity_inside_nobr_wraps_again() {
+    let style = style_of("<nobr>a<wbr id=target>b</nobr>");
+    assert_eq!(style.white_space(), WhiteSpace::Normal);
+}
+
+#[test]
+fn a_form_control_does_not_inherit_its_parents_alignment() {
+    for tag in ["input", "select", "textarea"] {
+        let style = style_of(&format!(
+            "<div style='text-align:center'><{tag} id=target></div>"
+        ));
+        assert_eq!(style.text_align(), TextAlign::Left, "<{tag}>");
+    }
+}

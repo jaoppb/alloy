@@ -255,22 +255,32 @@ Form controls receive UA default styles according to WHATWG HTML §15.5 and §15
 
 ### UA sheet rules the cascade cannot express yet
 
-`core/css/assets/ua.css` follows WHATWG HTML §15.3 section by section (#133, part of #81). The rules below are in the
-spec's sheet but need a property, value, selector or layout mode this file does not list, so the UA sheet leaves them
-out or approximates them. Like the other simplifications, each is declared here rather than dropped silently.
+`core/css/assets/ua.css` follows WHATWG HTML §15.3 section by section (#133, part of #81). The rules below are in
+§15.3.1–§15.3.12 of the spec's sheet but need a property, value, selector or layout mode this file does not list (or one
+that parses but has no effect yet), so the UA sheet leaves them out or approximates them. Like the other
+simplifications, each is declared here rather than dropped silently.
 
-| gap                                                                   | behaviour instead                                                                                                    | tracked for |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `:link` / `:visited` (no link-state pseudo-class)                     | `a[href]` stands for `:link`; a visited link keeps `#0000ee` instead of `#551a8b`                                    | v0.7        |
-| `display: table` and the `table-*` values (§15.3.8)                   | `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th` stack as blocks; `col` / `colgroup` generate nothing | v0.7        |
-| `vertical-align` (`sub`, `sup`)                                       | `<sub>` / `<sup>` sit on the baseline                                                                                | v0.7        |
-| `font-size: smaller` / `larger` (`sub`, `sup`, `small`, `big`)        | the element keeps its parent's font size                                                                             | v0.7        |
-| `text-decoration: dotted underline` (`abbr[title]`, `acronym[title]`) | no decoration                                                                                                        | v0.7        |
-| `::before` / `::after` with `content: open-quote` (`q`)               | no quotation marks are generated                                                                                     | v0.7        |
-| `:not()` (`[hidden]:not([hidden=until-found i]):not(embed)`)          | `[hidden]` hides every element, including `hidden=until-found` and `<embed hidden>`                                  | v0.7        |
-| `display: list-item` on `details > summary:first-of-type`             | `<summary>` is a block with no disclosure marker; `<details>` shows its whole content                                | v0.7        |
-| `display: ruby` / `ruby-text` (`ruby`, `rt`)                          | no ruby layout: the `<rt>` annotation follows its base text in normal flow                                           | v0.7        |
-| `cursor: pointer` and `:link:active { color: #ff0000 }`               | the pointer never changes over a link and an active link keeps its colour (`:active` never matches)                  | v0.7        |
+| gap                                                                                                                  | behaviour instead                                                                                                    | tracked for |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `:link` / `:visited` (no link-state pseudo-class)                                                                    | `a[href]` stands for `:link`; a visited link keeps `#0000ee` instead of `#551a8b`                                    | v0.7        |
+| `display: table` and the `table-*` values (§15.3.8)                                                                  | `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th` stack as blocks; `col` / `colgroup` generate nothing | v0.7        |
+| `vertical-align` (`sub`, `sup`)                                                                                      | `<sub>` / `<sup>` sit on the baseline                                                                                | v0.7        |
+| `font-size: smaller` / `larger` (`sub`, `sup`, `small`, `big`)                                                       | the element keeps its parent's font size                                                                             | v0.7        |
+| `text-decoration: dotted underline` (`abbr[title]`, `acronym[title]`)                                                | no decoration                                                                                                        | v0.7        |
+| `::before` / `::after` with `content: open-quote` (`q`)                                                              | no quotation marks are generated                                                                                     | v0.7        |
+| `:not()` (`[hidden]:not([hidden=until-found i]):not(embed)`)                                                         | `[hidden]` hides every element, including `hidden=until-found` and `<embed hidden>`                                  | v0.7        |
+| `display: list-item` on `details > summary:first-of-type`                                                            | `<summary>` is a block with no disclosure marker; `<details>` shows its whole content                                | v0.7        |
+| `display: ruby` / `ruby-text` (`ruby`, `rt`)                                                                         | no ruby layout: the `<rt>` annotation follows its base text in normal flow                                           | v0.7        |
+| `cursor: pointer` and `:link:active { color: #ff0000 }`                                                              | the pointer never changes over a link; `:active` parses but never matches, so an active link keeps its colour        | v0.7        |
+| `display: contents` (`slot`, §15.3.3)                                                                                | `<slot>` generates a box of its own                                                                                  | v0.7        |
+| `:popover-open` and the popover box (`[popover]`, §15.3.3)                                                           | a closed popover is laid out like any element                                                                        | v0.7        |
+| the open `<dialog>` box (`position: absolute`, `margin: auto`, `width: fit-content`, …, §15.3.3)                     | an open `<dialog>` is a plain block in normal flow                                                                   | v0.7        |
+| `:focus-visible { outline: auto }` (§15.3.4)                                                                         | no focus ring is drawn                                                                                               | v0.7        |
+| §15.3.5 bidirectional text (`:dir()`, `unicode-bidi` on `bdi`, `bdo`, `[dir]`, …)                                    | no bidi isolation or override                                                                                        | v0.7        |
+| `li { text-align: match-parent }` and `list-style-type` per nesting depth (§15.3.7)                                  | `<li>` inherits `text-align` as is; markers are not generated (see `display`)                                        | v0.7        |
+| §15.3.8 presentational attributes (`td[nowrap]`, `[align]`, `table[border]`, …; ASCII-case-insensitive `i` matching) | the attributes are ignored                                                                                           | v0.7        |
+| table parts under `[hidden]` keep their table display with `visibility: collapse` (§15.3.8)                          | a hidden `<tr>`, `<thead>`, … generates no box, like any `[hidden]` element                                          | v0.7        |
+| `white-space: pre-wrap` (`pre[wrap]`, §15.3.3; `textarea`, §15.3.10)                                                 | `<pre wrap>` keeps `pre`; a `<textarea>` keeps the `normal` it inherits                                              | v0.7        |
 
 ## Selectors
 

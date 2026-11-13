@@ -176,10 +176,10 @@ mod tests {
     use super::*;
     use crate::application::snapshot::snapshot;
 
-    /// Every element WHATWG HTML §15.3 / §15.5 lays out as a block, outside
+    /// Every element WHATWG HTML §15.3 / §15.5.5 lays out as a block, outside
     /// the table family. `hr` is listed for its `display` only (#82 owns the
     /// rest).
-    const FLOW_BLOCKS: [&str; 41] = [
+    const BLOCK_ELEMENTS: [&str; 41] = [
         "html",
         "body",
         "address",
@@ -237,6 +237,13 @@ mod tests {
         "area", "basefont", "datalist", "noembed", "noframes", "param", "rp", "template",
     ];
 
+    /// Every phrasing element the sheet styles: each must be `inline` even
+    /// over a `block` base, or it renders as a styled block until #136.
+    const STYLED_PHRASING: [&str; 22] = [
+        "a", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd", "label", "mark", "nobr",
+        "s", "samp", "small", "span", "strike", "strong", "tt", "u", "var",
+    ];
+
     /// A table holding every element of [`TABLE_BLOCKS`] and [`TABLE_COLUMNS`]:
     /// table-internal elements only survive tree construction inside one.
     const TABLE_MARKUP: &str = "<!doctype html><html><body><table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table></body></html>";
@@ -246,6 +253,11 @@ mod tests {
     /// up as `inline` instead of hiding behind today's `block` initial value
     /// (#81: the initial value becomes `inline`).
     fn ua_display(markup: &str, tag: &str) -> Display {
+        ua_display_over(Display::Inline, markup, tag)
+    }
+
+    /// [`ua_display`] over an explicit `base` display.
+    fn ua_display_over(base: Display, markup: &str, tag: &str) -> Display {
         let tree = dom::parse(markup).expect("the fixture parses").into_tree();
         let dom = snapshot(&tree, tree.document());
         let node = dom
@@ -253,9 +265,8 @@ mod tests {
             .filter_map(|id| dom.node(id))
             .find(|node| node.tag_str() == Some(tag))
             .unwrap_or_else(|| panic!("the fixture has a <{tag}>"));
-        let base = ComputedStyle::initial().with_display(Display::Inline);
         let cascaded = apply_author_rules(
-            base,
+            ComputedStyle::initial().with_display(base),
             None,
             &InheritedContext::root(),
             node,
@@ -271,7 +282,7 @@ mod tests {
 
     #[test]
     fn the_ua_sheet_itself_makes_every_flow_element_a_block() {
-        for tag in FLOW_BLOCKS {
+        for tag in BLOCK_ELEMENTS {
             assert_eq!(
                 ua_display(&markup_with(tag), tag),
                 Display::Block,
@@ -315,5 +326,13 @@ mod tests {
     fn the_hidden_attribute_removes_the_box_of_any_element() {
         let markup = "<!doctype html><body><span hidden>x</span></body>";
         assert_eq!(ua_display(markup, "span"), Display::None);
+    }
+
+    #[test]
+    fn every_styled_phrasing_element_is_inline_even_over_a_block_base() {
+        for tag in STYLED_PHRASING {
+            let display = ua_display_over(Display::Block, &markup_with(tag), tag);
+            assert_eq!(display, Display::Inline, "<{tag}>");
+        }
     }
 }
