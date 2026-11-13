@@ -240,9 +240,9 @@ mod tests {
 
     /// Every phrasing element the sheet styles: each must be `inline` even
     /// over a `block` base, or it renders as a styled block until #136.
-    const STYLED_PHRASING: [&str; 22] = [
+    const STYLED_PHRASING: [&str; 25] = [
         "a", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd", "label", "mark", "nobr",
-        "s", "samp", "small", "span", "strike", "strong", "tt", "u", "var",
+        "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "tt", "u", "var", "wbr",
     ];
 
     /// A table holding every element of [`TABLE_BLOCKS`] and [`TABLE_COLUMNS`]:

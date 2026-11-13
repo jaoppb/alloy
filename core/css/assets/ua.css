@@ -11,7 +11,8 @@
  * `inline` (#81). Box and font values follow the spec except where a value
  * below says it keeps an older one. Every §15.3.1–§15.3.12 rule this sheet
  * does not carry is listed in `core/css/tests/data/MANIFEST.md` ("UA sheet
- * rules the cascade cannot express yet"), one row per rule or rule group.
+ * rules the cascade cannot express yet"): per rule, or per category for the
+ * presentational hints, the quirks-mode rules and the prose-only rules.
  */
 
 /* ---- §15.3.1 Hidden elements ------------------------------------------- */
@@ -40,6 +41,10 @@ title {
  */
 [hidden] {
 	display: none;
+}
+
+input[type="hidden"] {
+	display: none !important;
 }
 
 /* ---- §15.3.2 The page --------------------------------------------------- */
@@ -118,9 +123,35 @@ dialog[hidden] {
 	display: none;
 }
 
+input[type="hidden"] {
+	display: none !important;
+}
+
+address {
+	font-style: italic;
+}
+
 /* Obsolete, kept for web compatibility (§15.3.3); `<center>` centres its content (issue #4). */
 center {
 	text-align: center;
+}
+
+/* The `align` hint of `div`, without the spec's `i` flag (MANIFEST: presentational hints). */
+div[align="left"] {
+	text-align: left;
+}
+
+div[align="right"] {
+	text-align: right;
+}
+
+div[align="center"],
+div[align="middle"] {
+	text-align: center;
+}
+
+div[align="justify"] {
+	text-align: justify;
 }
 
 /* ---- §15.3.4 Phrasing content ------------------------------------------ */
@@ -150,13 +181,15 @@ small,
 span,
 strike,
 strong,
+sub,
+sup,
 tt,
 u,
-var {
+var,
+wbr {
 	display: inline;
 }
 
-address,
 cite,
 dfn,
 em,
@@ -205,6 +238,12 @@ nobr {
 
 nobr wbr {
 	white-space: normal;
+}
+
+/* Their `vertical-align` and `font-size: smaller` are MANIFEST cuts. */
+sub,
+sup {
+	line-height: normal;
 }
 
 /* ---- §15.3.6 Sections and headings -------------------------------------- */
@@ -404,12 +443,17 @@ textarea {
 
 /* A control does not take its text setting from the surrounding text. */
 input,
-select,
 button,
 textarea {
 	letter-spacing: initial;
 	word-spacing: initial;
 	line-height: initial;
+}
+
+input,
+select,
+button,
+textarea {
 	text-transform: initial;
 }
 
@@ -444,10 +488,6 @@ input[type="reset"] {
 	width: auto;
 }
 
-input[type="hidden"] {
-	display: none;
-}
-
 select {
 	display: inline-block;
 	border: 1px solid #767676;
@@ -473,6 +513,11 @@ textarea {
 
 /* ---- §15.3.12 The fieldset and legend elements --------------------------- */
 
+/*
+ * The border keeps #87's `2px solid #767676` where the spec says
+ * `groove 2px ThreeDFace`: `groove` paints solid (MANIFEST border cut) and
+ * system colours are not supported.
+ */
 fieldset {
 	display: block;
 	margin: 0 2px;

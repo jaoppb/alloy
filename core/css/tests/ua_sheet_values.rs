@@ -192,7 +192,7 @@ fn a_form_control_does_not_inherit_its_parents_alignment() {
 #[test]
 fn a_form_control_resets_the_text_settings_it_would_inherit() {
     let parent = "letter-spacing:3px;word-spacing:4px;line-height:30px;text-transform:uppercase";
-    for tag in ["input", "select", "button", "textarea"] {
+    for tag in ["input", "button", "textarea"] {
         let style = style_of(&format!("<div style='{parent}'><{tag} id=target></div>"));
         let text = style.text_advance();
         assert_eq!(text.letter_spacing(), LetterSpacing::Normal, "<{tag}>");
@@ -200,6 +200,20 @@ fn a_form_control_resets_the_text_settings_it_would_inherit() {
         assert_eq!(text.line_height(), LineHeight::Normal, "<{tag}>");
         assert_eq!(text.text_transform(), TextTransform::None, "<{tag}>");
     }
+    let select = style_of(&format!(
+        "<div style='{parent}'><select id=target></select></div>"
+    ));
+    let text = select.text_advance();
+    assert_eq!(
+        text.text_transform(),
+        TextTransform::None,
+        "§15.3.10 resets it for <select> too"
+    );
+    assert_ne!(
+        text.line_height(),
+        LineHeight::Normal,
+        "but not the spacing and line height"
+    );
 }
 
 #[test]
@@ -216,6 +230,44 @@ fn table_parts_take_their_border_colour_from_the_table() {
 
 #[test]
 fn a_form_directly_inside_a_table_part_generates_no_box() {
-    let style = style_of("<table><tr><form id=target></form><td>x</td></tr></table>");
+    let style = style_of(
+        "<style>form { display: block }</style><table><tr><form id=target></form><td>x</td></tr></table>",
+    );
     assert_eq!(style.display(), css::Display::None);
+}
+
+#[test]
+fn a_hidden_input_stays_hidden_against_an_author_display() {
+    let style = style_of("<style>input { display: block }</style><input id=target type=hidden>");
+    assert_eq!(style.display(), css::Display::None);
+}
+
+#[test]
+fn subscripts_and_superscripts_have_a_normal_line_height() {
+    for tag in ["sub", "sup"] {
+        let style = style_of(&format!(
+            "<p style='line-height:40px'><{tag} id=target>2</{tag}></p>"
+        ));
+        assert_eq!(
+            style.text_advance().line_height(),
+            LineHeight::Normal,
+            "<{tag}>"
+        );
+    }
+}
+
+#[test]
+fn a_div_align_hint_sets_its_text_alignment() {
+    for (hint, expected) in [
+        ("left", TextAlign::Left),
+        ("right", TextAlign::Right),
+        ("center", TextAlign::Center),
+        ("middle", TextAlign::Center),
+        ("justify", TextAlign::Justify),
+    ] {
+        let style = style_of(&format!(
+            "<div style='text-align:right'><div id=target align={hint}>x</div></div>"
+        ));
+        assert_eq!(style.text_align(), expected, "align={hint}");
+    }
 }
