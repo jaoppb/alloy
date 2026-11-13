@@ -111,12 +111,17 @@ impl<'a, S: TreeSink + ?Sized> TreeBuilder<'a, S> {
         Ok(handle)
     }
 
+    /// Whether the current node is `<head>` or a `<noscript>` directly in it —
+    /// never one nested in a head `<template>`.
     fn head_can_end(&self) -> bool {
-        self.in_head
-            && self
-                .open_elements
-                .last()
-                .is_some_and(|open| matches!(open.tag, TagName::Head | TagName::Noscript))
+        if !self.in_head {
+            return false;
+        }
+        let mut innermost = self.open_elements.iter().rev().map(|open| &open.tag);
+        matches!(
+            (innermost.next(), innermost.next()),
+            (Some(TagName::Head), _) | (Some(TagName::Noscript), Some(TagName::Head))
+        )
     }
 
     fn pop_head(&mut self) {

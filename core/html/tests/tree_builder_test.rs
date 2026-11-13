@@ -182,3 +182,20 @@ fn body_content_inside_a_head_noscript_ends_head() {
         "WHATWG in-head-noscript: a <div> pops <noscript> and <head>"
     );
 }
+
+#[test]
+fn a_noscript_inside_a_head_template_does_not_end_head() {
+    let events = events_of(
+        "<head><template><noscript><div>x</div></noscript></template><title>t</title></head>",
+    );
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "div")),
+        Some(only_element_named(&events, "noscript")),
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head)
+    );
+}
