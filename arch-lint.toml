@@ -480,9 +480,10 @@ message = "core/window must not import the engine, another subsystem, or a scrip
 # #110 decision 4 / #111: the browsing context is pure. It never spawns a thread, never owns a
 # channel, and never executes a request. Calling `execute` / `decide` needs the `HttpTransport` /
 # `RequestPolicy` trait in scope, so the rule denies the traits and the transports under every
-# absolute module path; a relative, glob or aliased import is not visible to arch-lint (see the
-# section comment) and is left to review. The `ui` ↔ `browser` sibling rule (ADR-0026) is the
-# `ui::**` / `window::**` entries of `browser-isolated`; `core/ui` adds the converse.
+# absolute module path; a relative path, or a glob or aliased import of `network`, escapes these
+# item fences (see the section comment) and is left to review. The `ui` ↔ `browser` sibling rule
+# (ADR-0026) is the `ui::**` / `window::**` entries of `browser-isolated`; `core/ui` adds the
+# converse.
 [[restrict-use]]
 name = "browser-pure"
 scope = "browser"
