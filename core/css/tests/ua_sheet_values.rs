@@ -1,14 +1,17 @@
-//! The phrasing-content rules of the embedded UA sheet (WHATWG HTML §15.3.4,
-//! issue #133 of #81): the computed values a page gets with no author CSS at
+//! The values the embedded UA sheet gives HTML elements (WHATWG HTML §15.3,
+//! issue #133 of #81): the computed style a page gets with no author CSS at
 //! all, through the whole chain `dom::parse → snapshot → collect_style_sheets
-//! → UaCascade::resolve`. Painting them is #57's; this file pins the cascade.
+//! → UaCascade::resolve`. Painting the phrasing values is #57's; this file
+//! pins the cascade. The `display` of every element is pinned by the unit
+//! tests of `src/infrastructure/ua_sheet.rs`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use css::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use css::domain::computed::text_advance::{FontStyle, FontWeight, TextDecoration};
 use css::{
-    CascadeResolver, ComputedStyle, CssColor, Display, FontFamily, GenericFamily, UaCascade,
-    collect_style_sheets, snapshot,
+    CascadeResolver, ComputedStyle, CssColor, FontFamily, GenericFamily, Length, LengthEdges,
+    UaCascade, collect_style_sheets, snapshot,
 };
 
 /// The computed style of the element carrying `id="target"` in `body`.
@@ -123,7 +126,46 @@ fn an_author_rule_still_beats_the_ua_phrasing_rules() {
 }
 
 #[test]
-fn a_hidden_element_generates_no_box() {
-    let style = style_of("<div id=target hidden>xx</div>");
-    assert_eq!(style.display(), Display::None);
+fn nobr_does_not_wrap() {
+    let style = style_of("<nobr id=target>x</nobr>");
+    assert_eq!(style.white_space(), WhiteSpace::NoWrap);
+}
+
+#[test]
+fn a_list_nested_in_a_list_has_no_block_margins() {
+    let outer = style_of("<ul id=target><li>x</li></ul>");
+    assert_eq!(
+        outer.margin().top(),
+        Length::Em(1.0),
+        "a top-level list keeps its 1em"
+    );
+    for (outer_tag, inner_tag) in [("ul", "ol"), ("ol", "ul"), ("dl", "menu"), ("ul", "dl")] {
+        let nested = style_of(&format!(
+            "<{outer_tag}><li><{inner_tag} id=target></{inner_tag}></li></{outer_tag}>"
+        ));
+        assert_eq!(
+            nested.margin().top(),
+            Length::Pixels(0.0),
+            "{outer_tag} {inner_tag}"
+        );
+        assert_eq!(
+            nested.margin().bottom(),
+            Length::Pixels(0.0),
+            "{outer_tag} {inner_tag}"
+        );
+    }
+}
+
+#[test]
+fn table_cells_and_captions_carry_the_spec_values() {
+    let table = |cell: &str| style_of(&format!("<table>{cell}</table>"));
+    let caption = table("<caption id=target>x</caption>");
+    assert_eq!(caption.text_align(), TextAlign::Center);
+
+    let header = table("<tr><th id=target>x</th></tr>");
+    assert_eq!(header.text_advance().font_weight(), FontWeight::BOLD);
+    assert_eq!(header.padding(), LengthEdges::uniform(Length::Pixels(1.0)));
+
+    let data = table("<tr><td id=target>x</td></tr>");
+    assert_eq!(data.padding(), LengthEdges::uniform(Length::Pixels(1.0)));
 }

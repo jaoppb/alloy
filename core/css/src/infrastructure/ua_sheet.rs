@@ -158,9 +158,9 @@ fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> Computed
 
 /// A non-element node: no selector ever chooses one (`application/matching.rs`
 /// doc-comment), so its `display` stays a fixed Rust rule rather than a CSS
-/// one. An element's default is already [`Display::Block`] from
-/// [`ComputedStyle::initial`], which is why this arm is the only one that
-/// still needs Rust after `assets/ua.css` took over every per-tag exception.
+/// one. An element's `display` is `assets/ua.css`'s, which states it for every
+/// element WHATWG HTML §15.3 does not leave at CSS's initial `inline` (#133),
+/// so non-element nodes are the only ones that still need Rust.
 fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
     match kind {
         SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
@@ -176,10 +176,10 @@ mod tests {
     use super::*;
     use crate::application::snapshot::snapshot;
 
-    /// Every element WHATWG HTML §15.3 lays out as a block, plus the table
-    /// elements this engine stacks as blocks until it has table layout
-    /// (MANIFEST cut). `hr` is listed for its `display` only (#82 owns the rest).
-    const BLOCK_ELEMENTS: [&str; 49] = [
+    /// Every element WHATWG HTML §15.3 / §15.5 lays out as a block, outside
+    /// the table family. `hr` is listed for its `display` only (#82 owns the
+    /// rest).
+    const FLOW_BLOCKS: [&str; 41] = [
         "html",
         "body",
         "address",
@@ -221,20 +221,25 @@ mod tests {
         "details",
         "summary",
         "fieldset",
-        "table",
-        "caption",
-        "thead",
-        "tbody",
-        "tfoot",
-        "tr",
-        "td",
-        "th",
     ];
 
-    /// Elements §15.3.1 never renders.
-    const HIDDEN_ELEMENTS: [&str; 9] = [
-        "area", "datalist", "noembed", "noframes", "param", "rp", "template", "col", "colgroup",
+    /// The table family this engine stacks as blocks until it has table
+    /// layout (MANIFEST cut).
+    const TABLE_BLOCKS: [&str; 8] = [
+        "table", "caption", "thead", "tbody", "tfoot", "tr", "td", "th",
     ];
+
+    /// The column elements, which generate nothing while tables stack as blocks.
+    const TABLE_COLUMNS: [&str; 2] = ["colgroup", "col"];
+
+    /// The §15.3.1 elements that render nothing, outside the table family.
+    const HIDDEN_ELEMENTS: [&str; 8] = [
+        "area", "basefont", "datalist", "noembed", "noframes", "param", "rp", "template",
+    ];
+
+    /// A table holding every element of [`TABLE_BLOCKS`] and [`TABLE_COLUMNS`]:
+    /// table-internal elements only survive tree construction inside one.
+    const TABLE_MARKUP: &str = "<!doctype html><html><body><table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table></body></html>";
 
     /// The `display` the UA sheet alone gives the first `tag` element of
     /// `markup`, cascaded over an `inline` base — so a missing UA rule shows
@@ -266,17 +271,29 @@ mod tests {
 
     #[test]
     fn the_ua_sheet_itself_makes_every_flow_element_a_block() {
-        for tag in BLOCK_ELEMENTS {
-            let markup = table_aware_markup(tag);
-            assert_eq!(ua_display(&markup, tag), Display::Block, "<{tag}>");
+        for tag in FLOW_BLOCKS {
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::Block,
+                "<{tag}>"
+            );
+        }
+    }
+
+    #[test]
+    fn the_table_family_stacks_as_blocks_and_columns_generate_nothing() {
+        for tag in TABLE_BLOCKS {
+            assert_eq!(ua_display(TABLE_MARKUP, tag), Display::Block, "<{tag}>");
+        }
+        for tag in TABLE_COLUMNS {
+            assert_eq!(ua_display(TABLE_MARKUP, tag), Display::None, "<{tag}>");
         }
     }
 
     #[test]
     fn the_ua_sheet_hides_the_elements_html_never_renders() {
         for tag in HIDDEN_ELEMENTS {
-            let markup = table_aware_markup(tag);
-            assert_eq!(ua_display(&markup, tag), Display::None, "<{tag}>");
+            assert_eq!(ua_display(&markup_with(tag), tag), Display::None, "<{tag}>");
         }
     }
 
@@ -289,18 +306,14 @@ mod tests {
     }
 
     #[test]
+    fn the_hidden_attribute_beats_an_open_dialog() {
+        let markup = "<!doctype html><body><dialog open hidden></dialog></body>";
+        assert_eq!(ua_display(markup, "dialog"), Display::None);
+    }
+
+    #[test]
     fn the_hidden_attribute_removes_the_box_of_any_element() {
         let markup = "<!doctype html><body><span hidden>x</span></body>";
         assert_eq!(ua_display(markup, "span"), Display::None);
-    }
-
-    /// Table-internal elements only survive tree construction inside a table.
-    fn table_aware_markup(tag: &str) -> String {
-        let table = "<table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table>";
-        match tag {
-            "table" | "caption" | "thead" | "tbody" | "tfoot" | "tr" | "td" | "th" | "col"
-            | "colgroup" => format!("<!doctype html><html><body>{table}</body></html>"),
-            _ => markup_with(tag),
-        }
     }
 }
