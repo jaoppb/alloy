@@ -552,3 +552,13 @@ fn a_superseded_document_does_not_rename_the_window() {
 
     assert!(titles(&effects).is_empty());
 }
+
+#[test]
+fn a_title_inside_a_template_does_not_name_the_document() {
+    let titles = titles_after_loading(
+        "<head><template><title>tpl</title></template><title>real</title></head>",
+        &page("template.html"),
+    );
+
+    assert_eq!(titles, ["real"]);
+}
