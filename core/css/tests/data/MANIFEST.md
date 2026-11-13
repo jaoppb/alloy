@@ -253,6 +253,23 @@ Form controls receive UA default styles according to WHATWG HTML §15.5 and §15
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------- |
 | `<fieldset>` / `<legend>` border-notch clipping    | `<fieldset>` renders standard rectangular borders; `<legend>` is rendered in normal flow | v0.7        |
 
+### UA sheet rules the cascade cannot express yet
+
+`core/css/assets/ua.css` follows WHATWG HTML §15.3 section by section (#133, part of #81). The rules below are in the
+spec's sheet but need a property, value, selector or layout mode this file does not list, so the UA sheet leaves them
+out or approximates them. Like the other simplifications, each is declared here rather than dropped silently.
+
+| gap                                                                     | behaviour instead                                                                                 | tracked for |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------- |
+| `:link` / `:visited` (no link-state pseudo-class)                       | `a[href]` stands for `:link`; a visited link keeps `#0000ee` instead of `#551a8b`                 | v0.7        |
+| `display: table` and the `table-*` values (§15.3.8)                     | `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th` stack as blocks; `col` / `colgroup` generate nothing | v0.7        |
+| `vertical-align` (`sub`, `sup`)                                         | `<sub>` / `<sup>` sit on the baseline                                                              | v0.7        |
+| `font-size: smaller` / `larger` (`sub`, `sup`, `small`, `big`)          | the element keeps its parent's font size                                                          | v0.7        |
+| `text-decoration: dotted underline` (`abbr[title]`, `acronym[title]`)   | no decoration                                                                                     | v0.7        |
+| `::before` / `::after` with `content: open-quote` (`q`)                 | no quotation marks are generated                                                                  | v0.7        |
+| `:not()` (`[hidden]:not([hidden=until-found i]):not(embed)`)            | `[hidden]` hides every element, including `hidden=until-found` and `<embed hidden>`               | v0.7        |
+| `display: list-item` on `details > summary:first-of-type`              | `<summary>` is a block with no disclosure marker; `<details>` shows its whole content            | v0.7        |
+
 ## Selectors
 
 Written in the `E` / `F` element notation of the CSS specifications: one row is one grammatical form, not one example.

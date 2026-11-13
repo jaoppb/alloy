@@ -168,3 +168,139 @@ fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> Compute
         SnapshotNodeKind::Comment => base.with_display(Display::None),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use crate::application::snapshot::snapshot;
+
+    /// Every element WHATWG HTML §15.3 lays out as a block, plus the table
+    /// elements this engine stacks as blocks until it has table layout
+    /// (MANIFEST cut). `hr` is listed for its `display` only (#82 owns the rest).
+    const BLOCK_ELEMENTS: [&str; 49] = [
+        "html",
+        "body",
+        "address",
+        "blockquote",
+        "center",
+        "div",
+        "figure",
+        "figcaption",
+        "footer",
+        "form",
+        "header",
+        "hr",
+        "legend",
+        "listing",
+        "main",
+        "p",
+        "plaintext",
+        "pre",
+        "search",
+        "xmp",
+        "article",
+        "aside",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hgroup",
+        "nav",
+        "section",
+        "dir",
+        "dd",
+        "dl",
+        "dt",
+        "menu",
+        "ol",
+        "ul",
+        "details",
+        "summary",
+        "fieldset",
+        "table",
+        "caption",
+        "thead",
+        "tbody",
+        "tfoot",
+        "tr",
+        "td",
+        "th",
+    ];
+
+    /// Elements §15.3.1 never renders.
+    const HIDDEN_ELEMENTS: [&str; 9] = [
+        "area", "datalist", "noembed", "noframes", "param", "rp", "template", "col", "colgroup",
+    ];
+
+    /// The `display` the UA sheet alone gives the first `tag` element of
+    /// `markup`, cascaded over an `inline` base — so a missing UA rule shows
+    /// up as `inline` instead of hiding behind today's `block` initial value
+    /// (#81: the initial value becomes `inline`).
+    fn ua_display(markup: &str, tag: &str) -> Display {
+        let tree = dom::parse(markup).expect("the fixture parses").into_tree();
+        let dom = snapshot(&tree, tree.document());
+        let node = dom
+            .nodes_in_document_order()
+            .filter_map(|id| dom.node(id))
+            .find(|node| node.tag_str() == Some(tag))
+            .unwrap_or_else(|| panic!("the fixture has a <{tag}>"));
+        let base = ComputedStyle::initial().with_display(Display::Inline);
+        let cascaded = apply_author_rules(
+            base,
+            None,
+            &InheritedContext::root(),
+            node,
+            &dom,
+            &UaCascade::new().ua_rules,
+        );
+        cascaded.into_parts().0.display()
+    }
+
+    fn markup_with(tag: &str) -> String {
+        format!("<!doctype html><html><body><{tag}></{tag}></body></html>")
+    }
+
+    #[test]
+    fn the_ua_sheet_itself_makes_every_flow_element_a_block() {
+        for tag in BLOCK_ELEMENTS {
+            let markup = table_aware_markup(tag);
+            assert_eq!(ua_display(&markup, tag), Display::Block, "<{tag}>");
+        }
+    }
+
+    #[test]
+    fn the_ua_sheet_hides_the_elements_html_never_renders() {
+        for tag in HIDDEN_ELEMENTS {
+            let markup = table_aware_markup(tag);
+            assert_eq!(ua_display(&markup, tag), Display::None, "<{tag}>");
+        }
+    }
+
+    #[test]
+    fn a_dialog_is_hidden_until_it_is_open() {
+        let closed = "<!doctype html><body><dialog></dialog></body>";
+        let open = "<!doctype html><body><dialog open></dialog></body>";
+        assert_eq!(ua_display(closed, "dialog"), Display::None);
+        assert_eq!(ua_display(open, "dialog"), Display::Block);
+    }
+
+    #[test]
+    fn the_hidden_attribute_removes_the_box_of_any_element() {
+        let markup = "<!doctype html><body><span hidden>x</span></body>";
+        assert_eq!(ua_display(markup, "span"), Display::None);
+    }
+
+    /// Table-internal elements only survive tree construction inside a table.
+    fn table_aware_markup(tag: &str) -> String {
+        let table = "<table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table>";
+        match tag {
+            "table" | "caption" | "thead" | "tbody" | "tfoot" | "tr" | "td" | "th" | "col"
+            | "colgroup" => format!("<!doctype html><html><body>{table}</body></html>"),
+            _ => markup_with(tag),
+        }
+    }
+}

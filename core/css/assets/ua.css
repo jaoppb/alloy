@@ -2,27 +2,119 @@
  * The embedded user-agent stylesheet (v0.5 B2, `plano:435-443`).
  *
  * Parsed once by `UaCascade::new()` (`core/css/src/infrastructure/ua_sheet.rs`)
- * and cascaded as `Origin::UserAgent` rules, ahead of the document's own —
- * this file *is* the base layer B1 used to hard-code in
- * `style_for_tag` (removed in this change). Every value here reproduces
- * exactly what that Rust function set, so a document with no author CSS
- * renders unchanged.
+ * and cascaded as `Origin::UserAgent` rules, ahead of the document's own.
  *
- * Everything not overridden here already has the right computed value from
- * `ComputedStyle::initial()` — block display and zero margin — so an
- * ordinary element (`div`, `html`, …) needs no rule at all.
+ * The rules follow WHATWG HTML §15.3 ("Rendering"), section by section, so
+ * that every element the spec lays out as a block says so here: the sheet
+ * must not lean on `ComputedStyle::initial()`'s `display`, which CSS Display
+ * L3 §2 defines as `inline` (#81). A rule the cascade cannot express yet
+ * (`:visited`, `vertical-align`, `font-size: smaller`, `::before` quotes,
+ * `hidden=until-found`, table layout) is a declared cut in
+ * `core/css/tests/data/MANIFEST.md`, never a silent omission.
  */
 
+/* §15.3.1 Hidden elements. */
+area,
+base,
+datalist,
 head,
-style,
-script,
-title,
-meta,
 link,
-base {
+meta,
+noembed,
+noframes,
+param,
+rp,
+script,
+style,
+template,
+title {
 	display: none;
 }
 
+[hidden] {
+	display: none;
+}
+
+/* §15.3.3 Flow content. */
+html,
+body,
+address,
+blockquote,
+center,
+div,
+figure,
+figcaption,
+footer,
+form,
+header,
+hr,
+legend,
+listing,
+main,
+p,
+plaintext,
+pre,
+search,
+xmp {
+	display: block;
+}
+
+dialog {
+	display: none;
+}
+
+dialog[open] {
+	display: block;
+}
+
+/* §15.3.6 Sections and headings. */
+article,
+aside,
+hgroup,
+nav,
+section {
+	display: block;
+}
+
+/* §15.3.7 Lists. */
+dir,
+dd,
+dl,
+dt,
+menu,
+ol,
+ul {
+	display: block;
+}
+
+/* §15.3.10 Form controls and §15.3.13 `details`. */
+details,
+summary {
+	display: block;
+}
+
+/*
+ * §15.3.8 Tables: this engine has no table layout (MANIFEST cut), so the
+ * table family keeps stacking as blocks — the look it had while the initial
+ * `display` was `block` — and column elements generate nothing.
+ */
+table,
+caption,
+thead,
+tbody,
+tfoot,
+tr,
+td,
+th {
+	display: block;
+}
+
+colgroup,
+col {
+	display: none;
+}
+
+/* §15.3.4 Phrasing content. */
 span,
 a,
 em,
@@ -35,8 +127,51 @@ label {
 	display: inline;
 }
 
-a {
+address,
+cite,
+dfn,
+em,
+i,
+var {
+	font-style: italic;
+}
+
+b,
+strong {
+	font-weight: bolder;
+}
+
+code,
+kbd,
+listing,
+plaintext,
+pre,
+samp,
+tt,
+xmp {
+	font-family: monospace;
+}
+
+/* `:link` is `a[href]` here: no link-state pseudo-class (MANIFEST cut). */
+a[href] {
 	color: #0000ee;
+	text-decoration: underline;
+}
+
+mark {
+	background-color: yellow;
+	color: black;
+}
+
+ins,
+u {
+	text-decoration: underline;
+}
+
+del,
+s,
+strike {
+	text-decoration: line-through;
 }
 
 h1 {
@@ -96,18 +231,29 @@ blockquote {
 	margin: 16px 40px;
 }
 
-pre {
-	display: block;
-	font-family: monospace;
+figure {
+	margin: 1em 40px;
+}
+
+listing,
+plaintext,
+pre,
+xmp {
 	white-space: pre;
 	margin: 1em 0;
 }
 
+dir,
+menu,
 ol,
 ul {
 	display: block;
 	margin: 1em 0;
 	padding-left: 40px;
+}
+
+dl {
+	margin: 1em 0;
 }
 
 /* Lays out as a block; the `::marker` is not generated yet (MANIFEST `display`). */

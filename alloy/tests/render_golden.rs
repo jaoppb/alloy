@@ -170,6 +170,25 @@ fn border_width_with_no_border_style_renders_same_as_no_border() {
 }
 
 #[test]
+fn a_hidden_attribute_renders_byte_identical_to_an_empty_body() {
+    let page = |body: &str| {
+        format!(
+            "<!doctype html><html><head><style>body{{margin:0;background:#fff;color:#000}}</style></head>\
+             <body>{body}</body></html>"
+        )
+    };
+    let options = RenderOptions::new(400, 200);
+    let hidden = render_html_to_png(&page("<div hidden>xx</div>"), &options)
+        .expect("render with a hidden div succeeds");
+    let empty = render_html_to_png(&page(""), &options).expect("render of an empty body succeeds");
+
+    assert_eq!(
+        hidden, empty,
+        "`[hidden]` must generate no box (WHATWG HTML §15.3.1, #133)"
+    );
+}
+
+#[test]
 fn visibility_hidden_renders_same_as_empty_box_while_preserving_sibling_layout() {
     let with_visibility_hidden = "<!doctype html><html><head><style>\
                                   body{margin:0;background:#fff}\
