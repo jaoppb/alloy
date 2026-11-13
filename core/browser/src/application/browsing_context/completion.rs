@@ -5,11 +5,11 @@ use graphics::{Framebuffer, ImageId};
 
 use super::BrowsingContext;
 use crate::application::{
-    SubresourceDiscoverer, document_base_url, error_page, parse_author_stylesheet,
+    SubresourceDiscoverer, document_base_url, document_title, error_page, parse_author_stylesheet,
 };
 use crate::domain::{
-    Accepted, BrowserEffect, Document, Effects, FetchFailure, FetchPayload, FetchRequest,
-    FetchResult, LoadedDocument, NavigationId, Subresources,
+    Accepted, BrowserEffect, Document, DocumentTitle, Effects, FetchFailure, FetchPayload,
+    FetchRequest, FetchResult, LoadedDocument, NavigationId, Subresources,
 };
 
 impl<D: SubresourceDiscoverer> BrowsingContext<D> {
@@ -45,12 +45,15 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
         let base_url = document_base_url(&snapshot, &navigation_url);
         tracing::info!(url = %navigation_url, base = %base_url, "navigation complete");
         let found = self.discoverer.discover(&snapshot, &base_url);
+        let title =
+            document_title(&tree).unwrap_or_else(|| DocumentTitle::from_url(&navigation_url));
         let mut document = Document::loaded(tree, base_url);
         document.reserve_placeholders(&found);
         let mut effects = fetches_for(found, navigation);
         self.install(document);
         self.stats.record(Accepted::Navigation);
         effects.push(BrowserEffect::DocumentLoaded(self.id, navigation_url));
+        effects.push(BrowserEffect::TitleChanged(self.id, title));
         effects.push(self.content_damaged());
         effects
     }
@@ -60,16 +63,20 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
     fn show_navigation_error(&mut self, failure: &FetchFailure) -> Effects {
         tracing::error!(error = %failure, "navigation failed");
         self.stats.record(Accepted::NavigationError);
-        match error_page(&failure.to_string()) {
-            Ok(tree) => {
-                self.install(Document::generated(tree));
-                Effects::from_iter([self.content_damaged()])
-            }
+        let tree = match error_page(&failure.to_string()) {
+            Ok(tree) => tree,
             Err(error) => {
                 tracing::error!(%error, "the error page could not be built");
-                Effects::none()
+                return Effects::none();
             }
-        }
+        };
+        let title = document_title(&tree);
+        self.install(Document::generated(tree));
+        let renamed = title.map(|title| BrowserEffect::TitleChanged(self.id, title));
+        renamed
+            .into_iter()
+            .chain([self.content_damaged()])
+            .collect()
     }
 
     fn absorb_stylesheet(&mut self, text: &str, media: &MediaQuery) -> Effects {
