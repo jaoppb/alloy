@@ -77,7 +77,9 @@ impl EdgeSizes {
 ///
 /// It is what layout placed on that fragment's line, white space already
 /// processed (CSS Text L3 §4.1.1), so a painter draws it as one line from the
-/// fragment's origin and never wraps it again (#134).
+/// fragment's origin and never wraps it again (#134). The gaps are at their
+/// natural width: the extra space `text-align: justify` gives them is not
+/// carried (MANIFEST, "Inline formatting simplifications").
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FragmentText(String);
 
@@ -99,7 +101,11 @@ impl FragmentText {
 ///
 /// A block-level or atomic box is one fragment. An inline box or a text node
 /// has one fragment per line it touches (#134), so a node may own several
-/// `LayoutBox`es; [`LayoutBoxTree::fragments_of`] lists them.
+/// `LayoutBox`es; [`LayoutBoxTree::fragments_of`] lists them. A box that lays
+/// its own text out — an `<input>`'s or `<select>`'s label, a text node a flex
+/// container blockified — owns its box fragment plus that text's line
+/// fragments. Every fragment of a node carries the node's full
+/// [`Self::children`], whichever line they are on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LayoutBox {
@@ -306,7 +312,8 @@ impl LayoutBoxTree {
     }
 
     /// Every fragment of `node`, in document order: one for a block-level or
-    /// atomic node, one per line for an inline box or a text node, none when
+    /// atomic node (plus its line fragments when it lays its own text out, see
+    /// [`LayoutBox`]), one per line for an inline box or a text node, none when
     /// it generated no box.
     pub fn fragments_of(&self, node: SnapshotId) -> impl Iterator<Item = &LayoutBox> + '_ {
         self.boxes

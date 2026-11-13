@@ -213,9 +213,10 @@ The rest is additive or confined to the cascade helpers:
 
 - **A node may own several `LayoutBox`es.** An inline box (`span`, `a`, …) or a text node gets one fragment per line box
   it touches — the bounding rectangle of what its subtree put on that line — instead of one rectangle spanning every
-  line, which also covered the space between its pieces. Block-level and atomic boxes are still one fragment.
-  `LayoutBoxTree::fragments_of(node)` lists a node's fragments in order; `box_of(node)` answers the first one;
-  `boxes_in_document_order` and `len` count fragments.
+  line, which also covered the space between its pieces. Block-level and atomic boxes are still one fragment, except
+  that a box laying its own text out (an `<input>`'s or `<select>`'s label, a flex-blockified text node) also owns that
+  text's line fragments. `LayoutBoxTree::fragments_of(node)` lists a node's fragments in order; `box_of(node)` answers
+  the first one; `boxes_in_document_order` and `len` count fragments.
 - **A text fragment carries its text.** `LayoutBox::text() -> Option<&FragmentText>` is the text layout placed on that
   fragment's line, white space already processed; an element's fragment answers `None`. A painter draws it as one line
   from the fragment's origin and never wraps it again: `alloy/src/application/paint.rs` no longer re-wraps a text node's
