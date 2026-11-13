@@ -398,13 +398,14 @@ fn assemble<M: TextMeasurer>(
     let metrics = resolved.metrics;
     let edges = metrics.edges();
     let margin = edges.margin();
+    let contains = establishes_formatting_context(context, node);
     let (top_margin, children_offset) = top_arrangement(
-        collapses_at_top(edges),
+        collapses_at_top(edges) && !contains,
         CollapsedMargin::from_length(margin.top()),
         children.leading_margin(),
     );
     let (bottom_margin, trailing_extra) = bottom_arrangement(
-        collapses_at_bottom(edges, metrics.height()),
+        collapses_at_bottom(edges, metrics.height()) && !contains,
         CollapsedMargin::from_length(margin.bottom()),
         children.trailing_margin(),
     );
@@ -435,6 +436,24 @@ fn assemble<M: TextMeasurer>(
         flow,
         fragments,
     ))
+}
+
+/// Whether `node` starts a new block formatting context (CSS 2.1 §9.4.1), so
+/// its children's margins never collapse with its own: an `inline-block`, a
+/// flex item, a scroll container, the root element — and the document box
+/// above it, which stands for the initial containing block.
+fn establishes_formatting_context<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node: &StyledNode,
+) -> bool {
+    let style = node.style();
+    if style.display().is_atomic_inline() || style.overflow().is_scroll_container() {
+        return true;
+    }
+    let Some(parent) = node.parent().and_then(|id| context.node(id).ok()) else {
+        return true;
+    };
+    parent.parent().is_none() || parent.style().display() == Display::Flex
 }
 
 /// A box that collapses through reports **one** margin set holding all four
