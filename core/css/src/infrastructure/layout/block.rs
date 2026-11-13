@@ -5,7 +5,9 @@
 //! context. A block container stacks its in-flow children vertically, collapsing
 //! their vertical margins (CSS 2.1 §8.3.1); a run of consecutive inline-level
 //! children is handed to [`inline`] as one anonymous block, which is how
-//! `<div>text<p>x</p>more</div>` keeps all three pieces; a `display: flex`
+//! `<div>text<p>x</p>more</div>` keeps all three pieces. A block-level box
+//! inside an inline child splits that run around it (CSS 2.1 §9.2.1.1, #135),
+//! so `<span>aa<div>bb</div>cc</span>` is three rows. A `display: flex`
 //! container is handed to [`flex`].
 //!
 //! Every result is **relative**: `layout_box` answers with fragments positioned
@@ -37,6 +39,7 @@ use crate::infrastructure::layout::context::{
     LayoutContext, MAX_LAYOUT_DEPTH,
 };
 use crate::infrastructure::layout::fragment::{Fragment, Fragments, rect_at};
+use crate::infrastructure::layout::inline::InlineItem;
 use crate::infrastructure::layout::margin_collapse::{
     CollapsedMargin, MarginFlow, collapses_at_bottom, collapses_at_top,
 };
@@ -591,7 +594,7 @@ fn keep_if_boxed(kept: &mut Vec<SnapshotId>, styled: &StyledNode, child: Snapsho
 /// carrying text of its own (a text node blockified by a flex container, an
 /// `<input>` label) — that text as the container's only line content.
 enum Segment {
-    Inline(Vec<SnapshotId>),
+    Inline(Vec<InlineItem>),
     Block(SnapshotId),
     OwnText(SnapshotId),
 }
@@ -649,19 +652,38 @@ fn push_child<M: TextMeasurer>(
         return Ok(());
     }
     if display.is_inline_level() {
-        push_inline(segments, child);
-        return Ok(());
+        return push_inline_child(context, segments, child);
     }
     segments.push(Segment::Block(child));
     Ok(())
 }
 
-fn push_inline(segments: &mut Vec<Segment>, child: SnapshotId) {
+/// An inline-level child joins the current run of line boxes. A block-level
+/// box inside it splits that run (CSS 2.1 §9.2.1.1): the child's content
+/// before the block stays in the run, the block is stacked as its own
+/// segment, and the content after it opens the next run — which later inline
+/// siblings join.
+fn push_inline_child<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    segments: &mut Vec<Segment>,
+    child: SnapshotId,
+) -> Result<(), CssError> {
+    let mut after = None;
+    for block in inline::block_descendants(context, child)?.iter() {
+        push_inline(segments, InlineItem::between(child, after, Some(block)));
+        segments.push(Segment::Block(block));
+        after = Some(block);
+    }
+    push_inline(segments, InlineItem::between(child, after, None));
+    Ok(())
+}
+
+fn push_inline(segments: &mut Vec<Segment>, item: InlineItem) {
     if let Some(Segment::Inline(items)) = segments.last_mut() {
-        items.push(child);
+        items.push(item);
         return;
     }
-    segments.push(Segment::Inline(vec![child]));
+    segments.push(Segment::Inline(vec![item]));
 }
 
 fn push_own_text(node: &StyledNode, segments: &mut Vec<Segment>) {
