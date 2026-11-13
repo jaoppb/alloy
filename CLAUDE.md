@@ -106,8 +106,8 @@ history, not a pending merge. `docs/v0-5-handoff/README.md` (the phase package) 
   `browser` share; `arch-lint.toml` (`ui-isolated`, `region-isolated`) keeps the two siblings apart.
 - **#108 — layered compositor** (epic #110, ADR-0019 amendment): `alloy/src/application/compositor/` caches the chrome
   and content layers separately behind the `RenderBackend` port and takes `Damage::{Chrome, Content, Viewport}`; chrome
-  damage never bumps `stats.relayouts` (fixes #116), a viewport no taller than the chrome shows the chrome alone (fixes
-  #118). `graphics::PORT_SCHEMA_VERSION = 4` (`RenderBackend::bind_images`, `PRD-005` §6).
+  damage never bumps `stats.relayouts` (fixes #116), a viewport no taller than the chrome shows the chrome alone
+  (fixes #118). `graphics::PORT_SCHEMA_VERSION = 4` (`RenderBackend::bind_images`, `PRD-005` §6).
 - **#115 — slim event loop** (epic #110, ADR-0019 amendment, closes the epic): `alloy/src/application/event_loop/` is
   only `pump_once` + `PumpEvents` (the fold); `Session` is gone. `BrowserApp` (`application/browser_app/`) owns the
   browsing context, chrome, pending damage and compositor and is the entry point (`run`/`run_until`/
