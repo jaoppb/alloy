@@ -165,3 +165,40 @@ fn the_root_element_keeps_its_childs_margins_inside() {
     );
     assert_eq!(laid.border_box("first").min_y(), px(40));
 }
+
+#[test]
+fn bodys_overflow_belongs_to_the_viewport_so_its_margins_still_collapse() {
+    let markup = "<!doctype html><html><head><style>body { margin: 8px; overflow-x: hidden }</style></head>\
+                  <body id=body><h1 id=h1>x</h1></body></html>";
+    let tree = dom::parse(markup).expect("the fixture parses").into_tree();
+    let dom = snapshot(&tree, tree.document());
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let viewport = ViewportConstraints::new(px(800), px(600));
+    let boxes = BlockLayout::monospace()
+        .layout(&styled, &viewport)
+        .expect("lays out");
+    let laid = Laid { dom, boxes };
+
+    assert_eq!(
+        laid.border_box("body").min_y(),
+        laid.border_box("h1").min_y(),
+        "body's overflow propagates to the viewport (CSS Overflow L3 §3.3): body is not a \
+         scroll container, so h1's top margin collapses with body's"
+    );
+}
+
+#[test]
+fn an_empty_scroll_container_does_not_collapse_its_own_margins_through() {
+    let laid = Laid::new(
+        "<div id=a style='height:10px'></div>\
+         <div style='overflow:hidden;margin:20px 0'></div>\
+         <div id=b style='height:10px'></div>",
+    );
+
+    assert_eq!(
+        laid.border_box("b").min_y(),
+        laid.border_box("a").max_y().saturating_add(px(40)),
+        "a box that starts a formatting context keeps its top and bottom margins apart"
+    );
+}

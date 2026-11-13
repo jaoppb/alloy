@@ -49,7 +49,7 @@ impl<'run, 'tree, M: TextMeasurer> Emitter<'run, 'tree, M> {
         // A block-level descendant left this run when the run split around it
         // (CSS 2.1 §9.2.1.1): it holds no piece here, so its subtree is not
         // walked, once per run, for nothing.
-        if display.is_none() || !display.is_inline_level() {
+        if !display.is_inline_level() {
             return Ok(());
         }
         if display.is_atomic_inline() {
@@ -155,7 +155,7 @@ fn child_line_bounds<M: TextMeasurer>(
     placements: &Placements,
 ) -> Result<LineBounds, CssError> {
     let display = context.node(child)?.style().display();
-    if display.is_none() || !display.is_inline_level() {
+    if !display.is_inline_level() {
         return Ok(LineBounds::new());
     }
     line_bounds(context, child, placements)

@@ -102,6 +102,7 @@ impl OverflowStyle {
         Self { y, ..self }
     }
 }
+
 const fn scrolls(overflow: Overflow) -> bool {
     matches!(
         overflow,
