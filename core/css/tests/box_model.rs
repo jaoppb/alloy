@@ -90,7 +90,10 @@ fn adjacent_sibling_margins_collapse_to_the_larger_one() {
 fn a_parents_top_margin_collapses_with_its_first_childs() {
     let mut tree = dom::DomTree::new();
     let root = tree.document();
-    let parent = element(&mut tree, root, "parent");
+    // The root element contains its children's margins (CSS 2.1 §9.4.1),
+    // so the parent under test sits one level below it.
+    let page = element(&mut tree, root, "page");
+    let parent = element(&mut tree, page, "parent");
     element(&mut tree, parent, "child");
 
     let source = "
@@ -116,10 +119,12 @@ fn a_parents_top_margin_collapses_with_its_first_childs() {
 fn a_parents_bottom_margin_collapses_with_its_last_childs() {
     let mut tree = dom::DomTree::new();
     let root = tree.document();
-    let parent = element(&mut tree, root, "parent");
+    // The root element contains its children's margins (CSS 2.1 §9.4.1),
+    // so the parent under test sits one level below it.
+    let page = element(&mut tree, root, "page");
+    let parent = element(&mut tree, page, "parent");
     element(&mut tree, parent, "child");
-    let after = element(&mut tree, root, "after");
-    let _ = after;
+    element(&mut tree, page, "after");
 
     let source = "
         #child { height: 10px; margin-bottom: 12px; }
