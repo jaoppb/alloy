@@ -113,7 +113,7 @@ impl Line {
 /// container, so `MAX_LAYOUT_DEPTH` still bounds the recursion.
 ///
 /// An item split by block-level descendants contributes only its stretch
-/// between them (CSS 2.1 §9.2.1.1, [`window`]); its inline boxes then get
+/// between them (CSS 2.1 §9.2.1.1, `inline/split.rs`); its inline boxes then get
 /// fragments only on the lines that stretch fills.
 pub fn layout<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
@@ -779,8 +779,8 @@ fn widened_width(piece: &Piece, extra: Extra, index: usize) -> Au {
 // ---- fragment emission ----------------------------------------------------
 
 mod emit;
-mod window;
+mod split;
 
 use emit::Emitter;
-use window::Walk;
-pub use window::{InlineItem, block_descendants};
+use split::Walk;
+pub use split::{InlineItem, block_descendants};

@@ -793,8 +793,14 @@ impl BlockStack {
     }
 
     /// Places one anonymous block of line boxes: it separates the margins on
-    /// either side of it, so nothing collapses through.
+    /// either side of it, so nothing collapses through. One that holds no
+    /// line box — a whitespace-only run between blocks, the empty side of a
+    /// block-in-inline split — is not there at all for margins (CSS 2.1
+    /// §8.3.1, §9.2.1.1): they collapse through it.
     fn absorb_lines(&mut self, flow: ContentFlow) {
+        if flow.is_vacant() {
+            return;
+        }
         self.leading.get_or_insert(CollapsedMargin::ZERO);
         let vertical = self.cursor.saturating_add(self.pending.resolve());
         let height = flow.height();

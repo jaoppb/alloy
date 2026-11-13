@@ -117,6 +117,10 @@ impl Fragments {
         self.items.push(fragment);
     }
 
+    pub const fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
     /// Appends `other`, keeping both runs in their own order.
     pub fn absorb(&mut self, other: Self) {
         self.items.extend(other.items);
