@@ -27,7 +27,7 @@ and tree construction into `dom::DomTree`, not necessarily visual styling or pai
 | `article`    | rendered    | B5    | block sectioning container                                                               |
 | `blockquote` | rendered    | B5    | block quotation container                                                                |
 | `body`       | rendered    | B5    | main document body container                                                             |
-| `br`         | parsed only | B5    | void line break element; treated as an empty block container, inline break pending (#82) |
+| `br`         | rendered    | B5    | void line break element; an inline forced line break (#82)                               |
 | `code`       | parsed only | B5    | inline code span; renders identical to span, monospace font style pending (#57/#81)      |
 | `div`        | rendered    | B5    | block division container                                                                 |
 | `em`         | parsed only | B5    | inline emphasis element; renders identical to span, italic font style pending (#57/#81)  |
@@ -40,7 +40,7 @@ and tree construction into `dom::DomTree`, not necessarily visual styling or pai
 | `h6`         | partial     | B5    | level 6 section heading; font-size and margins render, font-weight bold pending (#57)    |
 | `head`       | rendered    | B5    | document metadata container; hidden via display: none                                    |
 | `header`     | rendered    | B5    | block header container                                                                   |
-| `hr`         | parsed only | B5    | void thematic break element; no UA border style and paints nothing (#82)                |
+| `hr`         | partial     | B5    | void thematic break element; a 1px gray rule, `inset` paints solid (#82)                 |
 | `html`       | rendered    | B5    | root document element                                                                    |
 | `img`        | parsed only | B5    | void embedded image element; no intrinsic sizing or replaced layout (#83)                |
 | `li`         | partial     | B5    | list item element with auto-closing tag omission; indent renders, ::marker pending (#71) |
