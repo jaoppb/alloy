@@ -196,13 +196,15 @@ shrinkage:
 ### Inline formatting simplifications
 
 The inline formatting context (`core/css/src/infrastructure/layout/inline.rs`) gives an inline box or a text node one
-fragment per line it touches (#134); a text fragment carries the text on its line, which is what paint draws.
+fragment per line it touches (#134); a text fragment carries the text on its line, which is what paint draws. A
+block-level box inside an inline box splits the run around it (CSS 2.1 §9.2.1.1, #135).
 
-| gap                                                                                                                                  | behaviour instead                                                                                                                                                                | tracked for |
-| ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| an inline box's own `margin`, `border` and `padding` (CSS 2.1 §10.3.1, §10.6.1)                                                      | an inline box's fragments are the bounds of its content; its edges are not laid out                                                                                              | v0.7        |
-| `text-align: justify` spacing in paint                                                                                               | layout widens a justified line's gaps, but a text fragment carries its text at natural spacing, so paint draws the words bunched at the line start inside the justified fragment | v0.7        |
-| a box that lays its own text out (an `<input>` / `<select>` label, a flex-blockified text node) also owns that text's line fragments | its background and outline are painted again around the label line, inside the control                                                                                           | v0.7        |
+| gap                                                                                                                                                                   | behaviour instead                                                                                                                                                                | tracked for |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| an inline box's own `margin`, `border` and `padding` (CSS 2.1 §10.3.1, §10.6.1)                                                                                       | an inline box's fragments are the bounds of its content; its edges are not laid out                                                                                              | v0.7        |
+| `text-align: justify` spacing in paint                                                                                                                                | layout widens a justified line's gaps, but a text fragment carries its text at natural spacing, so paint draws the words bunched at the line start inside the justified fragment | v0.7        |
+| a box that lays its own text out (an `<input>` / `<select>` label, a flex-blockified text node) also owns that text's line fragments                                  | its background and outline are painted again around the label line, inside the control                                                                                           | v0.7        |
+| shrink-to-fit width of an `inline-block` whose content holds a block-level box — directly, or through a block-in-inline split such as `<a><div>card</div></a>` (#135) | the block is measured at the full available width, so the `inline-block` fills it instead of shrinking to its content (no min/max-content pass)                                  | v0.7        |
 
 ### Font simplifications (fonts increment)
 

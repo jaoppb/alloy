@@ -46,7 +46,10 @@ impl<'run, 'tree, M: TextMeasurer> Emitter<'run, 'tree, M> {
     pub(super) fn emit_node(&mut self, node_id: SnapshotId) -> Result<(), CssError> {
         let styled = self.context.node(node_id)?;
         let display = styled.style().display();
-        if display.is_none() {
+        // A block-level descendant left this run when the run split around it
+        // (CSS 2.1 §9.2.1.1): it holds no piece here, so its subtree is not
+        // walked, once per run, for nothing.
+        if !display.is_inline_level() {
             return Ok(());
         }
         if display.is_atomic_inline() {
@@ -138,9 +141,24 @@ fn line_bounds<M: TextMeasurer>(
     let mut bounds = own_line_bounds(node_id, placements);
     let styled = context.node(node_id)?;
     for child in styled.children().iter() {
-        bounds.absorb(line_bounds(context, child, placements)?);
+        bounds.absorb(child_line_bounds(context, child, placements)?);
     }
     Ok(bounds)
+}
+
+/// A child's share of its parent's line bounds. A block-level child left the
+/// run when it split around it (CSS 2.1 §9.2.1.1) and holds no piece here, so
+/// its subtree is not walked again for every run of the split.
+fn child_line_bounds<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    child: SnapshotId,
+    placements: &Placements,
+) -> Result<LineBounds, CssError> {
+    let display = context.node(child)?.style().display();
+    if !display.is_inline_level() {
+        return Ok(LineBounds::new());
+    }
+    line_bounds(context, child, placements)
 }
 
 fn own_line_bounds(node_id: SnapshotId, placements: &Placements) -> LineBounds {

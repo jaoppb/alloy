@@ -289,3 +289,35 @@ fn a_wrapped_link_is_hit_on_its_lines_and_missed_on_the_text_before_it() {
         target
     );
 }
+
+/// Block-in-inline (#135): a `<div>` inside an `<a>` splits the link's run
+/// into a block of its own, and the link still covers it.
+#[test]
+fn a_block_inside_a_link_is_clickable_as_the_link() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/card.html").unwrap();
+    let mut app = app_over(
+        FakeWeb::new().with_page(target.clone(), "<html><body>card</body></html>"),
+        attributes.initial_size(),
+    );
+    load(
+        &mut app,
+        "<html><body style=\"margin: 0\"><a href=\"card.html\">\
+         <div style=\"width: 100px; height: 50px\">card</div></a></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut app);
+
+    // Near the card's bottom-right corner: inside the block, below its one
+    // line of text.
+    let navigations_before = app.stats().navigations();
+    click(&mut system, 90.0, 45.0);
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        completed_navigation(&mut system, &mut presenter, &mut app, navigations_before),
+        target
+    );
+}

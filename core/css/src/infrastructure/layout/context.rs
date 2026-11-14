@@ -406,6 +406,12 @@ impl ContentFlow {
         self.flow
     }
 
+    /// Whether this flow placed nothing at all: no height and no fragment —
+    /// a run of line boxes that held no line box.
+    pub const fn is_vacant(&self) -> bool {
+        self.height.is_zero() && self.fragments.is_empty()
+    }
+
     pub fn into_fragments(self) -> Fragments {
         self.fragments
     }

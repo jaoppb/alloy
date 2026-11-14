@@ -5,7 +5,9 @@
 //! context. A block container stacks its in-flow children vertically, collapsing
 //! their vertical margins (CSS 2.1 §8.3.1); a run of consecutive inline-level
 //! children is handed to [`inline`] as one anonymous block, which is how
-//! `<div>text<p>x</p>more</div>` keeps all three pieces; a `display: flex`
+//! `<div>text<p>x</p>more</div>` keeps all three pieces. A block-level box
+//! inside an inline child splits that run around it (CSS 2.1 §9.2.1.1, #135),
+//! so `<span>aa<div>bb</div>cc</span>` is three rows. A `display: flex`
 //! container is handed to [`flex`].
 //!
 //! Every result is **relative**: `layout_box` answers with fragments positioned
@@ -22,6 +24,7 @@ use crate::domain::computed::display::Display;
 use crate::domain::computed::inline_style::TextAlign;
 use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::computed::logical::Direction;
+use crate::domain::computed::overflow::OverflowStyle;
 use crate::domain::computed::position::PositionType;
 use crate::domain::computed::sizing::Sizing;
 use crate::domain::computed::style::ComputedStyle;
@@ -37,6 +40,7 @@ use crate::infrastructure::layout::context::{
     LayoutContext, MAX_LAYOUT_DEPTH,
 };
 use crate::infrastructure::layout::fragment::{Fragment, Fragments, rect_at};
+use crate::infrastructure::layout::inline::InlineItem;
 use crate::infrastructure::layout::margin_collapse::{
     CollapsedMargin, MarginFlow, collapses_at_bottom, collapses_at_top,
 };
@@ -395,13 +399,14 @@ fn assemble<M: TextMeasurer>(
     let metrics = resolved.metrics;
     let edges = metrics.edges();
     let margin = edges.margin();
+    let child_margins = child_margins_of(context, node)?;
     let (top_margin, children_offset) = top_arrangement(
-        collapses_at_top(edges),
+        collapses_at_top(edges) && child_margins.adjoin_own(),
         CollapsedMargin::from_length(margin.top()),
         children.leading_margin(),
     );
     let (bottom_margin, trailing_extra) = bottom_arrangement(
-        collapses_at_bottom(edges, metrics.height()),
+        collapses_at_bottom(edges, metrics.height()) && child_margins.adjoin_own(),
         CollapsedMargin::from_length(margin.bottom()),
         children.trailing_margin(),
     );
@@ -412,7 +417,7 @@ fn assemble<M: TextMeasurer>(
         input,
         children_offset.saturating_add(trailing_extra),
     );
-    let flow = flow_of(&children, metrics, content_height, input);
+    let flow = flow_of(&children, metrics, content_height, input, child_margins);
     let fragments = assemble_fragments(
         context,
         node,
@@ -432,6 +437,57 @@ fn assemble<M: TextMeasurer>(
         flow,
         fragments,
     ))
+}
+
+/// Whether a box's children's margins may adjoin its own (CSS 2.1 §8.3.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChildMargins {
+    /// An ordinary block: its first and last child's margins may collapse
+    /// with its own, and its own two margins may collapse through it.
+    Adjoin,
+    /// A box that starts a new block formatting context (CSS 2.1 §9.4.1): it
+    /// keeps its children's margins inside and its own two margins apart.
+    Contained,
+}
+
+impl ChildMargins {
+    const fn adjoin_own(self) -> bool {
+        matches!(self, Self::Adjoin)
+    }
+}
+
+/// Whether `node` starts a new block formatting context: an `inline-block`, a
+/// flex item, a scroll container, the root element — and the document box
+/// above it, which stands for the initial containing block.
+fn child_margins_of<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node: &StyledNode,
+) -> Result<ChildMargins, CssError> {
+    if node.style().display().is_atomic_inline() {
+        return Ok(ChildMargins::Contained);
+    }
+    let Some(parent_id) = node.parent() else {
+        return Ok(ChildMargins::Contained);
+    };
+    let parent = context.node(parent_id)?;
+    let contained = is_scroll_container(node, parent)
+        || parent.parent().is_none()
+        || parent.style().display() == Display::Flex;
+    if contained {
+        return Ok(ChildMargins::Contained);
+    }
+    Ok(ChildMargins::Adjoin)
+}
+
+/// Whether `node` is laid out as a scroll container. The root's first
+/// `<body>` gives its `overflow` to the viewport while the root's is
+/// `visible` (CSS Overflow L3 §3.3), so its used value is `visible` — the
+/// common `body { overflow-x: hidden }` must not stop its margins collapsing.
+/// Its computed value, which its children inherit, is untouched.
+fn is_scroll_container(node: &StyledNode, parent: &StyledNode) -> bool {
+    let gives_overflow_to_viewport =
+        node.is_body_of_root() && parent.style().overflow() == OverflowStyle::initial();
+    node.style().overflow().is_scroll_container() && !gives_overflow_to_viewport
 }
 
 /// A box that collapses through reports **one** margin set holding all four
@@ -493,14 +549,17 @@ fn used_content_height(
 }
 
 /// Whether this box's own top and bottom margins end up adjoining: nothing of
-/// its own may separate them, and its children must have collapsed through too.
+/// its own may separate them, its children must have collapsed through too,
+/// and it must not start a block formatting context (CSS 2.1 §8.3.1).
 const fn flow_of(
     children: &ContentFlow,
     metrics: BoxMetrics,
     content_height: Au,
     input: BlockInput,
+    child_margins: ChildMargins,
 ) -> MarginFlow {
-    let separated = !children.flow().collapses_through()
+    let separated = !child_margins.adjoin_own()
+        || !children.flow().collapses_through()
         || !content_height.is_zero()
         || !metrics.inner_vertical().is_zero()
         || metrics.height().is_some()
@@ -591,7 +650,7 @@ fn keep_if_boxed(kept: &mut Vec<SnapshotId>, styled: &StyledNode, child: Snapsho
 /// carrying text of its own (a text node blockified by a flex container, an
 /// `<input>` label) — that text as the container's only line content.
 enum Segment {
-    Inline(Vec<SnapshotId>),
+    Inline(Vec<InlineItem>),
     Block(SnapshotId),
     OwnText(SnapshotId),
 }
@@ -649,19 +708,38 @@ fn push_child<M: TextMeasurer>(
         return Ok(());
     }
     if display.is_inline_level() {
-        push_inline(segments, child);
-        return Ok(());
+        return push_inline_child(context, segments, child);
     }
     segments.push(Segment::Block(child));
     Ok(())
 }
 
-fn push_inline(segments: &mut Vec<Segment>, child: SnapshotId) {
+/// An inline-level child joins the current run of line boxes. A block-level
+/// box inside it splits that run (CSS 2.1 §9.2.1.1): the child's content
+/// before the block stays in the run, the block is stacked as its own
+/// segment, and the content after it opens the next run — which later inline
+/// siblings join.
+fn push_inline_child<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    segments: &mut Vec<Segment>,
+    child: SnapshotId,
+) -> Result<(), CssError> {
+    let mut after = None;
+    for block in inline::block_descendants(context, child)?.iter() {
+        push_inline(segments, InlineItem::between(child, after, Some(block)));
+        segments.push(Segment::Block(block));
+        after = Some(block);
+    }
+    push_inline(segments, InlineItem::between(child, after, None));
+    Ok(())
+}
+
+fn push_inline(segments: &mut Vec<Segment>, item: InlineItem) {
     if let Some(Segment::Inline(items)) = segments.last_mut() {
-        items.push(child);
+        items.push(item);
         return;
     }
-    segments.push(Segment::Inline(vec![child]));
+    segments.push(Segment::Inline(vec![item]));
 }
 
 fn push_own_text(node: &StyledNode, segments: &mut Vec<Segment>) {
@@ -771,8 +849,14 @@ impl BlockStack {
     }
 
     /// Places one anonymous block of line boxes: it separates the margins on
-    /// either side of it, so nothing collapses through.
+    /// either side of it, so nothing collapses through. One that holds no
+    /// line box — a whitespace-only run between blocks, the empty side of a
+    /// block-in-inline split — is not there at all for margins (CSS 2.1
+    /// §8.3.1, §9.2.1.1): they collapse through it.
     fn absorb_lines(&mut self, flow: ContentFlow) {
+        if flow.is_vacant() {
+            return;
+        }
         self.leading.get_or_insert(CollapsedMargin::ZERO);
         let vertical = self.cursor.saturating_add(self.pending.resolve());
         let height = flow.height();
