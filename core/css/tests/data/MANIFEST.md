@@ -274,13 +274,14 @@ Form controls receive UA default styles according to WHATWG HTML §15.5 and §15
 
 A replaced element (`img`, `video`, `canvas`, `iframe`, `object`, `embed`, `svg`) is sized from the author's `width` /
 `height`, the natural size the `NaturalSizes` port reports, then the ratio of its `width` / `height` attributes, then
-the default — 0×0 for `img`, 300×150 otherwise (CSS 2.1 §10.3.2, §10.6.2; issue #83, ADR-0028). An unavailable `<img>`
-with a non-empty `alt` is laid out as that text.
+the default — 0×0 for `img`, 300×150 otherwise (CSS 2.1 §10.3.2, §10.6.2; issue #83, ADR-0028). A `<canvas>`'s natural
+size is its bitmap: its `width` / `height` attributes, 300×150 by default. An unavailable `<img>` with a non-empty `alt`
+is laid out as that text.
 
 | gap                                                                 | behaviour instead                                                                                          | tracked for |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------- |
 | `object-fit` / `object-position`                                    | the image is stretched to the content box                                                                  | #70         |
-| the public `aspect-ratio` property                                  | refused; only the attribute ratio of `img`, `video`, `canvas` is honoured, and only in whole pixels         | v0.7        |
+| the public `aspect-ratio` property                                  | refused; only the attribute ratio of `img` and `video` (and a `canvas`'s bitmap) is honoured                  | v0.7        |
 | `srcset` / `sizes`, image density                                   | one image pixel is one CSS pixel                                                                           | v0.7        |
 | clipping an `alt` text to a sized box; the broken-image icon        | a long `alt` overflows the box the `width` / `height` give it; an unavailable image without `alt` is empty | v0.7        |
 | `min-width` / `max-width` constraints on the natural size (§10.4)   | not applied to a replaced box                                                                              | v0.7        |

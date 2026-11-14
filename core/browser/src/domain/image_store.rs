@@ -69,7 +69,7 @@ impl ImageStore {
         Self::default()
     }
 
-    /// Records the decoded pixels for `id`, replacing any placeholder.
+    /// Records the decoded pixels for `id`, whatever was known before.
     pub fn insert(&mut self, id: ImageId, frame: Framebuffer) {
         self.images
             .insert(id, StoredImage::Decoded(Arc::new(frame)));
@@ -77,7 +77,7 @@ impl ImageStore {
 
     /// Marks `id` as loading unless anything is already known about it — a
     /// discovered image must resolve to *something* from the first paint.
-    pub fn reserve_placeholder(&mut self, id: ImageId) {
+    pub fn mark_loading(&mut self, id: ImageId) {
         self.images.entry(id).or_insert(StoredImage::Loading);
     }
 
@@ -165,11 +165,11 @@ mod tests {
     }
 
     #[test]
-    fn a_placeholder_never_overwrites_a_decoded_frame() {
+    fn marking_loading_never_overwrites_a_decoded_frame() {
         let id = ImageId::new(7);
         let mut store = ImageStore::new();
         store.insert(id, red_pixel());
-        store.reserve_placeholder(id);
+        store.mark_loading(id);
         let frame = store.snapshot().get(id).unwrap();
         assert_eq!(frame.as_rgba8(), red_pixel().as_rgba8());
     }
@@ -184,7 +184,7 @@ mod tests {
     fn a_reserved_image_is_loading_until_decoded() {
         let id = ImageId::new(2);
         let mut store = ImageStore::new();
-        store.reserve_placeholder(id);
+        store.mark_loading(id);
         assert_eq!(store.state(id), Some(ImageState::Loading));
         store.insert(id, red_pixel());
         let size = SurfaceSize::new(1, 1).unwrap();
@@ -195,7 +195,7 @@ mod tests {
     fn a_failed_image_is_failed_and_paints_the_placeholder() {
         let id = ImageId::new(4);
         let mut store = ImageStore::new();
-        store.reserve_placeholder(id);
+        store.mark_loading(id);
         store.mark_failed(id);
         assert_eq!(store.state(id), Some(ImageState::Failed));
         let frame = store.snapshot().get(id).unwrap();
@@ -220,7 +220,7 @@ mod tests {
     fn clear_forgets_every_image() {
         let id = ImageId::new(3);
         let mut store = ImageStore::new();
-        store.reserve_placeholder(id);
+        store.mark_loading(id);
         store.clear();
         assert_eq!(store.state(id), None);
     }

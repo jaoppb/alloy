@@ -64,18 +64,18 @@ impl Document {
         &self.images
     }
 
-    /// Gives every image `found` references a placeholder until its pixels
-    /// arrive: a discovered image must resolve to *something* from the first
-    /// paint (see [`ImageStore::reserve_placeholder`]).
+    /// Marks every image `found` references as loading until its pixels
+    /// arrive, so layout waits for it instead of showing its `alt` text (see
+    /// [`ImageStore::mark_loading`]).
     pub fn reserve_placeholders(&mut self, found: &Subresources) {
         for request in found {
             if let SubresourceRequest::Image(image) = request {
-                self.images.reserve_placeholder(image.id());
+                self.images.mark_loading(image.id());
             }
         }
     }
 
-    /// Replaces `id`'s placeholder with its decoded pixels.
+    /// Records `id`'s decoded pixels.
     pub fn insert_image(&mut self, id: ImageId, frame: Framebuffer) {
         self.images.insert(id, frame);
     }

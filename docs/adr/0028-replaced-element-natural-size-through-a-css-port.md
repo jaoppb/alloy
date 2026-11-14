@@ -41,7 +41,10 @@ layout engine?
 
 ## Decision Outcome
 
-Chosen option: **Option 1**.
+Chosen option: **Option 1**. Option 2 would make an arriving image re-run the cascade, which must stay a function of the
+DOM and the sheets, and would change the closure signature every resolver passes. Option 3 would make `browser` name a
+`css` layout port, coupling the two siblings ADR-0026 keeps apart, and would still need `alloy` to know the
+node-to-image key.
 
 - **The port.** `css::NaturalSizes::resource_of(&self, node: SnapshotId) -> ReplacedResource`, where `ReplacedResource`
   is `Loaded(NaturalSize)`, `Loading` or `Unavailable`. It is infallible: a node the source knows nothing about is

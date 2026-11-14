@@ -31,8 +31,9 @@ impl ReplacedBox {
     }
 }
 
-/// How a node's own box is laid out, decided once from its tag and its
-/// resource.
+/// How a node's own box is laid out, decided in one place from its tag and
+/// its resource (asked again by each caller; the port answers the same within
+/// one layout).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OwnBox {
     /// Not a replaced element: laid out from its content.

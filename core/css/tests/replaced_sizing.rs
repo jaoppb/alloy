@@ -426,3 +426,19 @@ fn a_dimension_attribute_reads_the_same_with_or_without_px() {
         (100, 50)
     );
 }
+
+// ---- `<canvas>`: its attributes are its bitmap, its natural size ----------
+
+#[test]
+fn a_canvas_scales_its_bitmap_when_css_sets_one_axis() {
+    let laid = Laid::body("<canvas width=800 height=400 style='width:400px'></canvas>");
+    assert_eq!(laid.content_px("canvas"), (400, 200));
+    let tall = Laid::body("<canvas width=800 height=400 style='height:100px'></canvas>");
+    assert_eq!(tall.content_px("canvas"), (200, 100));
+}
+
+#[test]
+fn a_canvas_without_attributes_is_a_300_by_150_bitmap() {
+    let laid = Laid::body("<canvas style='width:600px'></canvas>");
+    assert_eq!(laid.content_px("canvas"), (600, 300));
+}

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use browser::{ImageStore, LinkTarget, LinkTargets};
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
-    StyleSheetSet, UaCascade, ViewportConstraints,
+    MonospaceMetrics, StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
 };
 use graphics::{
     Au, DisplayListBuilder, FontProvider, Framebuffer, RenderBackend, SoftwareCpuBackend,
@@ -113,8 +113,9 @@ pub fn run_render(source_html: &str, width: u32, height: u32) -> Result<Vec<u8>,
 /// `extra_sheets` is absorbed into the document's own `<style>`/`style=`
 /// rules at `Origin::Author` precedence — how the v0.5 I4 event loop feeds in
 /// a fetched `<link rel=stylesheet>` without `core/css` ever fetching
-/// anything itself. `images` maps discovered images to their pixel data; missing
-/// images fallback cleanly to a placeholder without crashing.
+/// anything itself. `images` is what became of each discovered image: layout
+/// sizes an `<img>` from it (a missing one is 0×0, or its `alt` text) and paint
+/// draws only the decoded ones.
 pub fn render_dom(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
@@ -130,7 +131,7 @@ pub fn render_dom(
         images,
         surface_size,
         font_provider.as_ref(),
-        &BlockLayout::monospace().with_natural_sizes(ImageSizes::new(images)),
+        MonospaceMetrics::new(),
         &mut backend,
     )?;
     Ok(framebuffer)
@@ -178,18 +179,20 @@ pub fn render_dom_with_links<F: FontProvider + 'static>(
         images,
         surface_size,
         font_provider.as_ref(),
-        &BlockLayout::new(measurer).with_natural_sizes(ImageSizes::new(images)),
+        measurer,
         backend,
     )
 }
 
+/// Lays `dom_tree` out and paints it over the one `images` store: layout sizes
+/// every `<img>` from it (ADR-0028) and paint draws what layout sized.
 fn render_document<F: FontProvider + 'static>(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
     images: &ImageStore,
     surface_size: SurfaceSize,
     font_provider: &F,
-    layout: &impl LayoutEngine,
+    measurer: impl TextMeasurer,
     backend: &mut impl RenderBackend,
 ) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
@@ -204,12 +207,13 @@ fn render_document<F: FontProvider + 'static>(
     let sheets = sheets.matching_viewport(&constraints);
     log_cascade_input(&sheets);
     let styled_tree = UaCascade::new().resolve(&snapshot, &sheets)?;
+    let layout = BlockLayout::new(measurer).with_natural_sizes(ImageSizes::new(images));
     let box_tree = layout.layout(&styled_tree, &constraints)?;
 
     let link_targets = collect_link_targets(&box_tree, &snapshot);
 
     let mut builder = DisplayListBuilder::new();
-    paint_box_tree(&box_tree, &styled_tree, images, font_provider, &mut builder)?;
+    paint_box_tree(&box_tree, &styled_tree, font_provider, &mut builder)?;
     let display_list = builder.build()?;
 
     backend.bind_images(Arc::new(images.snapshot()));

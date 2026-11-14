@@ -34,8 +34,9 @@ const REPLACED_TAGS: [TagName; 7] = [
 
 /// The elements whose `width` and `height` attributes also give a preferred
 /// ratio before the resource loads (HTML §15.4.3, "map to the aspect-ratio
-/// property").
-const RATIO_TAGS: [TagName; 3] = [TagName::img(), TagName::video(), TagName::canvas()];
+/// property"). `<canvas>` is on that list too, but its attributes are its
+/// bitmap's — its natural size — which already carries the ratio.
+const RATIO_TAGS: [TagName; 2] = [TagName::img(), TagName::video()];
 
 /// The default object size of an embedded element with nothing else to go on
 /// (CSS Images L3 §4.1): 300×150 CSS pixels.
@@ -72,13 +73,6 @@ impl NaturalSize {
     #[must_use]
     pub const fn height(self) -> Au {
         self.height
-    }
-
-    const fn ratio(self) -> AspectRatio {
-        AspectRatio {
-            width: self.width,
-            height: self.height,
-        }
     }
 }
 
@@ -147,7 +141,7 @@ impl DeclaredSize {
 }
 
 /// A used content-box size.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct UsedSize {
     width: Au,
     height: Au,
@@ -161,6 +155,10 @@ impl UsedSize {
     pub(crate) const fn height(self) -> Au {
         self.height
     }
+
+    fn ratio(self) -> Option<AspectRatio> {
+        AspectRatio::new(self.width, self.height)
+    }
 }
 
 /// Which default a replaced element falls back on.
@@ -168,6 +166,9 @@ impl UsedSize {
 enum ReplacedKind {
     /// An `<img>`: nothing to show, so nothing to size — 0×0 (issue #83).
     Image,
+    /// A `<canvas>`: its bitmap is its natural size, set by its `width` /
+    /// `height` attributes, 300×150 when absent (HTML §4.12.5).
+    Canvas(UsedSize),
     /// Every other replaced element: the 300×150 default object size.
     Embedded,
 }
@@ -190,7 +191,7 @@ impl ReplacedElement {
             return None;
         }
         Some(Self {
-            kind: kind_of(tag),
+            kind: kind_of(tag, node_ref),
             attribute_ratio: attribute_ratio(tag, node_ref),
         })
     }
@@ -200,9 +201,11 @@ impl ReplacedElement {
     /// other through the ratio, else through the natural size, else through the
     /// default; neither gives the natural size, else the default.
     pub(crate) fn used_size(self, resource: ReplacedResource, declared: DeclaredSize) -> UsedSize {
-        let natural = loaded_size(resource);
-        let ratio = natural.map(NaturalSize::ratio).or(self.attribute_ratio);
-        let fallback = natural.map_or_else(|| self.default_size(), natural_as_used);
+        let natural = loaded_size(resource)
+            .map(natural_as_used)
+            .or_else(|| self.own_natural_size());
+        let ratio = natural.and_then(UsedSize::ratio).or(self.attribute_ratio);
+        let fallback = natural.unwrap_or_else(|| self.default_size());
         let width = declared
             .width
             .or_else(|| scaled(ratio, declared.height, AspectRatio::width_for))
@@ -214,12 +217,22 @@ impl ReplacedElement {
         UsedSize { width, height }
     }
 
+    /// The natural size an element has without any resource: a canvas's
+    /// bitmap.
+    const fn own_natural_size(self) -> Option<UsedSize> {
+        match self.kind {
+            ReplacedKind::Canvas(bitmap) => Some(bitmap),
+            ReplacedKind::Image | ReplacedKind::Embedded => None,
+        }
+    }
+
     const fn default_size(self) -> UsedSize {
         match self.kind {
             ReplacedKind::Image => UsedSize {
                 width: Au::ZERO,
                 height: Au::ZERO,
             },
+            ReplacedKind::Canvas(bitmap) => bitmap,
             ReplacedKind::Embedded => UsedSize {
                 width: DEFAULT_OBJECT_WIDTH,
                 height: DEFAULT_OBJECT_HEIGHT,
@@ -252,11 +265,36 @@ const fn loaded_size(resource: ReplacedResource) -> Option<NaturalSize> {
     }
 }
 
-fn kind_of(tag: &TagName) -> ReplacedKind {
-    if *tag == TagName::Img {
-        return ReplacedKind::Image;
+fn kind_of(tag: &TagName, node_ref: NodeRef<'_>) -> ReplacedKind {
+    match tag {
+        TagName::Img => ReplacedKind::Image,
+        TagName::Canvas => ReplacedKind::Canvas(canvas_bitmap(node_ref)),
+        _ => ReplacedKind::Embedded,
     }
-    ReplacedKind::Embedded
+}
+
+/// A canvas's bitmap size: each attribute read with the rules for parsing
+/// non-negative integers (HTML §2.3.4.2), its default when absent or invalid.
+fn canvas_bitmap(node_ref: NodeRef<'_>) -> UsedSize {
+    UsedSize {
+        width: canvas_side(node_ref.attribute("width"), DEFAULT_OBJECT_WIDTH),
+        height: canvas_side(node_ref.attribute("height"), DEFAULT_OBJECT_HEIGHT),
+    }
+}
+
+fn canvas_side(raw: Option<&str>, default: Au) -> Au {
+    raw.and_then(non_negative_integer)
+        .and_then(Au::from_whole_px)
+        .unwrap_or(default)
+}
+
+/// Leading white space, then digits; whatever follows is ignored.
+fn non_negative_integer(raw: &str) -> Option<i32> {
+    let rest = raw.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let end = rest
+        .find(|character: char| !character.is_ascii_digit())
+        .unwrap_or(rest.len());
+    rest.get(..end)?.parse().ok()
 }
 
 fn attribute_ratio(tag: &TagName, node_ref: NodeRef<'_>) -> Option<AspectRatio> {

@@ -166,7 +166,7 @@ fn a_completed_document_is_installed_and_reports_what_to_fetch_next() {
 }
 
 #[test]
-fn every_discovered_image_has_a_placeholder_before_its_pixels_arrive() {
+fn every_discovered_image_is_loading_before_its_pixels_arrive() {
     let mut context = context();
     let target = page("index.html");
     let navigation = started(&context.navigate(target.clone()));
@@ -333,7 +333,7 @@ fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
 }
 
 #[test]
-fn a_decoded_image_replaces_its_placeholder_and_damages_the_content() {
+fn a_decoded_image_is_recorded_and_damages_the_content() {
     let mut context = context();
     let navigation = load(&mut context, "<body>hi</body>", &page("a.html"));
 

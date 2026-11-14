@@ -67,7 +67,7 @@ mod tests {
         let nodes = four_nodes();
         let mut images = ImageStore::new();
         images.insert(image_id_of(nodes[0]), frame(40, 20));
-        images.reserve_placeholder(image_id_of(nodes[1]));
+        images.mark_loading(image_id_of(nodes[1]));
         images.mark_failed(image_id_of(nodes[2]));
         let sizes = ImageSizes::new(&images);
 

@@ -187,7 +187,8 @@ pub(crate) fn layout_box<M: TextMeasurer>(
     ))
 }
 
-/// Lays an atomic inline-level box (`display: inline-block`) out for a line.
+/// Lays an atomic inline-level box out for a line: an `inline-block`, or a
+/// replaced element with `display: inline` (CSS 2.1 §9.2.2).
 ///
 /// An explicit `width` is used as-is. An `auto` width is shrink-to-fit
 /// (CSS 2.1 §10.3.9), approximated in two passes: lay the box out at the

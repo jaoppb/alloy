@@ -72,15 +72,11 @@ fn append_tag_hints(node: NodeRef<'_>, declarations: &mut String) {
     match node.tag() {
         // `<svg>`'s width/height are CSS lengths (SVG 2 §8.1), taken as written.
         Some(TagName::Svg) => append_svg_dimension_hints(node, declarations),
-        // HTML §15.4.3 "maps to the dimension properties": the embedded content
-        // and image elements (issue #83).
+        // HTML §15.4.3 "maps to the dimension properties" (issue #83). Not
+        // `<canvas>`: its attributes are its bitmap's natural size, mapped only
+        // to `aspect-ratio`, so an author `width` alone keeps the ratio.
         Some(
-            TagName::Img
-            | TagName::Video
-            | TagName::Canvas
-            | TagName::Iframe
-            | TagName::Object
-            | TagName::Embed,
+            TagName::Img | TagName::Video | TagName::Iframe | TagName::Object | TagName::Embed,
         ) => append_dimension_hints(node, declarations),
         Some(TagName::Input) => append_input_size_hint(node, declarations),
         Some(TagName::Textarea) => append_textarea_dimensions_hint(node, declarations),

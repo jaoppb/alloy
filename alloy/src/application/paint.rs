@@ -4,10 +4,12 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
-use browser::{ImageState, ImageStore, image_id_of};
+use browser::image_id_of;
 use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
-use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
+use css::{
+    EdgeSizes, INITIAL_FONT_SIZE, IntrinsicSize, LayoutBox, LayoutBoxTree, StyledNode, StyledTree,
+};
 use graphics::{
     Au, Color, DisplayListBuilder, FontId, FontProvider, GlyphId, GlyphInstance, GlyphRun,
     GraphicsError, Point, PxRect, Rect, Size,
@@ -20,12 +22,11 @@ pub const DEFAULT_FONT: FontId = FontId::new(1);
 pub fn paint_box_tree<F: FontProvider>(
     box_tree: &LayoutBoxTree,
     styled_tree: &StyledTree,
-    images: &ImageStore,
     font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     for laid_out in box_tree.boxes_in_document_order() {
-        paint_single_box(laid_out, styled_tree, images, font_provider, builder)?;
+        paint_single_box(laid_out, styled_tree, font_provider, builder)?;
     }
     Ok(())
 }
@@ -33,7 +34,6 @@ pub fn paint_box_tree<F: FontProvider>(
 fn paint_single_box<F: FontProvider>(
     laid_out: &LayoutBox,
     styled_tree: &StyledTree,
-    images: &ImageStore,
     font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
@@ -49,7 +49,7 @@ fn paint_single_box<F: FontProvider>(
     paint_borders(laid_out, styled_node, builder)?;
     paint_outline(laid_out, styled_node, builder)?;
     paint_text(laid_out, styled_node, font_provider, builder)?;
-    paint_image(laid_out, images, builder)
+    paint_image(laid_out, builder)
 }
 
 fn paint_background(
@@ -312,15 +312,17 @@ fn paint_vertical_border(
     builder.draw_rect(rect_to_px_rect(Rect::new(origin, size)), color)
 }
 
+/// Draws a replaced box's decoded image — exactly when layout sized the box
+/// from it (`IntrinsicSize::Natural`), so layout and paint never disagree on
+/// whether an image is there (issue #83).
 fn paint_image(
     laid_out: &LayoutBox,
-    images: &ImageStore,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    let image_id = image_id_of(laid_out.node());
-    if !matches!(images.state(image_id), Some(ImageState::Decoded(_))) {
+    if !matches!(laid_out.intrinsic_size(), IntrinsicSize::Natural(_)) {
         return Ok(());
     }
+    let image_id = image_id_of(laid_out.node());
     let content = laid_out.content();
     if content.is_empty() {
         return Ok(());

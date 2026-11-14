@@ -281,10 +281,11 @@ Additive; nothing a consumer has to change.
   (`alloy/src/application/image_sizes.rs`); `core/css` never sees the store.
 - **A replaced box is sized** from the author's `width` / `height`, the resource's natural size and — before it loads —
   the ratio of the element's own `width` / `height` attributes (CSS 2.1 §10.3.2, §10.6.2; WHATWG HTML §15.4.3). With
-  none of them an `<img>` is 0×0 and every other replaced element takes the 300×150 default object size. A block-level
-  replaced box with `width: auto` no longer fills its containing block. Its children (fallback content) are never laid
-  out. The `width` / `height` attributes of `img`, `video`, `canvas`, `iframe`, `object` and `embed` are presentational
-  hints, as `svg`'s already were.
+  none of them an `<img>` is 0×0 and every other replaced element takes the 300×150 default object size; a `<canvas>`'s
+  natural size is its bitmap, its `width` / `height` attributes (default 300×150). A block-level replaced box with
+  `width: auto` no longer fills its containing block. Its children (fallback content) are never laid out. The `width` /
+  `height` attributes of `img`, `video`, `iframe`, `object` and `embed` are presentational hints, as `svg`'s already
+  were; a `<canvas>`'s are not (HTML §15.4.3 maps them only to `aspect-ratio`).
 - **`LayoutBox::intrinsic_size()` gains `IntrinsicSize::Natural(NaturalSize)`** for a box whose resource is loaded; a
   box still `Loading` is `Pending` unless the author pinned both axes; an `Unavailable` one is `Resolved` — it was
   `Pending` before, for every replaced element whatever its resource. A line fragment (text, or an inline box's line) is
