@@ -357,20 +357,31 @@ impl<'snapshot> NodeRef<'snapshot> {
     /// element whose `overflow` CSS Overflow L3 §3.3 gives to the viewport.
     #[must_use]
     pub fn is_body_of_root(self) -> bool {
+        // Called for every node by the styled tree: answer the cheap tag
+        // checks first, so only a `<body>` under `<html>` ever scans siblings.
+        if !self.tag().is_some_and(TagName::is_body) {
+            return false;
+        }
         let Some(parent) = self.parent().and_then(|id| self.snapshot.node(id)) else {
             return false;
         };
-        let parent_is_root = parent
-            .parent()
-            .and_then(|id| self.snapshot.node(id))
-            .is_some_and(|grandparent| grandparent.kind() == SnapshotNodeKind::Document);
+        if !parent.tag().is_some_and(TagName::is_html) || !parent.is_child_of_document() {
+            return false;
+        }
         let first_body = parent.children().find(|&child| {
             self.snapshot
                 .node(child)
                 .and_then(Self::tag)
                 .is_some_and(TagName::is_body)
         });
-        parent_is_root && parent.tag().is_some_and(TagName::is_html) && first_body == Some(self.id)
+        first_body == Some(self.id)
+    }
+
+    /// Whether this node's parent is the document node — the root element.
+    fn is_child_of_document(self) -> bool {
+        self.parent()
+            .and_then(|id| self.snapshot.node(id))
+            .is_some_and(|parent| parent.kind() == SnapshotNodeKind::Document)
     }
 
     /// The value of attribute `name`, or `None`.
