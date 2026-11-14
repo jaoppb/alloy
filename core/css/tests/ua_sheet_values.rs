@@ -15,8 +15,8 @@ use css::domain::computed::text_advance::{
 };
 use css::domain::computed::visual::BorderStyle;
 use css::{
-    CascadeResolver, ComputedStyle, CssColor, FontFamily, GenericFamily, Length, LengthEdges,
-    Sizing, UaCascade, collect_style_sheets, snapshot,
+    CascadeResolver, ComputedStyle, CssColor, Display, FontFamily, GenericFamily, Length,
+    LengthEdges, Sizing, UaCascade, Visibility, collect_style_sheets, snapshot,
 };
 
 /// The computed style of the element carrying `id="target"` in `body`.
@@ -235,13 +235,13 @@ fn a_form_directly_inside_a_table_part_generates_no_box() {
     let style = style_of(
         "<style>form { display: block }</style><table><tr><form id=target></form><td>x</td></tr></table>",
     );
-    assert_eq!(style.display(), css::Display::None);
+    assert_eq!(style.display(), Display::None);
 }
 
 #[test]
 fn a_hidden_input_stays_hidden_against_an_author_display() {
     let style = style_of("<style>input { display: block }</style><input id=target type=hidden>");
-    assert_eq!(style.display(), css::Display::None);
+    assert_eq!(style.display(), Display::None);
 }
 
 #[test]
@@ -347,15 +347,17 @@ fn paragraphs_and_headings_honour_the_align_hint() {
     }
 }
 
+/// `element` where tree construction keeps a `<tag>`: a cell inside a row,
+/// any other table part directly inside a table.
+fn wrap_in_table(tag: &str, element: &str) -> String {
+    match tag {
+        "td" | "th" => format!("<table><tr>{element}</tr></table>"),
+        _ => format!("<table>{element}</table>"),
+    }
+}
+
 #[test]
 fn table_parts_honour_the_align_hint() {
-    // Cells only survive tree construction inside a row; the rest inside a table.
-    let in_table = |tag: &str| -> fn(&str) -> String {
-        if matches!(tag, "td" | "th") {
-            return |element| format!("<table><tr>{element}</tr></table>");
-        }
-        |element| format!("<table>{element}</table>")
-    };
     for tag in ["thead", "tbody", "tfoot", "tr", "td", "th"] {
         for (hint, expected) in [
             ("left", TextAlign::Left),
@@ -366,7 +368,7 @@ fn table_parts_honour_the_align_hint() {
             ("justify", TextAlign::Justify),
         ] {
             assert_eq!(
-                aligned(tag, hint, in_table(tag)),
+                aligned(tag, hint, |element| wrap_in_table(tag, element)),
                 expected,
                 "<{tag} align={hint}>"
             );
@@ -395,13 +397,13 @@ fn a_table_frame_sets_the_tables_own_border_style() {
 fn a_hidden_table_part_collapses_once_an_author_displays_it() {
     let style =
         style_of("<table><tr id=target hidden style='display:block'><td>x</td></tr></table>");
-    assert_eq!(style.visibility(), css::Visibility::Collapse);
+    assert_eq!(style.visibility(), Visibility::Collapse);
 }
 
 #[test]
 fn a_hidden_embed_is_a_zero_size_inline_box() {
     let style = style_of("<embed id=target hidden>");
-    assert_eq!(style.display(), css::Display::Inline);
+    assert_eq!(style.display(), Display::Inline);
     assert_eq!(style.width(), Sizing::Fixed(Length::Pixels(0.0)));
     assert_eq!(style.height(), Sizing::Fixed(Length::Pixels(0.0)));
 }
