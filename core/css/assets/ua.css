@@ -444,11 +444,26 @@ th[nowrap] {
 }
 
 /*
- * The `frame` hint, case-sensitively like the `align` hints. It only sets
- * the table's own border style, so it draws nothing until an author gives
- * the table a border width; the `rules` hints are left out (MANIFEST:
- * presentational hints).
+ * The `frame` and `rules` hints, case-sensitively like the `align` hints.
+ * They set only the table's own border style and colour, so they draw
+ * nothing until an author gives the table a border width. The cell and
+ * group borders of `rules` need `border-collapse` and are left out
+ * (MANIFEST: presentational hints). `rules` comes first so a `frame` on the
+ * same table wins, as in the spec.
  */
+table[rules="none"],
+table[rules="groups"],
+table[rules="rows"],
+table[rules="cols"],
+table[rules="all"] {
+	border-style: hidden;
+}
+
+table[rules="none"],
+table[rules="groups"],
+table[rules="rows"],
+table[rules="cols"],
+table[rules="all"],
 table[frame="void"],
 table[frame="above"],
 table[frame="below"],
@@ -623,6 +638,19 @@ button,
 select,
 textarea {
 	box-sizing: border-box;
+}
+
+/*
+ * The spec centres a button's label block-wise. `align-content` only takes
+ * effect in a flex container here, so the label still sits at the top
+ * (MANIFEST: controls row); `::file-selector-button` is refused.
+ */
+button,
+input[type="color"],
+input[type="reset"],
+input[type="button"],
+input[type="submit"] {
+	align-content: center;
 }
 
 /* A control does not take its text setting from the surrounding text. */

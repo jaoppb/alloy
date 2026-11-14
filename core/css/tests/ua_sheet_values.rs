@@ -7,13 +7,13 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use css::domain::computed::BorderColor;
 use css::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use css::domain::computed::text_advance::{
     FontStyle, FontWeight, LetterSpacing, LineHeight, TextDecoration, TextDecorationStyle,
     TextTransform, WordSpacing,
 };
 use css::domain::computed::visual::BorderStyle;
+use css::domain::computed::{AlignContent, BorderColor};
 use css::{
     CascadeResolver, ComputedStyle, CssColor, Display, FontFamily, GenericFamily, Length,
     LengthEdges, Sizing, UaCascade, Visibility, collect_style_sheets, snapshot,
@@ -384,13 +384,48 @@ fn table_parts_honour_the_align_hint() {
 }
 
 #[test]
-fn a_table_frame_sets_the_tables_own_border_style() {
+fn a_table_frame_or_rules_sets_the_tables_own_border_style_and_colour() {
     let style = style_of("<table id=target frame=above><tr><td>x</td></tr></table>");
     let sides = style.visual().border_styles();
     assert_eq!(sides.top(), BorderStyle::Outset);
     assert_eq!(sides.right(), BorderStyle::Hidden);
     assert_eq!(sides.bottom(), BorderStyle::Hidden);
     assert_eq!(sides.left(), BorderStyle::Hidden);
+    let black = BorderColor::Color(CssColor::BLACK);
+    assert_eq!(style.visual().border_colors().top(), black);
+
+    let ruled = style_of("<table id=target rules=all><tr><td>x</td></tr></table>");
+    assert_eq!(ruled.visual().border_styles().top(), BorderStyle::Hidden);
+    assert_eq!(ruled.visual().border_colors().top(), black);
+    let both = style_of("<table id=target rules=all frame=box><tr><td>x</td></tr></table>");
+    assert_eq!(
+        both.visual().border_styles().top(),
+        BorderStyle::Outset,
+        "frame wins over rules"
+    );
+}
+
+#[test]
+fn a_button_centres_its_label_block_wise() {
+    for markup in [
+        "<button id=target>x</button>",
+        "<input id=target type=submit>",
+        "<input id=target type=reset>",
+        "<input id=target type=button>",
+        "<input id=target type=color>",
+    ] {
+        assert_eq!(
+            style_of(markup).flex().align_content(),
+            AlignContent::Center,
+            "{markup}"
+        );
+    }
+    let text = style_of("<input id=target type=text>");
+    assert_ne!(
+        text.flex().align_content(),
+        AlignContent::Center,
+        "a text input is not a button"
+    );
 }
 
 #[test]
