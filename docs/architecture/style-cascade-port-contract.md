@@ -11,7 +11,7 @@ its contract record: the state of all seven mandatory items at the `I3` freeze p
 | 3    | Boundary aggregates: domain-owned, `#[non_exhaustive]`, schema version    | ✅ `DomSnapshot`, `StyledTree`, `LayoutBoxTree`, `ComputedStyle`, `StyledNode`, `LayoutBox` all domain-owned in `core/css`, `#[non_exhaustive]`; `css::PORT_SCHEMA_VERSION` is the single version knob. **`= 15`** — B4 reshaped `ComputedStyle` / `StyledNode` / `LayoutBox`, the fonts increment added `ComputedStyle::font_family`, `5` widened `SUPPORTED_PROPERTIES` to accept the `background` / `border` shorthands, `6` added `PositionStyle`, `SizingConstraints`, `OverflowStyle` (49 properties), `7` added `VisualStyle`, `TextAdvanceStyle`, `GridStyle`, `LogicalStyle`, expanding to 133 properties, `8` (the PR #19 review round) made `ComputedStyle` `Clone` but not `Copy`, its grid group behind a shared `Arc` (§3), `9` (issue #63) added the inherited `visibility` (`Visibility`), `10` (issue #64) the outline properties, and `11` (issue #134) one `LayoutBox` fragment per line for inline boxes and text, with `FragmentText`, `12` (issue #135) `StyledNode::is_body_of_root` and `OverflowStyle::is_scroll_container`, `13` (issue #136) `inline` as the initial `display`, with the root blockified, `14` (issue #82) `StyledNode::role` and `NodeRole` for `<br>`, and `15` (issue #83) the `NaturalSizes` port and replaced-element sizing. |
 | 4    | Exactly one typed error, source location                                  | ✅ `CssError`, `#[non_exhaustive]`, one enum shared by the three fallible traits (`NaturalSizes::resource_of` is infallible); `CssStage` names which stage raised it, `SourceSpan` carries line/column where the parser produced one                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 5    | Written lifecycle & concurrency contract                                  | ✅ §5 below                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `css::application::conformance::run_css_conformance`; `UaCascade` / `BlockLayout` / `FontBackedMeasurer` (real adapters) and `MockCascadeResolver` / `MockLayoutEngine` / `MockTextMeasurer` (reference mocks) both pass it (`tests/css_conformance.rs`); `NoResources`, `BlockLayout`'s default, is the reference `NaturalSizes` adapter and runs under it, and `alloy`'s `ImageSizes` is the real one (schema `15`). `--no-default-features` builds and tests the crate with no script-facing adapter linked (`core/css/Cargo.toml`'s `builtin-adapters` feature — see §6 below)                                                                                                                                                                                                                                                                                                                     |
+| 6    | Conformance suite + reference adapter + `no-<adapter>`                    | ✅ `css::application::conformance::run_css_conformance`; `UaCascade` / `BlockLayout` / `FontBackedMeasurer` (real adapters) and `MockCascadeResolver` / `MockLayoutEngine` / `MockTextMeasurer` (reference mocks) both pass it (`tests/css_conformance.rs`). `NaturalSizes` (schema `15`) has no conformance check yet: the suite's fixture holds no replaced element. Its reference adapter `NoResources` (`BlockLayout`'s default) and the sizing rules are covered by `tests/replaced_sizing.rs` and `tests/initial_display.rs`; `alloy`'s `ImageSizes` is the real adapter. `--no-default-features` builds and tests the crate with no script-facing adapter linked (`core/css/Cargo.toml`'s `builtin-adapters` feature — see §6 below)                                                                                                                                                                                                                                                                                                                     |
 | 7    | Frozen-API milestone                                                      | ✅ Frozen at `I3` (end of B4). `css::PORT_SCHEMA_VERSION = 15` is that surface (B4 froze it at `3`; fonts bumped to `4`; unstyled sites bumped to `5`; positioning/constraints/overflow bumped to `6`; visual/typography/grid/logical parallel tracks bumped to `7`; the PR #19 review round bumped to `8`; issue #63 bumped to `9`; issue #64 bumped to `10`; issue #134 bumped to `11`; issue #135 bumped to `12`; issue #136 bumped to `13`; issue #82 bumped to `14`; issue #83 bumped to `15`); any further boundary change bumps it and adds a `PRD-007` migration note                                                                                                                                                                                                                                                                                                                      |
 
 ---
@@ -29,7 +29,7 @@ were designed object-safe from `B0`, and `NaturalSizes` (schema `15`) follows th
 
 Every parameter and return type is a concrete, `#[non_exhaustive]` boundary aggregate — no `impl Trait`, no generic
 method, no associated type. `&dyn CascadeResolver`, `&dyn LayoutEngine`, `&dyn TextMeasurer` and `&dyn NaturalSizes` all
-compile. `application/conformance.rs` takes the first three as `dyn`; `core/css/src/infrastructure/layout/context.rs`'s
+compile. `application/conformance.rs` takes the first two as `dyn`; `core/css/src/infrastructure/layout/context.rs`'s
 `LayoutContext` holds the measurer generically (`measurer: &'tree M`) and the natural-size source as
 `natural_sizes: &'tree dyn NaturalSizes`. `ADR-0011` item 2 is satisfied with no companion trait, the same shape
 `graphics::RenderBackend` uses.
@@ -160,8 +160,9 @@ values the caller owns; nothing survives inside an adapter between one `resolve`
 
 There is no suspend/resume point and no re-entrancy hazard: `resolve`/`layout`/`measure` are ordinary recursive
 functions over an immutable input tree, never yielding control back to a caller-supplied callback mid-call. Unlike
-`RuntimeEngine`'s native-binding re-entrancy concern, nothing on this port ever calls back into script or into another
-port.
+`RuntimeEngine`'s native-binding re-entrancy concern, nothing on this port ever calls back into script; `layout`'s only
+outward calls are to the two Rust lookup ports it was built with, `TextMeasurer` and `NaturalSizes`, which never call
+back into it.
 
 ### 5.5 Cancellation
 
@@ -203,11 +204,13 @@ tree-shaped input.
   whole snapshot, `PRD-007:78`), no foreign type escaping the `StyledTree`, and graceful handling of an empty document.
 - `core/css/tests/css_conformance.rs` runs it against **both** pairs: the real adapters (`UaCascade` + `BlockLayout`)
   and the reference mocks (`MockCascadeResolver` + `MockLayoutEngine`, `infrastructure/mock.rs`) —
-  `the_builtin_rust_adapters_pass_conformance` and `the_port_mocks_pass_conformance`. `BlockLayout::new` lays out over
-  `NoResources`, the reference `NaturalSizes` adapter (every replaced element `Unavailable`), so the real-adapter run
-  exercises it; `alloy`'s `ImageSizes` (`alloy/src/application/image_sizes.rs`) is the adapter over a page's images.
-  `core/css/tests/port_swap.rs` (`swapping_the_resolver_needs_no_change_to_the_other_aggregates`) additionally proves an
-  adapter is swappable without touching the boundary aggregates.
+  `the_builtin_rust_adapters_pass_conformance` and `the_port_mocks_pass_conformance`. `NaturalSizes` is not in the
+  suite: its fixture holds no replaced element, so `resource_of` is never called there. Its reference adapter
+  `NoResources` (every replaced element `Unavailable`, `BlockLayout`'s default) and the sizing it drives are covered by
+  `core/css/tests/replaced_sizing.rs` and `core/css/tests/initial_display.rs`; `alloy`'s `ImageSizes`
+  (`alloy/src/application/image_sizes.rs`) is the adapter over a page's images. `core/css/tests/port_swap.rs`
+  (`swapping_the_resolver_needs_no_change_to_the_other_aggregates`) additionally proves an adapter is swappable without
+  touching the boundary aggregates.
 - `core/css/Cargo.toml`'s `builtin-adapters` feature (default-on) gates nothing yet — every adapter this crate ships is
   Rust, and the scriptable `.rhai` cascade adapter of `PRD-007` §3.4 lives in `core/runtime/rhai-bindings`, never here.
   `cargo test -p css --no-default-features` therefore already builds and tests exactly the same code as the default
