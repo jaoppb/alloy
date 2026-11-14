@@ -24,12 +24,14 @@ designed object-safe from `B0`:
 - `CascadeResolver::resolve(&self, dom: &DomSnapshot, sheets: &StyleSheetSet) -> Result<StyledTree, CssError>`
 - `LayoutEngine::layout(&self, styled: &StyledTree, constraints: &ViewportConstraints) -> Result<LayoutBoxTree, CssError>`
 - `TextMeasurer::measure(&self, run: &TextRun, style: &ComputedText) -> Result<TextMetrics, CssError>`
+- `NaturalSizes::resource_of(&self, node: SnapshotId) -> ReplacedResource` (since schema `15`, issue #83, ADR-0028 —
+  infallible: a node the source knows nothing about is `ReplacedResource::Unavailable`)
 
 Every parameter and return type is a concrete, `#[non_exhaustive]` boundary aggregate — no `impl Trait`, no generic
 method, no associated type. `&dyn CascadeResolver`, `&dyn LayoutEngine` and `&dyn TextMeasurer` all compile and are
 exactly what `core/css/src/infrastructure/layout/context.rs`'s `LayoutContext` holds
-(`measurer: &'tree dyn TextMeasurer`) and what `application/conformance.rs` takes. `ADR-0011` item 2 is satisfied with
-no companion trait, the same shape `graphics::RenderBackend` uses.
+(`natural_sizes: &'tree dyn NaturalSizes`) and what `application/conformance.rs` takes. `ADR-0011` item 2 is satisfied
+with no companion trait, the same shape `graphics::RenderBackend` uses.
 
 ---
 
@@ -58,6 +60,7 @@ first that is not: it removes `ComputedStyle`'s `Copy` and changes several publi
 | `12`    | `StyledNode`, `NodeRef`, `OverflowStyle`                                               | Issue #135 (#81). Additive. `StyledNode::is_body_of_root` (from `NodeRef::is_body_of_root`) records whether a node is the root `<html>`'s first `<body>`, the structural fact a layout engine needs to apply CSS Overflow L3 §3.3 (body's `overflow` goes to the viewport while the root's is `visible`) as a used value without changing the computed one; `OverflowStyle::is_scroll_container` answers `hidden`/`scroll`/`auto`. See `PRD-007` §6.                                                                                                                             |
 | `13`    | `ComputedStyle`, `Display`                                                             | Issue #136 (#81). **Not additive.** `ComputedStyle::initial()` and `Display::default()` are `Display::Inline` (CSS Display L3 §2), no longer `Block`; `StyledTree` blockifies the root element for every resolver (`Display::blockified`, §2.7). An element `ua.css` names no display for — the replaced elements aside, which keep a stopgap `inline-block` until #83 — is inline. See `PRD-007` §6.                                                                                                                                                                            |
 | `14`    | `StyledTree`, `StyledNode`, `NodeRole`                                                 | Issue #82. Additive. `StyledNode::role()` answers a new `#[non_exhaustive]` `NodeRole` (`Ordinary`, `LineBreak`); a `<br>` is `LineBreak`, and the inline formatting context ends the current line box at it, keeping a strut-high empty line when the line holds nothing else. `StyledTree` coerces a `<br>`'s computed `display` to `inline` unless it is `none`, for every resolver. See `PRD-007` §6.                                                                                                                                                                        |
+| `15`    | `NaturalSizes`, `BlockLayout`, `LayoutBox`, `StyledNode`, `IntrinsicSize`              | Issue #83, ADR-0028. **Not additive.** A new `NaturalSizes` port (`resource_of(node) -> ReplacedResource`: `Loaded(NaturalSize)` / `Loading` / `Unavailable`), injected into `BlockLayout` with `with_natural_sizes` (default `NoResources`). A replaced box is sized from the author's `width` / `height`, its natural size and its attribute ratio (CSS 2.1 §10.3.2, §10.6.2); an unsized `<img>` with none is 0×0, every other replaced element 300×150. `LayoutBox::intrinsic_size()` gains `Natural(NaturalSize)`; an `Unavailable` replaced box is `Resolved`, no longer `Pending`. A replaced element with `display: inline` is an atomic inline (`StyledNode::is_atomic_inline`), so `ua.css` gives the replaced elements no `display`. See `PRD-007` §6. |
 
 The full normative inventory of all 490 W3C/MDN CSS properties and the multi-agent parallel implementation roadmap is
 recorded in [`css-properties-complete-inventory.md`](./css-properties-complete-inventory.md).

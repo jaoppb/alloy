@@ -13,6 +13,7 @@ pub mod length;
 pub mod media;
 pub mod node_role;
 pub mod parse_notes;
+pub mod replaced;
 pub mod selector;
 pub mod specificity;
 pub mod styled_tree;

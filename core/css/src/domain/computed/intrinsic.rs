@@ -1,5 +1,5 @@
-//! [`IntrinsicSize`] — the "this box is still waiting on a resource" marker
-//! (v0.5 B4, plan `:499-501`).
+//! [`IntrinsicSize`] — what a box's size owes to a resource (v0.5 B4, plan
+//! `:499-501`; `Natural` since issue #83).
 //!
 //! A replaced element (`<img>` and friends) has no size of its own until the
 //! resource behind it is decoded. Layout still has to produce a box for it, so
@@ -11,10 +11,13 @@
 //! once a decoded image arrives, and adding the field afterwards would need a
 //! migration note in `PRD-007`.
 //!
-//! It is decided by the **tree builder**, not by a
-//! [`crate::CascadeResolver`]: only [`crate::StyledTree`]'s construction pass
-//! still sees the element's tag, and making it a resolver's job would change
-//! the closure signature every adapter passes.
+//! A [`crate::StyledNode`] answers `Pending` for every replaced element (its
+//! tree builder sees the tag, `crate::domain::replaced`); layout then asks the
+//! [`crate::NaturalSizes`] port about the resource and reports, per
+//! [`crate::LayoutBox`], whether the box took a natural size, still waits on
+//! one, or is final.
+
+use crate::domain::replaced::NaturalSize;
 
 /// Whether a box's own size is final.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -28,6 +31,9 @@ pub enum IntrinsicSize {
     /// and neither axis was pinned by the cascade. Its geometry will change once
     /// the resource arrives (Phase X).
     Pending,
+    /// The box belongs to a replaced element whose resource is loaded: this is
+    /// the resource's natural size, whatever size the box was given.
+    Natural(NaturalSize),
 }
 
 impl IntrinsicSize {
@@ -36,33 +42,4 @@ impl IntrinsicSize {
     pub const fn is_pending(self) -> bool {
         matches!(self, Self::Pending)
     }
-}
-
-use html::TagName;
-
-/// The elements whose size comes from a resource rather than from CSS
-/// (HTML Living Standard, "replaced elements").
-///
-/// Deliberately a short, closed list: an element outside it is laid out from
-/// its own content, which is the correct answer for every non-replaced tag.
-pub(crate) const REPLACED_TAGS: [TagName; 7] = [
-    TagName::img(),
-    TagName::video(),
-    TagName::canvas(),
-    TagName::iframe(),
-    TagName::object(),
-    TagName::embed(),
-    TagName::svg(),
-];
-
-/// The marker an element with this tag is born with.
-#[must_use]
-pub(crate) fn for_tag(tag: Option<&TagName>) -> IntrinsicSize {
-    let Some(tag) = tag else {
-        return IntrinsicSize::Resolved;
-    };
-    if REPLACED_TAGS.contains(tag) {
-        return IntrinsicSize::Pending;
-    }
-    IntrinsicSize::Resolved
 }

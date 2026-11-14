@@ -52,7 +52,7 @@ impl<'run, 'tree, M: TextMeasurer> Emitter<'run, 'tree, M> {
         if !display.is_inline_level() {
             return Ok(());
         }
-        if display.is_atomic_inline() {
+        if styled.is_atomic_inline() {
             self.emit_atom(node_id);
             return Ok(());
         }

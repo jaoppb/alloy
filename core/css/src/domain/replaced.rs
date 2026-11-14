@@ -1,0 +1,304 @@
+//! Replaced elements (issue #83): what an `<img>` and its kin bring to layout
+//! beyond their computed style, and how their used size follows from it.
+//!
+//! The size of a replaced box comes from three places (CSS 2.1 §10.3.2,
+//! §10.6.2): the author's `width` / `height`, the resource's natural size once
+//! it is loaded, and — before that — the ratio of the element's own `width` /
+//! `height` attributes (WHATWG HTML §15.4.3). The resource is not the styled
+//! tree's to know: layout asks the [`crate::NaturalSizes`] port, which answers
+//! a [`ReplacedResource`] per node.
+//!
+//! Every length is an integer [`Au`] (`ADR-0016`): the ratio scales in `i64`
+//! and saturates, never through a float.
+
+use graphics::Au;
+use html::TagName;
+
+use crate::domain::dom_snapshot::NodeRef;
+
+/// The elements whose size comes from a resource rather than from CSS
+/// (HTML Living Standard, "replaced elements").
+///
+/// Deliberately a short, closed list: an element outside it is laid out from
+/// its own content, which is the correct answer for every non-replaced tag.
+const REPLACED_TAGS: [TagName; 7] = [
+    TagName::img(),
+    TagName::video(),
+    TagName::canvas(),
+    TagName::iframe(),
+    TagName::object(),
+    TagName::embed(),
+    TagName::svg(),
+];
+
+/// The elements whose `width` and `height` attributes also give a preferred
+/// ratio before the resource loads (HTML §15.4.3, "map to the aspect-ratio
+/// property").
+const RATIO_TAGS: [TagName; 3] = [TagName::img(), TagName::video(), TagName::canvas()];
+
+/// The default object size of an embedded element with nothing else to go on
+/// (CSS Images L3 §4.1).
+const DEFAULT_OBJECT_WIDTH: i32 = 300;
+const DEFAULT_OBJECT_HEIGHT: i32 = 150;
+
+/// The natural size of a loaded resource, in CSS pixels — one image pixel per
+/// CSS pixel (no `srcset` density).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct NaturalSize {
+    width: Au,
+    height: Au,
+}
+
+impl NaturalSize {
+    /// A `width × height` pixel resource, or `None` for an empty one or one
+    /// too large to lay out.
+    #[must_use]
+    pub fn from_pixels(width: u32, height: u32) -> Option<Self> {
+        let width = Au::from_whole_px(i32::try_from(width).ok()?)?;
+        let height = Au::from_whole_px(i32::try_from(height).ok()?)?;
+        AspectRatio::new(width, height)?;
+        Some(Self { width, height })
+    }
+
+    #[must_use]
+    pub const fn width(self) -> Au {
+        self.width
+    }
+
+    #[must_use]
+    pub const fn height(self) -> Au {
+        self.height
+    }
+
+    const fn ratio(self) -> AspectRatio {
+        AspectRatio {
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+/// What has become of the resource behind one replaced element — the answer
+/// of the [`crate::NaturalSizes`] port.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ReplacedResource {
+    /// Decoded: the box may take its natural size.
+    Loaded(NaturalSize),
+    /// Requested and not answered yet: the box's size may still change.
+    Loading,
+    /// There is none and there will be none — no `src`, a failed fetch or
+    /// decode, or a pipeline that never fetches.
+    Unavailable,
+}
+
+/// A preferred width-to-height ratio, both sides positive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct AspectRatio {
+    width: Au,
+    height: Au,
+}
+
+impl AspectRatio {
+    fn new(width: Au, height: Au) -> Option<Self> {
+        let positive = width > Au::ZERO && height > Au::ZERO;
+        positive.then_some(Self { width, height })
+    }
+
+    fn height_for(self, width: Au) -> Au {
+        scale(width, self.height, self.width)
+    }
+
+    fn width_for(self, height: Au) -> Au {
+        scale(height, self.width, self.height)
+    }
+}
+
+/// `value × numerator / denominator`, in `i64`, saturating to the `Au` range.
+fn scale(value: Au, numerator: Au, denominator: Au) -> Au {
+    let product = i64::from(value.raw()).saturating_mul(i64::from(numerator.raw()));
+    let quotient = product
+        .checked_div(i64::from(denominator.raw()))
+        .unwrap_or(0);
+    let clamped = quotient.clamp(i64::from(i32::MIN), i64::from(i32::MAX));
+    Au::from_raw(i32::try_from(clamped).unwrap_or(0))
+}
+
+/// The two axes an author gave a box — `None` for `auto`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DeclaredSize {
+    width: Option<Au>,
+    height: Option<Au>,
+}
+
+impl DeclaredSize {
+    pub(crate) const fn new(width: Option<Au>, height: Option<Au>) -> Self {
+        Self { width, height }
+    }
+
+    /// Whether both axes are declared, so no resource can change the size.
+    pub(crate) const fn is_pinned(self) -> bool {
+        self.width.is_some() && self.height.is_some()
+    }
+}
+
+/// A used content-box size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct UsedSize {
+    width: Au,
+    height: Au,
+}
+
+impl UsedSize {
+    pub(crate) const fn width(self) -> Au {
+        self.width
+    }
+
+    pub(crate) const fn height(self) -> Au {
+        self.height
+    }
+}
+
+/// Which default a replaced element falls back on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ReplacedKind {
+    /// An `<img>`: nothing to show, so nothing to size — 0×0 (issue #83).
+    Image,
+    /// Every other replaced element: the 300×150 default object size.
+    Embedded,
+}
+
+/// A replaced element as layout sees it: which default it falls back on, and
+/// the ratio its own `width` / `height` attributes give.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ReplacedElement {
+    kind: ReplacedKind,
+    attribute_ratio: Option<AspectRatio>,
+}
+
+impl ReplacedElement {
+    /// The element `node_ref` is, if it is a replaced one.
+    #[must_use]
+    pub(crate) fn for_node(node_ref: NodeRef<'_>) -> Option<Self> {
+        let tag = node_ref.tag()?;
+        if !REPLACED_TAGS.contains(tag) {
+            return None;
+        }
+        Some(Self {
+            kind: kind_of(tag),
+            attribute_ratio: attribute_ratio(tag, node_ref),
+        })
+    }
+
+    /// The used content size under `declared` for `resource` (CSS 2.1
+    /// §10.3.2, §10.6.2): both axes declared win; one declared axis gives the
+    /// other through the ratio, else through the natural size, else through the
+    /// default; neither gives the natural size, else the default.
+    pub(crate) fn used_size(self, resource: ReplacedResource, declared: DeclaredSize) -> UsedSize {
+        let natural = loaded_size(resource);
+        let ratio = natural.map(NaturalSize::ratio).or(self.attribute_ratio);
+        let fallback = natural.map_or_else(|| self.default_size(), natural_as_used);
+        let width = declared
+            .width
+            .or_else(|| ratio.zip(declared.height).map(|(r, h)| r.width_for(h)))
+            .unwrap_or(fallback.width);
+        let height = declared
+            .height
+            .or_else(|| ratio.zip(declared.width).map(|(r, w)| r.height_for(w)))
+            .unwrap_or(fallback.height);
+        UsedSize { width, height }
+    }
+
+    fn default_size(self) -> UsedSize {
+        match self.kind {
+            ReplacedKind::Image => UsedSize {
+                width: Au::ZERO,
+                height: Au::ZERO,
+            },
+            ReplacedKind::Embedded => UsedSize {
+                width: Au::from_whole_px(DEFAULT_OBJECT_WIDTH).unwrap_or(Au::ZERO),
+                height: Au::from_whole_px(DEFAULT_OBJECT_HEIGHT).unwrap_or(Au::ZERO),
+            },
+        }
+    }
+}
+
+const fn natural_as_used(natural: NaturalSize) -> UsedSize {
+    UsedSize {
+        width: natural.width,
+        height: natural.height,
+    }
+}
+
+const fn loaded_size(resource: ReplacedResource) -> Option<NaturalSize> {
+    match resource {
+        ReplacedResource::Loaded(natural) => Some(natural),
+        ReplacedResource::Loading | ReplacedResource::Unavailable => None,
+    }
+}
+
+fn kind_of(tag: &TagName) -> ReplacedKind {
+    if *tag == TagName::Img {
+        return ReplacedKind::Image;
+    }
+    ReplacedKind::Embedded
+}
+
+fn attribute_ratio(tag: &TagName, node_ref: NodeRef<'_>) -> Option<AspectRatio> {
+    if !RATIO_TAGS.contains(tag) {
+        return None;
+    }
+    let width = dimension_pixels(node_ref.attribute("width")?)?;
+    let height = dimension_pixels(node_ref.attribute("height")?)?;
+    AspectRatio::new(width, height)
+}
+
+/// An attribute's value as whole pixels when it is a plain number — a
+/// percentage, or anything else, gives no ratio. The fraction of `100.5` is
+/// dropped: the ratio is integer arithmetic (`ADR-0016`).
+fn dimension_pixels(raw: &str) -> Option<Au> {
+    let trimmed = raw.trim();
+    let digits: &str = trimmed.split('.').next()?;
+    let rest = trimmed.get(digits.len()..)?;
+    let plain = !digits.is_empty()
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
+        && rest.bytes().skip(1).all(|byte| byte.is_ascii_digit());
+    if !plain {
+        return None;
+    }
+    Au::from_whole_px(digits.parse().ok()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn px(value: i32) -> Au {
+        Au::from_whole_px(value).unwrap_or(Au::ZERO)
+    }
+
+    #[test]
+    fn a_plain_dimension_attribute_is_whole_pixels() {
+        assert_eq!(dimension_pixels(" 100 "), Some(px(100)));
+        assert_eq!(dimension_pixels("100.5"), Some(px(100)));
+        assert_eq!(dimension_pixels("50%"), None);
+        assert_eq!(dimension_pixels("1.2.3"), None);
+        assert_eq!(dimension_pixels(""), None);
+    }
+
+    #[test]
+    fn an_empty_resource_has_no_natural_size() {
+        assert_eq!(NaturalSize::from_pixels(0, 10), None);
+        assert!(NaturalSize::from_pixels(4, 2).is_some());
+    }
+
+    #[test]
+    fn the_ratio_scales_in_integers() {
+        let ratio = AspectRatio {
+            width: px(3),
+            height: px(2),
+        };
+        assert_eq!(ratio.height_for(px(30)), px(20));
+        assert_eq!(ratio.width_for(px(20)), px(30));
+    }
+}

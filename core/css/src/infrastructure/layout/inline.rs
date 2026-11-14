@@ -6,7 +6,8 @@
 //! font type is named here — filled greedily into lines, and each line is then
 //! aligned by `text-align` (CSS Text L3 §7.3).
 //!
-//! An `inline-block` descendant is an **atomic inline** (CSS 2.1 §9.2.4): it is
+//! An `inline-block` descendant, or a replaced element with `display: inline`
+//! (CSS 2.1 §9.2.2, issue #83), is an **atomic inline** (CSS 2.1 §9.2.4): it is
 //! laid out as its own block container through
 //! [`block::layout_inline_block`], then sits on a line as one unbreakable piece
 //! the size of its margin box, its baseline on its bottom margin edge (the
@@ -249,7 +250,7 @@ fn collect<M: TextMeasurer>(
         run.walk.cross(node_id);
         return Ok(());
     }
-    if display.is_atomic_inline() {
+    if styled.is_atomic_inline() {
         return collect_atom(context, styled, input, run);
     }
     let font_size = box_model::font_size_of(style, input.parent_font_size());

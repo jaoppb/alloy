@@ -6,7 +6,8 @@
 //! (box-sizing and the three edges), [`margin_collapse`] (CSS 2.1 §8.3.1),
 //! [`context`] (what a formatting context reads and answers), [`fragment`]
 //! (a laid-out box before it knows where it is), [`inline`] (line boxes and
-//! text) and [`flex`] (CSS Flexbox L1).
+//! text), [`flex`] (CSS Flexbox L1) and [`replaced`] (a replaced element's
+//! own box, issue #83).
 
 mod box_model;
 mod context;
@@ -14,6 +15,7 @@ mod flex;
 mod fragment;
 mod inline;
 mod margin_collapse;
+mod replaced;
 
 pub mod block;
 

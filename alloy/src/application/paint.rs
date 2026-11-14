@@ -4,14 +4,16 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
-use browser::ImageStore;
+use browser::{ImageState, ImageStore};
 use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
 use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
 use graphics::{
     Au, Color, DisplayListBuilder, FontId, FontProvider, GlyphId, GlyphInstance, GlyphRun,
-    GraphicsError, ImageId, Point, PxRect, Rect, Size,
+    GraphicsError, Point, PxRect, Rect, Size,
 };
+
+use crate::application::image_sizes::image_id_of;
 
 /// Default font identifier used for text painting in the headless pipeline.
 pub const DEFAULT_FONT: FontId = FontId::new(1);
@@ -317,9 +319,8 @@ fn paint_image(
     images: &ImageStore,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    let raw_id = u32::try_from(laid_out.node().index()).unwrap_or(u32::MAX);
-    let image_id = ImageId::new(raw_id);
-    if !images.contains(image_id) {
+    let image_id = image_id_of(laid_out.node());
+    if !matches!(images.state(image_id), Some(ImageState::Decoded(_))) {
         return Ok(());
     }
     let content = laid_out.content();

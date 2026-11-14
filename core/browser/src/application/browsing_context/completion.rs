@@ -29,7 +29,7 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
             FetchPayload::Stylesheet(media, Ok(text)) => self.absorb_stylesheet(&text, &media),
             FetchPayload::Stylesheet(_, Err(failure)) => log_failed("stylesheet", &failure),
             FetchPayload::Image(id, Ok(frame)) => self.accept_image(id, frame),
-            FetchPayload::Image(_, Err(failure)) => log_failed("image", &failure),
+            FetchPayload::Image(id, Err(failure)) => self.reject_image(id, &failure),
         }
     }
 
@@ -104,6 +104,17 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
         };
         document.insert_image(id, frame);
         self.stats.record(Accepted::Image);
+        Effects::from_iter([self.content_damaged()])
+    }
+
+    /// A failed image is remembered as such, and the page laid out again: its
+    /// `<img>` stops waiting and may show its `alt` text (issue #83).
+    fn reject_image(&mut self, id: ImageId, failure: &FetchFailure) -> Effects {
+        log_failed("image", failure);
+        let Some(document) = self.document_to_update("image") else {
+            return Effects::none();
+        };
+        document.fail_image(id);
         Effects::from_iter([self.content_damaged()])
     }
 

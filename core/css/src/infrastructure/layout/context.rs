@@ -12,10 +12,11 @@ use std::collections::BTreeMap;
 
 use graphics::Au;
 
-use crate::application::ports::TextMeasurer;
+use crate::application::ports::{NaturalSizes, TextMeasurer};
 use crate::domain::dom_snapshot::SnapshotId;
 use crate::domain::error::{CssError, CssStage};
 use crate::domain::layout_box_tree::BoxEdges;
+use crate::domain::replaced::ReplacedResource;
 use crate::domain::styled_tree::{StyledNode, StyledTree};
 use crate::domain::text::{ComputedText, TextMetrics, TextRun};
 use crate::infrastructure::layout::fragment::Fragments;
@@ -28,12 +29,14 @@ use crate::infrastructure::layout::margin_collapse::{CollapsedMargin, MarginFlow
 /// same answer, as `MAX_NESTING_DEPTH` in the stylesheet parser.
 pub const MAX_LAYOUT_DEPTH: usize = 256;
 
-/// Everything a formatting context may read: the tree it is laying out and the
-/// text measurer behind the port — plus the one memo layout keeps, the
-/// shrink-to-fit widths already measured (see `block::layout_inline_block`).
+/// Everything a formatting context may read: the tree it is laying out, the
+/// text measurer and the replaced elements' resources behind their ports — plus
+/// the one memo layout keeps, the shrink-to-fit widths already measured (see
+/// `block::layout_inline_block`).
 pub struct LayoutContext<'tree, M> {
     styled: &'tree StyledTree,
     measurer: &'tree M,
+    natural_sizes: &'tree dyn NaturalSizes,
     fits: RefCell<BTreeMap<SnapshotId, FittedWidth>>,
 }
 
@@ -60,10 +63,15 @@ impl FittedWidth {
 }
 
 impl<'tree, M: TextMeasurer> LayoutContext<'tree, M> {
-    pub const fn new(styled: &'tree StyledTree, measurer: &'tree M) -> Self {
+    pub const fn new(
+        styled: &'tree StyledTree,
+        measurer: &'tree M,
+        natural_sizes: &'tree dyn NaturalSizes,
+    ) -> Self {
         Self {
             styled,
             measurer,
+            natural_sizes,
             fits: RefCell::new(BTreeMap::new()),
         }
     }
@@ -91,6 +99,12 @@ impl<'tree, M: TextMeasurer> LayoutContext<'tree, M> {
         self.styled
             .node(id)
             .ok_or_else(|| CssError::missing_computed_style(CssStage::Layout, id))
+    }
+
+    /// What has become of the resource behind the replaced element `node`,
+    /// through the port — layout never sees where it is kept (issue #83).
+    pub fn resource_of(&self, node: SnapshotId) -> ReplacedResource {
+        self.natural_sizes.resource_of(node)
     }
 
     /// The extent of `text` set at `font_size`, through the port — never

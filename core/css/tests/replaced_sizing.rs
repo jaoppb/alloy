@@ -1,6 +1,8 @@
 //! How a replaced element gets its size (issue #83): the `width` / `height`
 //! attributes as presentational hints (WHATWG HTML §15.4.3), with an author
-//! declaration winning over them.
+//! declaration winning over them; the natural size of a loaded resource,
+//! reached through the [`css::NaturalSizes`] port (CSS 2.1 §10.3.2, §10.6.2);
+//! the attribute ratio before it loads; and the size it gets with neither.
 //!
 //! Text is measured with [`css::BlockLayout::monospace`]: `0.6 * 16px` per
 //! glyph and `1.2 * 16px` per line.
@@ -12,20 +14,76 @@
     clippy::indexing_slicing
 )]
 
+use std::collections::BTreeMap;
+
 use css::{
-    BlockLayout, CascadeResolver, DomSnapshot, LayoutBox, LayoutBoxTree, LayoutEngine, SnapshotId,
-    UaCascade, ViewportConstraints, collect_style_sheets, snapshot,
+    BlockLayout, CascadeResolver, Display, DomSnapshot, IntrinsicSize, LayoutBox, LayoutBoxTree,
+    LayoutEngine, NaturalSize, NaturalSizes, ReplacedResource, SnapshotId, StyledTree, UaCascade,
+    ViewportConstraints, collect_style_sheets, snapshot,
 };
 use graphics::Au;
 
+/// The resources a test has "loaded", keyed by the element's tag: the first
+/// element with that tag gets it, every other replaced element is
+/// [`ReplacedResource::Unavailable`].
+#[derive(Default)]
+struct Resources {
+    by_tag: BTreeMap<&'static str, ReplacedResource>,
+}
+
+impl Resources {
+    fn with(mut self, tag: &'static str, resource: ReplacedResource) -> Self {
+        self.by_tag.insert(tag, resource);
+        self
+    }
+
+    fn resolved(self, dom: &DomSnapshot) -> Resolved {
+        let by_node = self
+            .by_tag
+            .into_iter()
+            .filter_map(|(tag, resource)| first_tagged(dom, tag).map(|node| (node, resource)))
+            .collect();
+        Resolved { by_node }
+    }
+}
+
+struct Resolved {
+    by_node: BTreeMap<SnapshotId, ReplacedResource>,
+}
+
+impl NaturalSizes for Resolved {
+    fn resource_of(&self, node: SnapshotId) -> ReplacedResource {
+        self.by_node
+            .get(&node)
+            .copied()
+            .unwrap_or(ReplacedResource::Unavailable)
+    }
+}
+
+fn first_tagged(dom: &DomSnapshot, tag: &str) -> Option<SnapshotId> {
+    dom.nodes_in_document_order()
+        .find(|&node| dom.node(node).and_then(css::NodeRef::tag_str) == Some(tag))
+}
+
+fn loaded(width: u32, height: u32) -> ReplacedResource {
+    ReplacedResource::Loaded(NaturalSize::from_pixels(width, height).unwrap())
+}
+
 struct Laid {
     dom: DomSnapshot,
+    styled: StyledTree,
     boxes: LayoutBoxTree,
 }
 
 impl Laid {
-    /// `body` (no UA body margin) laid out at an 800px viewport.
+    /// `body` (no UA body margin) laid out at an 800px viewport, with no
+    /// resource loaded.
     fn body(body: &str) -> Self {
+        Self::loading(body, Resources::default())
+    }
+
+    /// `body` laid out with `resources` behind the [`NaturalSizes`] port.
+    fn loading(body: &str, resources: Resources) -> Self {
         let markup = format!(
             "<!doctype html><html><head><style>body {{ margin: 0 }}</style></head><body>{body}</body></html>"
         );
@@ -37,16 +95,38 @@ impl Laid {
             .expect("the cascade resolves");
         let viewport = ViewportConstraints::new(px(800), px(600));
         let boxes = BlockLayout::monospace()
+            .with_natural_sizes(resources.resolved(&dom))
             .layout(&styled, &viewport)
             .expect("layout succeeds");
-        Self { dom, boxes }
+        Self { dom, styled, boxes }
     }
 
     fn tagged(&self, tag: &str) -> SnapshotId {
-        self.dom
+        first_tagged(&self.dom, tag).unwrap_or_else(|| panic!("no <{tag}>"))
+    }
+
+    fn display_of(&self, tag: &str) -> Display {
+        self.styled
+            .node(self.tagged(tag))
+            .expect("styled")
+            .style()
+            .display()
+    }
+
+    fn marker_of(&self, tag: &str) -> IntrinsicSize {
+        self.box_of(tag).intrinsic_size()
+    }
+
+    /// The single fragment of the text node `text`.
+    fn text(&self, text: &str) -> &LayoutBox {
+        let node = self
+            .dom
             .nodes_in_document_order()
-            .find(|&node| self.dom.node(node).and_then(css::NodeRef::tag_str) == Some(tag))
-            .unwrap_or_else(|| panic!("no <{tag}>"))
+            .find(|&node| self.dom.node(node).and_then(css::NodeRef::text) == Some(text))
+            .unwrap_or_else(|| panic!("no text node \"{text}\""));
+        let fragments: Vec<&LayoutBox> = self.boxes.fragments_of(node).collect();
+        assert_eq!(fragments.len(), 1, "\"{text}\" fits on one line");
+        fragments[0]
     }
 
     /// The one fragment of the first `<tag>`.
@@ -63,12 +143,12 @@ impl Laid {
     }
 }
 
-fn px(value: i32) -> Au {
+const fn px(value: i32) -> Au {
     Au::from_whole_px(value).unwrap()
 }
 
-fn whole_px(value: Au) -> i32 {
-    value.raw() / px(1).raw()
+const fn whole_px(value: Au) -> i32 {
+    value.raw().checked_div(px(1).raw()).unwrap()
 }
 
 /// Every replaced element the dimension attributes apply to (HTML §15.4.3).
@@ -99,4 +179,143 @@ fn a_dimension_attribute_on_a_non_replaced_element_is_ignored() {
     let laid = Laid::body("<div width=100 height=50>x</div>");
     let size = laid.box_of("div").content().size();
     assert_eq!(whole_px(size.width()), 800, "a div still fills its line");
+}
+
+// ---- the natural size (CSS 2.1 §10.3.2, §10.6.2) -------------------------
+
+#[test]
+fn a_loaded_image_with_no_size_from_css_takes_its_natural_size() {
+    let laid = Laid::loading("<img>", Resources::default().with("img", loaded(40, 20)));
+    assert_eq!(laid.content_px("img"), (40, 20));
+}
+
+#[test]
+fn a_css_width_alone_scales_the_height_by_the_natural_ratio() {
+    let laid = Laid::loading(
+        "<img style='width:80px'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(laid.content_px("img"), (80, 40));
+}
+
+#[test]
+fn a_css_height_alone_scales_the_width_by_the_natural_ratio() {
+    let laid = Laid::loading(
+        "<img style='height:10px'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(laid.content_px("img"), (20, 10));
+}
+
+#[test]
+fn both_css_axes_stretch_the_image_whatever_its_ratio() {
+    let laid = Laid::loading(
+        "<img style='width:10px;height:10px'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(laid.content_px("img"), (10, 10));
+}
+
+#[test]
+fn a_block_level_image_takes_its_natural_width_not_its_containing_blocks() {
+    let laid = Laid::loading(
+        "<img style='display:block'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(laid.content_px("img"), (40, 20));
+}
+
+// ---- before the resource arrives ------------------------------------------
+
+#[test]
+fn the_attribute_ratio_sizes_an_image_that_is_still_loading() {
+    let laid = Laid::loading(
+        "<img width=100 height=50 style='width:40px;height:auto'>",
+        Resources::default().with("img", ReplacedResource::Loading),
+    );
+    assert_eq!(laid.content_px("img"), (40, 20));
+}
+
+#[test]
+fn the_natural_ratio_beats_the_attribute_ratio_once_loaded() {
+    let laid = Laid::loading(
+        "<img width=100 height=50 style='width:40px;height:auto'>",
+        Resources::default().with("img", loaded(30, 30)),
+    );
+    assert_eq!(laid.content_px("img"), (40, 40));
+}
+
+#[test]
+fn an_unsized_image_that_is_loading_or_unavailable_is_empty() {
+    let loading = Laid::loading(
+        "<img>",
+        Resources::default().with("img", ReplacedResource::Loading),
+    );
+    assert_eq!(loading.content_px("img"), (0, 0));
+    let unavailable = Laid::body("<img>");
+    assert_eq!(unavailable.content_px("img"), (0, 0));
+}
+
+#[test]
+fn an_unsized_embedded_element_gets_the_default_object_size() {
+    for tag in ["video", "canvas", "iframe", "object", "embed"] {
+        let laid = Laid::body(&format!("<{tag}></{tag}>"));
+        assert_eq!(laid.content_px(tag), (300, 150), "<{tag}>");
+    }
+}
+
+// ---- an inline replaced element is an atomic inline (CSS 2.1 §9.2.2) -----
+
+#[test]
+fn an_inline_image_is_an_atomic_inline_on_its_neighbours_line() {
+    let laid = Laid::body("aa<img width=10 height=10>bb");
+    assert_eq!(laid.display_of("img"), Display::Inline, "no UA stopgap");
+    assert_eq!(laid.content_px("img"), (10, 10));
+    let before = laid.text("aa").content();
+    let after = laid.text("bb").content();
+    assert_eq!(before.min_y(), after.min_y(), "one line box");
+    assert!(
+        after.min_x() > before.max_x(),
+        "the image sits between them"
+    );
+}
+
+#[test]
+fn a_block_inside_an_inline_replaced_element_does_not_split_the_line() {
+    let laid = Laid::body("aa<video width=40 height=20>x<div>fallback</div>y</video>bb");
+    assert_eq!(laid.content_px("video"), (40, 20));
+    let before = laid.text("aa").content();
+    let after = laid.text("bb").content();
+    assert_eq!(
+        before.min_y(),
+        after.min_y(),
+        "the fallback block splits nothing"
+    );
+}
+
+// ---- what layout reports about the resource -------------------------------
+
+#[test]
+fn a_loaded_image_reports_its_natural_size() {
+    let laid = Laid::loading(
+        "<img style='width:80px'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    let natural = NaturalSize::from_pixels(40, 20).unwrap();
+    assert_eq!(laid.marker_of("img"), IntrinsicSize::Natural(natural));
+}
+
+#[test]
+fn a_loading_image_is_pending_until_both_axes_are_pinned() {
+    let resources = || Resources::default().with("img", ReplacedResource::Loading);
+    let unpinned = Laid::loading("<img style='width:20px'>", resources());
+    assert_eq!(unpinned.marker_of("img"), IntrinsicSize::Pending);
+    let pinned = Laid::loading("<img width=20 height=10>", resources());
+    assert_eq!(pinned.marker_of("img"), IntrinsicSize::Resolved);
+}
+
+#[test]
+fn an_unavailable_image_is_resolved_its_size_will_not_change() {
+    let laid = Laid::body("<img>");
+    assert_eq!(laid.marker_of("img"), IntrinsicSize::Resolved);
 }

@@ -133,7 +133,17 @@ pub mod infrastructure;
 /// at — and [`StyledTree`] keeps a `<br>` `inline` for every resolver unless
 /// its display is `none` (WHATWG HTML §15.3.4, issue #82). `PRD-007` §6
 /// carries the migration note.
-pub const PORT_SCHEMA_VERSION: u32 = 14;
+///
+/// `15` is **not additive** (issue #83, ADR-0028): a new [`NaturalSizes`] port
+/// tells [`BlockLayout`] (`with_natural_sizes`, default [`NoResources`]) what
+/// has become of each replaced element's resource; a replaced box is sized from
+/// the author's `width`/`height`, its [`NaturalSize`] and its attribute ratio
+/// (CSS 2.1 §10.3.2, §10.6.2), and reports `IntrinsicSize::Natural` once
+/// loaded; [`StyledNode::replaced`] and [`StyledNode::is_atomic_inline`] are
+/// new; a replaced element with `display: inline` is an atomic inline, so
+/// `ua.css` no longer gives `img`, `video`, `canvas`, `iframe`, `object`,
+/// `embed` or `svg` a `display`. `PRD-007` §6 carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 15;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -330,16 +340,16 @@ pub const SUPPORTED_SELECTORS: [&str; 19] = [
 pub use application::collect_sheets::collect_style_sheets;
 pub use application::conformance;
 pub use application::matching::{matches, strongest_match};
-pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
+pub use application::ports::{CascadeResolver, LayoutEngine, NaturalSizes, TextMeasurer};
 pub use application::snapshot::snapshot;
 pub use domain::color::{CssColor, ParseColorError};
 pub use domain::computed::display::ParseDisplayError;
 pub use domain::computed::outline::ParseOutlineStyleError;
 pub use domain::computed::style::INITIAL_FONT_SIZE;
 pub use domain::computed::{
-    ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, LengthEdges,
-    Outline, OutlineStyle, Overflow, OverflowStyle, PositionStyle, PositionType, Sizing,
-    SizingConstraints, Visibility, ZIndex,
+    ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, IntrinsicSize,
+    LengthEdges, Outline, OutlineStyle, Overflow, OverflowStyle, PositionStyle, PositionType,
+    Sizing, SizingConstraints, Visibility, ZIndex,
 };
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{
@@ -354,6 +364,7 @@ pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
 pub use domain::node_role::NodeRole;
 pub use domain::parse_notes::{ParseNote, ParseNotes};
+pub use domain::replaced::{NaturalSize, ReplacedElement, ReplacedResource};
 pub use domain::selector::{
     AttributeMatch, AttributeSelector, AttributeSelectors, Combinator, ComplexSelector,
     CompoundSelector, IdentifierList, NthFormula, PseudoClass, PseudoClasses, SelectorList,
@@ -368,6 +379,7 @@ pub use infrastructure::cascade::UaCascade;
 pub use infrastructure::font_backed_measurer::FontBackedMeasurer;
 pub use infrastructure::layout::BlockLayout;
 pub use infrastructure::mock::{MockCascadeResolver, MockLayoutEngine, MockTextMeasurer};
+pub use infrastructure::no_resources::NoResources;
 pub use infrastructure::parser::{
     SpannedToken, Token, TokenStream, parse_inline_style, parse_media_attribute, parse_stylesheet,
     tokenize,

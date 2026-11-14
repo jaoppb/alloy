@@ -533,3 +533,20 @@ fn hr_matches_golden() {
     let frame = decode_png(&bytes).expect("valid PNG");
     assert_matches_golden(&frame, &golden_path("hr.png"));
 }
+
+/// `<img width="100" height="50">` with no author size and no `src` (issue #83).
+const IMG_ATTRS_PAGE: &str = "<!doctype html><html><head><style>body{margin:0;background:#fff;color:#000}</style></head>\
+                              <body><img width=\"100\" height=\"50\" style=\"background:red\"></body></html>";
+
+#[test]
+fn img_width_and_height_attributes_paint_a_100_by_50_box() {
+    let options = RenderOptions::new(200, 100);
+    let bytes = render_html_to_png(IMG_ATTRS_PAGE, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    assert_eq!(frame.pixel(0, 0), Some(RED), "the box starts at the origin");
+    assert_eq!(frame.pixel(99, 49), Some(RED), "and is 100×50");
+    assert_eq!(frame.pixel(100, 0), Some(Color::WHITE), "no wider");
+    assert_eq!(frame.pixel(0, 50), Some(Color::WHITE), "no taller");
+    assert_matches_golden(&frame, &golden_path("img_attributes.png"));
+}

@@ -11,11 +11,12 @@
 use html::TagName;
 
 use crate::domain::computed::display::Display;
-use crate::domain::computed::intrinsic::{self, IntrinsicSize};
+use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
 use crate::domain::input_type::InputType;
 use crate::domain::node_role::NodeRole;
+use crate::domain::replaced::ReplacedElement;
 use crate::domain::text::TextRun;
 
 /// One node's computed style, plus its place in the tree, the character data it
@@ -34,7 +35,7 @@ pub struct StyledNode {
     children: ChildIds,
     style: ComputedStyle,
     text: Option<TextRun>,
-    intrinsic_size: IntrinsicSize,
+    replaced: Option<ReplacedElement>,
     is_foreign_descendant: bool,
     is_body_of_root: bool,
     role: NodeRole,
@@ -52,10 +53,31 @@ impl StyledNode {
         self.text.as_ref()
     }
 
-    /// Whether this node's own size still depends on an unloaded resource.
+    /// Whether this node's own size depends on a resource: `Pending` for every
+    /// replaced element, whose resource only layout asks about (through
+    /// [`crate::NaturalSizes`], issue #83), `Resolved` for everything else.
     #[must_use]
     pub const fn intrinsic_size(&self) -> IntrinsicSize {
-        self.intrinsic_size
+        if self.replaced.is_some() {
+            return IntrinsicSize::Pending;
+        }
+        IntrinsicSize::Resolved
+    }
+
+    /// The replaced element this node is (`<img>`, `<video>`, …), or `None`.
+    #[must_use]
+    pub const fn replaced(&self) -> Option<ReplacedElement> {
+        self.replaced
+    }
+
+    /// Whether this node sits on a line as one unbreakable box: an
+    /// `inline-block`, or a replaced element with `display: inline` (CSS 2.1
+    /// §9.2.2 — its content is the resource, never line boxes; issue #83).
+    #[must_use]
+    pub const fn is_atomic_inline(&self) -> bool {
+        let display = self.style.display();
+        display.is_atomic_inline()
+            || (self.replaced.is_some() && matches!(display, Display::Inline))
     }
 
     /// Whether this node sits inside foreign content (<svg>, <math>).
@@ -158,7 +180,7 @@ impl StyledTree {
                 children: ChildIds::from_ids(node_ref.children()),
                 style,
                 text: character_data_of(node_ref),
-                intrinsic_size: intrinsic::for_tag(node_ref.tag()),
+                replaced: ReplacedElement::for_node(node_ref),
                 is_foreign_descendant: node_ref.is_foreign_descendant(),
                 is_body_of_root: node_ref.is_body_of_root(),
                 role,

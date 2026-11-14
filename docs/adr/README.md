@@ -31,6 +31,7 @@ This directory contains the Architecture Decision Records (ADRs) for Alloy using
 | [ADR-0025](0025-mise-as-the-source-of-truth-for-tool-versions.md)          | mise Is the Source of Truth for Tool Versions            | Accepted | 2026-10-05 |
 | [ADR-0026](0026-core-ui-and-core-browser-sibling-effect-seam.md)           | `core/ui` and `core/browser` Are Siblings Joined by an Effect Seam | Accepted | 2026-10-23 |
 | [ADR-0027](0027-input-model-source-split-key-events-and-keymap-as-data.md) | Input Model — Source-Split Key Events and Keymap-as-Data | Accepted | 2026-10-23 |
+| [ADR-0028](0028-replaced-element-natural-size-through-a-css-port.md) | A Replaced Element's Natural Size Reaches Layout Through a `core/css` Port | Accepted | 2026-11-14 |
 
 ---
 

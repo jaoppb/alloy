@@ -80,6 +80,12 @@ impl Document {
         self.images.insert(id, frame);
     }
 
+    /// Records that `id` will never be decoded (issue #83): its `<img>` may
+    /// then show its `alt` text.
+    pub fn fail_image(&mut self, id: ImageId) {
+        self.images.mark_failed(id);
+    }
+
     /// Adds an already parsed author `sheet` to the cascade.
     pub fn add_sheet(&mut self, sheet: StyleSheetSet) {
         self.sheets.absorb(sheet);

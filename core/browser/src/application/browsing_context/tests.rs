@@ -10,7 +10,7 @@ use region::ContextId;
 use super::BrowsingContext;
 use crate::domain::{
     BrowserEffect, DocumentRequest, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult,
-    LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
+    ImageState, LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
 };
 use crate::infrastructure::MarkupDiscoverer;
 
@@ -188,7 +188,8 @@ fn every_discovered_image_has_a_placeholder_before_its_pixels_arrive() {
             _ => None,
         })
         .expect("the <img> was discovered");
-    assert!(context.document().unwrap().images().contains(image_id));
+    let images = context.document().unwrap().images();
+    assert_eq!(images.state(image_id), Some(ImageState::Loading));
 }
 
 #[test]
@@ -350,16 +351,35 @@ fn a_decoded_image_replaces_its_placeholder_and_damages_the_content() {
 }
 
 #[test]
-fn a_failed_subresource_is_logged_and_changes_nothing() {
+fn a_failed_stylesheet_is_logged_and_changes_nothing() {
     let mut context = context();
     let navigation = load(&mut context, "<body>hi</body>", &page("a.html"));
     let failed = FetchResult::new(
         navigation,
-        FetchPayload::Image(ImageId::new(1), Err(FetchFailure::new("404"))),
+        FetchPayload::Stylesheet(MediaQuery::always(), Err(FetchFailure::new("404"))),
     );
 
     assert!(context.complete(failed).is_empty());
+}
+
+/// A failed image is remembered as failed, and the page is laid out again, so
+/// its `<img>` can show its `alt` text (issue #83).
+#[test]
+fn a_failed_image_is_recorded_as_failed_and_damages_the_content() {
+    let mut context = context();
+    let navigation = load(&mut context, "<body>hi</body>", &page("a.html"));
+    let id = ImageId::new(1);
+    let failed = FetchResult::new(
+        navigation,
+        FetchPayload::Image(id, Err(FetchFailure::new("404"))),
+    );
+
+    let effects = context.complete(failed);
+
+    assert!(damaged(&effects));
     assert_eq!(context.stats().images_loaded(), 0);
+    let images = context.document().unwrap().images();
+    assert_eq!(images.state(id), Some(ImageState::Failed));
 }
 
 #[test]

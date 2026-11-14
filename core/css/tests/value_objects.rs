@@ -280,8 +280,8 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 14,
-        "version 14 adds `StyledNode::role` and keeps a `<br>` inline-level (issue #82, ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 15,
+        "version 15 adds the `NaturalSizes` port and sizes replaced boxes (issue #83, ADR-0028, ADR-0011 item 3)"
     );
     assert_eq!(SUPPORTED_PROPERTIES.len(), 143);
     assert!(SUPPORTED_PROPERTIES.contains(&"outline"));

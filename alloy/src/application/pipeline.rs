@@ -12,13 +12,14 @@ use std::sync::Arc;
 use browser::{ImageStore, LinkTarget, LinkTargets};
 use css::{
     BlockLayout, CascadeResolver, DomSnapshot, FontBackedMeasurer, LayoutBoxTree, LayoutEngine,
-    StyleSheetSet, TextMeasurer, UaCascade, ViewportConstraints,
+    StyleSheetSet, UaCascade, ViewportConstraints,
 };
 use graphics::{
     Au, DisplayListBuilder, FontProvider, Framebuffer, RenderBackend, SoftwareCpuBackend,
     SurfaceSize, SyntheticFontProvider,
 };
 
+use crate::application::image_sizes::ImageSizes;
 use crate::application::paint::{DEFAULT_FONT, paint_box_tree};
 use crate::application::runtime_font::RuntimeFontProvider;
 use crate::error::AlloyError;
@@ -129,7 +130,7 @@ pub fn render_dom(
         images,
         surface_size,
         font_provider.as_ref(),
-        &BlockLayout::monospace(),
+        &BlockLayout::monospace().with_natural_sizes(ImageSizes::new(images)),
         &mut backend,
     )?;
     Ok(framebuffer)
@@ -177,18 +178,18 @@ pub fn render_dom_with_links<F: FontProvider + 'static>(
         images,
         surface_size,
         font_provider.as_ref(),
-        &BlockLayout::new(measurer),
+        &BlockLayout::new(measurer).with_natural_sizes(ImageSizes::new(images)),
         backend,
     )
 }
 
-fn render_document<F: FontProvider + 'static, M: TextMeasurer + Send + Sync>(
+fn render_document<F: FontProvider + 'static>(
     dom_tree: &dom::DomTree,
     extra_sheets: StyleSheetSet,
     images: &ImageStore,
     surface_size: SurfaceSize,
     font_provider: &F,
-    layout: &BlockLayout<M>,
+    layout: &impl LayoutEngine,
     backend: &mut impl RenderBackend,
 ) -> Result<(Framebuffer, LinkTargets), AlloyError> {
     let snapshot = css::snapshot(dom_tree, dom_tree.document());
