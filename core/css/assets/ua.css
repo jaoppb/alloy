@@ -243,6 +243,12 @@ nobr wbr {
 	white-space: normal;
 }
 
+/*
+ * No `br` rule: the spec's `br { display-outside: newline }` is not CSS this
+ * parser takes, so `StyledTree` marks a `<br>` as `NodeRole::LineBreak` and
+ * keeps it inline-level unless `display: none` (issue #82).
+ */
+
 /* Their `vertical-align` and `font-size: smaller` are MANIFEST cuts. */
 sub,
 sup {

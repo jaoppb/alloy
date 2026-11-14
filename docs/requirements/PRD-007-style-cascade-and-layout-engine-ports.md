@@ -256,3 +256,16 @@ Additive; nothing a consumer has to change.
 - **The root element is blockified** (§2.7): `StyledTree::recompute_in_document_order`, which every `CascadeResolver`
   builds its tree through, turns an `inline` or `inline-block` root into `block` (`Display::blockified`), so the
   computed `display` of `<html>` is never inline-level, whichever adapter cascaded it.
+
+### `13 → 14` — Issue #82: `<br>` is a forced line break
+
+**Additive.** Nothing a consumer wrote breaks; what a replacement adapter has to reproduce:
+
+- **`StyledNode::role()` answers a `NodeRole`** (`#[non_exhaustive]`: `Ordinary`, `LineBreak`), set from the tag when
+  `StyledTree::recompute_in_document_order` builds the tree. A `<br>` is `LineBreak`; every other node is `Ordinary`. A
+  replacement `LayoutEngine` must end the current line box at a `LineBreak` node and, when the line holds nothing else,
+  keep it one strut high (the node's own font), so `a<br><br>b` puts `b` two lines below `a` and a trailing `<br>` adds
+  no line (WHATWG HTML §15.3.4, `br { display-outside: newline }`).
+- **A `<br>`'s computed `display` is `inline` unless it is `none`**, whatever the cascade returned: like the root's
+  blockification, the coercion lives in the tree builder, so no resolver can skip it and no layout segmentation (block,
+  flex, block-in-inline) ever sees a block-level `<br>`.

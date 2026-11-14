@@ -127,7 +127,13 @@ pub mod infrastructure;
 /// every resolver (§2.7, `Display::blockified`). An element the UA sheet names
 /// no display for is now inline (issue #136). `PRD-007` §6 carries the
 /// migration note.
-pub const PORT_SCHEMA_VERSION: u32 = 13;
+///
+/// `14` is additive: [`StyledNode::role`] answers a [`NodeRole`] — a `<br>` is
+/// [`NodeRole::LineBreak`], which the inline formatting context ends a line
+/// at — and [`StyledTree`] keeps a `<br>` `inline` for every resolver unless
+/// its display is `none` (WHATWG HTML §15.3.4, issue #82). `PRD-007` §6
+/// carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 14;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -346,6 +352,7 @@ pub use domain::input_type::InputType;
 pub use domain::layout_box_tree::{EdgeSizes, FragmentText, LayoutBox, LayoutBoxTree};
 pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
+pub use domain::node_role::NodeRole;
 pub use domain::parse_notes::{ParseNote, ParseNotes};
 pub use domain::selector::{
     AttributeMatch, AttributeSelector, AttributeSelectors, Combinator, ComplexSelector,

@@ -45,7 +45,7 @@ enum PieceKind {
     Word,
     /// A single space between two words — a soft wrap opportunity.
     Space,
-    /// A `\n` under `white-space: pre` — a mandatory break.
+    /// A `\n` under `white-space: pre` or a `<br>` — a mandatory break.
     Break,
     /// An atomic inline (`inline-block`): placed like a word, never split.
     Atomic,
@@ -231,6 +231,9 @@ fn collect<M: TextMeasurer>(
         return collect_atom(context, styled, input, run);
     }
     let font_size = box_model::font_size_of(style, input.parent_font_size());
+    if styled.role().is_line_break() {
+        return collect_line_break(context, styled, font_size, run);
+    }
     if styled.text().is_none() {
         return collect_children(context, styled, input.with_parent_font_size(font_size), run);
     }
@@ -276,6 +279,22 @@ fn collect_atom<M: TextMeasurer>(
     });
     run.atoms.insert(node_id, result);
     Ok(())
+}
+
+/// A `<br>` ends its line like a `\n` under `white-space: pre`, its strut set
+/// at its own font size (WHATWG HTML §15.3.4, issue #82).
+fn collect_line_break<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    styled: &StyledNode,
+    font_size: Au,
+    run: &mut Run,
+) -> Result<(), CssError> {
+    if !run.walk.takes_content() {
+        return Ok(());
+    }
+    let style = styled.style();
+    let setting = Setting::new(font_size, style.white_space());
+    push_break(context, styled.node(), setting, &mut run.pieces)
 }
 
 /// The character data of `styled`, set at `font_size`.
@@ -465,6 +484,17 @@ fn append_forced_break<M: TextMeasurer>(
     if index == 0 {
         return Ok(());
     }
+    push_break(context, node_id, setting, pieces)
+}
+
+/// A mandatory break, measured as empty text so a line it holds alone is one
+/// strut high.
+fn push_break<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node_id: SnapshotId,
+    setting: Setting,
+    pieces: &mut Vec<Piece>,
+) -> Result<(), CssError> {
     let metrics = context.measure("", setting.font_size)?;
     pieces.push(piece(node_id, PieceKind::Break, metrics, setting));
     Ok(())
@@ -549,7 +579,8 @@ impl LineFiller {
         self.close();
     }
 
-    /// A `\n` on an otherwise empty line still occupies one line's height.
+    /// A `\n` or a `<br>` on an otherwise empty line still occupies one
+    /// line's height.
     fn absorb_empty_line(&mut self, piece: Piece) {
         if !self.current.is_empty() {
             return;

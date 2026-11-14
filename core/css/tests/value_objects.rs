@@ -280,8 +280,8 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 13,
-        "version 13 makes `inline` the initial display and blockifies the root (issue #136, ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 14,
+        "version 14 adds `StyledNode::role` and keeps a `<br>` inline-level (issue #82, ADR-0011 item 3)"
     );
     assert_eq!(SUPPORTED_PROPERTIES.len(), 143);
     assert!(SUPPORTED_PROPERTIES.contains(&"outline"));
