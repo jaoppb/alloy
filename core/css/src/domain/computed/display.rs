@@ -24,11 +24,11 @@ pub struct ParseDisplayError(String);
 pub enum Display {
     /// The element and its subtree generate no box.
     None,
-    /// A block-level box in normal flow — the `initial` value here, matching the
-    /// UA rule for the elements B0 lays out.
-    #[default]
+    /// A block-level box in normal flow.
     Block,
-    /// An inline-level box in normal flow.
+    /// An inline-level box in normal flow — the CSS `initial` value (CSS
+    /// Display L3 §2).
+    #[default]
     Inline,
     /// A block-level flex container. Declared for the frozen contract; B4
     /// implements the layout.
@@ -61,6 +61,17 @@ impl Display {
     #[must_use]
     pub const fn is_atomic_inline(self) -> bool {
         matches!(self, Self::InlineBlock)
+    }
+
+    /// The block-level equivalent of this display (CSS Display L3 §2.7), as
+    /// the root element gets: an `inline` or `inline-block` box becomes a
+    /// `block`; a display that is already block-level, or `none`, stays.
+    #[must_use]
+    pub const fn blockified(self) -> Self {
+        match self {
+            Self::Inline | Self::InlineBlock => Self::Block,
+            other => other,
+        }
     }
 
     /// The keyword as it appears in a stylesheet.

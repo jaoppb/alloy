@@ -8,13 +8,12 @@
  * §15.5.5 (`details`), and each element's base `display` is declared exactly
  * once, in its section's display rule. Attribute and state rules (`[hidden]`,
  * `[popover]`, `dialog[open]`, `dialog[hidden]`, `input[type="hidden"]`,
- * `table > form`, `embed[hidden]`) then override it. The sheet must not lean
- * on `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines
- * as `inline` (#81). Box and font values follow the spec except where a value
- * below says it keeps an older one. The §15.3.1–§15.3.12 rules this sheet
- * does not carry, or carries in part, are listed in
- * `core/css/tests/data/MANIFEST.md` ("UA sheet rules the cascade cannot
- * express yet") — a list built by probing the spec's CSS, not proven
+ * `table > form`, `embed[hidden]`) then override it. An element with no rule
+ * takes CSS's initial `inline` (CSS Display L3 §2, #81). Box and font values
+ * follow the spec except where a value below says it keeps an older one. The
+ * §15.3.1–§15.3.12 rules this sheet does not carry, or carries in part, are
+ * listed in `core/css/tests/data/MANIFEST.md` ("UA sheet rules the cascade
+ * cannot express yet") — a list built by probing the spec's CSS, not proven
  * exhaustive.
  */
 
@@ -176,40 +175,9 @@ div[align="justify"] {
 /* ---- §15.3.4 Phrasing content ------------------------------------------ */
 
 /*
- * `inline` is CSS's initial `display`, so the spec needs no rule here; this
- * one stands in until `ComputedStyle::initial()` says `inline` too (#136,
- * which deletes it). It must name every phrasing element this sheet styles:
- * one left out would be a styled block until then (a full-width `<mark>`).
+ * No display rule: `inline` is CSS's initial `display` (CSS Display L3 §2),
+ * which `ComputedStyle::initial()` gives every phrasing element (#136).
  */
-a,
-abbr,
-acronym,
-b,
-cite,
-code,
-del,
-dfn,
-em,
-i,
-ins,
-kbd,
-label,
-mark,
-nobr,
-s,
-samp,
-small,
-span,
-strike,
-strong,
-sub,
-sup,
-tt,
-u,
-var,
-wbr {
-	display: inline;
-}
 
 cite,
 dfn,
@@ -760,5 +728,16 @@ summary {
  */
 
 svg {
+	display: inline-block;
+}
+
+/*
+ * Stopgap until #83, which removes it: `<img>` is inline replaced content,
+ * but layout sizes only an atomic inline, and with `inline` as the initial
+ * display (#136) a non-atomic inline `<img>` would get no box and stop
+ * painting. #83 makes layout treat a replaced element with `display: inline`
+ * as atomic (CSS 2.1 §9.2.2).
+ */
+img {
 	display: inline-block;
 }

@@ -120,7 +120,13 @@ pub mod infrastructure;
 /// `NodeRef::is_body_of_root`), the structural fact a layout engine needs to
 /// apply CSS Overflow L3 §3.3's body-to-viewport propagation as a used value,
 /// and `OverflowStyle::is_scroll_container` (issue #135).
-pub const PORT_SCHEMA_VERSION: u32 = 12;
+///
+/// `13` is **not additive**: `ComputedStyle::initial()` and
+/// `Display::default()` answer `Display::Inline` (CSS Display L3 §2) instead
+/// of `Block`, and the cascade blockifies the root element's display (§2.7,
+/// `Display::blockified`). An element the UA sheet names no display for is
+/// now inline (issue #136). `PRD-007` §6 carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 13;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///

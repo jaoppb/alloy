@@ -142,7 +142,20 @@ fn cascade_style(
     sheets: &StyleSheetSet,
 ) -> (ComputedStyle, InheritedContext) {
     let base = base_style(node_ref, parent);
-    apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts()
+    let (style, context) =
+        apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts();
+    (blockified_at_root(style, node_ref), context)
+}
+
+/// The root element's `display` is blockified (CSS Display L3 §2.7): with
+/// `inline` as the initial value, an author `html { display: inline }` must
+/// not put the whole page into one line run. This changes the computed value.
+fn blockified_at_root(style: ComputedStyle, node_ref: NodeRef<'_>) -> ComputedStyle {
+    if !node_ref.is_root_element() {
+        return style;
+    }
+    let display = style.display().blockified();
+    style.with_display(display)
 }
 
 /// The style before any rule applies: inherit from the parent (or take the
@@ -158,10 +171,11 @@ fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> Computed
 
 /// A non-element node: no selector ever chooses one (`application/matching.rs`
 /// doc-comment), so its `display` stays a fixed Rust rule rather than a CSS
-/// one. An element's `display` is `assets/ua.css`'s, which states it for every
-/// element WHATWG HTML §15.3 does not leave at CSS's initial `inline`, or lists
-/// the value as a MANIFEST cut (#133), so non-element nodes are the only ones
-/// that still need Rust.
+/// one. An element takes CSS's initial `inline` unless `assets/ua.css` states
+/// another display for it, as it does for every element WHATWG HTML §15.3
+/// does not leave inline (#133, #136) — so non-element nodes are the only
+/// ones that still need Rust. The `Element` arm is never reached: an element
+/// returns from [`base_style`] before this is asked.
 fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
     match kind {
         SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
@@ -238,8 +252,8 @@ mod tests {
         "area", "basefont", "datalist", "noembed", "noframes", "param", "rp", "template",
     ];
 
-    /// Every phrasing element the sheet styles: each must be `inline` even
-    /// over a `block` base, or it renders as a styled block until #136.
+    /// Every phrasing element the sheet styles: none of its rules may give one
+    /// a display other than the initial `inline`.
     const STYLED_PHRASING: [&str; 27] = [
         "a", "abbr", "acronym", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd",
         "label", "mark", "nobr", "s", "samp", "small", "span", "strike", "strong", "sub", "sup",
@@ -251,15 +265,9 @@ mod tests {
     const TABLE_MARKUP: &str = "<!doctype html><html><body><table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table></body></html>";
 
     /// The `display` the UA sheet alone gives the first `tag` element of
-    /// `markup`, cascaded over an `inline` base — so a missing UA rule shows
-    /// up as `inline` instead of hiding behind today's `block` initial value
-    /// (#81: the initial value becomes `inline`).
+    /// `markup`, cascaded over the initial style — so an element with no UA
+    /// display rule answers the initial `inline` (#136).
     fn ua_display(markup: &str, tag: &str) -> Display {
-        ua_display_over(Display::Inline, markup, tag)
-    }
-
-    /// [`ua_display`] over an explicit `base` display.
-    fn ua_display_over(base: Display, markup: &str, tag: &str) -> Display {
         let tree = dom::parse(markup).expect("the fixture parses").into_tree();
         let dom = snapshot(&tree, tree.document());
         let node = dom
@@ -268,7 +276,7 @@ mod tests {
             .find(|node| node.tag_str() == Some(tag))
             .unwrap_or_else(|| panic!("the fixture has a <{tag}>"));
         let cascaded = apply_author_rules(
-            ComputedStyle::initial().with_display(base),
+            ComputedStyle::initial(),
             None,
             &InheritedContext::root(),
             node,
@@ -353,10 +361,13 @@ mod tests {
     }
 
     #[test]
-    fn every_styled_phrasing_element_is_inline_even_over_a_block_base() {
+    fn every_styled_phrasing_element_stays_inline() {
         for tag in STYLED_PHRASING {
-            let display = ua_display_over(Display::Block, &markup_with(tag), tag);
-            assert_eq!(display, Display::Inline, "<{tag}>");
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::Inline,
+                "<{tag}>"
+            );
         }
     }
 }

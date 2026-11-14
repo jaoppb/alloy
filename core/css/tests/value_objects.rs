@@ -84,7 +84,11 @@ fn display_none_suppresses_the_box_and_keywords_round_trip() {
     assert!(Display::None.is_none());
     assert!(!Display::Block.is_none());
     assert_eq!(Display::Flex.keyword(), "flex");
-    assert_eq!(Display::default(), Display::Block);
+    assert_eq!(
+        Display::default(),
+        Display::Inline,
+        "CSS Display L3 §2 (#136)"
+    );
 }
 
 /// The UA sheet's `inline-block` (form controls) and `list-item` (`<li>`) must
@@ -108,7 +112,11 @@ fn the_initial_computed_style_is_black_transparent_and_sixteen_pixels() {
     let initial = ComputedStyle::initial();
     assert_eq!(initial.color(), CssColor::BLACK);
     assert_eq!(initial.background_color(), CssColor::TRANSPARENT);
-    assert_eq!(initial.display(), Display::Block);
+    assert_eq!(
+        initial.display(),
+        Display::Inline,
+        "CSS Display L3 §2 (#136)"
+    );
     assert_eq!(initial.visibility(), Visibility::Visible);
     assert_eq!(initial.font_size_au(au(16)), Some(au(16)));
 }
@@ -272,8 +280,8 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 12,
-        "version 12 adds StyledNode::is_body_of_root and OverflowStyle::is_scroll_container (issue #135, ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 13,
+        "version 13 makes `inline` the initial display and blockifies the root (issue #136, ADR-0011 item 3)"
     );
     assert_eq!(SUPPORTED_PROPERTIES.len(), 143);
     assert!(SUPPORTED_PROPERTIES.contains(&"outline"));
@@ -428,4 +436,14 @@ fn outline_values_and_classification() {
     assert!(OutlineStyle::Solid.is_drawn());
     assert!(OutlineStyle::Auto.is_drawn());
     assert!(!OutlineStyle::Hidden.is_drawn());
+}
+
+#[test]
+fn blockifying_turns_inline_level_displays_into_block_and_keeps_the_rest() {
+    assert_eq!(Display::Inline.blockified(), Display::Block);
+    assert_eq!(Display::InlineBlock.blockified(), Display::Block);
+    assert_eq!(Display::Block.blockified(), Display::Block);
+    assert_eq!(Display::Flex.blockified(), Display::Flex);
+    assert_eq!(Display::ListItem.blockified(), Display::ListItem);
+    assert_eq!(Display::None.blockified(), Display::None);
 }

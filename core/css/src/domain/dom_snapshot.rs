@@ -377,7 +377,14 @@ impl<'snapshot> NodeRef<'snapshot> {
         first_body == Some(self.id)
     }
 
-    /// Whether this node's parent is the document node — the root element.
+    /// Whether this is the root element: an element whose parent is the
+    /// document node.
+    #[must_use]
+    pub fn is_root_element(self) -> bool {
+        self.tag().is_some() && self.is_child_of_document()
+    }
+
+    /// Whether this node's parent is the document node.
     fn is_child_of_document(self) -> bool {
         self.parent()
             .and_then(|id| self.snapshot.node(id))

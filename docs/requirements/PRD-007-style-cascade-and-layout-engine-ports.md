@@ -235,3 +235,16 @@ Additive; nothing a consumer has to change.
   its computed `overflow`, and what its children inherit, stay untouched.
 - **`OverflowStyle::is_scroll_container()`** answers whether an axis is `hidden`, `scroll` or `auto` (not `clip`), the
   boxes CSS 2.1 §9.4.1 says start a new block formatting context.
+
+### `12 → 13` — Issue #136 (#81): `inline` is the initial `display`
+
+**Not additive.** What a consumer has to change:
+
+- **`ComputedStyle::initial().display()` and `Display::default()` are `Display::Inline`** (CSS Display L3 §2), no longer
+  `Block`. A consumer that built a style from `initial()` and relied on it being block-level must say `with_display`.
+- **An element `ua.css` names no display for is inline.** The UA sheet states every block of WHATWG HTML §15.3 (#133),
+  so only unlisted and custom elements change: `<u>`, `<sub>`, `<x-foo>` now sit on the line. Block-level content inside
+  them splits their run (#135). `<img>` keeps a stopgap `img { display: inline-block }` until #83 sizes replaced
+  inlines, so images keep their box.
+- **The root element is blockified** (§2.7): the cascade turns an `inline` or `inline-block` root into `block`
+  (`Display::blockified`), so the computed `display` of `<html>` is never inline-level.
