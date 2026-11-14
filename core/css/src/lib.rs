@@ -139,10 +139,12 @@ pub mod infrastructure;
 /// has become of each replaced element's resource; a replaced box is sized from
 /// the author's `width`/`height`, its [`NaturalSize`] and its attribute ratio
 /// (CSS 2.1 §10.3.2, §10.6.2), and reports `IntrinsicSize::Natural` once
-/// loaded; [`StyledNode::replaced`] and [`StyledNode::is_atomic_inline`] are
-/// new; a replaced element with `display: inline` is an atomic inline, so
-/// `ua.css` no longer gives `img`, `video`, `canvas`, `iframe`, `object`,
-/// `embed` or `svg` a `display`. `PRD-007` §6 carries the migration note.
+/// loaded; `StyledNode::intrinsic_size` and `IntrinsicSize::is_pending` are
+/// gone, [`StyledNode::is_replaced`] and [`StyledNode::is_atomic_inline`] are
+/// new, and `Display::is_atomic_inline` is renamed `is_inline_block`; a
+/// replaced element with `display: inline` is an atomic inline, so `ua.css`
+/// no longer gives `img`, `video`, `canvas`, `iframe`, `object`, `embed` or
+/// `svg` a `display`. `PRD-007` §6 carries the migration note.
 pub const PORT_SCHEMA_VERSION: u32 = 15;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
@@ -364,7 +366,7 @@ pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
 pub use domain::node_role::NodeRole;
 pub use domain::parse_notes::{ParseNote, ParseNotes};
-pub use domain::replaced::{NaturalSize, ReplacedElement, ReplacedResource};
+pub use domain::replaced::{NaturalSize, ReplacedResource};
 pub use domain::selector::{
     AttributeMatch, AttributeSelector, AttributeSelectors, Combinator, ComplexSelector,
     CompoundSelector, IdentifierList, NthFormula, PseudoClass, PseudoClasses, SelectorList,

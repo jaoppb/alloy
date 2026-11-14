@@ -393,3 +393,36 @@ fn an_alt_text_sits_on_its_neighbours_line() {
     let alt = laid.fragments("img")[0].content();
     assert!(alt.min_x() >= before.max_x() && after.min_x() >= alt.max_x());
 }
+
+#[test]
+fn every_fragment_of_an_image_showing_its_alt_is_resolved() {
+    let laid = Laid::body("<img alt='hello world'>");
+    let markers: Vec<IntrinsicSize> = laid
+        .fragments("img")
+        .iter()
+        .map(|fragment| fragment.intrinsic_size())
+        .collect();
+    assert!(markers.len() > 1, "a box and its text line");
+    assert!(
+        markers
+            .iter()
+            .all(|marker| *marker == IntrinsicSize::Resolved)
+    );
+}
+
+#[test]
+fn a_dimension_attribute_reads_the_same_with_or_without_px() {
+    let resources = || Resources::default().with("img", ReplacedResource::Loading);
+    let style = "style='width:40px;height:auto'";
+    let bare = Laid::loading(&format!("<img width=100 height=50 {style}>"), resources());
+    let suffixed = Laid::loading(
+        &format!("<img width=100px height=50px {style}>"),
+        resources(),
+    );
+    assert_eq!(bare.content_px("img"), (40, 20));
+    assert_eq!(suffixed.content_px("img"), (40, 20));
+    assert_eq!(
+        Laid::body("<img width=100px height=50px>").content_px("img"),
+        (100, 50)
+    );
+}

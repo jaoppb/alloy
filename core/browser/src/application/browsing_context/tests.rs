@@ -341,13 +341,11 @@ fn a_decoded_image_replaces_its_placeholder_and_damages_the_content() {
 
     assert!(damaged(&effects));
     assert_eq!(context.stats().images_loaded(), 1);
-    assert!(
-        context
-            .document()
-            .unwrap()
-            .images()
-            .contains(ImageId::new(7))
-    );
+    let images = context.document().unwrap().images();
+    assert!(matches!(
+        images.state(ImageId::new(7)),
+        Some(ImageState::Decoded(_))
+    ));
 }
 
 #[test]

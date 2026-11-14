@@ -3,7 +3,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use css::SnapshotId;
 use graphics::{Color, Framebuffer, GraphicsError, ImageId, ImageProvider, SurfaceSize};
+
+/// The [`ImageId`] of the `<img>` at `node`: its node's index. The one place
+/// the key is made — the discoverer requests under it, layout's natural-size
+/// lookup and the painter look it up (issue #83).
+#[must_use]
+pub fn image_id_of(node: SnapshotId) -> ImageId {
+    ImageId::new(u32::try_from(node.index()).unwrap_or(u32::MAX))
+}
 
 /// The images a page references, by [`ImageId`]: still loading, decoded —
 /// shared by pointer so a relayout snapshots them without copying pixel
@@ -85,12 +94,6 @@ impl ImageStore {
     /// Forgets every image (a new navigation starts from nothing).
     pub fn clear(&mut self) {
         self.images.clear();
-    }
-
-    /// Whether anything is known about `id` (loading, decoded or failed).
-    #[must_use]
-    pub fn contains(&self, id: ImageId) -> bool {
-        self.images.contains_key(&id)
     }
 
     /// What has become of `id`, or `None` for an image this page never
@@ -219,6 +222,6 @@ mod tests {
         let mut store = ImageStore::new();
         store.reserve_placeholder(id);
         store.clear();
-        assert!(!store.contains(id));
+        assert_eq!(store.state(id), None);
     }
 }

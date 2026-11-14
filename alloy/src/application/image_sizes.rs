@@ -7,16 +7,8 @@
 //! borrowed store — so an application-layer type, not an infrastructure
 //! adapter (`arch-lint` keeps `crate::infrastructure` out of this layer).
 
-use browser::{ImageState, ImageStore};
+use browser::{ImageState, ImageStore, image_id_of};
 use css::{NaturalSize, NaturalSizes, ReplacedResource, SnapshotId};
-use graphics::ImageId;
-
-/// The image id the discoverer gave the `<img>` at `node`: both sides key an
-/// image by its node's index (`browser::MarkupDiscoverer`).
-#[must_use]
-pub fn image_id_of(node: SnapshotId) -> ImageId {
-    ImageId::new(u32::try_from(node.index()).unwrap_or(u32::MAX))
-}
 
 /// What a page's images tell layout about each replaced element.
 #[derive(Clone, Copy, Debug)]
@@ -53,11 +45,11 @@ fn decoded(width: u32, height: u32) -> ReplacedResource {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
-    use browser::ImageStore;
+    use browser::{ImageStore, image_id_of};
     use css::{NaturalSize, NaturalSizes, ReplacedResource, SnapshotId};
     use graphics::{Color, Framebuffer, SurfaceSize};
 
-    use super::{ImageSizes, image_id_of};
+    use super::ImageSizes;
 
     /// Four real node ids, from a parsed document.
     fn four_nodes() -> Vec<SnapshotId> {

@@ -11,9 +11,10 @@
 //! Every length is an integer [`Au`] (`ADR-0016`): the ratio scales in `i64`
 //! and saturates, never through a float.
 
-use graphics::Au;
+use graphics::{AU_PER_PX, Au};
 use html::TagName;
 
+use crate::domain::dimension_value::DimensionValue;
 use crate::domain::dom_snapshot::NodeRef;
 
 /// The elements whose size comes from a resource rather than from CSS
@@ -37,9 +38,9 @@ const REPLACED_TAGS: [TagName; 7] = [
 const RATIO_TAGS: [TagName; 3] = [TagName::img(), TagName::video(), TagName::canvas()];
 
 /// The default object size of an embedded element with nothing else to go on
-/// (CSS Images L3 §4.1).
-const DEFAULT_OBJECT_WIDTH: i32 = 300;
-const DEFAULT_OBJECT_HEIGHT: i32 = 150;
+/// (CSS Images L3 §4.1): 300×150 CSS pixels.
+const DEFAULT_OBJECT_WIDTH: Au = Au::from_raw(300 * AU_PER_PX);
+const DEFAULT_OBJECT_HEIGHT: Au = Au::from_raw(150 * AU_PER_PX);
 
 /// The natural size of a loaded resource, in CSS pixels — one image pixel per
 /// CSS pixel (no `srcset` density).
@@ -56,7 +57,10 @@ impl NaturalSize {
     pub fn from_pixels(width: u32, height: u32) -> Option<Self> {
         let width = Au::from_whole_px(i32::try_from(width).ok()?)?;
         let height = Au::from_whole_px(i32::try_from(height).ok()?)?;
-        AspectRatio::new(width, height)?;
+        let empty = width <= Au::ZERO || height <= Au::ZERO;
+        if empty {
+            return None;
+        }
         Some(Self { width, height })
     }
 
@@ -169,9 +173,10 @@ enum ReplacedKind {
 }
 
 /// A replaced element as layout sees it: which default it falls back on, and
-/// the ratio its own `width` / `height` attributes give.
+/// the ratio its own `width` / `height` attributes give. Crate-private: a
+/// consumer only asks [`crate::StyledNode::is_replaced`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ReplacedElement {
+pub(crate) struct ReplacedElement {
     kind: ReplacedKind,
     attribute_ratio: Option<AspectRatio>,
 }
@@ -200,27 +205,37 @@ impl ReplacedElement {
         let fallback = natural.map_or_else(|| self.default_size(), natural_as_used);
         let width = declared
             .width
-            .or_else(|| ratio.zip(declared.height).map(|(r, h)| r.width_for(h)))
+            .or_else(|| scaled(ratio, declared.height, AspectRatio::width_for))
             .unwrap_or(fallback.width);
         let height = declared
             .height
-            .or_else(|| ratio.zip(declared.width).map(|(r, w)| r.height_for(w)))
+            .or_else(|| scaled(ratio, declared.width, AspectRatio::height_for))
             .unwrap_or(fallback.height);
         UsedSize { width, height }
     }
 
-    fn default_size(self) -> UsedSize {
+    const fn default_size(self) -> UsedSize {
         match self.kind {
             ReplacedKind::Image => UsedSize {
                 width: Au::ZERO,
                 height: Au::ZERO,
             },
             ReplacedKind::Embedded => UsedSize {
-                width: Au::from_whole_px(DEFAULT_OBJECT_WIDTH).unwrap_or(Au::ZERO),
-                height: Au::from_whole_px(DEFAULT_OBJECT_HEIGHT).unwrap_or(Au::ZERO),
+                width: DEFAULT_OBJECT_WIDTH,
+                height: DEFAULT_OBJECT_HEIGHT,
             },
         }
     }
+}
+
+/// The other axis from `known` through `ratio`, when both exist.
+fn scaled(
+    ratio: Option<AspectRatio>,
+    known: Option<Au>,
+    other_axis: fn(AspectRatio, Au) -> Au,
+) -> Option<Au> {
+    let (ratio, length) = ratio.zip(known)?;
+    Some(other_axis(ratio, length))
 }
 
 const fn natural_as_used(natural: NaturalSize) -> UsedSize {
@@ -248,25 +263,14 @@ fn attribute_ratio(tag: &TagName, node_ref: NodeRef<'_>) -> Option<AspectRatio> 
     if !RATIO_TAGS.contains(tag) {
         return None;
     }
-    let width = dimension_pixels(node_ref.attribute("width")?)?;
-    let height = dimension_pixels(node_ref.attribute("height")?)?;
+    let width = attribute_pixels(node_ref, "width")?;
+    let height = attribute_pixels(node_ref, "height")?;
     AspectRatio::new(width, height)
 }
 
-/// An attribute's value as whole pixels when it is a plain number — a
-/// percentage, or anything else, gives no ratio. The fraction of `100.5` is
-/// dropped: the ratio is integer arithmetic (`ADR-0016`).
-fn dimension_pixels(raw: &str) -> Option<Au> {
-    let trimmed = raw.trim();
-    let digits: &str = trimmed.split('.').next()?;
-    let rest = trimmed.get(digits.len()..)?;
-    let plain = !digits.is_empty()
-        && digits.bytes().all(|byte| byte.is_ascii_digit())
-        && rest.bytes().skip(1).all(|byte| byte.is_ascii_digit());
-    if !plain {
-        return None;
-    }
-    Au::from_whole_px(digits.parse().ok()?)
+/// A dimension attribute as a length — a percentage gives no ratio.
+fn attribute_pixels(node_ref: NodeRef<'_>, name: &str) -> Option<Au> {
+    DimensionValue::parse(node_ref.attribute(name)?)?.pixels()
 }
 
 #[cfg(test)]
@@ -275,15 +279,6 @@ mod tests {
 
     fn px(value: i32) -> Au {
         Au::from_whole_px(value).unwrap_or(Au::ZERO)
-    }
-
-    #[test]
-    fn a_plain_dimension_attribute_is_whole_pixels() {
-        assert_eq!(dimension_pixels(" 100 "), Some(px(100)));
-        assert_eq!(dimension_pixels("100.5"), Some(px(100)));
-        assert_eq!(dimension_pixels("50%"), None);
-        assert_eq!(dimension_pixels("1.2.3"), None);
-        assert_eq!(dimension_pixels(""), None);
     }
 
     #[test]

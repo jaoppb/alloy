@@ -11,7 +11,6 @@
 use html::TagName;
 
 use crate::domain::computed::display::Display;
-use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
 use crate::domain::input_type::InputType;
@@ -53,20 +52,16 @@ impl StyledNode {
         self.text.as_ref()
     }
 
-    /// Whether this node's own size depends on a resource: `Pending` for every
-    /// replaced element, whose resource only layout asks about (through
-    /// [`crate::NaturalSizes`], issue #83), `Resolved` for everything else.
+    /// Whether this node is a replaced element (`<img>`, `<video>`, …), whose
+    /// size comes from a resource only layout asks about (through
+    /// [`crate::NaturalSizes`], issue #83).
     #[must_use]
-    pub const fn intrinsic_size(&self) -> IntrinsicSize {
-        if self.replaced.is_some() {
-            return IntrinsicSize::Pending;
-        }
-        IntrinsicSize::Resolved
+    pub const fn is_replaced(&self) -> bool {
+        self.replaced.is_some()
     }
 
-    /// The replaced element this node is (`<img>`, `<video>`, …), or `None`.
-    #[must_use]
-    pub const fn replaced(&self) -> Option<ReplacedElement> {
+    /// The replaced element this node is, or `None`.
+    pub(crate) const fn replaced(&self) -> Option<ReplacedElement> {
         self.replaced
     }
 
@@ -76,8 +71,7 @@ impl StyledNode {
     #[must_use]
     pub const fn is_atomic_inline(&self) -> bool {
         let display = self.style.display();
-        display.is_atomic_inline()
-            || (self.replaced.is_some() && matches!(display, Display::Inline))
+        display.is_inline_block() || (self.replaced.is_some() && matches!(display, Display::Inline))
     }
 
     /// Whether this node sits inside foreign content (<svg>, <math>).

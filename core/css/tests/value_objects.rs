@@ -100,11 +100,11 @@ fn inline_block_and_list_item_parse_and_classify() {
     assert_eq!(Display::InlineBlock.keyword(), "inline-block");
     assert_eq!(Display::ListItem.to_string(), "list-item");
     assert!(Display::InlineBlock.is_inline_level());
-    assert!(Display::InlineBlock.is_atomic_inline());
+    assert!(Display::InlineBlock.is_inline_block());
     assert!(Display::Inline.is_inline_level());
-    assert!(!Display::Inline.is_atomic_inline());
+    assert!(!Display::Inline.is_inline_block());
     assert!(!Display::ListItem.is_inline_level());
-    assert!(!Display::Block.is_atomic_inline());
+    assert!(!Display::Block.is_inline_block());
 }
 
 #[test]

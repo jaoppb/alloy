@@ -44,7 +44,7 @@ use crate::infrastructure::layout::inline::InlineItem;
 use crate::infrastructure::layout::margin_collapse::{
     CollapsedMargin, MarginFlow, collapses_at_bottom, collapses_at_top,
 };
-use crate::infrastructure::layout::replaced::{self, ReplacedBox};
+use crate::infrastructure::layout::replaced::{OwnBox, ReplacedBox};
 use crate::infrastructure::layout::{flex, inline};
 use crate::infrastructure::no_resources::NoResources;
 use crate::infrastructure::text_metrics::MonospaceMetrics;
@@ -162,7 +162,7 @@ pub(crate) fn layout_box<M: TextMeasurer>(
     let style = node.style();
     let font_size = box_model::font_size_of(style, input.parent_font_size());
     let metrics = box_model::resolve(style, font_size, input.containing_width())?;
-    let replaced = replaced::replaced_box(context, node, metrics);
+    let replaced = OwnBox::of(context, node).replaced_box(metrics);
     let content_width = input
         .forced_content_width()
         .or_else(|| replaced.map(|own| own.size().width()))
@@ -206,7 +206,7 @@ pub(crate) fn layout_inline_block<M: TextMeasurer>(
 ) -> Result<BlockResult, CssError> {
     let node = context.node(node_id)?;
     let style = node.style();
-    if style.width() != Sizing::Auto || replaced::sizes_itself(context, node) {
+    if style.width() != Sizing::Auto || OwnBox::of(context, node).sizes_itself() {
         return layout_box(context, node_id, input);
     }
     let available = available_content_width(style, input)?;

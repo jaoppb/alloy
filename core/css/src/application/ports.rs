@@ -86,9 +86,3 @@ pub trait NaturalSizes: Send + Sync {
     /// The resource state of the replaced element `node`.
     fn resource_of(&self, node: SnapshotId) -> ReplacedResource;
 }
-
-impl<T: NaturalSizes + ?Sized> NaturalSizes for &T {
-    fn resource_of(&self, node: SnapshotId) -> ReplacedResource {
-        (**self).resource_of(node)
-    }
-}

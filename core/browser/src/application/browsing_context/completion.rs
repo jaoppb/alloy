@@ -114,7 +114,7 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
         let Some(document) = self.document_to_update("image") else {
             return Effects::none();
         };
-        document.fail_image(id);
+        document.record_image_failure(id);
         Effects::from_iter([self.content_damaged()])
     }
 

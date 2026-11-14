@@ -571,3 +571,33 @@ fn an_img_without_its_image_paints_its_alt_text() {
         (0..20).any(|row| (0..100).any(|column| frame.pixel(column, row) != Some(Color::WHITE)));
     assert!(inked, "the text sits at the image's place, top left");
 }
+
+/// The ids the discoverer requests images under are the ids layout's
+/// natural-size lookup and the painter read back (issue #83): a decoded 4×4
+/// `pic.png` lays its `<img>` out — and paints it — at 4×4.
+#[test]
+fn a_decoded_image_lays_its_img_out_at_its_natural_size() {
+    use browser::{ImageStore, MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
+
+    let markup = "<!doctype html><html><head><style>body{margin:0;background:#fff}</style></head>\
+                  <body><img src=\"pic.png\"></body></html>";
+    let tree = dom::parse(markup).unwrap().into_tree();
+    let base = network::Url::parse("http://example.invalid/").unwrap();
+    let found = MarkupDiscoverer.discover(&snapshot(&tree, tree.document()), &base);
+    let size = graphics::SurfaceSize::new(4, 4).unwrap();
+    let pixels = graphics::Framebuffer::filled(size, RED).unwrap();
+    let mut images = ImageStore::new();
+    for request in &found {
+        if let SubresourceRequest::Image(image) = request {
+            images.insert(image.id(), pixels.clone());
+        }
+    }
+
+    let surface = graphics::SurfaceSize::new(20, 20).unwrap();
+    let frame = alloy::render_dom(&tree, css::StyleSheetSet::new(), &images, surface).unwrap();
+
+    assert_eq!(frame.pixel(0, 0), Some(RED));
+    assert_eq!(frame.pixel(3, 3), Some(RED));
+    assert_eq!(frame.pixel(4, 0), Some(Color::WHITE), "4 wide, not 300");
+    assert_eq!(frame.pixel(0, 4), Some(Color::WHITE), "4 tall, not 150");
+}

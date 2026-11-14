@@ -2,11 +2,13 @@
 //! `<img>`, the two subresource-bearing tags v0.5 understands.
 
 use css::{DomSnapshot, NodeRef, SnapshotId};
-use graphics::ImageId;
+
 use network::Url;
 
 use crate::application::SubresourceDiscoverer;
-use crate::domain::{ImageRequest, StylesheetRequest, SubresourceRequest, Subresources};
+use crate::domain::{
+    ImageRequest, StylesheetRequest, SubresourceRequest, Subresources, image_id_of,
+};
 
 /// Discovers `<link rel="stylesheet">` and `<img>` from the markup.
 #[derive(Clone, Copy, Debug, Default)]
@@ -61,8 +63,7 @@ fn rel_is_stylesheet(node: NodeRef<'_>) -> bool {
 fn image_request(id: SnapshotId, node: NodeRef<'_>, base: &Url) -> Option<ImageRequest> {
     let src = node.attribute("src")?;
     let url = base.join(src).ok()?;
-    let image_id = ImageId::new(u32::try_from(id.index()).unwrap_or(u32::MAX));
-    Some(ImageRequest::new(image_id, url))
+    Some(ImageRequest::new(image_id_of(id), url))
 }
 
 #[cfg(test)]

@@ -13,6 +13,7 @@ use graphics::{Point, Rect};
 
 use super::{Atoms, Placements};
 use crate::application::ports::TextMeasurer;
+use crate::domain::computed::intrinsic::IntrinsicSize;
 use crate::domain::dom_snapshot::{ChildIds, SnapshotId};
 use crate::domain::error::CssError;
 use crate::domain::layout_box_tree::{BoxEdges, FragmentText};
@@ -78,7 +79,7 @@ impl<'run, 'tree, M: TextMeasurer> Emitter<'run, 'tree, M> {
             styled.node(),
             rect,
             BoxEdges::ZERO,
-            styled.intrinsic_size(),
+            IntrinsicSize::Resolved,
             ChildIds::from_ids(styled.children().iter()),
         );
         let Some(text) = self.text_on(styled, line) else {

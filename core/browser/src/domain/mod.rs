@@ -18,7 +18,7 @@ pub use document::Document;
 pub use document_request::DocumentRequest;
 pub use effect::{BrowserEffect, Effects};
 pub use fetch::{FetchFailure, FetchPayload, FetchRequest, FetchResult, LoadedDocument};
-pub use image_store::{ImageState, ImageStore, StoreSnapshot};
+pub use image_store::{ImageState, ImageStore, StoreSnapshot, image_id_of};
 pub use link::LinkDestination;
 pub use link_target::{LinkTarget, LinkTargets};
 pub use navigation::{NavigationId, Navigations};

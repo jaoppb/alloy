@@ -287,10 +287,13 @@ Additive; nothing a consumer has to change.
   hints, as `svg`'s already were.
 - **`LayoutBox::intrinsic_size()` gains `IntrinsicSize::Natural(NaturalSize)`** for a box whose resource is loaded; a
   box still `Loading` is `Pending` unless the author pinned both axes; an `Unavailable` one is `Resolved` — it was
-  `Pending` before, for every replaced element whatever its resource. `StyledNode::intrinsic_size()` still answers
-  `Pending` for every replaced element.
+  `Pending` before, for every replaced element whatever its resource. A line fragment (text, or an inline box's line) is
+  always `Resolved`. `StyledNode::intrinsic_size()` is **removed** — only layout knows the resource — and so is the
+  unused `IntrinsicSize::is_pending()`; a consumer asks `StyledNode::is_replaced()`.
 - **A replaced element with `display: inline` is an atomic inline** (CSS 2.1 §9.2.2): `StyledNode::is_atomic_inline()`
   answers it, and inline collection, emission, block-in-inline splitting and margin containment ask the node instead of
-  `Display::is_atomic_inline`. So `ua.css` drops #136's stopgap
-  `img, video, canvas, iframe, object, embed { display: inline-block }` and the `svg { display: inline-block }` rule:
-  the computed `display` of those elements is now `inline`. `StyledNode::replaced()` exposes the `ReplacedElement`.
+  `Display::is_atomic_inline`, which is **renamed** `Display::is_inline_block` because it answers only that. So `ua.css`
+  drops #136's stopgap `img, video, canvas, iframe, object, embed { display: inline-block }` and the
+  `svg { display: inline-block }` rule: the computed `display` of those elements is now `inline`. The `width` / `height`
+  attributes are read with HTML's rules for parsing dimension values (§2.3.4.4) for both the hint and the ratio, so
+  `100px` and `100` agree.

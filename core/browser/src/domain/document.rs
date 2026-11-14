@@ -82,7 +82,7 @@ impl Document {
 
     /// Records that `id` will never be decoded (issue #83): its `<img>` may
     /// then show its `alt` text.
-    pub fn fail_image(&mut self, id: ImageId) {
+    pub fn record_image_failure(&mut self, id: ImageId) {
         self.images.mark_failed(id);
     }
 

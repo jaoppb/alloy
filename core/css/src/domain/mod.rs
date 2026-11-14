@@ -4,6 +4,7 @@
 pub mod color;
 pub mod computed;
 pub mod declaration;
+pub mod dimension_value;
 pub mod dom_snapshot;
 pub mod error;
 pub mod identifier;

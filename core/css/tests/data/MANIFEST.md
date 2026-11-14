@@ -285,6 +285,8 @@ with a non-empty `alt` is laid out as that text.
 | clipping an `alt` text to a sized box; the broken-image icon        | a long `alt` overflows the box the `width` / `height` give it; an unavailable image without `alt` is empty | v0.7        |
 | `min-width` / `max-width` constraints on the natural size (§10.4)   | not applied to a replaced box                                                                              | v0.7        |
 | a natural ratio with no natural size (an SVG with only a `viewBox`) | the default object size                                                                                    | v0.7        |
+| a replaced flex item's content-based main size (CSS Flexbox L1 §9.2) and its ratio under a forced main size | an `auto` main size is 0 (no flex item gets a content-based one yet), and the cross size follows the declared width, not the forced one | v0.7        |
+| an `<object>` with no usable resource represents its children (HTML §15.4.6) | an unavailable `<object>` takes the 300×150 default object size and its fallback content is not laid out | v0.7        |
 
 ### UA sheet rules the cascade cannot express yet
 

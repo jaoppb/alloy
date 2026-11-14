@@ -15,6 +15,7 @@
 use core::fmt::Write;
 
 use crate::domain::declaration::DeclarationBlock;
+use crate::domain::dimension_value::DimensionValue;
 use crate::domain::dom_snapshot::{DomSnapshot, NodeRef, SnapshotNodeKind};
 use crate::domain::error::CssError;
 use crate::domain::input_type::InputType;
@@ -69,11 +70,12 @@ fn collect_presentational_hints(
 fn append_tag_hints(node: NodeRef<'_>, declarations: &mut String) {
     use html::TagName;
     match node.tag() {
+        // `<svg>`'s width/height are CSS lengths (SVG 2 §8.1), taken as written.
+        Some(TagName::Svg) => append_svg_dimension_hints(node, declarations),
         // HTML §15.4.3 "maps to the dimension properties": the embedded content
-        // and image elements, plus `<svg>`'s own width/height (issue #83).
+        // and image elements (issue #83).
         Some(
-            TagName::Svg
-            | TagName::Img
+            TagName::Img
             | TagName::Video
             | TagName::Canvas
             | TagName::Iframe
@@ -86,9 +88,23 @@ fn append_tag_hints(node: NodeRef<'_>, declarations: &mut String) {
     }
 }
 
-fn append_dimension_hints(node: NodeRef<'_>, declarations: &mut String) {
+fn append_svg_dimension_hints(node: NodeRef<'_>, declarations: &mut String) {
     append_hint_dimension(node.attribute("width"), "width", declarations);
     append_hint_dimension(node.attribute("height"), "height", declarations);
+}
+
+/// The `width` / `height` attributes read with the rules for parsing dimension
+/// values (HTML §2.3.4.4): `100`, `100px` and `100abc` are all `100px`.
+fn append_dimension_hints(node: NodeRef<'_>, declarations: &mut String) {
+    append_dimension_hint(node.attribute("width"), "width", declarations);
+    append_dimension_hint(node.attribute("height"), "height", declarations);
+}
+
+fn append_dimension_hint(value: Option<&str>, property: &str, target: &mut String) {
+    let Some(dimension) = value.and_then(DimensionValue::parse) else {
+        return;
+    };
+    let _ = write!(target, "{property}: {}; ", dimension.to_css());
 }
 
 fn append_input_size_hint(node: NodeRef<'_>, target: &mut String) {

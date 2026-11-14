@@ -11,11 +11,11 @@
 //! once a decoded image arrives, and adding the field afterwards would need a
 //! migration note in `PRD-007`.
 //!
-//! A [`crate::StyledNode`] answers `Pending` for every replaced element (its
-//! tree builder sees the tag, `crate::domain::replaced`); layout then asks the
-//! [`crate::NaturalSizes`] port about the resource and reports, per
-//! [`crate::LayoutBox`], whether the box took a natural size, still waits on
-//! one, or is final.
+//! Only layout knows: it asks the [`crate::NaturalSizes`] port about a
+//! replaced element's resource and reports, per [`crate::LayoutBox`], whether
+//! the box took a natural size, still waits on one, or is final. Every other
+//! box — and every line fragment, which never stands for a resource — is
+//! `Resolved`.
 
 use crate::domain::replaced::NaturalSize;
 
@@ -34,12 +34,4 @@ pub enum IntrinsicSize {
     /// The box belongs to a replaced element whose resource is loaded: this is
     /// the resource's natural size, whatever size the box was given.
     Natural(NaturalSize),
-}
-
-impl IntrinsicSize {
-    /// Whether this box still depends on an unloaded resource.
-    #[must_use]
-    pub const fn is_pending(self) -> bool {
-        matches!(self, Self::Pending)
-    }
 }
