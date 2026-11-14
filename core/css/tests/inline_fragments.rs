@@ -148,3 +148,21 @@ fn an_element_box_carries_no_text_and_a_one_line_inline_has_one_fragment() {
     assert_eq!(block.len(), 1);
     assert!(block[0].text().is_none(), "only text fragments carry text");
 }
+
+#[test]
+fn a_space_between_two_inline_elements_keeps_them_apart() {
+    // #141: a text node holding only a space, between two inline elements.
+    let laid = Laid::new("<div><span id=a>a</span> <span id=b>b</span></div>");
+    let a = laid.fragments(laid.element("a"));
+    let b = laid.fragments(laid.element("b"));
+
+    assert_eq!(a.len(), 1);
+    assert_eq!(b.len(), 1);
+    assert_eq!(
+        b[0].content().min_x(),
+        a[0].content()
+            .max_x()
+            .saturating_add(Au::from_raw(CHAR_ADVANCE)),
+        "one space's advance separates \"a\" from \"b\""
+    );
+}

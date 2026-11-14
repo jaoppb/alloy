@@ -289,3 +289,69 @@ fn a_wrapped_link_is_hit_on_its_lines_and_missed_on_the_text_before_it() {
         target
     );
 }
+
+#[test]
+fn a_wrapped_link_is_hit_on_its_second_line_and_missed_past_its_end() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/next.html").unwrap();
+    let mut app = app_over(
+        FakeWeb::new().with_page(target.clone(), "<html><body>next</body></html>"),
+        attributes.initial_size(),
+    );
+    load(
+        &mut app,
+        "<html><body style=\"margin: 0\"><div style=\"width: 90px\">xx \
+         <a href=\"next.html\">bbbb cccc dddd eeee ffff gggg</a></div></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut app);
+
+    // The regions on the link's second line: its `<a>` fragment and its text's.
+    let areas: Vec<graphics::Rect> = app
+        .browsing
+        .content_regions()
+        .map(|region| region.bounds())
+        .collect();
+    let first_top = areas.iter().map(|area| area.min_y()).min().unwrap();
+    let second_top = areas
+        .iter()
+        .map(|area| area.min_y())
+        .filter(|top| *top > first_top)
+        .min()
+        .unwrap();
+    let second_line: Vec<&graphics::Rect> = areas
+        .iter()
+        .filter(|area| area.min_y() == second_top)
+        .collect();
+    let line = **second_line.first().unwrap();
+    let line_end = second_line.iter().map(|area| area.max_x()).max().unwrap();
+    let line_y = middle_px(line.min_y(), line.size().height());
+
+    // Past the end of the second line: empty space a single bounding box of
+    // the whole link would still have covered.
+    let navigations_before = app.stats().navigations();
+    let past_end = f64::from(line_end.to_px().get()) + 4.0;
+    click(&mut system, past_end, line_y);
+    pump(&mut system, &mut presenter, &mut app);
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        app.stats().navigations(),
+        navigations_before,
+        "a click past the end of a wrapped link's line must miss it"
+    );
+
+    click(
+        &mut system,
+        middle_px(line.min_x(), line.size().width()),
+        line_y,
+    );
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        completed_navigation(&mut system, &mut presenter, &mut app, navigations_before),
+        target,
+        "the second line of a wrapped link is hit"
+    );
+}
