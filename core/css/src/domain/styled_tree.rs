@@ -124,7 +124,8 @@ impl StyledTree {
     /// Builds a styled tree by calling `compute` once per node, in document
     /// order, passing the parent's already-computed style (or `None` at the
     /// root). Pre-order construction of the snapshot guarantees the parent is
-    /// finished before the child is visited.
+    /// finished before the child is visited. The root element's `display` is
+    /// then blockified (CSS Display L3 §2.7), whatever `compute` returned.
     #[must_use]
     pub fn recompute_in_document_order(
         snapshot: &DomSnapshot,

@@ -720,7 +720,7 @@ summary {
 	display: block;
 }
 
-/* ---- §15.5.12–§15.5.14 marquee, meter, progress -------------------------- */
+/* ---- §15.5.13–§15.5.15 marquee, meter, progress -------------------------- */
 
 marquee {
 	display: inline-block;
@@ -728,17 +728,21 @@ marquee {
 	overflow: hidden !important;
 }
 
-/* The bar is not drawn yet; the box keeps the size the spec gives it. */
+/*
+ * The gauge is not drawn yet: the box keeps the size the spec gives it, and
+ * the element's fallback content paints inside it (and may spill out) until
+ * it is. Their `vertical-align: -0.2em` is a MANIFEST cut.
+ */
 meter {
 	display: inline-block;
-	width: 5em;
-	height: 1em;
+	inline-size: 5em;
+	block-size: 1em;
 }
 
 progress {
 	display: inline-block;
-	width: 10em;
-	height: 1em;
+	inline-size: 10em;
+	block-size: 1em;
 }
 
 /* ---- Embedded content ------------------------------------------------------ */

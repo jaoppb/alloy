@@ -349,4 +349,22 @@ mod tests {
             );
         }
     }
+
+    /// The `inline-block` stopgap until #83 must cover every replaced element
+    /// but `<svg>` (which has its own rule): one it misses loses its box.
+    #[test]
+    fn every_replaced_element_has_the_inline_block_stopgap() {
+        let all = crate::domain::computed::intrinsic::REPLACED_TAGS;
+        let replaced = all
+            .iter()
+            .map(html::TagName::as_str)
+            .filter(|tag| *tag != "svg");
+        for tag in replaced {
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::InlineBlock,
+                "<{tag}>"
+            );
+        }
+    }
 }

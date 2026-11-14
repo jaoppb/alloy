@@ -1,8 +1,8 @@
 //! Rectangle proofs for the box model (v0.5 B4): margin collapse (CSS 2.1
 //! §8.3.1) and `box-sizing` (CSS Box Sizing L3 §5). Every fixture uses `div`
-//! elements, which the embedded UA sheet (`core/css/assets/ua.css`) leaves at
-//! `ComputedStyle::initial()` — block display, zero margin — so only the
-//! author CSS each test declares is in play.
+//! elements, which the embedded UA sheet (`core/css/assets/ua.css`) makes
+//! `display: block` with zero margin, so only the author CSS each test
+//! declares is in play.
 
 #![allow(
     clippy::unwrap_used,
