@@ -357,8 +357,8 @@ mod tests {
         let all = crate::domain::computed::intrinsic::REPLACED_TAGS;
         let replaced = all
             .iter()
-            .map(html::TagName::as_str)
-            .filter(|tag| *tag != "svg");
+            .filter(|tag| **tag != html::TagName::svg())
+            .map(html::TagName::as_str);
         for tag in replaced {
             assert_eq!(
                 ua_display(&markup_with(tag), tag),

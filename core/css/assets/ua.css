@@ -49,7 +49,11 @@ input[type="hidden"] {
 	display: none !important;
 }
 
-/* A hidden `<embed>` keeps a zero-size inline box rather than none. */
+/*
+ * A hidden `<embed>` is a zero-size inline rather than `display: none`. Until
+ * #83 sizes replaced inlines, a non-atomic inline gets no box at all, which
+ * shows the same as the spec's zero-size box.
+ */
 embed[hidden] {
 	display: inline;
 	width: 0;
@@ -763,6 +767,9 @@ svg {
  * fallback content paint instead. #83 makes layout treat a replaced element
  * with `display: inline` as atomic (CSS 2.1 §9.2.2). The list is
  * `REPLACED_TAGS` (`core/css/src/domain/computed/intrinsic.rs`) minus `svg`.
+ * `embed[hidden]` (0,1,1) outweighs this and stays `inline`, so a hidden
+ * `<embed>` gets no box until #83 — the same zero-size result the spec's rule
+ * gives.
  */
 img,
 video,

@@ -244,11 +244,12 @@ Additive; nothing a consumer has to change.
   `Block`. A consumer that built a style from `initial()` and relied on it being block-level must say `with_display`.
 - **An element `ua.css` names no display for is inline.** The UA sheet states every block of WHATWG HTML §15.3 (#133)
   and the §15.5 widgets that are inline-blocks (`marquee`, `meter`, `progress`), so what changes is the rest: unlisted
-  phrasing elements (`abbr`, `time`, `bdi`, `q`, `data`, `output`, `ruby`/`rt`, …), `noscript`, `math`, `optgroup`,
-  `source`, and every custom element (`<x-foo>`) now sit on the line. Block-level content inside them splits their run
-  (#135). The replaced elements (`img`, `video`, `canvas`, `iframe`, `object`, `embed`) keep a stopgap
+  phrasing elements (`bdo`, `big`, `time`, `bdi`, `q`, `data`, `output`, `ruby`/`rt`, …), `noscript`, `math`,
+  `optgroup`, `source`, and every custom element (`<x-foo>`) now sit on the line. Block-level content inside them splits
+  their run (#135). The replaced elements (`img`, `video`, `canvas`, `iframe`, `object`, `embed`) keep a stopgap
   `display: inline-block` until #83 sizes replaced inlines, so they keep their box and their fallback content stays
-  hidden.
+  hidden — except a hidden `<embed>`, whose `embed[hidden]` rule outweighs the stopgap and leaves it a non-atomic inline
+  with no box, the same zero-size result the spec's rule gives.
 - **A custom element is laid out as an inline box.** Its own `width`, `height`, `margin`, `border` and `padding` are not
   laid out — the MANIFEST "Inline formatting simplifications" cut — so `<my-card style="border: …">` loses its frame
   unless the page gives it `display: block`, as the spec and browsers also require.

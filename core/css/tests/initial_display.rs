@@ -167,7 +167,9 @@ fn a_sized_image_keeps_its_box_until_83_sizes_replaced_elements() {
 }
 
 /// Every replaced element but `<svg>` (which has its own rule), as
-/// `core/css/src/domain/computed/intrinsic.rs` lists them.
+/// `core/css/src/domain/computed/intrinsic.rs` lists them. This copy only
+/// drives the behaviour checks below; the `ua_sheet.rs` unit test reads
+/// `REPLACED_TAGS` itself and is what guards the list's completeness.
 const REPLACED: [&str; 6] = ["img", "video", "canvas", "iframe", "object", "embed"];
 
 #[test]
