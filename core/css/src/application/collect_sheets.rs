@@ -67,15 +67,28 @@ fn collect_presentational_hints(
 }
 
 fn append_tag_hints(node: NodeRef<'_>, declarations: &mut String) {
+    use html::TagName;
     match node.tag() {
-        Some(html::TagName::Svg) => {
-            append_hint_dimension(node.attribute("width"), "width", declarations);
-            append_hint_dimension(node.attribute("height"), "height", declarations);
-        }
-        Some(html::TagName::Input) => append_input_size_hint(node, declarations),
-        Some(html::TagName::Textarea) => append_textarea_dimensions_hint(node, declarations),
+        // HTML §15.4.3 "maps to the dimension properties": the embedded content
+        // and image elements, plus `<svg>`'s own width/height (issue #83).
+        Some(
+            TagName::Svg
+            | TagName::Img
+            | TagName::Video
+            | TagName::Canvas
+            | TagName::Iframe
+            | TagName::Object
+            | TagName::Embed,
+        ) => append_dimension_hints(node, declarations),
+        Some(TagName::Input) => append_input_size_hint(node, declarations),
+        Some(TagName::Textarea) => append_textarea_dimensions_hint(node, declarations),
         _ => {}
     }
+}
+
+fn append_dimension_hints(node: NodeRef<'_>, declarations: &mut String) {
+    append_hint_dimension(node.attribute("width"), "width", declarations);
+    append_hint_dimension(node.attribute("height"), "height", declarations);
 }
 
 fn append_input_size_hint(node: NodeRef<'_>, target: &mut String) {
