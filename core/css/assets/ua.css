@@ -7,14 +7,15 @@
  * Laid out section by section after WHATWG HTML §15.3 ("Rendering") and
  * §15.5.5 (`details`), and each element's base `display` is declared exactly
  * once, in its section's display rule. Attribute and state rules (`[hidden]`,
- * `[popover]`, `dialog[open]`, `input[type="hidden"]`, `table > form`,
- * `embed[hidden]`) then override it. The sheet must not lean on
- * `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines as
- * `inline` (#81). Box and font values follow the spec except where a value
- * below says it keeps an older one. Every §15.3.1–§15.3.12 rule this sheet
- * does not carry is listed in `core/css/tests/data/MANIFEST.md` ("UA sheet
- * rules the cascade cannot express yet"): per rule, or per category for the
- * presentational hints, the quirks-mode rules and the prose-only rules.
+ * `[popover]`, `dialog[open]`, `dialog[hidden]`, `input[type="hidden"]`,
+ * `table > form`, `embed[hidden]`) then override it. The sheet must not lean
+ * on `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines
+ * as `inline` (#81). Box and font values follow the spec except where a value
+ * below says it keeps an older one. The §15.3.1–§15.3.12 rules this sheet
+ * does not carry, or carries in part, are listed in
+ * `core/css/tests/data/MANIFEST.md` ("UA sheet rules the cascade cannot
+ * express yet") — a list built by probing the spec's CSS, not proven
+ * exhaustive.
  */
 
 /* ---- §15.3.1 Hidden elements ------------------------------------------- */
@@ -445,8 +446,10 @@ th[nowrap] {
 
 /*
  * The `frame` and `rules` hints, case-sensitively like the `align` hints.
- * They set only the table's own border style and colour, so they draw
- * nothing until an author gives the table a border width. The cell and
+ * They set only the table's own border style and colour. The spec's initial
+ * `border-width` is `medium`, so there they draw a medium border; here it is
+ * 0 (MANIFEST: border simplifications), so they draw nothing until an author
+ * gives the table a border width. The cell and
  * group borders of `rules` need `border-collapse` and are left out
  * (MANIFEST: presentational hints). `rules` comes first so a `frame` on the
  * same table wins, as in the spec.
@@ -511,8 +514,9 @@ table[frame="border"] {
 
 /*
  * A hidden table part keeps `visibility: collapse` under `[hidden]`'s
- * `display: none`, as in the spec: it only shows once an author
- * re-displays the element.
+ * `display: none`, as in the spec: the collapse only takes effect once an
+ * author re-displays the element — here as an invisible block that still
+ * takes space, until there is table layout.
  */
 colgroup[hidden],
 col[hidden],
@@ -716,7 +720,7 @@ textarea {
 	border: 1px solid #767676;
 	background-color: #ffffff;
 	padding: 2px;
-	/* Refused until `pre-wrap` is supported (MANIFEST cut); kept as the intended value. */
+	/* Dropped silently by the cascade until `pre-wrap` is supported (MANIFEST cut); kept as the intended value. */
 	white-space: pre-wrap;
 	font-family: monospace;
 	width: 12em;
