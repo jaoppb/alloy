@@ -7,8 +7,9 @@
  * Laid out section by section after WHATWG HTML §15.3 ("Rendering") and
  * §15.5.5 (`details`), and each element's base `display` is declared exactly
  * once, in its section's display rule — attribute and state rules
- * (`[hidden]`, `dialog[open]`, `input[type="hidden"]`, `table > form`,
- * `embed[hidden]`) then override it: the sheet must not lean on
+ * (`[hidden]`, `dialog[open]`, `input[type="hidden"]`, `table > form`) then
+ * override it, and `embed[hidden]` gives a hidden `<embed>` its own: the
+ * sheet must not lean on
  * `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines as
  * `inline` (#81). Box and font values follow the spec except where a value
  * below says it keeps an older one. Every §15.3.1–§15.3.12 rule this sheet
@@ -144,7 +145,7 @@ center {
 /*
  * The `align` hints of `div` (§15.3.3) and of `p` and `h1`–`h6` (§15.3.8),
  * matched case-sensitively: the parser refuses the spec's `i` flag
- * (MANIFEST: presentational hints).
+ * (MANIFEST: presentational hints). `middle` centres a `div` only.
  */
 div[align="left"],
 p[align="left"],
@@ -176,14 +177,7 @@ h3[align="center"],
 h4[align="center"],
 h5[align="center"],
 h6[align="center"],
-div[align="middle"],
-p[align="middle"],
-h1[align="middle"],
-h2[align="middle"],
-h3[align="middle"],
-h4[align="middle"],
-h5[align="middle"],
-h6[align="middle"] {
+div[align="middle"] {
 	text-align: center;
 }
 

@@ -330,10 +330,12 @@ mod tests {
         assert_eq!(ua_display(markup, "li"), Display::ListItem);
     }
 
+    /// A rule the parser refuses with a note never applies, silently; every
+    /// rule shipped in `assets/ua.css` must parse.
     #[test]
-    fn a_hidden_embed_keeps_a_zero_size_inline_box() {
-        let markup = "<!doctype html><body><embed hidden></body>";
-        assert_eq!(ua_display(markup, "embed"), Display::Inline);
+    fn the_ua_sheet_parses_without_a_note() {
+        let notes = UaCascade::new().ua_rules.notes().clone();
+        assert!(notes.is_empty(), "{notes:?}");
     }
 
     #[test]

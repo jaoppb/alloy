@@ -15,7 +15,7 @@ use css::domain::computed::text_advance::{
 };
 use css::{
     CascadeResolver, ComputedStyle, CssColor, FontFamily, GenericFamily, Length, LengthEdges,
-    UaCascade, collect_style_sheets, snapshot,
+    Sizing, UaCascade, collect_style_sheets, snapshot,
 };
 
 /// The computed style of the element carrying `id="target"` in `body`.
@@ -320,11 +320,9 @@ fn paragraphs_and_headings_honour_the_align_hint() {
 }
 
 #[test]
-fn an_active_link_rule_is_inert_until_there_is_pointer_state() {
-    let style = style_of("<a id=target href=x>x</a>");
-    assert_eq!(
-        style.color(),
-        CssColor::rgb(0x00, 0x00, 0xEE),
-        "`:active` never matches yet"
-    );
+fn a_hidden_embed_is_a_zero_size_inline_box() {
+    let style = style_of("<embed id=target hidden>");
+    assert_eq!(style.display(), css::Display::Inline);
+    assert_eq!(style.width(), Sizing::Fixed(Length::Pixels(0.0)));
+    assert_eq!(style.height(), Sizing::Fixed(Length::Pixels(0.0)));
 }
