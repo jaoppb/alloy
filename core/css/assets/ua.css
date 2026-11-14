@@ -722,6 +722,15 @@ hr {
 	overflow: hidden;
 }
 
+/*
+ * `hr[align]` needs `auto` margins and the `color` / `size` / `width` hints
+ * need the attribute's value (MANIFEST cuts); this rule needs neither.
+ */
+hr[color],
+hr[noshade] {
+	border-style: solid;
+}
+
 /* ---- §15.3.12 The fieldset and legend elements --------------------------- */
 
 /*

@@ -470,3 +470,15 @@ fn hr_is_a_gray_inset_rule_with_half_an_em_above_and_below() {
         (Overflow::Hidden, Overflow::Hidden)
     );
 }
+
+#[test]
+fn a_colored_or_unshaded_hr_has_a_solid_border() {
+    for attribute in ["color=red", "noshade"] {
+        let styles = style_of(&format!("<hr id=target {attribute}>"))
+            .visual()
+            .border_styles();
+        for side in [styles.top(), styles.right(), styles.bottom(), styles.left()] {
+            assert_eq!(side, BorderStyle::Solid, "<hr {attribute}>");
+        }
+    }
+}
