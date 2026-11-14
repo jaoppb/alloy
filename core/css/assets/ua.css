@@ -444,6 +444,71 @@ th[nowrap] {
 }
 
 /*
+ * The `frame` hint, case-sensitively like the `align` hints. It only sets
+ * the table's own border style, so it draws nothing until an author gives
+ * the table a border width; the `rules` hints are left out (MANIFEST:
+ * presentational hints).
+ */
+table[frame="void"],
+table[frame="above"],
+table[frame="below"],
+table[frame="hsides"],
+table[frame="lhs"],
+table[frame="rhs"],
+table[frame="vsides"],
+table[frame="box"],
+table[frame="border"] {
+	border-color: black;
+}
+
+table[frame="void"] {
+	border-style: hidden;
+}
+
+table[frame="above"] {
+	border-style: outset hidden hidden hidden;
+}
+
+table[frame="below"] {
+	border-style: hidden hidden outset hidden;
+}
+
+table[frame="hsides"] {
+	border-style: outset hidden outset hidden;
+}
+
+table[frame="lhs"] {
+	border-style: hidden hidden hidden outset;
+}
+
+table[frame="rhs"] {
+	border-style: hidden outset hidden hidden;
+}
+
+table[frame="vsides"] {
+	border-style: hidden outset;
+}
+
+table[frame="box"],
+table[frame="border"] {
+	border-style: outset;
+}
+
+/*
+ * A hidden table part keeps `visibility: collapse` under `[hidden]`'s
+ * `display: none`, as in the spec: it only shows once an author
+ * re-displays the element.
+ */
+colgroup[hidden],
+col[hidden],
+thead[hidden],
+tbody[hidden],
+tfoot[hidden],
+tr[hidden] {
+	visibility: collapse;
+}
+
+/*
  * The `align` hints of §15.3.8, matched case-sensitively like `div`'s (the
  * parser refuses the spec's `i` flag): `p` and `h1`–`h6` take left, right,
  * center and justify; the table parts also take `middle` (prose) and

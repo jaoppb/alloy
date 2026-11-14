@@ -13,6 +13,7 @@ use css::domain::computed::text_advance::{
     FontStyle, FontWeight, LetterSpacing, LineHeight, TextDecoration, TextDecorationStyle,
     TextTransform, WordSpacing,
 };
+use css::domain::computed::visual::BorderStyle;
 use css::{
     CascadeResolver, ComputedStyle, CssColor, FontFamily, GenericFamily, Length, LengthEdges,
     Sizing, UaCascade, collect_style_sheets, snapshot,
@@ -311,28 +312,35 @@ fn a_nowrap_cell_does_not_wrap() {
     }
 }
 
+/// The alignment the UA sheet gives `<tag align=hint>` under a parent
+/// aligned the opposite way of the hint, so a missing rule shows.
+fn aligned(tag: &str, hint: &str, wrap: impl Fn(&str) -> String) -> TextAlign {
+    let parent = if hint == "right" { "left" } else { "right" };
+    let element = format!("<{tag} id=target align={hint}>x</{tag}>");
+    style_of(&format!(
+        "<div style='text-align:{parent}'>{}</div>",
+        wrap(&element)
+    ))
+    .text_align()
+}
+
 #[test]
 fn paragraphs_and_headings_honour_the_align_hint() {
-    for tag in ["p", "h1", "h6"] {
+    for tag in ["p", "h1", "h2", "h3", "h4", "h5", "h6"] {
         for (hint, expected) in [
             ("left", TextAlign::Left),
             ("right", TextAlign::Right),
             ("center", TextAlign::Center),
             ("justify", TextAlign::Justify),
         ] {
-            let markup = format!(
-                "<div style='text-align:right'><{tag} id=target align={hint}>x</{tag}></div>"
-            );
             assert_eq!(
-                style_of(&markup).text_align(),
+                aligned(tag, hint, str::to_owned),
                 expected,
                 "<{tag} align={hint}>"
             );
         }
-        let middle =
-            format!("<div style='text-align:right'><{tag} id=target align=middle>x</{tag}></div>");
         assert_eq!(
-            style_of(&middle).text_align(),
+            aligned(tag, "middle", str::to_owned),
             TextAlign::Right,
             "`middle` centres a div only (§15.3.3): <{tag}> keeps the inherited alignment"
         );
@@ -341,17 +349,28 @@ fn paragraphs_and_headings_honour_the_align_hint() {
 
 #[test]
 fn table_parts_honour_the_align_hint() {
-    for (hint, expected) in [
-        ("left", TextAlign::Left),
-        ("center", TextAlign::Center),
-        ("middle", TextAlign::Center),
-        ("absmiddle", TextAlign::Center),
-        ("justify", TextAlign::Justify),
-    ] {
-        let cell = style_of(&format!(
-            "<table style='text-align:right'><tr><td id=target align={hint}>x</td></tr></table>"
-        ));
-        assert_eq!(cell.text_align(), expected, "<td align={hint}>");
+    // Cells only survive tree construction inside a row; the rest inside a table.
+    let in_table = |tag: &str| -> fn(&str) -> String {
+        if matches!(tag, "td" | "th") {
+            return |element| format!("<table><tr>{element}</tr></table>");
+        }
+        |element| format!("<table>{element}</table>")
+    };
+    for tag in ["thead", "tbody", "tfoot", "tr", "td", "th"] {
+        for (hint, expected) in [
+            ("left", TextAlign::Left),
+            ("right", TextAlign::Right),
+            ("center", TextAlign::Center),
+            ("middle", TextAlign::Center),
+            ("absmiddle", TextAlign::Center),
+            ("justify", TextAlign::Justify),
+        ] {
+            assert_eq!(
+                aligned(tag, hint, in_table(tag)),
+                expected,
+                "<{tag} align={hint}>"
+            );
+        }
     }
     let inherited =
         style_of("<table><tr align=right><td id=target>x</td></tr></table>").text_align();
@@ -360,6 +379,23 @@ fn table_parts_honour_the_align_hint() {
         TextAlign::Right,
         "a cell inherits its row's alignment"
     );
+}
+
+#[test]
+fn a_table_frame_sets_the_tables_own_border_style() {
+    let style = style_of("<table id=target frame=above><tr><td>x</td></tr></table>");
+    let sides = style.visual().border_styles();
+    assert_eq!(sides.top(), BorderStyle::Outset);
+    assert_eq!(sides.right(), BorderStyle::Hidden);
+    assert_eq!(sides.bottom(), BorderStyle::Hidden);
+    assert_eq!(sides.left(), BorderStyle::Hidden);
+}
+
+#[test]
+fn a_hidden_table_part_collapses_once_an_author_displays_it() {
+    let style =
+        style_of("<table><tr id=target hidden style='display:block'><td>x</td></tr></table>");
+    assert_eq!(style.visibility(), css::Visibility::Collapse);
 }
 
 #[test]
