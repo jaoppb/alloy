@@ -705,6 +705,21 @@ textarea {
 	height: 2.4em;
 }
 
+/* ---- §15.3.11 The hr element -------------------------------------------- */
+
+/*
+ * `display: block` is in §15.3.3 above. The `inset` border paints solid in its
+ * `currentColor` until stroke styles rasterize (MANIFEST: border simplifications).
+ */
+hr {
+	color: gray;
+	border-style: inset;
+	border-width: 1px;
+	margin-block: 0.5em;
+	margin-inline: auto;
+	overflow: hidden;
+}
+
 /* ---- §15.3.12 The fieldset and legend elements --------------------------- */
 
 /*

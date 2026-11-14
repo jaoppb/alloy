@@ -477,3 +477,61 @@ fn outline_paints_outside_border_box_and_leaves_layout_identical() {
         "bottom border must be blue"
     );
 }
+
+/// `<p>a</p><hr><p>b</p>` with no author rule for `hr` (issue #82).
+const HR_PAGE: &str = "<!doctype html><html><head><style>body{margin:0;background:#fff;color:#000}</style></head>\
+                       <body><p>a</p><hr><p>b</p></body></html>";
+
+const WHITE: Color = Color::rgb(0xff, 0xff, 0xff);
+
+/// A pixel of the UA `hr` rule's `color: gray` border over the white page:
+/// neutral (the `inset` style paints solid until stroke styles rasterize —
+/// MANIFEST "Border simplifications"), never the background, and the 2px
+/// rule's edges blend with white where it sits at a fractional `y`.
+fn is_rule_gray(pixel: Option<Color>) -> bool {
+    pixel.is_some_and(|color| {
+        let (red, green, blue) = (color.red(), color.green(), color.blue());
+        color != WHITE && red == green && green == blue && red >= 0x80
+    })
+}
+
+#[test]
+fn hr_paints_a_full_width_gray_rule_between_the_paragraphs() {
+    let options = RenderOptions::new(200, 120);
+    let bytes = render_html_to_png(HR_PAGE, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    let rule_rows: Vec<u32> = (0..frame.height())
+        .filter(|&row| (0..frame.width()).all(|column| is_rule_gray(frame.pixel(column, row))))
+        .collect();
+    let (Some(&top), Some(&bottom)) = (rule_rows.first(), rule_rows.last()) else {
+        panic!("the hr paints no full-width row: margin-inline: auto on an auto width is 0");
+    };
+    assert!(
+        bottom.saturating_sub(top) < 3,
+        "a 1px top and a 1px bottom border with no content between, at most 3 blended rows: {rule_rows:?}"
+    );
+
+    let has_ink = |rows: core::ops::Range<u32>| {
+        rows.into_iter().any(|row| {
+            (0..frame.width()).any(|column| {
+                frame
+                    .pixel(column, row)
+                    .is_some_and(|color| color.red() < 0x40)
+            })
+        })
+    };
+    assert!(has_ink(0..top), "\"a\" is painted above the rule");
+    assert!(
+        has_ink(bottom.saturating_add(1)..frame.height()),
+        "\"b\" is painted below the rule"
+    );
+}
+
+#[test]
+fn hr_matches_golden() {
+    let options = RenderOptions::new(200, 120);
+    let bytes = render_html_to_png(HR_PAGE, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+    assert_matches_golden(&frame, &golden_path("hr.png"));
+}
