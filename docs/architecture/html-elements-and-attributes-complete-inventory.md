@@ -8,9 +8,9 @@
 - **Total de Elementos/Tags HTML Padrão Modernos (WHATWG / MDN):** 114
 - **Total de Elementos Legados/Obsoletos Reconhecidos pelo Parser:** 27 (regras de tolerância web compat)
 - **Total Geral de Elementos Catalogados:** 141
-- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 32 (22.7% do total; 27.2%
+- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 34 (24.1% do total; 28.9%
   dos modernos)
-- **Elementos Apenas Parseados (sem efeito de renderização no momento):** 6 (4.3% do total)
+- **Elementos Apenas Parseados (sem efeito de renderização no momento):** 4 (2.8% do total)
 - **Elementos Pendentes para HTML Completo:** 103 (73.0% do total; 77 modernos + 26 legados)
 - **Total de Atributos Globais Padrão:** 32 (incluindo extensões modernas como `popover`, `inert`, `writingsuggestions`)
 - **Total de Atributos ARIA (Estados e Propriedades):** 48
@@ -24,8 +24,8 @@
 | :-------------------------------------------------------------------- | :---: | :---------: | :-------------: | :-------: | :-------: | :-------------- |
 | 01. Raiz e Metadados do Documento (Root & Document Metadata)          |   7   |      7      |        0        |     0     |   100%    | 🟢 Suportado    |
 | 02. Seções e Estrutura Semântica (Content Sectioning)                 |  15   |     12      |        0        |     3     |    80%    | 🟡 Em progresso |
-| 03. Agrupamento de Texto e Blocos (Grouping & Text Content)           |  16   |      8      |        1        |     7     |    50%    | 🟡 Em progresso |
-| 04. Semântica Inline & Nível de Texto (Inline Text Semantics)         |  29   |      2      |        4        |    23     |    7%     | 🟡 Em progresso |
+| 03. Agrupamento de Texto e Blocos (Grouping & Text Content)           |  16   |      9      |        0        |     7     |    56%    | 🟡 Em progresso |
+| 04. Semântica Inline & Nível de Texto (Inline Text Semantics)         |  29   |      3      |        3        |    23     |    10%    | 🟡 Em progresso |
 | 05. Mídia e Conteúdo Embutido (Embedded & Replaced Content)           |  11   |      0      |        1        |    10     |    0%     | ⚪ Pendente     |
 | 06. Tabelas e Dados Tabulares (Tabular Data & Tables)                 |  10   |      0      |        0        |    10     |    0%     | ⚪ Pendente     |
 | 07. Formulários e Controles de Usuário (Forms & Interactive Controls) |  14   |      0      |        0        |    14     |    0%     | ⚪ Pendente     |
