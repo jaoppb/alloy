@@ -79,11 +79,11 @@ impl Laid {
     /// `body` (no UA body margin) laid out at an 800px viewport, with no
     /// resource loaded.
     fn body(body: &str) -> Self {
-        Self::loading(body, Resources::default())
+        Self::with_resources(body, Resources::default())
     }
 
     /// `body` laid out with `resources` behind the [`NaturalSizes`] port.
-    fn loading(body: &str, resources: Resources) -> Self {
+    fn with_resources(body: &str, resources: Resources) -> Self {
         let markup = format!(
             "<!doctype html><html><head><style>body {{ margin: 0 }}</style></head><body>{body}</body></html>"
         );
@@ -151,8 +151,9 @@ const fn whole_px(value: Au) -> i32 {
     value.raw().checked_div(px(1).raw()).unwrap()
 }
 
-/// Every replaced element the dimension attributes apply to (HTML §15.4.3).
-const DIMENSIONED: [&str; 6] = ["img", "video", "canvas", "iframe", "object", "embed"];
+/// Every replaced element the dimension attributes map to `width` / `height`
+/// on (HTML §15.4.3) — not `<canvas>`, whose attributes are its bitmap.
+const DIMENSIONED: [&str; 5] = ["img", "video", "iframe", "object", "embed"];
 
 #[test]
 fn the_width_and_height_attributes_size_every_replaced_element() {
@@ -185,13 +186,13 @@ fn a_dimension_attribute_on_a_non_replaced_element_is_ignored() {
 
 #[test]
 fn a_loaded_image_with_no_size_from_css_takes_its_natural_size() {
-    let laid = Laid::loading("<img>", Resources::default().with("img", loaded(40, 20)));
+    let laid = Laid::with_resources("<img>", Resources::default().with("img", loaded(40, 20)));
     assert_eq!(laid.content_px("img"), (40, 20));
 }
 
 #[test]
 fn a_css_width_alone_scales_the_height_by_the_natural_ratio() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img style='width:80px'>",
         Resources::default().with("img", loaded(40, 20)),
     );
@@ -200,7 +201,7 @@ fn a_css_width_alone_scales_the_height_by_the_natural_ratio() {
 
 #[test]
 fn a_css_height_alone_scales_the_width_by_the_natural_ratio() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img style='height:10px'>",
         Resources::default().with("img", loaded(40, 20)),
     );
@@ -209,7 +210,7 @@ fn a_css_height_alone_scales_the_width_by_the_natural_ratio() {
 
 #[test]
 fn both_css_axes_stretch_the_image_whatever_its_ratio() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img style='width:10px;height:10px'>",
         Resources::default().with("img", loaded(40, 20)),
     );
@@ -218,7 +219,7 @@ fn both_css_axes_stretch_the_image_whatever_its_ratio() {
 
 #[test]
 fn a_block_level_image_takes_its_natural_width_not_its_containing_blocks() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img style='display:block'>",
         Resources::default().with("img", loaded(40, 20)),
     );
@@ -229,7 +230,7 @@ fn a_block_level_image_takes_its_natural_width_not_its_containing_blocks() {
 
 #[test]
 fn the_attribute_ratio_sizes_an_image_that_is_still_loading() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img width=100 height=50 style='width:40px;height:auto'>",
         Resources::default().with("img", ReplacedResource::Loading),
     );
@@ -238,7 +239,7 @@ fn the_attribute_ratio_sizes_an_image_that_is_still_loading() {
 
 #[test]
 fn the_natural_ratio_beats_the_attribute_ratio_once_loaded() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img width=100 height=50 style='width:40px;height:auto'>",
         Resources::default().with("img", loaded(30, 30)),
     );
@@ -247,7 +248,7 @@ fn the_natural_ratio_beats_the_attribute_ratio_once_loaded() {
 
 #[test]
 fn an_unsized_image_that_is_loading_or_unavailable_is_empty() {
-    let loading = Laid::loading(
+    let loading = Laid::with_resources(
         "<img>",
         Resources::default().with("img", ReplacedResource::Loading),
     );
@@ -297,7 +298,7 @@ fn a_block_inside_an_inline_replaced_element_does_not_split_the_line() {
 
 #[test]
 fn a_loaded_image_reports_its_natural_size() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img style='width:80px'>",
         Resources::default().with("img", loaded(40, 20)),
     );
@@ -308,9 +309,9 @@ fn a_loaded_image_reports_its_natural_size() {
 #[test]
 fn a_loading_image_is_pending_until_both_axes_are_pinned() {
     let resources = || Resources::default().with("img", ReplacedResource::Loading);
-    let unpinned = Laid::loading("<img style='width:20px'>", resources());
+    let unpinned = Laid::with_resources("<img style='width:20px'>", resources());
     assert_eq!(unpinned.marker_of("img"), IntrinsicSize::Pending);
-    let pinned = Laid::loading("<img width=20 height=10>", resources());
+    let pinned = Laid::with_resources("<img width=20 height=10>", resources());
     assert_eq!(pinned.marker_of("img"), IntrinsicSize::Resolved);
 }
 
@@ -366,7 +367,7 @@ fn an_empty_alt_shows_nothing() {
 
 #[test]
 fn a_loaded_image_never_shows_its_alt_text() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img alt='hello'>",
         Resources::default().with("img", loaded(40, 20)),
     );
@@ -376,7 +377,7 @@ fn a_loaded_image_never_shows_its_alt_text() {
 
 #[test]
 fn a_loading_image_shows_no_alt_text_yet() {
-    let laid = Laid::loading(
+    let laid = Laid::with_resources(
         "<img alt='hello'>",
         Resources::default().with("img", ReplacedResource::Loading),
     );
@@ -414,8 +415,8 @@ fn every_fragment_of_an_image_showing_its_alt_is_resolved() {
 fn a_dimension_attribute_reads_the_same_with_or_without_px() {
     let resources = || Resources::default().with("img", ReplacedResource::Loading);
     let style = "style='width:40px;height:auto'";
-    let bare = Laid::loading(&format!("<img width=100 height=50 {style}>"), resources());
-    let suffixed = Laid::loading(
+    let bare = Laid::with_resources(&format!("<img width=100 height=50 {style}>"), resources());
+    let suffixed = Laid::with_resources(
         &format!("<img width=100px height=50px {style}>"),
         resources(),
     );
@@ -441,4 +442,16 @@ fn a_canvas_scales_its_bitmap_when_css_sets_one_axis() {
 fn a_canvas_without_attributes_is_a_300_by_150_bitmap() {
     let laid = Laid::body("<canvas style='width:600px'></canvas>");
     assert_eq!(laid.content_px("canvas"), (600, 300));
+}
+
+#[test]
+fn a_canvas_reads_its_attributes_as_non_negative_integers() {
+    let laid = Laid::body("<canvas width='+400' height='-0'></canvas>");
+    assert_eq!(laid.content_px("canvas"), (400, 0));
+}
+
+#[test]
+fn the_attribute_ratio_sizes_a_video_before_it_loads() {
+    let laid = Laid::body("<video width=100 height=50 style='width:40px;height:auto'></video>");
+    assert_eq!(laid.content_px("video"), (40, 20));
 }

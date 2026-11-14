@@ -14,7 +14,7 @@
 use graphics::{AU_PER_PX, Au};
 use html::TagName;
 
-use crate::domain::dimension_value::DimensionValue;
+use crate::domain::dimension_value::{DimensionValue, non_negative_integer};
 use crate::domain::dom_snapshot::NodeRef;
 
 /// The elements whose size comes from a resource rather than from CSS
@@ -284,17 +284,9 @@ fn canvas_bitmap(node_ref: NodeRef<'_>) -> UsedSize {
 
 fn canvas_side(raw: Option<&str>, default: Au) -> Au {
     raw.and_then(non_negative_integer)
+        .and_then(|pixels| i32::try_from(pixels).ok())
         .and_then(Au::from_whole_px)
         .unwrap_or(default)
-}
-
-/// Leading white space, then digits; whatever follows is ignored.
-fn non_negative_integer(raw: &str) -> Option<i32> {
-    let rest = raw.trim_start_matches(|character: char| character.is_ascii_whitespace());
-    let end = rest
-        .find(|character: char| !character.is_ascii_digit())
-        .unwrap_or(rest.len());
-    rest.get(..end)?.parse().ok()
 }
 
 fn attribute_ratio(tag: &TagName, node_ref: NodeRef<'_>) -> Option<AspectRatio> {

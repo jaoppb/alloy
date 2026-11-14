@@ -75,8 +75,9 @@ impl ImageStore {
             .insert(id, StoredImage::Decoded(Arc::new(frame)));
     }
 
-    /// Marks `id` as loading unless anything is already known about it — a
-    /// discovered image must resolve to *something* from the first paint.
+    /// Marks `id` as loading unless anything is already known about it, so
+    /// layout tells a requested image from an unavailable one: it waits for the
+    /// first instead of showing its `alt` text.
     pub fn mark_loading(&mut self, id: ImageId) {
         self.images.entry(id).or_insert(StoredImage::Loading);
     }

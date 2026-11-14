@@ -51,11 +51,14 @@ mod tests {
 
     use super::ImageSizes;
 
-    /// Four real node ids, from a parsed document.
+    /// The ids of four `<img>` nodes, from a parsed document.
     fn four_nodes() -> Vec<SnapshotId> {
         let tree = dom::parse("<img><img><img><img>").unwrap().into_tree();
         let snapshot = css::snapshot(&tree, tree.document());
-        snapshot.nodes_in_document_order().take(4).collect()
+        snapshot
+            .nodes_in_document_order()
+            .filter(|&id| snapshot.node(id).and_then(css::NodeRef::tag_str) == Some("img"))
+            .collect()
     }
 
     fn frame(width: u32, height: u32) -> Framebuffer {

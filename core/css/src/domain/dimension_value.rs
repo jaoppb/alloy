@@ -3,7 +3,8 @@
 //!
 //! One parser serves both uses: the presentational hint the attribute maps to
 //! (HTML §15.4.3) and the preferred ratio a replaced element takes from it
-//! before its resource loads.
+//! before its resource loads. [`non_negative_integer`] reads the integer
+//! attributes beside them — a `<canvas>`'s bitmap size.
 
 use core::fmt::Write;
 
@@ -84,6 +85,22 @@ impl DimensionUnit {
     }
 }
 
+/// An attribute read with the rules for parsing non-negative integers (HTML
+/// §2.3.4.2, through §2.3.4.1): leading white space, an optional `+`, digits;
+/// a `-` passes only when the digits are all zero. Whatever follows is
+/// ignored.
+pub(crate) fn non_negative_integer(raw: &str) -> Option<u32> {
+    let rest = raw.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    if let Some(negative) = rest.strip_prefix('-') {
+        return leading_digits(negative)
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value == 0);
+    }
+    let unsigned = rest.strip_prefix('+').unwrap_or(rest);
+    leading_digits(unsigned).parse().ok()
+}
+
 fn leading_digits(text: &str) -> &str {
     let end = text
         .find(|character: char| !character.is_ascii_digit())
@@ -146,6 +163,15 @@ mod tests {
         assert_eq!(css("auto"), None);
         assert_eq!(css("-5"), None);
         assert_eq!(css(".5"), None);
+    }
+
+    #[test]
+    fn a_non_negative_integer_takes_a_plus_sign_and_minus_zero() {
+        assert_eq!(non_negative_integer(" 400px"), Some(400));
+        assert_eq!(non_negative_integer("+400"), Some(400));
+        assert_eq!(non_negative_integer("-0"), Some(0));
+        assert_eq!(non_negative_integer("-5"), None);
+        assert_eq!(non_negative_integer("auto"), None);
     }
 
     #[test]
