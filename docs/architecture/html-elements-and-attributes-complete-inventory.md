@@ -8,9 +8,9 @@
 - **Total de Elementos/Tags HTML Padrão Modernos (WHATWG / MDN):** 114
 - **Total de Elementos Legados/Obsoletos Reconhecidos pelo Parser:** 27 (regras de tolerância web compat)
 - **Total Geral de Elementos Catalogados:** 141
-- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 34 (24.1% do total; 28.9%
+- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 35 (24.8% do total; 29.7%
   dos modernos)
-- **Elementos Apenas Parseados (sem efeito de renderização no momento):** 4 (2.8% do total)
+- **Elementos Apenas Parseados (sem efeito de renderização no momento):** 3 (2.1% do total)
 - **Elementos Pendentes para HTML Completo:** 103 (73.0% do total; 77 modernos + 26 legados)
 - **Total de Atributos Globais Padrão:** 32 (incluindo extensões modernas como `popover`, `inert`, `writingsuggestions`)
 - **Total de Atributos ARIA (Estados e Propriedades):** 48
@@ -26,7 +26,7 @@
 | 02. Seções e Estrutura Semântica (Content Sectioning)                 |  15   |     12      |        0        |     3     |    80%    | 🟡 Em progresso |
 | 03. Agrupamento de Texto e Blocos (Grouping & Text Content)           |  16   |      9      |        0        |     7     |    56%    | 🟡 Em progresso |
 | 04. Semântica Inline & Nível de Texto (Inline Text Semantics)         |  29   |      3      |        3        |    23     |    10%    | 🟡 Em progresso |
-| 05. Mídia e Conteúdo Embutido (Embedded & Replaced Content)           |  11   |      0      |        1        |    10     |    0%     | ⚪ Pendente     |
+| 05. Mídia e Conteúdo Embutido (Embedded & Replaced Content)           |  11   |      1      |        0        |    10     |    9%     | 🟡 Em progresso |
 | 06. Tabelas e Dados Tabulares (Tabular Data & Tables)                 |  10   |      0      |        0        |    10     |    0%     | ⚪ Pendente     |
 | 07. Formulários e Controles de Usuário (Forms & Interactive Controls) |  14   |      0      |        0        |    14     |    0%     | ⚪ Pendente     |
 | 08. Elementos Interativos e Diálogos (Interactive & Dialogs)          |   3   |      0      |        0        |     3     |    0%     | ⚪ Pendente     |
@@ -177,7 +177,7 @@ Code e Object Calisthenics em `core/html` e `core/dom`):
 
 | Elemento (Tag)                                                               |       Alloy        | Classificação no Parser | Modelo de Conteúdo  | UA Stylesheet Padrão                                | Atributos Específicos Principais                                                                      | Módulo / Especificação                                           |
 | :--------------------------------------------------------------------------- | :----------------: | :---------------------: | :-----------------: | :-------------------------------------------------- | :---------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- |
-| [`<`img`>`](https://developer.mozilla.org/docs/Web/HTML/Element/img)         | 🟡 Apenas parseado |        **Void**         | Replaced / Phrasing | `— (sem regra no UA; sem dimensões intrínsecas)`    | `src`, `alt`, `width`, `height`, `srcset`, `sizes`, `loading`, `decoding`, `crossorigin`              | WHATWG Embedded (parseado no DOM; layout substituído pendente #83)|
+| [`<`img`>`](https://developer.mozilla.org/docs/Web/HTML/Element/img)         | 🟡 Renderizado (parcial) |        **Void**         | Replaced / Phrasing | — (`display: inline`; caixa substituída atômica, #83) | `src`, `alt`, `width`, `height`, `srcset`, `sizes`, `loading`, `decoding`, `crossorigin`              | WHATWG Embedded (tamanho por `width`/`height`, tamanho natural ou `alt`, #83; `object-fit`/`srcset` pendentes) |
 | [`<`iframe`>`](https://developer.mozilla.org/docs/Web/HTML/Element/iframe)   |    ⏳ Pendente     |         Normal          | Replaced / Phrasing | `border: 2px inset; width: 300px; height: 150px;`   | `src`, `srcdoc`, `name`, `sandbox`, `allow`, `allowfullscreen`, `loading`, `width`, `height`          | WHATWG Embedded                                                  |
 | [`<`embed`>`](https://developer.mozilla.org/docs/Web/HTML/Element/embed)     | ⏳ Pendente |        **Void**         | Replaced / Phrasing | `width: 300px; height: 150px;`                    | `src`, `type`, `width`, `height`                                                                      | WHATWG Embedded        |
 | [`<`object`>`](https://developer.mozilla.org/docs/Web/HTML/Element/object)   | ⏳ Pendente |         Normal          | Replaced / Phrasing | `width: 300px; height: 150px;`                    | `data`, `type`, `name`, `form`, `width`, `height`                                                     | WHATWG Embedded        |
