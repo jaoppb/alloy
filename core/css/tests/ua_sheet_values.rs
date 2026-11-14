@@ -10,7 +10,8 @@
 use css::domain::computed::BorderColor;
 use css::domain::computed::inline_style::{TextAlign, WhiteSpace};
 use css::domain::computed::text_advance::{
-    FontStyle, FontWeight, LetterSpacing, LineHeight, TextDecoration, TextTransform, WordSpacing,
+    FontStyle, FontWeight, LetterSpacing, LineHeight, TextDecoration, TextDecorationStyle,
+    TextTransform, WordSpacing,
 };
 use css::{
     CascadeResolver, ComputedStyle, CssColor, FontFamily, GenericFamily, Length, LengthEdges,
@@ -279,5 +280,51 @@ fn a_definition_term_is_not_bold() {
         style.text_advance().font_weight(),
         FontWeight::NORMAL,
         "§15.3.7 gives `dt` only `display: block`"
+    );
+}
+
+#[test]
+fn an_abbreviation_with_a_title_has_a_dotted_underline() {
+    for tag in ["abbr", "acronym"] {
+        let decoration = decoration_of(&format!("<{tag} id=target title=t>x</{tag}>"));
+        assert!(decoration.line().has_underline(), "<{tag} title>");
+        assert_eq!(
+            decoration.style(),
+            TextDecorationStyle::Dotted,
+            "<{tag} title>"
+        );
+        let bare = decoration_of(&format!("<{tag} id=target>x</{tag}>"));
+        assert!(
+            bare.line().is_none(),
+            "<{tag}> without a title is not decorated"
+        );
+    }
+}
+
+#[test]
+fn a_nowrap_cell_does_not_wrap() {
+    for cell in ["td", "th"] {
+        let style = style_of(&format!(
+            "<table><tr><{cell} id=target nowrap>x</{cell}></tr></table>"
+        ));
+        assert_eq!(style.white_space(), WhiteSpace::NoWrap, "<{cell} nowrap>");
+    }
+}
+
+#[test]
+fn paragraphs_and_headings_honour_the_align_hint() {
+    for tag in ["p", "h1", "h6"] {
+        let style = style_of(&format!("<{tag} id=target align=right>x</{tag}>"));
+        assert_eq!(style.text_align(), TextAlign::Right, "<{tag} align=right>");
+    }
+}
+
+#[test]
+fn an_active_link_rule_is_inert_until_there_is_pointer_state() {
+    let style = style_of("<a id=target href=x>x</a>");
+    assert_eq!(
+        style.color(),
+        CssColor::rgb(0x00, 0x00, 0xEE),
+        "`:active` never matches yet"
     );
 }

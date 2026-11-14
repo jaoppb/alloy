@@ -5,8 +5,10 @@
  * and cascaded as `Origin::UserAgent` rules, ahead of the document's own.
  *
  * Laid out section by section after WHATWG HTML §15.3 ("Rendering") and
- * §15.5.5 (`details`), and each element's `display` is declared exactly once,
- * in its section's display rule: the sheet must not lean on
+ * §15.5.5 (`details`), and each element's base `display` is declared exactly
+ * once, in its section's display rule — attribute and state rules
+ * (`[hidden]`, `dialog[open]`, `input[type="hidden"]`, `table > form`,
+ * `embed[hidden]`) then override it: the sheet must not lean on
  * `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines as
  * `inline` (#81). Box and font values follow the spec except where a value
  * below says it keeps an older one. Every §15.3.1–§15.3.12 rule this sheet
@@ -45,6 +47,13 @@ title {
 
 input[type="hidden"] {
 	display: none !important;
+}
+
+/* A hidden `<embed>` keeps a zero-size inline box rather than none. */
+embed[hidden] {
+	display: inline;
+	width: 0;
+	height: 0;
 }
 
 /* ---- §15.3.2 The page --------------------------------------------------- */
@@ -132,21 +141,60 @@ center {
 	text-align: center;
 }
 
-/* The `align` hint of `div`, without the spec's `i` flag (MANIFEST: presentational hints). */
-div[align="left"] {
+/*
+ * The `align` hints of `div` (§15.3.3) and of `p` and `h1`–`h6` (§15.3.8),
+ * matched case-sensitively: the parser refuses the spec's `i` flag
+ * (MANIFEST: presentational hints).
+ */
+div[align="left"],
+p[align="left"],
+h1[align="left"],
+h2[align="left"],
+h3[align="left"],
+h4[align="left"],
+h5[align="left"],
+h6[align="left"] {
 	text-align: left;
 }
 
-div[align="right"] {
+div[align="right"],
+p[align="right"],
+h1[align="right"],
+h2[align="right"],
+h3[align="right"],
+h4[align="right"],
+h5[align="right"],
+h6[align="right"] {
 	text-align: right;
 }
 
 div[align="center"],
-div[align="middle"] {
+p[align="center"],
+h1[align="center"],
+h2[align="center"],
+h3[align="center"],
+h4[align="center"],
+h5[align="center"],
+h6[align="center"],
+div[align="middle"],
+p[align="middle"],
+h1[align="middle"],
+h2[align="middle"],
+h3[align="middle"],
+h4[align="middle"],
+h5[align="middle"],
+h6[align="middle"] {
 	text-align: center;
 }
 
-div[align="justify"] {
+div[align="justify"],
+p[align="justify"],
+h1[align="justify"],
+h2[align="justify"],
+h3[align="justify"],
+h4[align="justify"],
+h5[align="justify"],
+h6[align="justify"] {
 	text-align: justify;
 }
 
@@ -159,6 +207,8 @@ div[align="justify"] {
  * one left out would be a styled block until then (a full-width `<mark>`).
  */
 a,
+abbr,
+acronym,
 b,
 cite,
 code,
@@ -212,6 +262,11 @@ a[href] {
 	text-decoration: underline;
 }
 
+/* `:link:active`; `:active` parses but never matches until there is pointer state. */
+a[href]:active {
+	color: #ff0000;
+}
+
 mark {
 	background-color: yellow;
 	color: black;
@@ -226,6 +281,11 @@ del,
 s,
 strike {
 	text-decoration: line-through;
+}
+
+abbr[title],
+acronym[title] {
+	text-decoration: dotted underline;
 }
 
 nobr {
@@ -402,6 +462,11 @@ th {
 
 th {
 	font-weight: bold;
+}
+
+td[nowrap],
+th[nowrap] {
+	white-space: nowrap;
 }
 
 thead,

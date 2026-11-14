@@ -240,9 +240,10 @@ mod tests {
 
     /// Every phrasing element the sheet styles: each must be `inline` even
     /// over a `block` base, or it renders as a styled block until #136.
-    const STYLED_PHRASING: [&str; 25] = [
-        "a", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd", "label", "mark", "nobr",
-        "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "tt", "u", "var", "wbr",
+    const STYLED_PHRASING: [&str; 27] = [
+        "a", "abbr", "acronym", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd",
+        "label", "mark", "nobr", "s", "samp", "small", "span", "strike", "strong", "sub", "sup",
+        "tt", "u", "var", "wbr",
     ];
 
     /// A table holding every element of [`TABLE_BLOCKS`] and [`TABLE_COLUMNS`]:
@@ -321,6 +322,18 @@ mod tests {
     fn the_hidden_attribute_beats_an_open_dialog() {
         let markup = "<!doctype html><body><dialog open hidden></dialog></body>";
         assert_eq!(ua_display(markup, "dialog"), Display::None);
+    }
+
+    #[test]
+    fn a_list_item_is_a_list_item() {
+        let markup = "<!doctype html><body><ul><li>x</li></ul></body>";
+        assert_eq!(ua_display(markup, "li"), Display::ListItem);
+    }
+
+    #[test]
+    fn a_hidden_embed_keeps_a_zero_size_inline_box() {
+        let markup = "<!doctype html><body><embed hidden></body>";
+        assert_eq!(ua_display(markup, "embed"), Display::Inline);
     }
 
     #[test]
