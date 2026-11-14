@@ -319,3 +319,77 @@ fn an_unavailable_image_is_resolved_its_size_will_not_change() {
     let laid = Laid::body("<img>");
     assert_eq!(laid.marker_of("img"), IntrinsicSize::Resolved);
 }
+
+// ---- `alt` text (WHATWG HTML §15.4.2) -------------------------------------
+
+impl Laid {
+    /// Every fragment of the first `<tag>`: its box first, then the lines of
+    /// any text it lays out itself.
+    fn fragments(&self, tag: &str) -> Vec<&LayoutBox> {
+        self.boxes.fragments_of(self.tagged(tag)).collect()
+    }
+
+    /// The text the first `<tag>` draws itself, line by line.
+    fn own_text(&self, tag: &str) -> Vec<String> {
+        self.fragments(tag)
+            .iter()
+            .filter_map(|fragment| fragment.text())
+            .map(|text| text.as_str().to_owned())
+            .collect()
+    }
+}
+
+#[test]
+fn an_unavailable_image_shows_its_alt_text_in_a_box_that_fits_it() {
+    let laid = Laid::body("<img alt='hello world'>");
+    assert_eq!(laid.own_text("img"), ["hello world"]);
+    let own = laid.fragments("img")[0].content().size();
+    // 11 glyphs at 0.6 × 16px, one 1.2 × 16px line.
+    assert_eq!(own.width(), Au::from_raw(px(1).raw() * 96 / 10 * 11));
+    assert_eq!(own.height(), Au::from_raw(px(1).raw() * 192 / 10));
+}
+
+#[test]
+fn a_sized_unavailable_image_keeps_its_size_and_shows_its_alt_inside() {
+    let laid = Laid::body("<img width=100 height=50 alt='hi'>");
+    assert_eq!(laid.own_text("img"), ["hi"]);
+    let own = laid.fragments("img")[0].content().size();
+    assert_eq!((whole_px(own.width()), whole_px(own.height())), (100, 50));
+}
+
+#[test]
+fn an_empty_alt_shows_nothing() {
+    let laid = Laid::body("<img alt=''>");
+    assert!(laid.own_text("img").is_empty());
+    assert_eq!(laid.content_px("img"), (0, 0));
+}
+
+#[test]
+fn a_loaded_image_never_shows_its_alt_text() {
+    let laid = Laid::loading(
+        "<img alt='hello'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert!(laid.own_text("img").is_empty());
+    assert_eq!(laid.content_px("img"), (40, 20));
+}
+
+#[test]
+fn a_loading_image_shows_no_alt_text_yet() {
+    let laid = Laid::loading(
+        "<img alt='hello'>",
+        Resources::default().with("img", ReplacedResource::Loading),
+    );
+    assert!(laid.own_text("img").is_empty());
+    assert_eq!(laid.content_px("img"), (0, 0));
+}
+
+#[test]
+fn an_alt_text_sits_on_its_neighbours_line() {
+    let laid = Laid::body("aa<img alt='hi'>bb");
+    let before = laid.text("aa").content();
+    let after = laid.text("bb").content();
+    assert_eq!(before.min_y(), after.min_y(), "one line box");
+    let alt = laid.fragments("img")[0].content();
+    assert!(alt.min_x() >= before.max_x() && after.min_x() >= alt.max_x());
+}

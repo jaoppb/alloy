@@ -206,7 +206,7 @@ pub(crate) fn layout_inline_block<M: TextMeasurer>(
 ) -> Result<BlockResult, CssError> {
     let node = context.node(node_id)?;
     let style = node.style();
-    if style.width() != Sizing::Auto || replaced::sizes_itself(node) {
+    if style.width() != Sizing::Auto || replaced::sizes_itself(context, node) {
         return layout_box(context, node_id, input);
     }
     let available = available_content_width(style, input)?;

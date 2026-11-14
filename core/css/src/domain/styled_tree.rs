@@ -225,7 +225,8 @@ fn inline_when_line_break(style: ComputedStyle, role: NodeRole) -> ComputedStyle
 /// For `<input>` and `<select>` elements the inline text is synthesized from the
 /// element's attributes or selected `<option>` rather than from a child text node —
 /// the controls have no direct text children in the page flow, but layout needs
-/// a label/value to paint (issue #87).
+/// a label/value to paint (issue #87). An `<img>` carries its `alt`, which layout
+/// shows only when the image is unavailable (WHATWG HTML §15.4.2, issue #83).
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
     if node_ref.kind() == SnapshotNodeKind::Text {
         if node_ref.is_foreign_descendant() {
@@ -233,18 +234,29 @@ fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
         }
         return node_ref.text().map(TextRun::new);
     }
-    synthesized_control_text(node_ref)
+    synthesized_text(node_ref)
 }
 
-/// Returns a synthetic [`TextRun`] for form control elements that display
-/// synthesized text (e.g. `<input>` labels/values, `<select>` selected option),
-/// or `None` for every other element kind.
-fn synthesized_control_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+/// Returns a synthetic [`TextRun`] for the elements that display text of their
+/// own rather than their children's (`<input>` labels/values, a `<select>`'s
+/// selected option, an `<img>`'s `alt`), or `None` for every other element kind.
+fn synthesized_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
     match node_ref.tag() {
         Some(TagName::Input) => synthesized_input_text(node_ref),
         Some(TagName::Select) => synthesized_select_text(node_ref),
+        Some(TagName::Img) => alternative_text(node_ref),
         _ => None,
     }
+}
+
+/// An `<img>`'s non-empty `alt`: `alt=""` says the image is decorative, so it
+/// shows nothing at all.
+fn alternative_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    let alt = node_ref.attribute("alt")?;
+    if alt.is_empty() {
+        return None;
+    }
+    Some(TextRun::new(alt))
 }
 
 /// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible

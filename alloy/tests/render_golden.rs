@@ -550,3 +550,24 @@ fn img_width_and_height_attributes_paint_a_100_by_50_box() {
     assert_eq!(frame.pixel(0, 50), Some(Color::WHITE), "no taller");
     assert_matches_golden(&frame, &golden_path("img_attributes.png"));
 }
+
+/// `alloy render` fetches nothing, so every `<img>` is unavailable and shows
+/// its `alt` text (WHATWG HTML §15.4.2, issue #83).
+#[test]
+fn an_img_without_its_image_paints_its_alt_text() {
+    let page = |img: &str| {
+        format!(
+            "<!doctype html><html><head><style>body{{margin:0;background:#fff;color:#000}}</style></head>\
+             <body>{img}</body></html>"
+        )
+    };
+    let options = RenderOptions::new(400, 200);
+    let with_alt = render_html_to_png(&page("<img alt=\"hello world\">"), &options).unwrap();
+    let bare = render_html_to_png(&page("<img>"), &options).unwrap();
+    assert_ne!(with_alt, bare, "the alt text is drawn");
+
+    let frame = decode_png(&with_alt).expect("valid PNG");
+    let inked =
+        (0..20).any(|row| (0..100).any(|column| frame.pixel(column, row) != Some(Color::WHITE)));
+    assert!(inked, "the text sits at the image's place, top left");
+}
