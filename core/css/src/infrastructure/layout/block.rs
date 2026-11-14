@@ -490,8 +490,7 @@ impl ChildMargins {
 /// starts a new formatting context — an atomic inline (an `inline-block`, or a
 /// replaced element with `display: inline`), a scroll container, the root
 /// element and the document box above it (block formatting contexts), or a
-/// flex item (whatever context its contents start) — and
-/// adjoining otherwise.
+/// flex item (whatever context its contents start) — and adjoining otherwise.
 fn child_margins_of<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node: &StyledNode,

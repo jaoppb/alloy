@@ -28,9 +28,9 @@
 //!   [`CssStage`], [`Origin`], [`SnapshotNodeKind`]); and the typed
 //!   [`CssError`].
 //! - [`application`] — the four ports ([`CascadeResolver`], [`LayoutEngine`],
-//!   [`TextMeasurer`], [`NaturalSizes`]), the explicit [`snapshot`] mapping (`dom::DomTree →
-//!   DomSnapshot`), selector [`matches`]ing, [`collect_style_sheets`], and the
-//!   [`conformance`] suite.
+//!   [`TextMeasurer`], [`NaturalSizes`]), the explicit [`snapshot`] mapping
+//!   (`dom::DomTree → DomSnapshot`), selector [`matches`]ing,
+//!   [`collect_style_sheets`], and the [`conformance`] suite.
 //! - [`infrastructure`] — the hand-written CSS Syntax Level 3 parser
 //!   ([`parse_stylesheet`], [`parse_inline_style`], [`tokenize`]), the
 //!   placeholder Rust adapters ([`UaCascade`], [`BlockLayout`],
@@ -40,8 +40,9 @@
 //! ## Contract record
 //!
 //! This crate is the `CascadeResolver` / `LayoutEngine` / `TextMeasurer` /
-//! `NaturalSizes` port under the `ADR-0011` Replaceable Port Contract. The boundary aggregates and
-//! [`PORT_SCHEMA_VERSION`] **freeze at integration point I3** (end of B4);
+//! `NaturalSizes` port under the `ADR-0011` Replaceable Port Contract. The
+//! boundary aggregates and [`PORT_SCHEMA_VERSION`] **freeze at integration
+//! point I3** (end of B4);
 //! `docs/architecture/style-cascade-port-contract.md` records the state of all
 //! seven items from that point on. A change after the freeze also needs a
 //! migration note in `PRD-007`.

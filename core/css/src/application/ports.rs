@@ -82,6 +82,9 @@ impl<T: TextMeasurer + ?Sized> TextMeasurer for std::sync::Arc<T> {
 /// are kept, and whoever keeps them never sees layout. Answering
 /// [`ReplacedResource::Unavailable`] for a node it knows nothing about is the
 /// correct default — that is what a page with no fetched resource is.
+///
+/// Deterministic for as long as an engine holds it: the same node gets the
+/// same answer within one layout, which asks more than once (`ADR-0016`).
 pub trait NaturalSizes: Send + Sync {
     /// The resource state of the replaced element `node`.
     fn resource_of(&self, node: SnapshotId) -> ReplacedResource;

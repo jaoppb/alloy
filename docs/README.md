@@ -13,7 +13,7 @@ docs/
 ├── architecture/                       # System Architecture & Design
 │   ├── overview.md                     # High-level architecture, C4 diagrams, and core patterns
 │   ├── runtime-engine-port-contract.md # ADR-0011 contract record for the RuntimeEngine port
-│   ├── style-cascade-port-contract.md  # ADR-0011 contract record for the CascadeResolver/LayoutEngine/TextMeasurer port
+│   ├── style-cascade-port-contract.md  # ADR-0011 contract record for the CascadeResolver/LayoutEngine/TextMeasurer/NaturalSizes port
 │   ├── http-transport-port-contract.md # ADR-0011 contract record for the HttpTransport/RequestPolicy port (frozen at I4)
 │   ├── window-system-port-contract.md  # ADR-0011 contract record for the WindowSystem/Presenter port (frozen at I4)
 │   ├── html-tree-sink-port-contract.md # ADR-0011 contract record for the TokenSink/TreeSink port (flags the HtmlError location gap)
