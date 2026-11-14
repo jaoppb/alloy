@@ -115,7 +115,12 @@ pub mod infrastructure;
 /// a node may own several boxes ([`LayoutBoxTree::fragments_of`]), and a text
 /// fragment carries the [`FragmentText`] layout placed on its line (issue
 /// #134). `PRD-007` §6 carries the migration note.
-pub const PORT_SCHEMA_VERSION: u32 = 11;
+///
+/// `12` is additive: `StyledNode::is_body_of_root` (with
+/// `NodeRef::is_body_of_root`), the structural fact a layout engine needs to
+/// apply CSS Overflow L3 §3.3's body-to-viewport propagation as a used value,
+/// and `OverflowStyle::is_scroll_container` (issue #135).
+pub const PORT_SCHEMA_VERSION: u32 = 12;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///

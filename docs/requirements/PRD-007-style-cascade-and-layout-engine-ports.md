@@ -224,3 +224,14 @@ The rest is additive or confined to the cascade helpers:
   dropped the space after a closing inline tag.
 - **Link regions follow the lines.** `alloy`'s `collect_link_targets` already made one region per box under an
   `<a href>`, so a link that wraps now has one region per line, and a click between them misses.
+
+### `11 → 12` — Issue #135 (#81): body-of-root and scroll-container facts
+
+Additive; nothing a consumer has to change.
+
+- **`StyledNode::is_body_of_root()`** (computed from the new `NodeRef::is_body_of_root()`) says whether a node is the
+  root `<html>` element's first `<body>`. CSS Overflow L3 §3.3 gives that element's `overflow` to the viewport while the
+  root's is `visible`; `BlockLayout` uses the fact to lay `<body>` out as a non-scroll container (a used value) while
+  its computed `overflow`, and what its children inherit, stay untouched.
+- **`OverflowStyle::is_scroll_container()`** answers whether an axis is `hidden`, `scroll` or `auto` (not `clip`), the
+  boxes CSS 2.1 §9.4.1 says start a new block formatting context.
