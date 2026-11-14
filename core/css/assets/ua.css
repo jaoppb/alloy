@@ -6,10 +6,9 @@
  *
  * Laid out section by section after WHATWG HTML §15.3 ("Rendering") and
  * §15.5.5 (`details`), and each element's base `display` is declared exactly
- * once, in its section's display rule — attribute and state rules
- * (`[hidden]`, `dialog[open]`, `input[type="hidden"]`, `table > form`) then
- * override it, and `embed[hidden]` gives a hidden `<embed>` its own: the
- * sheet must not lean on
+ * once, in its section's display rule. Attribute and state rules (`[hidden]`,
+ * `[popover]`, `dialog[open]`, `input[type="hidden"]`, `table > form`,
+ * `embed[hidden]`) then override it. The sheet must not lean on
  * `ComputedStyle::initial()`'s `display`, which CSS Display L3 §2 defines as
  * `inline` (#81). Box and font values follow the spec except where a value
  * below says it keeps an older one. Every §15.3.1–§15.3.12 rule this sheet
@@ -133,6 +132,16 @@ dialog[hidden] {
 	display: none;
 }
 
+/*
+ * The spec hides `[popover]:not(:popover-open):not(dialog[open])`. Nothing
+ * here can open a popover (no `:popover-open`, no script), so every popover
+ * is closed: plain `[popover]` stands in, and `dialog[open]` (0,1,1) still
+ * outweighs it (MANIFEST: popover row).
+ */
+[popover] {
+	display: none;
+}
+
 address {
 	font-style: italic;
 }
@@ -143,52 +152,23 @@ center {
 }
 
 /*
- * The `align` hints of `div` (§15.3.3) and of `p` and `h1`–`h6` (§15.3.8),
- * matched case-sensitively: the parser refuses the spec's `i` flag
- * (MANIFEST: presentational hints). `middle` centres a `div` only.
+ * The `align` hint of `div`, matched case-sensitively: the parser refuses
+ * the spec's `i` flag (MANIFEST: presentational hints).
  */
-div[align="left"],
-p[align="left"],
-h1[align="left"],
-h2[align="left"],
-h3[align="left"],
-h4[align="left"],
-h5[align="left"],
-h6[align="left"] {
+div[align="left"] {
 	text-align: left;
 }
 
-div[align="right"],
-p[align="right"],
-h1[align="right"],
-h2[align="right"],
-h3[align="right"],
-h4[align="right"],
-h5[align="right"],
-h6[align="right"] {
+div[align="right"] {
 	text-align: right;
 }
 
 div[align="center"],
-p[align="center"],
-h1[align="center"],
-h2[align="center"],
-h3[align="center"],
-h4[align="center"],
-h5[align="center"],
-h6[align="center"],
 div[align="middle"] {
 	text-align: center;
 }
 
-div[align="justify"],
-p[align="justify"],
-h1[align="justify"],
-h2[align="justify"],
-h3[align="justify"],
-h4[align="justify"],
-h5[align="justify"],
-h6[align="justify"] {
+div[align="justify"] {
 	text-align: justify;
 }
 
@@ -461,6 +441,88 @@ th {
 td[nowrap],
 th[nowrap] {
 	white-space: nowrap;
+}
+
+/*
+ * The `align` hints of §15.3.8, matched case-sensitively like `div`'s (the
+ * parser refuses the spec's `i` flag): `p` and `h1`–`h6` take left, right,
+ * center and justify; the table parts also take `middle` (prose) and
+ * `absmiddle` (CSS) for centre.
+ */
+p[align="left"],
+h1[align="left"],
+h2[align="left"],
+h3[align="left"],
+h4[align="left"],
+h5[align="left"],
+h6[align="left"],
+thead[align="left"],
+tbody[align="left"],
+tfoot[align="left"],
+tr[align="left"],
+td[align="left"],
+th[align="left"] {
+	text-align: left;
+}
+
+p[align="right"],
+h1[align="right"],
+h2[align="right"],
+h3[align="right"],
+h4[align="right"],
+h5[align="right"],
+h6[align="right"],
+thead[align="right"],
+tbody[align="right"],
+tfoot[align="right"],
+tr[align="right"],
+td[align="right"],
+th[align="right"] {
+	text-align: right;
+}
+
+p[align="center"],
+h1[align="center"],
+h2[align="center"],
+h3[align="center"],
+h4[align="center"],
+h5[align="center"],
+h6[align="center"],
+thead[align="center"],
+tbody[align="center"],
+tfoot[align="center"],
+tr[align="center"],
+td[align="center"],
+th[align="center"],
+thead[align="middle"],
+tbody[align="middle"],
+tfoot[align="middle"],
+tr[align="middle"],
+td[align="middle"],
+th[align="middle"],
+thead[align="absmiddle"],
+tbody[align="absmiddle"],
+tfoot[align="absmiddle"],
+tr[align="absmiddle"],
+td[align="absmiddle"],
+th[align="absmiddle"] {
+	text-align: center;
+}
+
+p[align="justify"],
+h1[align="justify"],
+h2[align="justify"],
+h3[align="justify"],
+h4[align="justify"],
+h5[align="justify"],
+h6[align="justify"],
+thead[align="justify"],
+tbody[align="justify"],
+tfoot[align="justify"],
+tr[align="justify"],
+td[align="justify"],
+th[align="justify"] {
+	text-align: justify;
 }
 
 thead,

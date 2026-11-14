@@ -314,9 +314,52 @@ fn a_nowrap_cell_does_not_wrap() {
 #[test]
 fn paragraphs_and_headings_honour_the_align_hint() {
     for tag in ["p", "h1", "h6"] {
-        let style = style_of(&format!("<{tag} id=target align=right>x</{tag}>"));
-        assert_eq!(style.text_align(), TextAlign::Right, "<{tag} align=right>");
+        for (hint, expected) in [
+            ("left", TextAlign::Left),
+            ("right", TextAlign::Right),
+            ("center", TextAlign::Center),
+            ("justify", TextAlign::Justify),
+        ] {
+            let markup = format!(
+                "<div style='text-align:right'><{tag} id=target align={hint}>x</{tag}></div>"
+            );
+            assert_eq!(
+                style_of(&markup).text_align(),
+                expected,
+                "<{tag} align={hint}>"
+            );
+        }
+        let middle =
+            format!("<div style='text-align:right'><{tag} id=target align=middle>x</{tag}></div>");
+        assert_eq!(
+            style_of(&middle).text_align(),
+            TextAlign::Right,
+            "`middle` centres a div only (§15.3.3): <{tag}> keeps the inherited alignment"
+        );
     }
+}
+
+#[test]
+fn table_parts_honour_the_align_hint() {
+    for (hint, expected) in [
+        ("left", TextAlign::Left),
+        ("center", TextAlign::Center),
+        ("middle", TextAlign::Center),
+        ("absmiddle", TextAlign::Center),
+        ("justify", TextAlign::Justify),
+    ] {
+        let cell = style_of(&format!(
+            "<table style='text-align:right'><tr><td id=target align={hint}>x</td></tr></table>"
+        ));
+        assert_eq!(cell.text_align(), expected, "<td align={hint}>");
+    }
+    let inherited =
+        style_of("<table><tr align=right><td id=target>x</td></tr></table>").text_align();
+    assert_eq!(
+        inherited,
+        TextAlign::Right,
+        "a cell inherits its row's alignment"
+    );
 }
 
 #[test]

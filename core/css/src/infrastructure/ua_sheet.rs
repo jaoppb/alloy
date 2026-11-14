@@ -330,6 +330,14 @@ mod tests {
         assert_eq!(ua_display(markup, "li"), Display::ListItem);
     }
 
+    #[test]
+    fn a_popover_is_closed_unless_it_is_an_open_dialog() {
+        let closed = "<!doctype html><body><div popover>x</div></body>";
+        let dialog = "<!doctype html><body><dialog open popover>x</dialog></body>";
+        assert_eq!(ua_display(closed, "div"), Display::None);
+        assert_eq!(ua_display(dialog, "dialog"), Display::Block);
+    }
+
     /// A rule the parser refuses with a note never applies, silently; every
     /// rule shipped in `assets/ua.css` must parse.
     #[test]
