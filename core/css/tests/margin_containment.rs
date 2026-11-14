@@ -226,3 +226,26 @@ fn a_child_inheriting_bodys_overflow_is_a_scroll_container() {
          so #c inherits `hidden` and keeps a's margin inside"
     );
 }
+
+#[test]
+fn body_keeps_its_overflow_when_the_root_has_its_own() {
+    let markup = "<!doctype html><html><head><style>html { overflow: hidden } \
+                  body { margin: 8px; overflow: hidden } h1 { margin: 20px 0 }</style></head>\
+                  <body id=body><h1 id=h1>x</h1></body></html>";
+    let tree = dom::parse(markup).expect("the fixture parses").into_tree();
+    let dom = snapshot(&tree, tree.document());
+    let sheets = collect_style_sheets(&dom).expect("readable");
+    let styled = UaCascade::new().resolve(&dom, &sheets).expect("resolves");
+    let viewport = ViewportConstraints::new(px(800), px(600));
+    let boxes = BlockLayout::monospace()
+        .layout(&styled, &viewport)
+        .expect("lays out");
+    let laid = Laid { dom, boxes };
+
+    assert_eq!(
+        laid.border_box("h1").min_y(),
+        laid.border_box("body").min_y().saturating_add(px(20)),
+        "the root's own overflow is not visible, so body's stays on body (CSS Overflow L3 §3.3): \
+         body is a scroll container and keeps h1's margin inside"
+    );
+}
