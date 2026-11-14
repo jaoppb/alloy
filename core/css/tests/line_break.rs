@@ -144,14 +144,12 @@ fn a_trailing_br_adds_no_line() {
 
 #[test]
 fn a_br_alone_holds_one_empty_line() {
-    let laid = Laid::new("<br>");
+    let laid = Laid::new("<br id=b>");
 
     assert_eq!(laid.container_height(), lines(1));
-    assert_eq!(
-        laid.fragments("container").len(),
-        1,
-        "the container is not vacant, so it is laid out like any block"
-    );
+    let br = laid.fragments("b");
+    assert_eq!(br.len(), 1, "the br owns the empty line it holds");
+    assert_eq!(br[0].content().size().height(), lines(1));
 }
 
 #[test]
@@ -225,4 +223,48 @@ fn a_hidden_br_keeps_display_none() {
     let laid = Laid::styled("br { display: none }", "<br id=b>");
 
     assert_eq!(laid.display_of("b"), Display::None);
+}
+
+// ---- justification ---------------------------------------------------------
+
+#[test]
+fn a_line_ending_at_a_br_is_not_justified() {
+    // CSS Text L3 §7.3: under `text-align: justify` the default
+    // `text-align-last: auto` starts a line that ends in a forced break, like
+    // the last line, instead of widening its gaps.
+    let laid = Laid::styled(
+        "#container { text-align: justify }",
+        "aaa <span id=b>bbb</span><br>ccc",
+    );
+
+    let bold = laid.fragments("b");
+    assert_eq!(
+        bold[0].content().min_x(),
+        Au::from_raw(CHAR_ADVANCE.saturating_mul(4)),
+        "\"bbb\" follows \"aaa \" instead of being pushed to the right edge"
+    );
+}
+
+#[test]
+fn a_br_root_element_is_still_blockified() {
+    // A script-built tree can make a `<br>` the root element; the root's
+    // blockification (CSS Display L3 §2.7) has the last word over the br's
+    // inline coercion, so the root is never inline-level.
+    let mut tree = dom::DomTree::new();
+    let document = tree.document();
+    let br = tree.create_element(html::TagName::Br);
+    tree.append_child(document, br).unwrap();
+    let dom = snapshot(&tree, document);
+    let sheets = collect_style_sheets(&dom).expect("no CSS to read");
+    let styled = UaCascade::new()
+        .resolve(&dom, &sheets)
+        .expect("the cascade resolves");
+
+    let root_element = dom
+        .nodes_in_document_order()
+        .find(|&node| dom.node(node).and_then(css::NodeRef::tag) == Some(&html::TagName::Br))
+        .expect("the br is in the snapshot");
+    let node = styled.node(root_element).expect("the br is styled");
+    assert_eq!(node.role(), NodeRole::LineBreak);
+    assert_eq!(node.style().display(), Display::Block);
 }

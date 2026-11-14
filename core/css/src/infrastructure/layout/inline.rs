@@ -62,12 +62,23 @@ struct Piece {
     text: Option<Rc<str>>,
 }
 
-/// One line box: the pieces on it and the extents that position them.
+/// How a line box ended: where the filler wrapped, or at a mandatory break.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LineEnd {
+    /// The next piece did not fit, or the run ran out.
+    Wrapped,
+    /// A `\n` under `white-space: pre` or a `<br>` closed it.
+    Forced,
+}
+
+/// One line box: the pieces on it, the extents that position them, and how it
+/// ended.
 struct Line {
     pieces: Vec<Piece>,
     width: Au,
     ascent: Au,
     descent: Au,
+    end: LineEnd,
 }
 
 impl Line {
@@ -77,7 +88,18 @@ impl Line {
             width: Au::ZERO,
             ascent: Au::ZERO,
             descent: Au::ZERO,
+            end: LineEnd::Wrapped,
         }
+    }
+
+    const fn end_at_forced_break(&mut self) {
+        self.end = LineEnd::Forced;
+    }
+
+    /// Whether a mandatory break closed this line — such a line is never
+    /// justified (CSS Text L3 §7.3).
+    fn ends_at_forced_break(&self) -> bool {
+        self.end == LineEnd::Forced
     }
 
     fn push(&mut self, piece: Piece) {
@@ -576,6 +598,7 @@ impl LineFiller {
     fn force_break(&mut self, piece: Piece) {
         self.pending_space = None;
         self.absorb_empty_line(piece);
+        self.current.end_at_forced_break();
         self.close();
     }
 
@@ -748,9 +771,10 @@ const fn half(value: Au) -> Au {
 }
 
 /// How much every inter-word gap grows under `text-align: justify`. The last
-/// line of a block is never justified (CSS Text L3 §7.3).
+/// line of a block and a line a forced break ends are never justified: the
+/// initial `text-align-last: auto` starts them (CSS Text L3 §7.3).
 fn justification(line: &Line, placement: LinePlacement) -> Extra {
-    if placement.align != TextAlign::Justify || placement.is_last {
+    if placement.align != TextAlign::Justify || placement.is_last || line.ends_at_forced_break() {
         return Extra::NONE;
     }
     let free = placement.content_width.saturating_sub(line.width);

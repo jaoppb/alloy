@@ -135,9 +135,10 @@ impl StyledTree {
     /// Builds a styled tree by calling `compute` once per node, in document
     /// order, passing the parent's already-computed style (or `None` at the
     /// root). Pre-order construction of the snapshot guarantees the parent is
-    /// finished before the child is visited. The root element's `display` is
-    /// then blockified (CSS Display L3 §2.7), and a `<br>`'s made `inline`
-    /// unless it is `none` (issue #82), whatever `compute` returned.
+    /// finished before the child is visited. A `<br>`'s `display` is then made
+    /// `inline` unless it is `none` (issue #82), and the root element's is
+    /// blockified last (CSS Display L3 §2.7), whatever `compute` returned — so
+    /// even a `<br>` root is never inline-level.
     #[must_use]
     pub fn recompute_in_document_order(
         snapshot: &DomSnapshot,
@@ -150,7 +151,7 @@ impl StyledTree {
             };
             let computed = compute(node_ref, parent_style_of(&nodes, node_ref));
             let role = NodeRole::for_tag(node_ref.tag());
-            let style = inline_when_line_break(blockified_at_root(computed, node_ref), role);
+            let style = blockified_at_root(inline_when_line_break(computed, role), node_ref);
             nodes.push(StyledNode {
                 node: id,
                 parent: node_ref.parent(),

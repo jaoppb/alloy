@@ -16,7 +16,7 @@ use css::domain::computed::visual::BorderStyle;
 use css::domain::computed::{AlignContent, BorderColor};
 use css::{
     CascadeResolver, ComputedStyle, CssColor, Display, FontFamily, GenericFamily, Length,
-    LengthEdges, Sizing, UaCascade, Visibility, collect_style_sheets, snapshot,
+    LengthEdges, Overflow, Sizing, UaCascade, Visibility, collect_style_sheets, snapshot,
 };
 
 /// The computed style of the element carrying `id="target"` in `body`.
@@ -441,4 +441,32 @@ fn a_hidden_embed_is_a_zero_size_inline_box() {
     assert_eq!(style.display(), Display::Inline);
     assert_eq!(style.width(), Sizing::Fixed(Length::Pixels(0.0)));
     assert_eq!(style.height(), Sizing::Fixed(Length::Pixels(0.0)));
+}
+
+#[test]
+fn hr_is_a_gray_inset_rule_with_half_an_em_above_and_below() {
+    let style = style_of("<hr id=target>");
+
+    assert_eq!(style.color(), CssColor::rgb(0x80, 0x80, 0x80));
+    assert_eq!(style.border(), LengthEdges::uniform(Length::Pixels(1.0)));
+    let styles = style.visual().border_styles();
+    for side in [styles.top(), styles.right(), styles.bottom(), styles.left()] {
+        assert_eq!(side, BorderStyle::Inset);
+    }
+    let margin = style.margin();
+    assert_eq!(
+        (margin.top(), margin.bottom()),
+        (Length::Em(0.5), Length::Em(0.5)),
+        "margin-block: 0.5em"
+    );
+    assert_eq!(
+        (margin.left(), margin.right()),
+        (Length::Pixels(0.0), Length::Pixels(0.0)),
+        "margin-inline: auto is dropped (no `auto` margins, MANIFEST cut), leaving the initial 0"
+    );
+    let overflow = style.overflow();
+    assert_eq!(
+        (overflow.x(), overflow.y()),
+        (Overflow::Hidden, Overflow::Hidden)
+    );
 }

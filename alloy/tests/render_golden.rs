@@ -482,8 +482,6 @@ fn outline_paints_outside_border_box_and_leaves_layout_identical() {
 const HR_PAGE: &str = "<!doctype html><html><head><style>body{margin:0;background:#fff;color:#000}</style></head>\
                        <body><p>a</p><hr><p>b</p></body></html>";
 
-const WHITE: Color = Color::rgb(0xff, 0xff, 0xff);
-
 /// A pixel of the UA `hr` rule's `color: gray` border over the white page:
 /// neutral (the `inset` style paints solid until stroke styles rasterize —
 /// MANIFEST "Border simplifications"), never the background, and the 2px
@@ -491,7 +489,7 @@ const WHITE: Color = Color::rgb(0xff, 0xff, 0xff);
 fn is_rule_gray(pixel: Option<Color>) -> bool {
     pixel.is_some_and(|color| {
         let (red, green, blue) = (color.red(), color.green(), color.blue());
-        color != WHITE && red == green && green == blue && red >= 0x80
+        color != Color::WHITE && red == green && green == blue && red >= 0x80
     })
 }
 
@@ -505,7 +503,7 @@ fn hr_paints_a_full_width_gray_rule_between_the_paragraphs() {
         .filter(|&row| (0..frame.width()).all(|column| is_rule_gray(frame.pixel(column, row))))
         .collect();
     let (Some(&top), Some(&bottom)) = (rule_rows.first(), rule_rows.last()) else {
-        panic!("the hr paints no full-width row: margin-inline: auto on an auto width is 0");
+        panic!("expected at least one full-width gray row (the hr's border)");
     };
     assert!(
         bottom.saturating_sub(top) < 3,

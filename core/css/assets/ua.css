@@ -709,7 +709,9 @@ textarea {
 
 /*
  * `display: block` is in §15.3.3 above. The `inset` border paints solid in its
- * `currentColor` until stroke styles rasterize (MANIFEST: border simplifications).
+ * `currentColor` until stroke styles rasterize (MANIFEST: border simplifications),
+ * and `margin-inline: auto` is dropped until margins take `auto` (MANIFEST cut):
+ * on an auto-width `hr` both resolve to 0.
  */
 hr {
 	color: gray;

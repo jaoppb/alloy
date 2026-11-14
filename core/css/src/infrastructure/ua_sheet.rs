@@ -171,8 +171,7 @@ mod tests {
     use crate::application::snapshot::snapshot;
 
     /// Every element WHATWG HTML §15.3 / §15.5.5 lays out as a block, outside
-    /// the table family. `hr` is listed for its `display` only (#82 owns the
-    /// rest).
+    /// the table family.
     const BLOCK_ELEMENTS: [&str; 41] = [
         "html",
         "body",

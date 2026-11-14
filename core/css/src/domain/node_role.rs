@@ -2,8 +2,10 @@
 //!
 //! Layout is handed only a [`crate::StyledTree`] (`PRD-007:56-60`), which
 //! carries no tag name, so an element whose rendering the HTML rendering rules
-//! fix outside CSS has to say so inside the aggregate. A `<br>` is the one such
-//! element today (issue #82).
+//! fix outside CSS has to say so inside the aggregate. `StyledNode` already
+//! carries two such tag-derived facts as their own fields (`intrinsic_size`,
+//! `is_body_of_root`); `NodeRole` is the closed set an element's layout role
+//! grows in, starting with a `<br>` (issue #82).
 
 use html::TagName;
 
@@ -24,7 +26,7 @@ impl NodeRole {
     /// The role an element with `tag` plays; every non-element node is
     /// [`NodeRole::Ordinary`].
     #[must_use]
-    pub const fn for_tag(tag: Option<&TagName>) -> Self {
+    pub(crate) const fn for_tag(tag: Option<&TagName>) -> Self {
         match tag {
             Some(TagName::Br) => Self::LineBreak,
             _ => Self::Ordinary,
