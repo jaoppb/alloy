@@ -135,7 +135,8 @@ impl StyledTree {
             let Some(node_ref) = snapshot.node(id) else {
                 continue;
             };
-            let style = compute(node_ref, parent_style_of(&nodes, node_ref));
+            let computed = compute(node_ref, parent_style_of(&nodes, node_ref));
+            let style = blockified_at_root(computed, node_ref);
             nodes.push(StyledNode {
                 node: id,
                 parent: node_ref.parent(),
@@ -152,6 +153,19 @@ impl StyledTree {
             root: snapshot.root(),
         }
     }
+}
+
+/// The root element's `display` is blockified (CSS Display L3 §2.7): with
+/// `inline` as the initial value, `html { display: inline }` must not put the
+/// whole page into one line run. Applied here, where every
+/// [`crate::CascadeResolver`] builds its tree, so no adapter can skip it; it
+/// changes the computed value.
+fn blockified_at_root(style: ComputedStyle, node_ref: NodeRef<'_>) -> ComputedStyle {
+    if !node_ref.is_root_element() {
+        return style;
+    }
+    let display = style.display().blockified();
+    style.with_display(display)
 }
 
 /// The text a node contributes to an inline formatting context.

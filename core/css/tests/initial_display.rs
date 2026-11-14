@@ -1,8 +1,9 @@
 //! The initial `display` is `inline` (CSS Display L3 §2; #136 of #81): an
-//! element the UA sheet gives no display — `<img>`, `<u>`, `<sub>`, a custom
-//! element — sits on the line with its neighbours instead of breaking it. The
-//! root element is blockified (CSS Display L3 §2.7), so no author rule can put
-//! a whole page into one line run.
+//! element the UA sheet gives no display — `<u>`, `<sub>`, a custom element —
+//! sits on the line with its neighbours instead of breaking it. The replaced
+//! elements keep a stopgap `inline-block` until #83, so `<img>` sits on the
+//! line as an atomic box and keeps its size. The root element is blockified
+//! (CSS Display L3 §2.7), whichever resolver cascaded it.
 //!
 //! Text is measured with [`css::BlockLayout::monospace`]: `0.6 * 16px` per
 //! glyph and `1.2 * 16px` per line.
@@ -163,4 +164,72 @@ fn a_sized_image_keeps_its_box_until_83_sizes_replaced_elements() {
     let size = image[0].content().size();
     assert_eq!(size.width(), Au::from_whole_px(10).unwrap());
     assert_eq!(size.height(), Au::from_whole_px(10).unwrap());
+}
+
+/// Every replaced element but `<svg>` (which has its own rule), as
+/// `core/css/src/domain/computed/intrinsic.rs` lists them.
+const REPLACED: [&str; 6] = ["img", "video", "canvas", "iframe", "object", "embed"];
+
+#[test]
+fn every_replaced_element_keeps_its_box_and_hides_its_fallback_until_83() {
+    for tag in REPLACED {
+        let laid = Laid::body(&format!(
+            "aa<{tag} style='width:40px;height:20px'>fallback</{tag}>bb"
+        ));
+        let boxes: Vec<&LayoutBox> = laid.boxes.fragments_of(laid.tagged(tag)).collect();
+        assert_eq!(boxes.len(), 1, "<{tag}> still generates its box");
+        assert_eq!(
+            boxes[0].content().size().width(),
+            Au::from_whole_px(40).unwrap(),
+            "<{tag}>"
+        );
+        assert_eq!(
+            fallback_fragments(&laid, tag),
+            0,
+            "<{tag}>'s fallback content is not laid out"
+        );
+    }
+}
+
+/// How many fragments the text node `fallback` gets when it is a child of
+/// `<tag>`. A void `<img>` has no children: its "fallback" is a sibling, so
+/// it counts as none here.
+fn fallback_fragments(laid: &Laid, tag: &str) -> usize {
+    let element = laid.tagged(tag);
+    let Some(fallback) = laid
+        .dom
+        .node(element)
+        .and_then(|node| node.children().next())
+    else {
+        return 0;
+    };
+    laid.boxes.fragments_of(fallback).count()
+}
+
+#[test]
+fn widgets_the_spec_renders_as_inline_blocks_are_inline_blocks() {
+    for tag in ["marquee", "meter", "progress"] {
+        let laid = Laid::body(&format!("<{tag}>x</{tag}>"));
+        assert_eq!(
+            laid.display_of(tag),
+            Display::InlineBlock,
+            "<{tag}>, WHATWG HTML §15.5"
+        );
+    }
+}
+
+#[test]
+fn every_cascade_resolver_gets_a_blockified_root() {
+    let tree = dom::parse("<!doctype html><html><body>x</body></html>")
+        .expect("parses")
+        .into_tree();
+    let dom = snapshot(&tree, tree.document());
+    // A resolver that applies no rule at all, like a script cascade's fallback.
+    let styled = StyledTree::recompute_in_document_order(&dom, |_, _| ComputedStyle::initial());
+    let html = dom
+        .nodes_in_document_order()
+        .find(|&node| dom.node(node).and_then(css::NodeRef::tag_str) == Some("html"))
+        .unwrap();
+
+    assert_eq!(styled.node(html).unwrap().style().display(), Display::Block);
 }

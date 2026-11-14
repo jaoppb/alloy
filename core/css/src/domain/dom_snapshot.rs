@@ -380,7 +380,7 @@ impl<'snapshot> NodeRef<'snapshot> {
     /// Whether this is the root element: an element whose parent is the
     /// document node.
     #[must_use]
-    pub fn is_root_element(self) -> bool {
+    pub(crate) fn is_root_element(self) -> bool {
         self.tag().is_some() && self.is_child_of_document()
     }
 

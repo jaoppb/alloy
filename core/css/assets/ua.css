@@ -5,7 +5,7 @@
  * and cascaded as `Origin::UserAgent` rules, ahead of the document's own.
  *
  * Laid out section by section after WHATWG HTML §15.3 ("Rendering") and
- * §15.5.5 (`details`), and each element's base `display` is declared exactly
+ * §15.5 ("Widgets"), and each element's base `display` is declared exactly
  * once, in its section's display rule. Attribute and state rules (`[hidden]`,
  * `[popover]`, `dialog[open]`, `dialog[hidden]`, `input[type="hidden"]`,
  * `table > form`, `embed[hidden]`) then override it. An element with no rule
@@ -720,6 +720,27 @@ summary {
 	display: block;
 }
 
+/* ---- §15.5.12–§15.5.14 marquee, meter, progress -------------------------- */
+
+marquee {
+	display: inline-block;
+	text-align: initial;
+	overflow: hidden !important;
+}
+
+/* The bar is not drawn yet; the box keeps the size the spec gives it. */
+meter {
+	display: inline-block;
+	width: 5em;
+	height: 1em;
+}
+
+progress {
+	display: inline-block;
+	width: 10em;
+	height: 1em;
+}
+
 /* ---- Embedded content ------------------------------------------------------ */
 
 /*
@@ -732,12 +753,18 @@ svg {
 }
 
 /*
- * Stopgap until #83, which removes it: `<img>` is inline replaced content,
- * but layout sizes only an atomic inline, and with `inline` as the initial
- * display (#136) a non-atomic inline `<img>` would get no box and stop
- * painting. #83 makes layout treat a replaced element with `display: inline`
- * as atomic (CSS 2.1 §9.2.2).
+ * Stopgap until #83, which removes it: these are inline replaced content, but
+ * layout sizes only an atomic inline, and with `inline` as the initial display
+ * (#136) a non-atomic inline one would get no box, stop painting and let its
+ * fallback content paint instead. #83 makes layout treat a replaced element
+ * with `display: inline` as atomic (CSS 2.1 §9.2.2). The list is
+ * `REPLACED_TAGS` (`core/css/src/domain/computed/intrinsic.rs`) minus `svg`.
  */
-img {
+img,
+video,
+canvas,
+iframe,
+object,
+embed {
 	display: inline-block;
 }

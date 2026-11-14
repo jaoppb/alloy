@@ -142,43 +142,22 @@ fn cascade_style(
     sheets: &StyleSheetSet,
 ) -> (ComputedStyle, InheritedContext) {
     let base = base_style(node_ref, parent);
-    let (style, context) =
-        apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts();
-    (blockified_at_root(style, node_ref), context)
-}
-
-/// The root element's `display` is blockified (CSS Display L3 §2.7): with
-/// `inline` as the initial value, an author `html { display: inline }` must
-/// not put the whole page into one line run. This changes the computed value.
-fn blockified_at_root(style: ComputedStyle, node_ref: NodeRef<'_>) -> ComputedStyle {
-    if !node_ref.is_root_element() {
-        return style;
-    }
-    let display = style.display().blockified();
-    style.with_display(display)
+    apply_author_rules(base, parent, inherited, node_ref, dom, sheets).into_parts()
 }
 
 /// The style before any rule applies: inherit from the parent (or take the
 /// CSS `initial` value at the root), then the one rule no selector can ever
 /// express — the fixed `display` a document, a text run or a comment gets.
+///
+/// An element keeps CSS's initial `inline` here: `assets/ua.css` states every
+/// other display (#133, #136). A non-element node is never chosen by a
+/// selector (`application/matching.rs` doc-comment), so its `display` is a
+/// fixed Rust rule.
 fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> ComputedStyle {
     let base = parent.map_or_else(ComputedStyle::initial, ComputedStyle::inheriting_from);
-    if node_ref.tag().is_some() {
-        return base;
-    }
-    style_for_non_element(base, node_ref.kind())
-}
-
-/// A non-element node: no selector ever chooses one (`application/matching.rs`
-/// doc-comment), so its `display` stays a fixed Rust rule rather than a CSS
-/// one. An element takes CSS's initial `inline` unless `assets/ua.css` states
-/// another display for it, as it does for every element WHATWG HTML §15.3
-/// does not leave inline (#133, #136) — so non-element nodes are the only
-/// ones that still need Rust. The `Element` arm is never reached: an element
-/// returns from [`base_style`] before this is asked.
-fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
-    match kind {
-        SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
+    match node_ref.kind() {
+        SnapshotNodeKind::Element => base,
+        SnapshotNodeKind::Document => base.with_display(Display::Block),
         SnapshotNodeKind::Text => base.with_display(Display::Inline),
         SnapshotNodeKind::Comment => base.with_display(Display::None),
     }

@@ -70,7 +70,7 @@ impl Display {
     pub const fn blockified(self) -> Self {
         match self {
             Self::Inline | Self::InlineBlock => Self::Block,
-            other => other,
+            Self::Block | Self::Flex | Self::ListItem | Self::None => self,
         }
     }
 
