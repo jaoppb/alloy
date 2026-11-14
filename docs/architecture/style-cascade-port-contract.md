@@ -19,7 +19,7 @@ all seven mandatory items at the `I3` freeze point (end of v0.5 B4).
 ## 2. Object-safety (item 2)
 
 Unlike `RuntimeEngine` (`core/engine`), none of the four CSS traits needed a `dyn`-dispatch companion — the first three
-were designed object-safe from `B0`, and `NaturalSizes` (schema `14`) follows them:
+were designed object-safe from `B0`, and `NaturalSizes` (schema `15`) follows them:
 
 - `CascadeResolver::resolve(&self, dom: &DomSnapshot, sheets: &StyleSheetSet) -> Result<StyledTree, CssError>`
 - `LayoutEngine::layout(&self, styled: &StyledTree, constraints: &ViewportConstraints) -> Result<LayoutBoxTree, CssError>`

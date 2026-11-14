@@ -295,6 +295,6 @@ Additive; nothing a consumer has to change.
   answers it, and inline collection, emission, block-in-inline splitting and margin containment ask the node instead of
   `Display::is_atomic_inline`, which is **renamed** `Display::is_inline_block` because it answers only that. So `ua.css`
   drops #136's stopgap `img, video, canvas, iframe, object, embed { display: inline-block }` and the
-  `svg { display: inline-block }` rule: the computed `display` of those elements is now `inline`. The `width` / `height`
-  attributes are read with HTML's rules for parsing dimension values (§2.3.4.4) for both the hint and the ratio, so
-  `100px` and `100` agree.
+  `svg { display: inline-block }` rule: the computed `display` of those elements is now `inline`, and a hidden `<embed>`
+  (`embed[hidden]`: `inline`, 0×0) gets a 0×0 atomic box where it got none. The `width` / `height` attributes are read
+  with HTML's rules for parsing dimension values (§2.3.4.4) for both the hint and the ratio, so `100px` and `100` agree.

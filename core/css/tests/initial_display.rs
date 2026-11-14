@@ -152,6 +152,19 @@ fn an_inline_block_root_is_blockified_too() {
     assert_eq!(laid.display_of("html"), Display::Block);
 }
 
+/// `embed[hidden]` is `inline` and 0×0 (WHATWG HTML §15.3.1): a zero-size
+/// atomic box on its neighbours' line.
+#[test]
+fn a_hidden_embed_is_a_zero_size_box_on_the_line() {
+    let laid = Laid::body("aaa<embed hidden>bbb");
+    let embed: Vec<&LayoutBox> = laid.boxes.fragments_of(laid.tagged("embed")).collect();
+
+    assert_eq!(embed.len(), 1, "the hidden embed still generates its box");
+    assert!(embed[0].content().size().width().is_zero());
+    assert!(embed[0].content().size().height().is_zero());
+    laid.assert_one_row("aaa", "bbb");
+}
+
 #[test]
 fn a_sized_image_keeps_its_box_as_an_atomic_inline() {
     let laid = Laid::body("aaa<img style='width:10px;height:10px'>bbb");

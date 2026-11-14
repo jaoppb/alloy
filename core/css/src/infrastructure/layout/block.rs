@@ -487,7 +487,8 @@ impl ChildMargins {
 }
 
 /// How `node`'s children's margins relate to its own: contained when `node`
-/// starts a new formatting context — an `inline-block`, a scroll container,
+/// starts a new formatting context — an atomic inline (an `inline-block`, or a
+/// replaced element with `display: inline`), a scroll container,
 /// the root element and the document box above it (block formatting
 /// contexts), or a flex item (whatever context its contents start) — and
 /// adjoining otherwise.

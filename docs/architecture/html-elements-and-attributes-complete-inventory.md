@@ -8,7 +8,7 @@
 - **Total de Elementos/Tags HTML Padrão Modernos (WHATWG / MDN):** 114
 - **Total de Elementos Legados/Obsoletos Reconhecidos pelo Parser:** 27 (regras de tolerância web compat)
 - **Total Geral de Elementos Catalogados:** 141
-- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 35 (24.8% do total; 29.7%
+- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 35 (24.8% do total; 29.8%
   dos modernos)
 - **Elementos Apenas Parseados (sem efeito de renderização no momento):** 3 (2.1% do total)
 - **Elementos Pendentes para HTML Completo:** 103 (73.0% do total; 77 modernos + 26 legados)
