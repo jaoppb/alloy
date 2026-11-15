@@ -103,6 +103,8 @@ pub const SUPPORTED_SYNTAX: &[&str] = &[
     "<script> rawtext",
     "<style> rawtext",
     "<textarea> rcdata",
+    "<title> rcdata",
+    "head content keeps head open",
     "p tag omission",
     "li tag omission",
     "void tags auto-close",

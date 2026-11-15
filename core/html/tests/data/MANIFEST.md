@@ -57,7 +57,7 @@ and tree construction into `dom::DomTree`, not necessarily visual styling or pai
 | `span`       | rendered    | B5    | inline text container                                                                    |
 | `strong`     | parsed only | B5    | inline strong importance element; renders identical to span, font-weight bold pending    |
 | `style`      | rendered    | B5    | stylesheet element; content tokenized as RAWTEXT, not markup; hidden via display: none    |
-| `title`      | partial     | B5    | document title metadata; hidden via display: none, RCDATA mode and window title pending  |
+| `title`      | rendered    | B5    | document title metadata; RCDATA content, hidden via display: none, names the window (#84) |
 | `ul`         | rendered    | B5    | unordered list block container                                                           |
 
 ## Syntax
@@ -82,6 +82,8 @@ Syntactic constructs handled by the HTML5 tokenizer state machine and tree build
 | `<script> rawtext`          | B5    | rawtext mode in `<script>`: inner markup is never parsed as HTML elements     |
 | `<style> rawtext`           | B5    | rawtext mode in `<style>`: inner CSS markup is never parsed as HTML elements  |
 | `<textarea> rcdata`         | #87   | rcdata mode in `<textarea>`: inner markup is text, entities are decoded       |
+| `<title> rcdata`            | #87   | rcdata mode in `<title>`: inner markup is text, entities are decoded          |
+| `head content keeps head open` | #84 | `base`, `link`, `meta`, `noscript`, `script`, `style`, `template`, `title` stay in `<head>`; obsolete `basefont`/`bgsound` still end it |
 | `p tag omission`            | B5    | open `<p>` is implicitly closed before opening another `<p>` or block element |
 | `li tag omission`           | B5    | open `<li>` is implicitly closed before opening another `<li>`                |
 | `void tags auto-close`      | B5    | void tags do not trap subsequent elements as children                         |

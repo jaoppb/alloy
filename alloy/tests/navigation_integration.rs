@@ -296,3 +296,27 @@ fn navigating_to_a_non_utf8_body_shows_the_error_card() {
     assert_eq!(stats.navigations(), 0);
     assert_eq!(stats.navigation_errors(), 1);
 }
+
+#[test]
+fn a_loaded_page_names_the_window_after_its_title() {
+    let start_url = Url::parse("http://example.com/titled.html").unwrap();
+    let page = "<html><head><base href=\"/\"><title>x</title></head><body>hi</body></html>";
+    let transport = MockTransport::new().with_response(start_url.clone(), text_response(page));
+    let mut system = HeadlessWindowSystem::new();
+    let mut presenter = RecordingPresenter::new();
+    let size = window::SurfaceSize::new(200, 150).unwrap();
+    system
+        .create_window(&WindowAttributes::new(WindowTitle::from("alloy"), size))
+        .unwrap();
+
+    let mut cycles = 0_usize;
+    let stats = BrowserApp::new(size, services(transport), compositor(), Keymap::default())
+        .run_until(&start_url, &mut system, &mut presenter, |stats| {
+            cycles += 1;
+            first_page_laid_out(stats) || cycles >= MAX_LOOP_CYCLES
+        })
+        .expect("browser loop runs");
+
+    assert_eq!(stats.navigations(), 1);
+    assert_eq!(system.title(), Some(&WindowTitle::from("x")));
+}

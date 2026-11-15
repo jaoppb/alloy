@@ -68,7 +68,8 @@ pub(crate) struct Cycle {
 }
 
 /// One iteration: drain every window event, drain every background-fetch
-/// result waiting right now, and — only if something actually changed —
+/// result waiting right now, hand the window any title a new document asked
+/// for (#84), and — only if something actually changed —
 /// relay out and present exactly once ("drain everything currently available,
 /// then relay out at most once").
 pub(crate) fn pump_once<S, R, F, X, W, B>(
@@ -92,6 +93,9 @@ where
     while let Some(result) = app.next_ready_fetch() {
         events.observe_fetch();
         app.complete_fetch(result);
+    }
+    if let Some(title) = app.take_title() {
+        system.set_title(title);
     }
 
     let shown = app.render(presenter)?;

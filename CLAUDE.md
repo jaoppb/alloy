@@ -116,7 +116,9 @@ history, not a pending merge. `docs/v0-5-handoff/README.md` (the phase package) 
   `BrowserApp::reload_keymap` are the keymap seam #50 plugs a script into (`DefaultKeymapSource` in infrastructure).
   `LoopStats` is a value object (`relayouts()`, `navigations()` …, no pub fields); `initial_window_attributes` lives in
   `alloy/src/composition.rs`. `arch-lint.toml`: `alloy-infrastructure` scope and `event-loop-pump-fold-dispatch-only`.
-  Not wired (no effect emitted yet): `TitleChanged` → `set_title` (#84), hover → `set_cursor` (#68).
+  `BrowserEffect::TitleChanged` (first HTML `<title>`, collapsed, else the URL) is recorded by the executor in
+  `PendingTitle` and applied by `pump_once` with `set_title` (#84). Not wired (no effect emitted yet): hover →
+  `set_cursor` (#68).
 - **I4 — `alloy <url>`, native window rendering**: on `main` since PR #16 (`split/07`); `alloy/tests/e2e_golden.rs` is
   the mock-driven golden (`MockTransport` + `HeadlessWindowSystem`/`RecordingPresenter`), the coalescing invariants are
   unit tests in `browser_app/coalescing_tests.rs`, and the loop itself has the #115 shape above.

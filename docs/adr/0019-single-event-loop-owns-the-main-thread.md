@@ -183,9 +183,10 @@ place that knows how a viewport divides into layers.
   were deleted, no alias).
 - **`EffectExecutor`** (`application/effects/`) is the only place the chrome and the browsing context meet: it borrows
   both for one dispatch and carries out `UiEffect` and `BrowserEffect` (`Navigate`, `FollowLink`, `ChromeDamaged`,
-  `Fetch`, `NavigationStarted`/`DocumentLoaded`, `ContentDamaged`). It owns nothing and is not generic over the window.
-  `TitleChanged` → `set_title` (#84) and hover → `cursor_for` → `set_cursor` (#68) are not wired: the browser emits
-  neither effect yet.
+  `Fetch`, `NavigationStarted`/`DocumentLoaded`, `ContentDamaged`, `TitleChanged`). It owns nothing and is not generic
+  over the window: a window command it cannot issue itself waits in a pending slot `BrowserApp` owns, which `pump_once`
+  (the only holder of the `WindowSystem`) drains after fetches complete — `TitleChanged` → `PendingTitle` → `set_title`
+  (#84). Hover → `cursor_for` → `set_cursor` (#68) is not wired: the browser emits no such effect yet.
 - **Keymap seam (#110 decision 25):** `KeymapSource` is a port; the composition root resolves it once with
   `resolve_keymap` (default `DefaultKeymapSource`, which supplies nothing and so resolves to `Keymap::default()`), and
   `BrowserApp::reload_keymap` re-resolves it. No script call sits on the key-press path; #50 plugs a script in here.

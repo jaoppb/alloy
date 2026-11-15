@@ -3,7 +3,7 @@
 use network::Url;
 use region::ContextId;
 
-use crate::domain::{FetchRequest, NavigationId};
+use crate::domain::{DocumentTitle, FetchRequest, NavigationId};
 
 /// An instruction from a browsing context to `alloy`'s executor. Every variant
 /// names its context so a context tree (#90) can be routed without changing
@@ -19,6 +19,8 @@ pub enum BrowserEffect {
     DocumentLoaded(ContextId, Url),
     /// What the content area shows changed: it needs a relayout.
     ContentDamaged(ContextId),
+    /// The shown document names the window `DocumentTitle` (#84).
+    TitleChanged(ContextId, DocumentTitle),
 }
 
 impl BrowserEffect {
@@ -28,7 +30,8 @@ impl BrowserEffect {
         match self {
             Self::NavigationStarted(context, _)
             | Self::DocumentLoaded(context, _)
-            | Self::ContentDamaged(context) => *context,
+            | Self::ContentDamaged(context)
+            | Self::TitleChanged(context, _) => *context,
             Self::Fetch(_, navigation) => navigation.context(),
         }
     }

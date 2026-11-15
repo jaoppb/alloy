@@ -30,7 +30,7 @@ use graphics::{FontProvider, RenderBackend};
 use network::Url;
 use platform::HostPlatform;
 use ui::{Keymap, Theme, UiController, UiRenderTree};
-use window::{InputText, KeyEvent, PhysicalPosition, Presenter, SurfaceSize};
+use window::{InputText, KeyEvent, PhysicalPosition, Presenter, SurfaceSize, WindowTitle};
 
 use self::render::ui_tree_for;
 use crate::application::browser_services::BrowserServices;
@@ -39,6 +39,7 @@ use crate::application::effects::EffectExecutor;
 use crate::application::event_loop;
 use crate::application::keymap::resolve_keymap;
 use crate::application::loop_stats::LoopStats;
+use crate::application::pending_title::PendingTitle;
 use crate::application::ports::{FetchExecutor, IdlePause, KeymapSource};
 use crate::error::AlloyError;
 
@@ -49,6 +50,8 @@ pub struct BrowserApp<F, X, W, B> {
     browsing: BrowsingContext<MarkupDiscoverer>,
     pointer_position: Option<PhysicalPosition>,
     damage: PendingDamage,
+    /// The title the next pump hands to the window (#84).
+    title: PendingTitle,
     viewport: SurfaceSize,
     compositor: Compositor<B>,
     stats: LoopStats,
@@ -84,6 +87,7 @@ where
             browsing: BrowsingContext::new(MarkupDiscoverer),
             pointer_position: None,
             damage,
+            title: PendingTitle::default(),
             viewport,
             compositor,
             stats: LoopStats::default(),
@@ -186,6 +190,12 @@ where
         self.executor().complete(result);
     }
 
+    /// The title a loaded document asked for since the last call, if any; the
+    /// loop gives it to `WindowSystem::set_title` (#84, ADR-0019).
+    pub const fn take_title(&mut self) -> Option<WindowTitle> {
+        self.title.take()
+    }
+
     /// Where the pointer was last seen — `None` until it first enters.
     pub const fn pointer_position(&self) -> Option<PhysicalPosition> {
         self.pointer_position
@@ -218,6 +228,7 @@ where
             &mut self.browsing,
             &mut self.ui,
             &mut self.damage,
+            &mut self.title,
             self.services.fetch_executor(),
         )
     }

@@ -10,6 +10,7 @@ pub mod html_parse;
 pub mod keymap;
 pub mod loop_stats;
 pub mod paint;
+pub mod pending_title;
 pub mod pipeline;
 pub mod ports;
 pub mod runtime_font;

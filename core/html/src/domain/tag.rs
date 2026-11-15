@@ -488,11 +488,21 @@ impl TagName {
     }
 
     /// Checks whether this tag is allowed inside `<head>` without triggering head termination.
+    ///
+    /// WHATWG §13.2.6.4.4 ("in head") also keeps the obsolete `basefont` and `bgsound`; they
+    /// are not in this vocabulary, so they still end `<head>` (#84).
     #[must_use]
     pub const fn is_head_content(&self) -> bool {
         matches!(
             self,
-            Self::Title | Self::Meta | Self::Style | Self::Link | Self::Script | Self::Noscript
+            Self::Base
+                | Self::Link
+                | Self::Meta
+                | Self::Noscript
+                | Self::Script
+                | Self::Style
+                | Self::Template
+                | Self::Title
         )
     }
 
@@ -741,6 +751,8 @@ mod tests {
             TagName::Link,
             TagName::Script,
             TagName::Noscript,
+            TagName::Base,
+            TagName::Template,
         ] {
             assert!(tag.is_head_content());
         }

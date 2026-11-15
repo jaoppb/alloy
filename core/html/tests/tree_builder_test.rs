@@ -99,54 +99,163 @@ fn div_inside_li_does_not_prevent_omission() {
 
 #[test]
 fn textarea_rcdata_yields_one_text_child_and_no_element_child() {
-    let events = events_of("<textarea><b>x</b></textarea>");
-    let textareas = elements_named(&events, "textarea");
-    assert_eq!(textareas.len(), 1, "must create one <textarea> element");
+    let events = events_of("<textarea><b>x</b> &amp;</textarea>");
+    let textarea = only_element_named(&events, "textarea");
 
-    let bs = elements_named(&events, "b");
-    assert!(bs.is_empty(), "<b> must not be parsed as an element child");
-
-    let textarea_id = textareas[0];
-    let text_nodes: Vec<_> = events
-        .iter()
-        .filter_map(|event| match event {
-            MockEvent::CreateText { id, content } => Some((*id, content.as_str())),
-            _ => None,
-        })
-        .collect();
-
-    assert_eq!(text_nodes.len(), 1, "must yield exactly one text node");
-    assert_eq!(text_nodes[0].1, "<b>x</b>");
-    assert_eq!(
-        parent_of(&events, text_nodes[0].0),
-        Some(textarea_id),
-        "text node must be a child of <textarea>"
+    assert!(
+        elements_named(&events, "b").is_empty(),
+        "<b> must stay text"
     );
+    assert_eq!(text_children_of(&events, textarea), ["<b>x</b> &"]);
 }
 
 #[test]
 fn title_rcdata_yields_one_text_child_and_no_element_child() {
-    let events = events_of("<title><b>x</b></title>");
-    let titles = elements_named(&events, "title");
-    assert_eq!(titles.len(), 1, "must create one <title> element");
+    let events = events_of("<title>a <b>b</b> &amp;</title>");
+    let title = only_element_named(&events, "title");
 
-    let bs = elements_named(&events, "b");
-    assert!(bs.is_empty(), "<b> must not be parsed as an element child");
+    assert!(
+        elements_named(&events, "b").is_empty(),
+        "<b> must stay text"
+    );
+    assert_eq!(text_children_of(&events, title), ["a <b>b</b> &"]);
+}
 
-    let title_id = titles[0];
-    let text_nodes: Vec<_> = events
+fn text_children_of(events: &[MockEvent], parent: NodeHandle) -> Vec<String> {
+    events
         .iter()
         .filter_map(|event| match event {
-            MockEvent::CreateText { id, content } => Some((*id, content.as_str())),
+            MockEvent::CreateText { id, content } if parent_of(events, *id) == Some(parent) => {
+                Some(content.clone())
+            }
             _ => None,
         })
-        .collect();
+        .collect()
+}
 
-    assert_eq!(text_nodes.len(), 1, "must yield exactly one text node");
-    assert_eq!(text_nodes[0].1, "<b>x</b>");
+fn only_element_named(events: &[MockEvent], name: &str) -> NodeHandle {
+    match elements_named(events, name).as_slice() {
+        [only] => *only,
+        found => panic!("must create exactly one <{name}> element, found {found:?}"),
+    }
+}
+
+#[test]
+fn base_keeps_head_open_for_the_following_title() {
+    let events = events_of("<head><base href=\"/\"><title>x</title></head>");
+    let head = only_element_named(&events, "head");
+
     assert_eq!(
-        parent_of(&events, text_nodes[0].0),
-        Some(title_id),
-        "text node must be a child of <title>"
+        parent_of(&events, only_element_named(&events, "base")),
+        Some(head)
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head),
+        "<base> must not end <head> before <title>"
+    );
+}
+
+#[test]
+fn template_stays_in_head() {
+    let events = events_of("<head><template></template><title>x</title></head>");
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "template")),
+        Some(head)
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head)
+    );
+}
+
+#[test]
+fn body_content_inside_a_head_noscript_ends_head() {
+    let events = events_of("<head><noscript><div>x</div></noscript></head>");
+    let body = only_element_named(&events, "body");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "div")),
+        Some(body),
+        "WHATWG in-head-noscript: a <div> pops <noscript> and <head>"
+    );
+}
+
+#[test]
+fn a_noscript_inside_a_head_template_does_not_end_head() {
+    let events = events_of(
+        "<head><template><noscript><div>x</div></noscript></template><title>t</title></head>",
+    );
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "div")),
+        Some(only_element_named(&events, "noscript")),
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head)
+    );
+}
+
+#[test]
+fn body_content_inside_nested_head_noscripts_ends_head() {
+    let events = events_of("<head><noscript><noscript><p>hi");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(only_element_named(&events, "body")),
+    );
+}
+
+#[test]
+fn content_after_html_closed_inside_head_goes_to_body() {
+    let events = events_of("<head></html><p>x");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(only_element_named(&events, "body")),
+    );
+}
+
+#[test]
+fn a_template_after_html_closed_inside_head_goes_to_body() {
+    let events = events_of("<head></html><template><p>x");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "template")),
+        Some(only_element_named(&events, "body")),
+    );
+}
+
+#[test]
+fn a_body_tag_inside_a_head_template_is_ignored() {
+    let events = events_of("<head><template><body><p>x");
+    let template = only_element_named(&events, "template");
+
+    assert!(
+        elements_named(&events, "body").is_empty(),
+        "no body may be created"
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(template)
+    );
+}
+
+#[test]
+fn a_head_end_tag_inside_a_head_template_is_ignored() {
+    let events = events_of("<head><template></head><p>x</template><title>t</title>");
+    let head = only_element_named(&events, "head");
+
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "p")),
+        Some(only_element_named(&events, "template"))
+    );
+    assert_eq!(
+        parent_of(&events, only_element_named(&events, "title")),
+        Some(head)
     );
 }
