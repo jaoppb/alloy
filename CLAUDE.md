@@ -32,8 +32,11 @@ history, not a pending merge. `docs/v0-5-handoff/README.md` (the phase package) 
 - **B4 — `core/css`**: a full layout engine over the B0–B3 port skeleton — box model (`BoxEdges`, margin collapse,
   `box-sizing`), a complete inline formatting context (word segmentation, whitespace collapse, `text-align` incl.
   `justify`, baseline alignment), and Flexbox (CSS Flexbox L1 §9, single-line; multi-line `flex-wrap` documented as a
-  cut in `core/css/tests/data/MANIFEST.md` for v0.7). `css::PORT_SCHEMA_VERSION = 3`. Frozen at integration point `I3`:
-  `docs/architecture/style-cascade-port-contract.md`.
+  cut in `core/css/tests/data/MANIFEST.md` for v0.7). `css::PORT_SCHEMA_VERSION = 15` (`3` at the `I3` freeze; `4`–`10`
+  fonts, shorthands, positioning/constraints/overflow, visual/typography/grid/logical, the PR #19 review
+  round, #63, #64; `11` per-line inline fragments #134, `12` body-of-root and scroll-container facts #135, `13` `inline`
+  as the initial `display` #136, `14` `<br>` #82, `15` the `NaturalSizes` port and replaced-element sizing #83,
+  ADR-0028). Frozen at integration point `I3`: `docs/architecture/style-cascade-port-contract.md`.
 - **B5 — `core/html`**: HTML5 tokenizer + `TreeSink`/`TokenSink` ports (PRD-008) — WHATWG §13.2.5 state machine for the
   states a real document uses, `<script>`/`<style>` raw-text mode, minimal tag-omission rules.
   `core/html/tests/data/MANIFEST.md` + `manifest_runner.rs` mirror B1's two-way consistency gate.
