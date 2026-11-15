@@ -89,11 +89,13 @@ pub struct ComputedStyle {
 }
 
 impl ComputedStyle {
-    /// Every property at its CSS `initial` value.
+    /// Every property at its CSS `initial` value — `display: inline` among
+    /// them (CSS Display L3 §2): an element the UA sheet names no display for
+    /// sits on the line with its neighbours (#136).
     #[must_use]
     pub const fn initial() -> Self {
         Self {
-            display: Display::Block,
+            display: Display::Inline,
             color: CssColor::BLACK,
             background_color: CssColor::TRANSPARENT,
             margin: LengthEdges::ZERO,

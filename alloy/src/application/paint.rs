@@ -9,8 +9,8 @@ use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
 use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
 use graphics::{
-    Au, Color, DisplayListBuilder, FaceMetrics, FontId, FontProvider, GlyphId, GlyphInstance,
-    GlyphRun, GraphicsError, ImageId, Point, PxRect, Rect, Size,
+    Au, Color, DisplayListBuilder, FontId, FontProvider, GlyphId, GlyphInstance, GlyphRun,
+    GraphicsError, ImageId, Point, PxRect, Rect, Size,
 };
 
 /// Default font identifier used for text painting in the headless pipeline.
@@ -330,19 +330,19 @@ fn paint_image(
     builder.draw_image(image_id, area, area)
 }
 
+/// Draws the text layout placed on this fragment's line, as one line from the
+/// fragment's origin (#134): layout already broke the lines, so paint never
+/// wraps again — which is what keeps a run that starts mid-line, or after a
+/// space, where layout put it.
 fn paint_text<F: FontProvider>(
     laid_out: &LayoutBox,
     styled_node: &StyledNode,
     font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    let Some(text_run) = styled_node.text() else {
+    let Some(text) = laid_out.text() else {
         return Ok(());
     };
-    if text_run.is_empty() {
-        return Ok(());
-    }
-
     let color = styled_node.style().color().to_graphics();
     if color.is_transparent() {
         return Ok(());
@@ -350,121 +350,38 @@ fn paint_text<F: FontProvider>(
 
     let content = laid_out.content();
     let metrics = font_provider.metrics(DEFAULT_FONT)?;
-    let glyphs = layout_glyphs(
-        text_run.as_str(),
-        content,
-        styled_node,
-        metrics,
+    let baseline = content.min_y().saturating_add(metrics.ascent());
+    let mut glyphs = GlyphRun::new();
+    append_line_glyphs(
+        text.as_str(),
+        Point::new(content.min_x(), baseline),
         font_provider,
+        &mut glyphs,
     )?;
 
-    if !glyphs.is_empty() {
-        builder.draw_text(glyphs, color, DEFAULT_FONT)?;
+    if glyphs.is_empty() {
+        return Ok(());
     }
-
-    Ok(())
+    builder.draw_text(glyphs, color, DEFAULT_FONT)
 }
 
-fn layout_glyphs<F: FontProvider>(
-    text: &str,
-    content: Rect,
-    styled_node: &StyledNode,
-    metrics: FaceMetrics,
-    font_provider: &F,
-) -> Result<GlyphRun, GraphicsError> {
-    let white_space = styled_node.style().white_space();
-    let min_x = content.min_x();
-    let max_x = content.max_x();
-    let line_height = metrics.line_height();
-    let mut baseline_y = content.min_y().saturating_add(metrics.ascent());
-    let mut pen_x = min_x;
-    let mut run = GlyphRun::new();
-
-    if white_space.preserves_newlines() {
-        layout_preformatted(
-            text,
-            min_x,
-            line_height,
-            metrics.ascent(),
-            content.min_y(),
-            font_provider,
-            &mut run,
-        )?;
-        return Ok(run);
-    }
-
-    for word in text.split_whitespace() {
-        let word_width = measure_text_run(word, font_provider)?;
-        let space_glyph = font_provider.glyph_for_char(DEFAULT_FONT, ' ')?;
-        let space_advance = font_provider.advance(DEFAULT_FONT, space_glyph)?;
-
-        if pen_x > min_x {
-            let next_pos = pen_x
-                .saturating_add(space_advance)
-                .saturating_add(word_width);
-            if white_space.allows_soft_wrap() && next_pos > max_x {
-                pen_x = min_x;
-                baseline_y = baseline_y.saturating_add(line_height);
-            } else {
-                pen_x = pen_x.saturating_add(space_advance);
-            }
-        }
-
-        pen_x = append_word_glyphs(word, pen_x, baseline_y, font_provider, &mut run)?;
-    }
-
-    Ok(run)
-}
-
-fn append_word_glyphs<F: FontProvider>(
-    word: &str,
-    mut pen_x: Au,
-    baseline_y: Au,
-    font_provider: &F,
-    run: &mut GlyphRun,
-) -> Result<Au, GraphicsError> {
-    for ch in word.chars() {
-        let glyph = font_provider.glyph_for_char(DEFAULT_FONT, ch)?;
-        if glyph != GlyphId::NOTDEF {
-            run.push(GlyphInstance::new(glyph, Point::new(pen_x, baseline_y)));
-        }
-        let advance = font_provider.advance(DEFAULT_FONT, glyph)?;
-        pen_x = pen_x.saturating_add(advance);
-    }
-    Ok(pen_x)
-}
-
-fn measure_text_run<F: FontProvider>(text: &str, font_provider: &F) -> Result<Au, GraphicsError> {
-    let mut total = Au::ZERO;
-    for ch in text.chars() {
-        let glyph = font_provider.glyph_for_char(DEFAULT_FONT, ch)?;
-        let advance = font_provider.advance(DEFAULT_FONT, glyph)?;
-        total = total.saturating_add(advance);
-    }
-    Ok(total)
-}
-
-fn layout_preformatted<F: FontProvider>(
-    text: &str,
-    min_x: Au,
-    line_height: Au,
-    ascent: Au,
-    min_y: Au,
+/// Appends one glyph per character of `line`, advancing the pen from `origin`
+/// (whose vertical coordinate is the baseline).
+fn append_line_glyphs<F: FontProvider>(
+    line: &str,
+    origin: Point,
     font_provider: &F,
     run: &mut GlyphRun,
 ) -> Result<(), GraphicsError> {
-    let mut baseline_y = min_y.saturating_add(ascent);
-    for line in text.split('\n') {
-        let mut pen_x = min_x;
-        for ch in line.chars() {
-            let glyph = font_provider.glyph_for_char(DEFAULT_FONT, ch)?;
-            if glyph != GlyphId::NOTDEF {
-                run.push(GlyphInstance::new(glyph, Point::new(pen_x, baseline_y)));
-            }
-            let advance = font_provider.advance(DEFAULT_FONT, glyph)?;
-            pen_x = pen_x.saturating_add(advance);
+    let baseline = origin.vertical();
+    let mut pen_x = origin.horizontal();
+    for character in line.chars() {
+        let glyph = font_provider.glyph_for_char(DEFAULT_FONT, character)?;
+        if glyph != GlyphId::NOTDEF {
+            run.push(GlyphInstance::new(glyph, Point::new(pen_x, baseline)));
         }
-        baseline_y = baseline_y.saturating_add(line_height);
+        let advance = font_provider.advance(DEFAULT_FONT, glyph)?;
+        pen_x = pen_x.saturating_add(advance);
     }
     Ok(())
 }

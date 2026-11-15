@@ -319,12 +319,14 @@ fn the_ua_sheet_still_gives_a_heading_and_a_paragraph_their_classic_shape() {
 }
 
 #[test]
-fn the_ua_sheet_gives_an_anchor_tag_the_standard_link_blue_colour() {
+fn the_ua_sheet_gives_a_link_the_standard_link_blue_colour() {
     let mut tree = dom::DomTree::new();
     let root = tree.document();
     let html = child(&mut tree, root, "html");
     let body = child(&mut tree, html, "body");
     let anchor = child(&mut tree, body, "a");
+    // `a[href]` stands for `:link` (#133); an `<a>` without `href` is not a link.
+    attribute_of(&mut tree, anchor, "href", "/next");
     text(&mut tree, anchor, "Link");
 
     let dom = snapshot(&tree, root);

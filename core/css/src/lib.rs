@@ -109,7 +109,31 @@ pub mod infrastructure;
 /// `10` adds the outline properties (`outline`, `outline-offset`,
 /// `outline-color`, `outline-width`, `outline-style`; CSS UI 4 §3),
 /// expanding [`SUPPORTED_PROPERTIES`] from 138 to 143 (issue #64).
-pub const PORT_SCHEMA_VERSION: u32 = 10;
+///
+/// `11` is **not additive**: an inline box or a text node gets one
+/// [`LayoutBox`] fragment per line it touches instead of one bounding box, so
+/// a node may own several boxes ([`LayoutBoxTree::fragments_of`]), and a text
+/// fragment carries the [`FragmentText`] layout placed on its line (issue
+/// #134). `PRD-007` §6 carries the migration note.
+///
+/// `12` is additive: `StyledNode::is_body_of_root` (with
+/// `NodeRef::is_body_of_root`), the structural fact a layout engine needs to
+/// apply CSS Overflow L3 §3.3's body-to-viewport propagation as a used value,
+/// and `OverflowStyle::is_scroll_container` (issue #135).
+///
+/// `13` is **not additive**: `ComputedStyle::initial()` and
+/// `Display::default()` answer `Display::Inline` (CSS Display L3 §2) instead
+/// of `Block`, and [`StyledTree`] blockifies the root element's display for
+/// every resolver (§2.7, `Display::blockified`). An element the UA sheet names
+/// no display for is now inline (issue #136). `PRD-007` §6 carries the
+/// migration note.
+///
+/// `14` is additive: [`StyledNode::role`] answers a [`NodeRole`] — a `<br>` is
+/// [`NodeRole::LineBreak`], which the inline formatting context ends a line
+/// at — and [`StyledTree`] keeps a `<br>` `inline` for every resolver unless
+/// its display is `none` (WHATWG HTML §15.3.4, issue #82). `PRD-007` §6
+/// carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 14;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -325,9 +349,10 @@ pub use domain::dom_snapshot::{
 pub use domain::error::{CssError, CssStage, SourceSpan};
 pub use domain::identifier::Identifier;
 pub use domain::input_type::InputType;
-pub use domain::layout_box_tree::{EdgeSizes, LayoutBox, LayoutBoxTree};
+pub use domain::layout_box_tree::{EdgeSizes, FragmentText, LayoutBox, LayoutBoxTree};
 pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
+pub use domain::node_role::NodeRole;
 pub use domain::parse_notes::{ParseNote, ParseNotes};
 pub use domain::selector::{
     AttributeMatch, AttributeSelector, AttributeSelectors, Combinator, ComplexSelector,

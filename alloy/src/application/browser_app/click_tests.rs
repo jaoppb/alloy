@@ -1,6 +1,8 @@
 //! Pointer clicks through the pump: links, chrome and navigation supersession.
 #![allow(clippy::unwrap_used)]
 
+use std::collections::BTreeMap;
+
 use browser::{FetchPayload, FetchResult};
 use ui::OmniboxTheme;
 use window::{HeadlessWindowSystem, RecordingPresenter, WindowEvent, WindowSystem as _};
@@ -215,5 +217,183 @@ fn clicks_below_chrome_region_trigger_link_with_offset_compensation() {
         ),
         target,
         "clicking below chrome height must trigger the link with offset compensation"
+    );
+}
+
+/// The middle of `length` from `start`, in whole document pixels.
+fn middle_px(start: graphics::Au, length: graphics::Au) -> f64 {
+    let middle = start.saturating_add(graphics::Au::from_raw(length.raw().saturating_div(2)));
+    f64::from(middle.to_px().get())
+}
+
+fn click(system: &mut HeadlessWindowSystem, x: f64, document_y: f64) {
+    system.schedule(WindowEvent::PointerMoved {
+        position: window::PhysicalPosition::new(x, window_y(document_y)),
+    });
+    system.schedule(WindowEvent::PointerButton {
+        button: window::PointerButton::Left,
+        pressed: true,
+    });
+}
+
+/// A window showing `xx ` and then a link that wraps onto four lines in a
+/// 90px column, with `next.html` served by the fake web.
+fn wrapped_link_window() -> (
+    HeadlessWindowSystem,
+    RecordingPresenter,
+    TestApp,
+    network::Url,
+) {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/next.html").unwrap();
+    let mut app = app_over(
+        FakeWeb::new().with_page(target.clone(), "<html><body>next</body></html>"),
+        attributes.initial_size(),
+    );
+    load(
+        &mut app,
+        "<html><body style=\"margin: 0\"><div style=\"width: 90px\">xx \
+         <a href=\"next.html\">bbbb cccc dddd eeee ffff gggg</a></div></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut app);
+    (system, presenter, app, target)
+}
+
+/// The link's area on each line, top to bottom: the union of the regions
+/// that share a line (the `<a>` fragment and its text's).
+fn link_lines(app: &TestApp) -> BTreeMap<graphics::Au, graphics::Rect> {
+    let mut lines: BTreeMap<graphics::Au, graphics::Rect> = BTreeMap::new();
+    for area in app.browsing.content_regions().map(|region| region.bounds()) {
+        let wider = lines
+            .get(&area.min_y())
+            .is_none_or(|known| area.max_x() > known.max_x());
+        if wider {
+            lines.insert(area.min_y(), area);
+        }
+    }
+    lines
+}
+
+/// Clicks at `(x, document_y)` and asserts no navigation happened. A hit's
+/// navigation is counted one pump after the click, when its result is
+/// applied (`completed_navigation`), so this pumps that far before
+/// concluding the click missed.
+fn assert_click_misses(
+    (system, presenter, app): (
+        &mut HeadlessWindowSystem,
+        &mut RecordingPresenter,
+        &mut TestApp,
+    ),
+    (x, document_y): (f64, f64),
+    reason: &str,
+) {
+    let navigations_before = app.stats().navigations();
+    click(system, x, document_y);
+    pump(system, presenter, app);
+    pump(system, presenter, app);
+    assert_eq!(app.stats().navigations(), navigations_before, "{reason}");
+}
+
+#[test]
+fn a_wrapped_link_is_hit_on_its_first_line_and_missed_on_the_text_before_it() {
+    let (mut system, mut presenter, mut app, target) = wrapped_link_window();
+    let lines = link_lines(&app);
+    let first_line = *lines.values().next().unwrap();
+    assert!(
+        first_line.min_x() > graphics::Au::ZERO,
+        "the link's first line starts after \"xx \""
+    );
+    let line_y = middle_px(first_line.min_y(), first_line.size().height());
+
+    // On "xx", left of the link but on its first line: the old single
+    // bounding box of the wrapped link covered this point.
+    assert_click_misses(
+        (&mut system, &mut presenter, &mut app),
+        (1.0, line_y),
+        "a click on the text before a wrapped link must miss it",
+    );
+
+    let navigations_before = app.stats().navigations();
+    click(
+        &mut system,
+        middle_px(first_line.min_x(), first_line.size().width()),
+        line_y,
+    );
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        completed_navigation(&mut system, &mut presenter, &mut app, navigations_before),
+        target
+    );
+}
+
+#[test]
+fn a_wrapped_link_is_hit_on_its_last_line_and_missed_past_its_end() {
+    let (mut system, mut presenter, mut app, target) = wrapped_link_window();
+    let lines = link_lines(&app);
+    let last_line = *lines.values().next_back().unwrap();
+    let widest = lines.values().map(|line| line.max_x()).max().unwrap();
+    let line_y = middle_px(last_line.min_y(), last_line.size().height());
+    let past_end = f64::from(last_line.max_x().to_px().get()) + 4.0;
+
+    // The link's last line is short, so a point just past its end is still
+    // inside the bounding box of the whole link — what a single region would
+    // have covered.
+    assert!(
+        past_end < f64::from(widest.to_px().get()),
+        "the probe point lies inside the link's bounding box"
+    );
+    assert_click_misses(
+        (&mut system, &mut presenter, &mut app),
+        (past_end, line_y),
+        "a click past the end of a wrapped link's last line must miss it",
+    );
+
+    let navigations_before = app.stats().navigations();
+    click(
+        &mut system,
+        middle_px(last_line.min_x(), last_line.size().width()),
+        line_y,
+    );
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        completed_navigation(&mut system, &mut presenter, &mut app, navigations_before),
+        target,
+        "the last line of a wrapped link is hit"
+    );
+}
+
+/// Block-in-inline (#135): a `<div>` inside an `<a>` splits the link's run
+/// into a block of its own, and the link still covers it.
+#[test]
+fn a_block_inside_a_link_is_clickable_as_the_link() {
+    let attributes = initial_window_attributes().unwrap();
+    let mut system = HeadlessWindowSystem::new();
+    system.create_window(&attributes).unwrap();
+    let mut presenter = RecordingPresenter::new();
+    let target = network::Url::parse("http://example.com/card.html").unwrap();
+    let mut app = app_over(
+        FakeWeb::new().with_page(target.clone(), "<html><body>card</body></html>"),
+        attributes.initial_size(),
+    );
+    load(
+        &mut app,
+        "<html><body style=\"margin: 0\"><a href=\"card.html\">\
+         <div style=\"width: 100px; height: 50px\">card</div></a></body></html>",
+        "http://example.com/index.html",
+    );
+    pump(&mut system, &mut presenter, &mut app);
+
+    // Near the card's bottom-right corner: inside the block, below its one
+    // line of text.
+    let navigations_before = app.stats().navigations();
+    click(&mut system, 90.0, 45.0);
+    pump(&mut system, &mut presenter, &mut app);
+    assert_eq!(
+        completed_navigation(&mut system, &mut presenter, &mut app, navigations_before),
+        target
     );
 }

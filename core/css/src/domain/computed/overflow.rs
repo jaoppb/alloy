@@ -73,6 +73,15 @@ impl OverflowStyle {
         }
     }
 
+    /// Whether this box is a scroll container (CSS Overflow L3 §3): an
+    /// axis that is `hidden`, `scroll` or `auto` — not `clip`, which clips
+    /// without scrolling. A scroll container starts a new block formatting
+    /// context (CSS 2.1 §9.4.1).
+    #[must_use]
+    pub const fn is_scroll_container(self) -> bool {
+        scrolls(self.x) || scrolls(self.y)
+    }
+
     #[must_use]
     pub const fn x(self) -> Overflow {
         self.x
@@ -92,4 +101,11 @@ impl OverflowStyle {
     pub const fn with_y(self, y: Overflow) -> Self {
         Self { y, ..self }
     }
+}
+
+const fn scrolls(overflow: Overflow) -> bool {
+    matches!(
+        overflow,
+        Overflow::Hidden | Overflow::Scroll | Overflow::Auto
+    )
 }

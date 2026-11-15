@@ -10,10 +10,12 @@
 
 use html::TagName;
 
+use crate::domain::computed::display::Display;
 use crate::domain::computed::intrinsic::{self, IntrinsicSize};
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
 use crate::domain::input_type::InputType;
+use crate::domain::node_role::NodeRole;
 use crate::domain::text::TextRun;
 
 /// One node's computed style, plus its place in the tree, the character data it
@@ -34,6 +36,8 @@ pub struct StyledNode {
     text: Option<TextRun>,
     intrinsic_size: IntrinsicSize,
     is_foreign_descendant: bool,
+    is_body_of_root: bool,
+    role: NodeRole,
 }
 
 impl StyledNode {
@@ -58,6 +62,22 @@ impl StyledNode {
     #[must_use]
     pub const fn is_foreign_descendant(&self) -> bool {
         self.is_foreign_descendant
+    }
+
+    /// Whether this is the root element's first `<body>`, whose `overflow`
+    /// goes to the viewport while the root's is `visible` (CSS Overflow L3
+    /// §3.3) — a structural fact layout needs, since it never sees tags.
+    #[must_use]
+    pub const fn is_body_of_root(&self) -> bool {
+        self.is_body_of_root
+    }
+
+    /// What this node is to layout beyond its style — a `<br>` is a forced
+    /// line break (issue #82), a structural fact layout needs since it never
+    /// sees tags.
+    #[must_use]
+    pub const fn role(&self) -> NodeRole {
+        self.role
     }
 
     #[must_use]
@@ -115,7 +135,10 @@ impl StyledTree {
     /// Builds a styled tree by calling `compute` once per node, in document
     /// order, passing the parent's already-computed style (or `None` at the
     /// root). Pre-order construction of the snapshot guarantees the parent is
-    /// finished before the child is visited.
+    /// finished before the child is visited. A `<br>`'s `display` is then made
+    /// `inline` unless it is `none` (issue #82), and the root element's is
+    /// blockified last (CSS Display L3 §2.7), whatever `compute` returned — so
+    /// even a `<br>` root is never inline-level.
     #[must_use]
     pub fn recompute_in_document_order(
         snapshot: &DomSnapshot,
@@ -126,7 +149,9 @@ impl StyledTree {
             let Some(node_ref) = snapshot.node(id) else {
                 continue;
             };
-            let style = compute(node_ref, parent_style_of(&nodes, node_ref));
+            let computed = compute(node_ref, parent_style_of(&nodes, node_ref));
+            let role = NodeRole::for_tag(node_ref.tag());
+            let style = blockified_at_root(inline_when_line_break(computed, role), node_ref);
             nodes.push(StyledNode {
                 node: id,
                 parent: node_ref.parent(),
@@ -135,6 +160,8 @@ impl StyledTree {
                 text: character_data_of(node_ref),
                 intrinsic_size: intrinsic::for_tag(node_ref.tag()),
                 is_foreign_descendant: node_ref.is_foreign_descendant(),
+                is_body_of_root: node_ref.is_body_of_root(),
+                role,
             });
         }
         Self {
@@ -142,6 +169,30 @@ impl StyledTree {
             root: snapshot.root(),
         }
     }
+}
+
+/// The root element's `display` is blockified (CSS Display L3 §2.7): with
+/// `inline` as the initial value, `html { display: inline }` must not put the
+/// whole page into one line run. Applied here, where every
+/// [`crate::CascadeResolver`] builds its tree, so no adapter can skip it; it
+/// changes the computed value.
+fn blockified_at_root(style: ComputedStyle, node_ref: NodeRef<'_>) -> ComputedStyle {
+    if !node_ref.is_root_element() {
+        return style;
+    }
+    let display = style.display().blockified();
+    style.with_display(display)
+}
+
+/// A `<br>` is inline-level whatever its author `display`, unless `none`
+/// (WHATWG HTML §15.3.4, `br { display-outside: newline }`): coerced here, like
+/// the root's blockification, so block, flex and block-in-inline segmentation
+/// see an ordinary inline box and no resolver can skip the rule (issue #82).
+fn inline_when_line_break(style: ComputedStyle, role: NodeRole) -> ComputedStyle {
+    if !role.is_line_break() || style.display().is_none() {
+        return style;
+    }
+    style.with_display(Display::Inline)
 }
 
 /// The text a node contributes to an inline formatting context.

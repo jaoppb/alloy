@@ -8,9 +8,9 @@
 - **Total de Elementos/Tags HTML Padrão Modernos (WHATWG / MDN):** 114
 - **Total de Elementos Legados/Obsoletos Reconhecidos pelo Parser:** 27 (regras de tolerância web compat)
 - **Total Geral de Elementos Catalogados:** 141
-- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 32 (22.7% do total; 27.2%
+- **Elementos Atualmente Suportados (Renderizados) no Alloy (`core/html` / `core/css` v0.5):** 34 (24.1% do total; 28.9%
   dos modernos)
-- **Elementos Apenas Parseados (sem efeito de renderização no momento):** 6 (4.3% do total)
+- **Elementos Apenas Parseados (sem efeito de renderização no momento):** 4 (2.8% do total)
 - **Elementos Pendentes para HTML Completo:** 103 (73.0% do total; 77 modernos + 26 legados)
 - **Total de Atributos Globais Padrão:** 32 (incluindo extensões modernas como `popover`, `inert`, `writingsuggestions`)
 - **Total de Atributos ARIA (Estados e Propriedades):** 48
@@ -24,8 +24,8 @@
 | :-------------------------------------------------------------------- | :---: | :---------: | :-------------: | :-------: | :-------: | :-------------- |
 | 01. Raiz e Metadados do Documento (Root & Document Metadata)          |   7   |      7      |        0        |     0     |   100%    | 🟢 Suportado    |
 | 02. Seções e Estrutura Semântica (Content Sectioning)                 |  15   |     12      |        0        |     3     |    80%    | 🟡 Em progresso |
-| 03. Agrupamento de Texto e Blocos (Grouping & Text Content)           |  16   |      8      |        1        |     7     |    50%    | 🟡 Em progresso |
-| 04. Semântica Inline & Nível de Texto (Inline Text Semantics)         |  29   |      2      |        4        |    23     |    7%     | 🟡 Em progresso |
+| 03. Agrupamento de Texto e Blocos (Grouping & Text Content)           |  16   |      9      |        0        |     7     |    56%    | 🟡 Em progresso |
+| 04. Semântica Inline & Nível de Texto (Inline Text Semantics)         |  29   |      3      |        3        |    23     |    10%    | 🟡 Em progresso |
 | 05. Mídia e Conteúdo Embutido (Embedded & Replaced Content)           |  11   |      0      |        1        |    10     |    0%     | ⚪ Pendente     |
 | 06. Tabelas e Dados Tabulares (Tabular Data & Tables)                 |  10   |      0      |        0        |    10     |    0%     | ⚪ Pendente     |
 | 07. Formulários e Controles de Usuário (Forms & Interactive Controls) |  14   |      0      |        0        |    14     |    0%     | ⚪ Pendente     |
@@ -123,7 +123,7 @@ Code e Object Calisthenics em `core/html` e `core/dom`):
 | Elemento (Tag)                                                                     |          Alloy           | Classificação no Parser |  Modelo de Conteúdo  | UA Stylesheet Padrão                                                        | Atributos Específicos Principais | Módulo / Especificação                                                                         |
 | :--------------------------------------------------------------------------------- | :----------------------: | :---------------------: | :------------------: | :-------------------------------------------------------------------------- | :------------------------------- | :--------------------------------------------------------------------------------------------- |
 | [`<`p`>`](https://developer.mozilla.org/docs/Web/HTML/Element/p)                   |      ✅ Renderizado      |   Normal (Fecha auto)   |     Flow content     | `display: block; margin: 16px 0;`                                           | —                                | WHATWG Grouping                                                                                |
-| [`<`hr`>`](https://developer.mozilla.org/docs/Web/HTML/Element/hr)                 |   🟡 Apenas parseado     |        **Void**         |     Flow content     | `— (sem regra no UA stylesheet; não desenha bordas)`                        | —                                | WHATWG Grouping (parseado no DOM; pintura de borda pendente #82)                               |
+| [`<`hr`>`](https://developer.mozilla.org/docs/Web/HTML/Element/hr)                 | 🟡 Renderizado (parcial) |        **Void**         |     Flow content     | `color: gray; border: 1px inset; margin-block: 0.5em;`                      | —                                | WHATWG Grouping (linha cinza de 1px, #82; `inset` pinta sólido; `hr[align]` é corte)           |
 | [`<`pre`>`](https://developer.mozilla.org/docs/Web/HTML/Element/pre)               |      ✅ Renderizado      |     Normal (Block)      |     Flow content     | `display: block; font-family: monospace; white-space: pre; margin: 1em 0;`  | —                                | WHATWG Grouping                                                                                |
 | [`<`blockquote`>`](https://developer.mozilla.org/docs/Web/HTML/Element/blockquote) |      ✅ Renderizado      |     Normal (Block)      |     Flow content     | `display: block; margin: 16px 40px;`                                        | `cite`                           | WHATWG Grouping                                                                                |
 | [`<`ol`>`](https://developer.mozilla.org/docs/Web/HTML/Element/ol)                 |      ✅ Renderizado      |     Normal (Block)      |     Flow content     | `display: block; margin: 1em 0; padding-left: 40px;`                        | `reversed`, `start`, `type`      | WHATWG Grouping (listas aninhadas respeitadas #95)                                             |
@@ -170,7 +170,7 @@ Code e Object Calisthenics em `core/html` e `core/dom`):
 | [`<`bdi`>`](https://developer.mozilla.org/docs/Web/HTML/Element/bdi)       |       ⏳ Pendente        |         Normal          |  Phrasing content  | `unicode-bidi: isolate;`                                            | —                                                                         | WHATWG Text-level                                                                  |
 | [`<`bdo`>`](https://developer.mozilla.org/docs/Web/HTML/Element/bdo)       |       ⏳ Pendente        |         Normal          |  Phrasing content  | `unicode-bidi: bidi-override;`                                      | `dir` (obrigatório)                                                       | WHATWG Text-level                                                                  |
 | [`<`span`>`](https://developer.mozilla.org/docs/Web/HTML/Element/span)     |      ✅ Renderizado      |         Normal          |  Phrasing content  | `display: inline;`                                                  | —                                                                         | WHATWG Text-level                                                                  |
-| [`<`br`>`](https://developer.mozilla.org/docs/Web/HTML/Element/br)         |   🟡 Apenas parseado     |        **Void**         |  Phrasing content  | `— (layout trata como bloco vazio)`                                 | —                                                                         | WHATWG Text-level (quebra de linha inline pendente #82)                            |
+| [`<`br`>`](https://developer.mozilla.org/docs/Web/HTML/Element/br)         |      ✅ Renderizado      |        **Void**         |  Phrasing content  | — (quebra de linha forçada, `NodeRole::LineBreak`)                  | —                                                                         | WHATWG Text-level (quebra de linha inline, #82; `br[clear]` é corte)               |
 | [`<`wbr`>`](https://developer.mozilla.org/docs/Web/HTML/Element/wbr)       |       ⏳ Pendente        |        **Void**         |  Phrasing content  | Oportunidade de quebra de linha                                     | —                                                                         | WHATWG Text-level                                                                  |
 
 ### 05. Mídia e Conteúdo Embutido (11 tags)

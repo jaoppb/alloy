@@ -45,7 +45,7 @@ use html::TagName;
 ///
 /// Deliberately a short, closed list: an element outside it is laid out from
 /// its own content, which is the correct answer for every non-replaced tag.
-const REPLACED_TAGS: [TagName; 7] = [
+pub(crate) const REPLACED_TAGS: [TagName; 7] = [
     TagName::img(),
     TagName::video(),
     TagName::canvas(),

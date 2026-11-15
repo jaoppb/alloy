@@ -206,3 +206,66 @@ The rest is additive or confined to the cascade helpers:
 - **Painting honors outline without changing layout.** `alloy/src/application/paint.rs` draws outline rectangles
   expanded by `outline-offset` outside the border box, using `paint_border_sides`, while leaving `LayoutBoxTree`
   byte-identical.
+
+### `10 → 11` — Issue #134 (#81): one `LayoutBox` fragment per line
+
+**Not additive.** What a consumer has to change:
+
+- **A node may own several `LayoutBox`es.** An inline box (`span`, `a`, …) or a text node gets one fragment per line box
+  it touches — the bounding rectangle of what its subtree put on that line — instead of one rectangle spanning every
+  line, which also covered the space between its pieces. Block-level and atomic boxes are still one fragment, except
+  that a box laying its own text out (an `<input>`'s or `<select>`'s label, a flex-blockified text node) also owns that
+  text's line fragments. `LayoutBoxTree::fragments_of(node)` lists a node's fragments in order; `box_of(node)` answers
+  the first one; `boxes_in_document_order` and `len` count fragments.
+- **A text fragment carries its text.** `LayoutBox::text() -> Option<&FragmentText>` is the text layout placed on that
+  fragment's line, white space already processed; an element's fragment answers `None`. A painter draws it as one line
+  from the fragment's origin and never wraps it again: `alloy/src/application/paint.rs` no longer re-wraps a text node's
+  whole string inside one rectangle, which had painted a run that starts mid-line from the container's left edge and
+  dropped the space after a closing inline tag.
+- **Link regions follow the lines.** `alloy`'s `collect_link_targets` already made one region per box under an
+  `<a href>`, so a link that wraps now has one region per line, and a click between them misses.
+
+### `11 → 12` — Issue #135 (#81): body-of-root and scroll-container facts
+
+Additive; nothing a consumer has to change.
+
+- **`StyledNode::is_body_of_root()`** (computed from the new `NodeRef::is_body_of_root()`) says whether a node is the
+  root `<html>` element's first `<body>`. CSS Overflow L3 §3.3 gives that element's `overflow` to the viewport while the
+  root's is `visible`; `BlockLayout` uses the fact to lay `<body>` out as a non-scroll container (a used value) while
+  its computed `overflow`, and what its children inherit, stay untouched.
+- **`OverflowStyle::is_scroll_container()`** answers whether an axis is `hidden`, `scroll` or `auto` (not `clip`), the
+  boxes CSS 2.1 §9.4.1 says start a new block formatting context.
+
+### `12 → 13` — Issue #136 (#81): `inline` is the initial `display`
+
+**Not additive.** What a consumer has to change:
+
+- **`ComputedStyle::initial().display()` and `Display::default()` are `Display::Inline`** (CSS Display L3 §2), no longer
+  `Block`. A consumer that built a style from `initial()` and relied on it being block-level must say `with_display`.
+- **An element `ua.css` names no display for is inline.** The UA sheet states every block of WHATWG HTML §15.3 (#133)
+  and the §15.5 widgets that are inline-blocks (`marquee`, `meter`, `progress`), so what changes is the rest: unlisted
+  phrasing elements (`bdo`, `big`, `time`, `bdi`, `q`, `data`, `output`, `ruby`/`rt`, …), `noscript`, `math`,
+  `optgroup`, `source`, and every custom element (`<x-foo>`) now sit on the line. Block-level content inside them splits
+  their run (#135). The replaced elements (`img`, `video`, `canvas`, `iframe`, `object`, `embed`) keep a stopgap
+  `display: inline-block` until #83 sizes replaced inlines, so they keep their box and their fallback content stays
+  hidden — except a hidden `<embed>`, whose `embed[hidden]` rule outweighs the stopgap and leaves it a non-atomic inline
+  with no box, the same zero-size result the spec's rule gives.
+- **A custom element is laid out as an inline box.** Its own `width`, `height`, `margin`, `border` and `padding` are not
+  laid out — the MANIFEST "Inline formatting simplifications" cut — so `<my-card style="border: …">` loses its frame
+  unless the page gives it `display: block`, as the spec and browsers also require.
+- **The root element is blockified** (§2.7): `StyledTree::recompute_in_document_order`, which every `CascadeResolver`
+  builds its tree through, turns an `inline` or `inline-block` root into `block` (`Display::blockified`), so the
+  computed `display` of `<html>` is never inline-level, whichever adapter cascaded it.
+
+### `13 → 14` — Issue #82: `<br>` is a forced line break
+
+**Additive.** Nothing a consumer wrote breaks; what a replacement adapter has to reproduce:
+
+- **`StyledNode::role()` answers a `NodeRole`** (`#[non_exhaustive]`: `Ordinary`, `LineBreak`), set from the tag when
+  `StyledTree::recompute_in_document_order` builds the tree. A `<br>` is `LineBreak`; every other node is `Ordinary`. A
+  replacement `LayoutEngine` must end the current line box at a `LineBreak` node and, when the line holds nothing else,
+  keep it one strut high (the node's own font), so `a<br><br>b` puts `b` two lines below `a` and a trailing `<br>` adds
+  no line (WHATWG HTML §15.3.4, `br { display-outside: newline }`).
+- **A `<br>`'s computed `display` is `inline` unless it is `none`**, whatever the cascade returned: like the root's
+  blockification, the coercion lives in the tree builder, so no resolver can skip it and no layout segmentation (block,
+  flex, block-in-inline) ever sees a block-level `<br>`.

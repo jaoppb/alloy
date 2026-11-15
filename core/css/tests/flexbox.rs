@@ -1,6 +1,6 @@
 //! Rectangle proofs for Flexbox (v0.5 B4, CSS Flexbox L1 §9): one proof per
 //! property named in the phase's `Definition of Done`. Every fixture uses
-//! `div` elements (the UA sheet leaves them at `ComputedStyle::initial()`)
+//! `div` elements (the UA sheet makes them `display: block` with zero margin)
 //! sized with plain pixel lengths, so the expected positions below are exact
 //! integer arithmetic, never text measurement.
 

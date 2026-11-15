@@ -148,23 +148,222 @@ fn cascade_style(
 /// The style before any rule applies: inherit from the parent (or take the
 /// CSS `initial` value at the root), then the one rule no selector can ever
 /// express — the fixed `display` a document, a text run or a comment gets.
+///
+/// An element keeps CSS's initial `inline` here: `assets/ua.css` states every
+/// other display (#133, #136). A non-element node is never chosen by a
+/// selector (`application/matching.rs` doc-comment), so its `display` is a
+/// fixed Rust rule.
 fn base_style(node_ref: NodeRef<'_>, parent: Option<&ComputedStyle>) -> ComputedStyle {
     let base = parent.map_or_else(ComputedStyle::initial, ComputedStyle::inheriting_from);
-    if node_ref.tag().is_some() {
-        return base;
-    }
-    style_for_non_element(base, node_ref.kind())
-}
-
-/// A non-element node: no selector ever chooses one (`application/matching.rs`
-/// doc-comment), so its `display` stays a fixed Rust rule rather than a CSS
-/// one. An element's default is already [`Display::Block`] from
-/// [`ComputedStyle::initial`], which is why this arm is the only one that
-/// still needs Rust after `assets/ua.css` took over every per-tag exception.
-fn style_for_non_element(base: ComputedStyle, kind: SnapshotNodeKind) -> ComputedStyle {
-    match kind {
-        SnapshotNodeKind::Document | SnapshotNodeKind::Element => base.with_display(Display::Block),
+    match node_ref.kind() {
+        SnapshotNodeKind::Element => base,
+        SnapshotNodeKind::Document => base.with_display(Display::Block),
         SnapshotNodeKind::Text => base.with_display(Display::Inline),
         SnapshotNodeKind::Comment => base.with_display(Display::None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use crate::application::snapshot::snapshot;
+
+    /// Every element WHATWG HTML §15.3 / §15.5.5 lays out as a block, outside
+    /// the table family.
+    const BLOCK_ELEMENTS: [&str; 41] = [
+        "html",
+        "body",
+        "address",
+        "blockquote",
+        "center",
+        "div",
+        "figure",
+        "figcaption",
+        "footer",
+        "form",
+        "header",
+        "hr",
+        "legend",
+        "listing",
+        "main",
+        "p",
+        "plaintext",
+        "pre",
+        "search",
+        "xmp",
+        "article",
+        "aside",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hgroup",
+        "nav",
+        "section",
+        "dir",
+        "dd",
+        "dl",
+        "dt",
+        "menu",
+        "ol",
+        "ul",
+        "details",
+        "summary",
+        "fieldset",
+    ];
+
+    /// The table family this engine stacks as blocks until it has table
+    /// layout (MANIFEST cut).
+    const TABLE_BLOCKS: [&str; 8] = [
+        "table", "caption", "thead", "tbody", "tfoot", "tr", "td", "th",
+    ];
+
+    /// The column elements, which generate nothing while tables stack as blocks.
+    const TABLE_COLUMNS: [&str; 2] = ["colgroup", "col"];
+
+    /// The §15.3.1 elements that render nothing, outside the table family.
+    const HIDDEN_ELEMENTS: [&str; 8] = [
+        "area", "basefont", "datalist", "noembed", "noframes", "param", "rp", "template",
+    ];
+
+    /// Every phrasing element the sheet styles: none of its rules may give one
+    /// a display other than the initial `inline`.
+    const STYLED_PHRASING: [&str; 27] = [
+        "a", "abbr", "acronym", "b", "cite", "code", "del", "dfn", "em", "i", "ins", "kbd",
+        "label", "mark", "nobr", "s", "samp", "small", "span", "strike", "strong", "sub", "sup",
+        "tt", "u", "var", "wbr",
+    ];
+
+    /// A table holding every element of [`TABLE_BLOCKS`] and [`TABLE_COLUMNS`]:
+    /// table-internal elements only survive tree construction inside one.
+    const TABLE_MARKUP: &str = "<!doctype html><html><body><table><caption></caption><colgroup><col></colgroup><thead><tr><th></th></tr></thead><tbody><tr><td></td></tr></tbody><tfoot></tfoot></table></body></html>";
+
+    /// The `display` the UA sheet alone gives the first `tag` element of
+    /// `markup`, cascaded over the initial style — so an element with no UA
+    /// display rule answers the initial `inline` (#136).
+    fn ua_display(markup: &str, tag: &str) -> Display {
+        let tree = dom::parse(markup).expect("the fixture parses").into_tree();
+        let dom = snapshot(&tree, tree.document());
+        let node = dom
+            .nodes_in_document_order()
+            .filter_map(|id| dom.node(id))
+            .find(|node| node.tag_str() == Some(tag))
+            .unwrap_or_else(|| panic!("the fixture has a <{tag}>"));
+        let cascaded = apply_author_rules(
+            ComputedStyle::initial(),
+            None,
+            &InheritedContext::root(),
+            node,
+            &dom,
+            &UaCascade::new().ua_rules,
+        );
+        cascaded.into_parts().0.display()
+    }
+
+    fn markup_with(tag: &str) -> String {
+        format!("<!doctype html><html><body><{tag}></{tag}></body></html>")
+    }
+
+    #[test]
+    fn the_ua_sheet_itself_makes_every_flow_element_a_block() {
+        for tag in BLOCK_ELEMENTS {
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::Block,
+                "<{tag}>"
+            );
+        }
+    }
+
+    #[test]
+    fn the_table_family_stacks_as_blocks_and_columns_generate_nothing() {
+        for tag in TABLE_BLOCKS {
+            assert_eq!(ua_display(TABLE_MARKUP, tag), Display::Block, "<{tag}>");
+        }
+        for tag in TABLE_COLUMNS {
+            assert_eq!(ua_display(TABLE_MARKUP, tag), Display::None, "<{tag}>");
+        }
+    }
+
+    #[test]
+    fn the_ua_sheet_hides_the_elements_html_never_renders() {
+        for tag in HIDDEN_ELEMENTS {
+            assert_eq!(ua_display(&markup_with(tag), tag), Display::None, "<{tag}>");
+        }
+    }
+
+    #[test]
+    fn a_dialog_is_hidden_until_it_is_open() {
+        let closed = "<!doctype html><body><dialog></dialog></body>";
+        let open = "<!doctype html><body><dialog open></dialog></body>";
+        assert_eq!(ua_display(closed, "dialog"), Display::None);
+        assert_eq!(ua_display(open, "dialog"), Display::Block);
+    }
+
+    #[test]
+    fn the_hidden_attribute_beats_an_open_dialog() {
+        let markup = "<!doctype html><body><dialog open hidden></dialog></body>";
+        assert_eq!(ua_display(markup, "dialog"), Display::None);
+    }
+
+    #[test]
+    fn a_list_item_is_a_list_item() {
+        let markup = "<!doctype html><body><ul><li>x</li></ul></body>";
+        assert_eq!(ua_display(markup, "li"), Display::ListItem);
+    }
+
+    #[test]
+    fn a_popover_is_closed_unless_it_is_an_open_dialog() {
+        let closed = "<!doctype html><body><div popover>x</div></body>";
+        let dialog = "<!doctype html><body><dialog open popover>x</dialog></body>";
+        assert_eq!(ua_display(closed, "div"), Display::None);
+        assert_eq!(ua_display(dialog, "dialog"), Display::Block);
+    }
+
+    /// A rule the parser refuses with a note never applies, silently; every
+    /// rule shipped in `assets/ua.css` must parse.
+    #[test]
+    fn the_ua_sheet_parses_without_a_note() {
+        let notes = UaCascade::new().ua_rules.notes().clone();
+        assert!(notes.is_empty(), "{notes:?}");
+    }
+
+    #[test]
+    fn the_hidden_attribute_removes_the_box_of_any_element() {
+        let markup = "<!doctype html><body><span hidden>x</span></body>";
+        assert_eq!(ua_display(markup, "span"), Display::None);
+    }
+
+    #[test]
+    fn every_styled_phrasing_element_stays_inline() {
+        for tag in STYLED_PHRASING {
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::Inline,
+                "<{tag}>"
+            );
+        }
+    }
+
+    /// The `inline-block` stopgap until #83 must cover every replaced element
+    /// but `<svg>` (which has its own rule): one it misses loses its box.
+    #[test]
+    fn every_replaced_element_has_the_inline_block_stopgap() {
+        let all = crate::domain::computed::intrinsic::REPLACED_TAGS;
+        let replaced = all
+            .iter()
+            .filter(|tag| **tag != html::TagName::svg())
+            .map(html::TagName::as_str);
+        for tag in replaced {
+            assert_eq!(
+                ua_display(&markup_with(tag), tag),
+                Display::InlineBlock,
+                "<{tag}>"
+            );
+        }
     }
 }
