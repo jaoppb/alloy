@@ -369,19 +369,31 @@ to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom", "cs
 message = "core/platform is a leaf: it must not depend on any other workspace crate (ADR-0022)."
 
 # --- import restrictions ---------------------------------------------------
+#
+# A deny pattern is matched against every path as written — a `use` path or a qualified path in
+# code (`window::domain::key::KeyCode` in a signature) — segment by segment, anchored at both ends:
+# `*` is exactly one segment, `**` any number including zero (arch-lint 0.6 `path_matches`, #128).
+# So "anything under a crate or module" is `<path>::**` (it also matches the bare `<path>`), never
+# `<path>::*`, which misses `winit::window::Window`; and a fenced item is `<crate>::**::<Item>`, so
+# a re-export and its defining module (`network::HttpTransport`,
+# `network::application::ports::HttpTransport`) are both denied. arch-lint compares the path as
+# written: a relative path (`super::…`) escapes every rule, and a glob import (`ports::*`) or an
+# alias of a parent path (`use network as net;`, `use std::sync as s;`) escapes every fence
+# narrower than the crate — an item fence or a module fence such as `std::sync::mpsc::**` — while
+# a crate-wide `<crate>::**` fence still catches it. Those cases are left to review.
 
 # Engine must not import any concrete script runtime crate (ADR-0002:49 / ADR-0011 item 2)
 [[restrict-use]]
 name = "engine-interpreter-free"
 scope = "engine"
 deny = [
-    "rhai::*",
-    "boa_engine::*",
-    "rquickjs::*",
-    "deno_core::*",
-    "v8::*",
-    "mlua::*",
-    "rlua::*",
+    "rhai::**",
+    "boa_engine::**",
+    "rquickjs::**",
+    "deno_core::**",
+    "v8::**",
+    "mlua::**",
+    "rlua::**",
 ]
 message = "core/engine must remain script-interpreter free (ADR-0002:49 / ADR-0011 item 2)."
 
@@ -390,13 +402,13 @@ message = "core/engine must remain script-interpreter free (ADR-0002:49 / ADR-00
 name = "css-interpreter-free"
 scope = "css"
 deny = [
-    "rhai::*",
-    "boa_engine::*",
-    "rquickjs::*",
-    "deno_core::*",
-    "v8::*",
-    "mlua::*",
-    "rlua::*",
+    "rhai::**",
+    "boa_engine::**",
+    "rquickjs::**",
+    "deno_core::**",
+    "v8::**",
+    "mlua::**",
+    "rlua::**",
 ]
 message = "core/css must remain script-interpreter free (PRD-007:64-67)."
 
@@ -405,13 +417,13 @@ message = "core/css must remain script-interpreter free (PRD-007:64-67)."
 name = "dom-interpreter-free"
 scope = "dom"
 deny = [
-    "rhai::*",
-    "boa_engine::*",
-    "rquickjs::*",
-    "deno_core::*",
-    "v8::*",
-    "mlua::*",
-    "rlua::*",
+    "rhai::**",
+    "boa_engine::**",
+    "rquickjs::**",
+    "deno_core::**",
+    "v8::**",
+    "mlua::**",
+    "rlua::**",
 ]
 message = "core/dom must remain script-interpreter free."
 
@@ -423,7 +435,7 @@ message = "core/dom must remain script-interpreter free."
 [[restrict-use]]
 name = "window-backend-confined"
 scope = "window-winit-free"
-deny = ["winit::*", "softbuffer::*"]
+deny = ["winit::**", "softbuffer::**"]
 message = "winit/softbuffer must stay confined to infrastructure/{winit_system,softbuffer_presenter,event_map} (ADR-0011 item 6)"
 # --- cross-crate isolation (one rule per crate, replaces the `layering` CI job's cargo-tree greps) ---
 # `deny-scope-dep` only resolves `crate::` paths inside one crate, so it cannot see
@@ -433,61 +445,63 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 [[restrict-use]]
 name = "dom-isolated"
 scope = "dom"
-deny = ["engine::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/dom must not import the engine, a script runtime, or the bindings crate."
 
 [[restrict-use]]
 name = "graphics-isolated"
 scope = "graphics"
-deny = ["engine::*", "dom::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "dom::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/graphics must not import the engine, DOM, or a script runtime (PRD-005:62-63)."
 
 [[restrict-use]]
 name = "css-isolated"
 scope = "css"
-deny = ["engine::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/css must not import the engine or a script runtime — the scriptable adapter lives in rhai-bindings (PRD-007). It may import dom, html and graphics."
 
 [[restrict-use]]
 name = "html-isolated"
 scope = "html"
-deny = ["engine::*", "dom::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "dom::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/html must not import the engine, dom, or a script runtime (PRD-008, ADR-0024)."
 
 [[restrict-use]]
 name = "network-isolated"
 scope = "network"
-deny = ["engine::*", "dom::*", "css::*", "graphics::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "dom::**", "css::**", "graphics::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/network must not import the engine, another subsystem, or a script runtime — the scriptable RequestPolicy lives in rhai-bindings (PRD-009, ADR-0019)."
 
 [[restrict-use]]
 name = "window-isolated"
 scope = "window"
-deny = ["engine::*", "dom::*", "css::*", "graphics::*", "network::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "dom::**", "css::**", "graphics::**", "network::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/window must not import the engine, another subsystem, or a script runtime — FrameView keeps the graphics edge from existing (PRD-010, ADR-0019)."
 
 # #110 decision 4 / #111: the browsing context is pure. It never spawns a thread, never owns a
-# channel, and never executes a request — `HttpTransport` / `RequestPolicy` are the only way to
-# call `execute` / `decide`, so denying their import denies the call. The `ui` ↔ `browser`
-# sibling rule (ADR-0026) is the `ui::*` / `window::*` entries here; `core/ui` adds the converse.
+# channel, and never executes a request. Calling `execute` / `decide` needs the `HttpTransport` /
+# `RequestPolicy` trait in scope, so the rule denies the traits and the transports under every
+# absolute module path; a relative path, or a glob or aliased import of a parent (`network`,
+# `std::sync`), escapes these fences (see the section comment) and is left to review. The `ui` ↔ `browser` sibling rule
+# (ADR-0026) is the `ui::**` / `window::**` entries of `browser-isolated`; `core/ui` adds the
+# converse.
 [[restrict-use]]
 name = "browser-pure"
 scope = "browser"
 deny = [
-    "std::thread",
-    "std::thread::*",
-    "std::sync::mpsc",
-    "std::sync::mpsc::*",
-    "network::HttpTransport",
-    "network::RequestPolicy",
-    "network::MockTransport",
+    "std::thread::**",
+    "std::sync::mpsc::**",
+    "network::**::HttpTransport",
+    "network::**::RequestPolicy",
+    "network::**::MockTransport",
+    "network::**::RealHttpTransport",
 ]
 message = "core/browser is a pure state machine: no thread, no channel, no HttpTransport call — it returns BrowserEffect::Fetch for alloy to execute (#110 decision 4, ADR-0019 amendment)."
 
 [[restrict-use]]
 name = "browser-isolated"
 scope = "browser"
-deny = ["engine::*", "ui::*", "window::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "ui::**", "window::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/browser must not import the engine, a script runtime, core/ui, or the window system — alloy's executor mediates between the sibling effect enums (ADR-0026)."
 
 # #109 / ADR-0026: the chrome and the browsing context are siblings joined by `alloy`'s executor.
@@ -497,16 +511,15 @@ message = "core/browser must not import the engine, a script runtime, core/ui, o
 name = "ui-isolated"
 scope = "ui"
 deny = [
-    "browser::*",
-    "dom::*",
-    "css::*",
-    "html::*",
-    "engine::*",
-    "rhai::*",
-    "rhai_runtime::*",
-    "rhai_bindings::*",
-    "std::thread",
-    "std::thread::*",
+    "browser::**",
+    "dom::**",
+    "css::**",
+    "html::**",
+    "engine::**",
+    "rhai::**",
+    "rhai_runtime::**",
+    "rhai_bindings::**",
+    "std::thread::**",
 ]
 message = "core/ui must not import core/browser, the document crates, the engine, a script runtime, or std::thread — alloy's executor mediates between the sibling effect enums (ADR-0026)."
 
@@ -514,16 +527,11 @@ message = "core/ui must not import core/browser, the document crates, the engine
 name = "event-loop-no-key-policy"
 scope = "alloy-event-loop"
 deny = [
-    "window::KeyCode",
-    "window::KeyCode::*",
-    "window::LogicalKey",
-    "window::LogicalKey::*",
-    "window::Modifiers",
-    "window::Modifiers::*",
-    "window::KeyState",
-    "window::KeyState::*",
-    "window::FunctionKey",
-    "window::FunctionKey::*",
+    "window::**::KeyCode::**",
+    "window::**::LogicalKey::**",
+    "window::**::Modifiers::**",
+    "window::**::KeyState::**",
+    "window::**::FunctionKey::**",
 ]
 message = "The event loop names no key type (KeyCode, LogicalKey, Modifiers, KeyState, FunctionKey), imported or by path: key policy is core/ui's Keymap and InputRouter (ADR-0027, #113). Forward the KeyEvent whole. Calling a KeyEvent accessor such as `modifiers()` is not visible to this rule; review still covers it."
 
@@ -533,12 +541,11 @@ message = "The event loop names no key type (KeyCode, LogicalKey, Modifiers, Key
 name = "event-loop-pump-fold-dispatch-only"
 scope = "alloy-event-loop"
 deny = [
-    "css::*",
-    "dom::*",
-    "std::thread",
-    "std::thread::*",
-    "graphics::SoftwareCpuBackend",
-    "graphics::infrastructure::*",
+    "css::**",
+    "dom::**",
+    "std::thread::**",
+    "graphics::**::SoftwareCpuBackend",
+    "graphics::infrastructure::**",
 ]
 message = "The event loop imports nothing from graphics infrastructure, css, dom or std::thread: it pumps window events, folds them and dispatches to BrowserApp; the EffectExecutor and the Compositor do the rest (#115, ADR-0019, ADR-0026)."
 
@@ -547,12 +554,9 @@ message = "The event loop imports nothing from graphics infrastructure, css, dom
 name = "alloy-infrastructure-driven-by-application"
 scope = "alloy-infrastructure"
 deny = [
-    "crate::application::event_loop",
-    "crate::application::event_loop::*",
-    "crate::application::browser_app",
-    "crate::application::browser_app::*",
-    "crate::application::effects",
-    "crate::application::effects::*",
+    "crate::application::event_loop::**",
+    "crate::application::browser_app::**",
+    "crate::application::effects::**",
 ]
 message = "alloy's infrastructure adapters implement application ports; they must not call the event loop, BrowserApp or the EffectExecutor (#115, ADR-0010)."
 
@@ -560,52 +564,54 @@ message = "alloy's infrastructure adapters implement application ports; they mus
 name = "region-isolated"
 scope = "region"
 deny = [
-    "browser::*",
-    "ui::*",
-    "dom::*",
-    "css::*",
-    "html::*",
-    "network::*",
-    "window::*",
-    "engine::*",
-    "rhai::*",
-    "rhai_runtime::*",
-    "rhai_bindings::*",
-    "std::thread",
-    "std::thread::*",
+    "browser::**",
+    "ui::**",
+    "dom::**",
+    "css::**",
+    "html::**",
+    "network::**",
+    "window::**",
+    "engine::**",
+    "rhai::**",
+    "rhai_runtime::**",
+    "rhai_bindings::**",
+    "std::thread::**",
 ]
 message = "core/region is the leaf ui and browser share; it imports graphics and nothing else (ADR-0026)."
 
 # #114: `alloy`'s only threads, transport calls and byte decoding live in `alloy/src/infrastructure/` behind the
-# `FetchExecutor` / `ImageDecoder` / `IdlePause` ports. `network::{HttpTransport, RequestPolicy, MockTransport}` are
-# fenced as `browser-pure` fences them: importing the trait is the only way to call `execute` / `decide`. `graphics::png::encode` stays allowed (the headless
-# `alloy render` path writes PNGs), so the rule names the module import and `decode`, not `png::*`.
+# `FetchExecutor` / `ImageDecoder` / `IdlePause` ports. `HttpTransport` / `RequestPolicy` and the transports are
+# fenced as `browser-pure` fences them, under every absolute module path (relative, glob and aliased imports are left
+# to review). `graphics::png::encode` stays allowed (the headless `alloy render` path writes PNGs), so the rule names
+# the `png` and `png_decode` module imports and the two decoders (`png::decode`, `png_decode::decode_png`), not
+# `png::**`.
 [[restrict-use]]
 name = "alloy-application-no-threads-or-decoding"
 scope = "alloy-application"
 deny = [
-    "std::thread",
-    "std::thread::*",
-    "graphics::png",
-    "graphics::png::decode",
-    "network::HttpTransport",
-    "network::RequestPolicy",
-    "network::MockTransport",
-    "crate::infrastructure",
-    "crate::infrastructure::*",
+    "std::thread::**",
+    "graphics::**::png",
+    "graphics::**::png::decode",
+    "graphics::**::png_decode",
+    "graphics::**::decode_png",
+    "network::**::HttpTransport",
+    "network::**::RequestPolicy",
+    "network::**::MockTransport",
+    "network::**::RealHttpTransport",
+    "crate::infrastructure::**",
 ]
-message = "alloy's application layer names no std::thread, no PNG decoder, no HttpTransport / RequestPolicy and no crate::infrastructure item (tests included) — fetch workers and image decoding are infrastructure adapters behind ports (#110 decision 26, #114, ADR-0010)."
+message = "alloy's application layer names no std::thread, no PNG decoder, no HttpTransport / RequestPolicy or transport and no crate::infrastructure item (tests included) — fetch workers and image decoding are infrastructure adapters behind ports (#110 decision 26, #114, ADR-0010)."
 
 [[restrict-use]]
 name = "platform-isolated"
 scope = "platform"
-deny = ["engine::*", "dom::*", "css::*", "graphics::*", "html::*", "network::*", "window::*", "rhai::*", "rhai_runtime::*", "rhai_bindings::*"]
+deny = ["engine::**", "dom::**", "css::**", "graphics::**", "html::**", "network::**", "window::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/platform is a leaf every crate may depend on, so it imports none of them (ADR-0022)."
 
 [[restrict-use]]
 name = "runtime-rhai-domain-free"
 scope = "runtime-rhai"
-deny = ["dom::*", "css::*", "graphics::*", "network::*", "window::*", "rhai_bindings::*"]
+deny = ["dom::**", "css::**", "graphics::**", "network::**", "window::**", "rhai_bindings::**"]
 message = "core/runtime/rhai must name no domain crate — the bridges live in rhai-bindings (v0.5 report §2.12)."
 
 # Crate preference: prefer tracing over log
