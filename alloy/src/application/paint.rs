@@ -8,11 +8,12 @@ use browser::image_id_of;
 use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
 use css::{
-    EdgeSizes, INITIAL_FONT_SIZE, IntrinsicSize, LayoutBox, LayoutBoxTree, StyledNode, StyledTree,
+    EdgeSizes, INITIAL_FONT_SIZE, IntrinsicSize, LayoutBox, LayoutBoxTree, NaturalSize, StyledNode,
+    StyledTree,
 };
 use graphics::{
     Au, Color, DisplayListBuilder, FontId, FontProvider, GlyphId, GlyphInstance, GlyphRun,
-    GraphicsError, Point, PxRect, Rect, Size,
+    GraphicsError, Point, Px, PxRect, Rect, Size,
 };
 
 /// Default font identifier used for text painting in the headless pipeline.
@@ -314,21 +315,36 @@ fn paint_vertical_border(
 
 /// Draws a replaced box's decoded image — exactly when layout sized the box
 /// from it (`IntrinsicSize::Natural`), so layout and paint never disagree on
-/// whether an image is there (issue #83).
+/// whether an image is there (issue #83). A `Pending` or `Resolved` box has no
+/// decoded image to draw.
+///
+/// The whole image (its natural rectangle, in image pixels) is scaled into
+/// the content box (page coordinates): the two coincide only for an unscaled
+/// image at the page origin.
 fn paint_image(
     laid_out: &LayoutBox,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    if !matches!(laid_out.intrinsic_size(), IntrinsicSize::Natural(_)) {
+    let IntrinsicSize::Natural(natural) = laid_out.intrinsic_size() else {
         return Ok(());
-    }
-    let image_id = image_id_of(laid_out.node());
+    };
     let content = laid_out.content();
     if content.is_empty() {
         return Ok(());
     }
-    let area = rect_to_px_rect(content);
-    builder.draw_image(image_id, area, area)
+    let image_id = image_id_of(laid_out.node());
+    builder.draw_image(image_id, natural_rect(natural), rect_to_px_rect(content))
+}
+
+/// The image's own pixels, `0, 0` to its natural size: `draw_image`'s source
+/// is in image coordinates.
+fn natural_rect(natural: NaturalSize) -> PxRect {
+    PxRect::new(
+        Px::new(0.0),
+        Px::new(0.0),
+        natural.width().to_px(),
+        natural.height().to_px(),
+    )
 }
 
 /// Draws the text layout placed on this fragment's line, as one line from the

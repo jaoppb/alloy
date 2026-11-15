@@ -572,32 +572,96 @@ fn an_img_without_its_image_paints_its_alt_text() {
     assert!(inked, "the text sits at the image's place, top left");
 }
 
-/// The ids the discoverer requests images under are the ids layout's
-/// natural-size lookup and the painter read back (issue #83): a decoded 4×4
-/// `pic.png` lays its `<img>` out — and paints it — at 4×4.
-#[test]
-fn a_decoded_image_lays_its_img_out_at_its_natural_size() {
+const BLUE: Color = Color::rgb(0, 0, 255);
+
+/// Renders `body` (with `body_style`) at 20×20, every discovered image decoded
+/// to `pixels` under the id the discoverer requested it with — so the ids
+/// layout's natural-size lookup and the painter read back are the real ones
+/// (issue #83).
+fn render_with_decoded_images(
+    body_style: &str,
+    body: &str,
+    pixels: &graphics::Framebuffer,
+) -> graphics::Framebuffer {
     use browser::{ImageStore, MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
 
-    let markup = "<!doctype html><html><head><style>body{margin:0;background:#fff}</style></head>\
-                  <body><img src=\"pic.png\"></body></html>";
-    let tree = dom::parse(markup).unwrap().into_tree();
+    let markup = format!(
+        "<!doctype html><html><head><style>body{{background:#fff;{body_style}}}</style></head>\
+         <body>{body}</body></html>"
+    );
+    let tree = dom::parse(&markup).unwrap().into_tree();
     let base = network::Url::parse("http://example.invalid/").unwrap();
     let found = MarkupDiscoverer.discover(&snapshot(&tree, tree.document()), &base);
-    let size = graphics::SurfaceSize::new(4, 4).unwrap();
-    let pixels = graphics::Framebuffer::filled(size, RED).unwrap();
     let mut images = ImageStore::new();
     for request in &found {
         if let SubresourceRequest::Image(image) = request {
             images.insert(image.id(), pixels.clone());
         }
     }
-
     let surface = graphics::SurfaceSize::new(20, 20).unwrap();
-    let frame = alloy::render_dom(&tree, css::StyleSheetSet::new(), &images, surface).unwrap();
+    alloy::render_dom(&tree, css::StyleSheetSet::new(), &images, surface).unwrap()
+}
+
+fn solid(color: Color) -> graphics::Framebuffer {
+    graphics::Framebuffer::filled(graphics::SurfaceSize::new(4, 4).unwrap(), color).unwrap()
+}
+
+/// A 2×1 image: a red pixel, then a blue one.
+fn red_then_blue() -> graphics::Framebuffer {
+    let size = graphics::SurfaceSize::new(2, 1).unwrap();
+    graphics::Framebuffer::from_rgba8(size, vec![255, 0, 0, 255, 0, 0, 255, 255]).unwrap()
+}
+
+#[test]
+fn a_decoded_image_lays_its_img_out_at_its_natural_size() {
+    let frame = render_with_decoded_images("margin:0", "<img src=\"pic.png\">", &solid(RED));
 
     assert_eq!(frame.pixel(0, 0), Some(RED));
     assert_eq!(frame.pixel(3, 3), Some(RED));
     assert_eq!(frame.pixel(4, 0), Some(Color::WHITE), "4 wide, not 300");
     assert_eq!(frame.pixel(0, 4), Some(Color::WHITE), "4 tall, not 150");
+}
+
+/// The painter samples the whole image whatever the box's page position: an
+/// `<img>` under the UA `body { margin: 8px }` paints at (8, 8). The test above
+/// sits at the origin, where page and image coordinates coincide — which is
+/// how passing the content box as the image source went unnoticed.
+#[test]
+fn a_decoded_image_away_from_the_origin_paints_its_whole_box() {
+    let frame = render_with_decoded_images("", "<img src=\"pic.png\">", &solid(RED));
+
+    assert_eq!(frame.pixel(8, 8), Some(RED), "its top-left corner");
+    assert_eq!(frame.pixel(11, 11), Some(RED), "its bottom-right corner");
+    assert_eq!(
+        frame.pixel(7, 8),
+        Some(Color::WHITE),
+        "the margin stays blank"
+    );
+    assert_eq!(frame.pixel(12, 8), Some(Color::WHITE), "4 wide");
+}
+
+/// A box the attributes size larger than the image shows the whole image
+/// scaled into it, not its top-left corner cropped.
+#[test]
+fn a_decoded_image_scaled_by_its_attributes_fills_its_box() {
+    let frame = render_with_decoded_images(
+        "margin:0",
+        "<img src=\"pic.png\" width=\"16\" height=\"8\">",
+        &red_then_blue(),
+    );
+
+    assert_eq!(
+        frame.pixel(0, 0),
+        Some(RED),
+        "the left half is the red pixel"
+    );
+    assert_eq!(frame.pixel(7, 7), Some(RED));
+    assert_eq!(
+        frame.pixel(8, 0),
+        Some(BLUE),
+        "the right half is the blue pixel"
+    );
+    assert_eq!(frame.pixel(15, 7), Some(BLUE));
+    assert_eq!(frame.pixel(16, 0), Some(Color::WHITE), "16 wide");
+    assert_eq!(frame.pixel(0, 8), Some(Color::WHITE), "8 tall");
 }
