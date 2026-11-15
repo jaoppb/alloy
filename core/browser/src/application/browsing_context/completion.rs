@@ -48,7 +48,7 @@ impl<D: SubresourceDiscoverer> BrowsingContext<D> {
         let title =
             document_title(&tree).unwrap_or_else(|| DocumentTitle::from_url(&navigation_url));
         let mut document = Document::loaded(tree, base_url);
-        document.reserve_placeholders(&found);
+        document.mark_images_loading(&found);
         let mut effects = fetches_for(found, navigation);
         self.install(document);
         self.stats.record(Accepted::Navigation);

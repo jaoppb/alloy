@@ -1,4 +1,5 @@
-//! The document a context currently shows, with everything fetched for it.
+//! The document a context currently shows, with the sheets fetched and the
+//! images requested for it.
 
 use css::StyleSheetSet;
 use dom::DomTree;
@@ -8,7 +9,8 @@ use network::Url;
 use crate::domain::{ImageStore, SubresourceRequest, Subresources};
 
 /// A DOM tree, the base URL its relative references resolve against, and the
-/// sheets and images fetched for it. A new document starts from none of them.
+/// sheets fetched and images requested for it. A new document starts from none
+/// of them.
 #[derive(Debug)]
 pub struct Document {
     tree: DomTree,
@@ -58,7 +60,7 @@ impl Document {
         &self.sheets
     }
 
-    /// The images fetched (or reserved) so far.
+    /// The images this document requested, with what became of each.
     #[must_use]
     pub const fn images(&self) -> &ImageStore {
         &self.images
@@ -67,7 +69,7 @@ impl Document {
     /// Marks every image `found` references as loading until its pixels
     /// arrive, so layout waits for it instead of showing its `alt` text (see
     /// [`ImageStore::mark_loading`]).
-    pub fn reserve_placeholders(&mut self, found: &Subresources) {
+    pub fn mark_images_loading(&mut self, found: &Subresources) {
         for request in found {
             if let SubresourceRequest::Image(image) = request {
                 self.images.mark_loading(image.id());

@@ -19,7 +19,7 @@ pub enum Accepted {
     NavigationError,
     /// An external stylesheet joined the cascade.
     Stylesheet,
-    /// An image decoded and replaced its placeholder.
+    /// An image decoded (its entry stops loading).
     Image,
 }
 
@@ -52,7 +52,7 @@ impl ContextStats {
         self.stylesheets.0
     }
 
-    /// Images that decoded and replaced their placeholder.
+    /// Images that decoded.
     #[must_use]
     pub const fn images_loaded(&self) -> usize {
         self.images.0
