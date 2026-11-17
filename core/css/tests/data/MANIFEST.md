@@ -205,7 +205,6 @@ kept inline-level unless `display: none`) ends its line, and holds a strut-high 
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | an inline box's own `margin`, `border` and `padding` (CSS 2.1 §10.3.1, §10.6.1)                                                                                       | an inline box's fragments are the bounds of its content; its edges are not laid out                                                                                              | v0.7        |
 | `text-align: justify` spacing in paint                                                                                                                                | layout widens a justified line's gaps, but a text fragment carries its text at natural spacing, so paint draws the words bunched at the line start inside the justified fragment | v0.7        |
-| a box that lays its own text out (an `<input>` / `<select>` label, a flex-blockified text node) also owns that text's line fragments                                  | its background and outline are painted again around the label line, inside the control                                                                                           | v0.7        |
 | shrink-to-fit width of an `inline-block` whose content holds a block-level box — directly, or through a block-in-inline split such as `<a><div>card</div></a>` (#135) | the block is measured at the full available width, so the `inline-block` fills it instead of shrinking to its content (no min/max-content pass)                                  | v0.7        |
 | a `<br>` that is a flex item (WHATWG HTML §15.3.4)                                                                                                                    | blockified like any empty inline: an empty item, no break                                                                                                                        | v0.7        |
 
@@ -269,6 +268,25 @@ Form controls receive UA default styles according to WHATWG HTML §15.5 and §15
 | gap                                                | behaviour instead                                                                        | tracked for |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------- |
 | `<fieldset>` / `<legend>` border-notch clipping    | `<fieldset>` renders standard rectangular borders; `<legend>` is rendered in normal flow | v0.7        |
+
+### Replaced elements
+
+A replaced element (`img`, `video`, `canvas`, `iframe`, `object`, `embed`, `svg`) is sized from the author's `width` /
+`height`, the natural size the `NaturalSizes` port reports, then the ratio of its `width` / `height` attributes, then
+the default — 0×0 for `img`, 300×150 otherwise (CSS 2.1 §10.3.2, §10.6.2; issue #83, ADR-0028). A `<canvas>`'s natural
+size is its bitmap: its `width` / `height` attributes, 300×150 by default. An unavailable `<img>` with a non-empty `alt`
+is laid out as that text.
+
+| gap                                                                 | behaviour instead                                                                                          | tracked for |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------- |
+| `object-fit` / `object-position`                                    | the image is stretched to the content box                                                                  | #70         |
+| the public `aspect-ratio` property                                  | refused; only the attribute ratio of `img` and `video` (and a `canvas`'s bitmap) is honoured                  | v0.7        |
+| `srcset` / `sizes`, image density                                   | one image pixel is one CSS pixel                                                                           | v0.7        |
+| clipping an `alt` text to a sized box; the broken-image icon        | a long `alt` overflows the box the `width` / `height` give it; an unavailable image without `alt` is empty | v0.7        |
+| `min-width` / `max-width` constraints on the natural size (§10.4)   | not applied to a replaced box                                                                              | v0.7        |
+| a natural ratio with no natural size (an SVG with only a `viewBox`) | the default object size                                                                                    | v0.7        |
+| a replaced flex item's content-based main size (CSS Flexbox L1 §9.2) and its ratio under a forced main size | an `auto` main size is 0 (no flex item gets a content-based one yet), and the cross size follows the declared width, not the forced one | v0.7        |
+| an `<object>` with no usable resource represents its children (HTML §15.4.6) | an unavailable `<object>` takes the 300×150 default object size and its fallback content is not laid out | v0.7        |
 
 ### UA sheet rules the cascade cannot express yet
 

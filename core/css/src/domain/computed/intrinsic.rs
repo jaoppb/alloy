@@ -1,20 +1,23 @@
-//! [`IntrinsicSize`] — the "this box is still waiting on a resource" marker
-//! (v0.5 B4, plan `:499-501`).
+//! [`IntrinsicSize`] — what a box's size owes to a resource (v0.5 B4, plan
+//! `:499-501`; `Natural` since issue #83).
 //!
 //! A replaced element (`<img>` and friends) has no size of its own until the
 //! resource behind it is decoded. Layout still has to produce a box for it, so
 //! the box says out loud that its size is provisional instead of pretending a
 //! zero is a measurement.
 //!
-//! The marker lands **before** the `I3` freeze on purpose: Phase X (`<img>`)
-//! reads [`crate::LayoutBox::intrinsic_size`] to know which boxes to re-lay-out
-//! once a decoded image arrives, and adding the field afterwards would need a
-//! migration note in `PRD-007`.
+//! The marker landed **before** the `I3` freeze so that adding it later would
+//! not need a migration note in `PRD-007`. Today the painter reads it: it draws
+//! an image exactly on a `Natural` box (issue #83). A relayout is triggered by
+//! the browsing context when an image arrives or fails, not by `Pending`.
 //!
-//! It is decided by the **tree builder**, not by a
-//! [`crate::CascadeResolver`]: only [`crate::StyledTree`]'s construction pass
-//! still sees the element's tag, and making it a resolver's job would change
-//! the closure signature every adapter passes.
+//! Only layout knows: it asks the [`crate::NaturalSizes`] port about a
+//! replaced element's resource and reports, per [`crate::LayoutBox`], whether
+//! the box took a natural size, still waits on one, or is final. Every other
+//! box — and every line fragment, which never stands for a resource — is
+//! `Resolved`.
+
+use crate::domain::replaced::NaturalSize;
 
 /// Whether a box's own size is final.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -24,45 +27,11 @@ pub enum IntrinsicSize {
     /// from its formatting context.
     #[default]
     Resolved,
-    /// The box belongs to a replaced element whose resource has not been loaded,
-    /// and neither axis was pinned by the cascade. Its geometry will change once
-    /// the resource arrives (Phase X).
+    /// The box belongs to a replaced element whose resource is still loading,
+    /// and the cascade did not pin both axes. Its geometry may change once the
+    /// resource arrives.
     Pending,
-}
-
-impl IntrinsicSize {
-    /// Whether this box still depends on an unloaded resource.
-    #[must_use]
-    pub const fn is_pending(self) -> bool {
-        matches!(self, Self::Pending)
-    }
-}
-
-use html::TagName;
-
-/// The elements whose size comes from a resource rather than from CSS
-/// (HTML Living Standard, "replaced elements").
-///
-/// Deliberately a short, closed list: an element outside it is laid out from
-/// its own content, which is the correct answer for every non-replaced tag.
-pub(crate) const REPLACED_TAGS: [TagName; 7] = [
-    TagName::img(),
-    TagName::video(),
-    TagName::canvas(),
-    TagName::iframe(),
-    TagName::object(),
-    TagName::embed(),
-    TagName::svg(),
-];
-
-/// The marker an element with this tag is born with.
-#[must_use]
-pub(crate) fn for_tag(tag: Option<&TagName>) -> IntrinsicSize {
-    let Some(tag) = tag else {
-        return IntrinsicSize::Resolved;
-    };
-    if REPLACED_TAGS.contains(tag) {
-        return IntrinsicSize::Pending;
-    }
-    IntrinsicSize::Resolved
+    /// The box belongs to a replaced element whose resource is loaded: this is
+    /// the resource's natural size, whatever size the box was given.
+    Natural(NaturalSize),
 }

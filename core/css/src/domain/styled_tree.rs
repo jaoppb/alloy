@@ -11,21 +11,21 @@
 use html::TagName;
 
 use crate::domain::computed::display::Display;
-use crate::domain::computed::intrinsic::{self, IntrinsicSize};
 use crate::domain::computed::style::ComputedStyle;
 use crate::domain::dom_snapshot::{ChildIds, DomSnapshot, NodeRef, SnapshotId, SnapshotNodeKind};
 use crate::domain::input_type::InputType;
 use crate::domain::node_role::NodeRole;
+use crate::domain::replaced::ReplacedElement;
 use crate::domain::text::TextRun;
 
 /// One node's computed style, plus its place in the tree, the character data it
-/// carries, and whether its own size is still provisional.
+/// carries, and whether it is a replaced element whose size comes from a
+/// resource.
 ///
-/// The last two are what v0.5 B4 added: [`crate::LayoutEngine::layout`] is
-/// handed **only** a `&StyledTree` (`PRD-007:56-60`), so an inline formatting
-/// context can reach the text only if the text travels inside the aggregate,
-/// and Phase X can find the boxes waiting on a resource only if the marker
-/// does too.
+/// [`crate::LayoutEngine::layout`] is handed **only** a `&StyledTree`
+/// (`PRD-007:56-60`), so an inline formatting context can reach the text only if
+/// the text travels inside the aggregate, and layout asks [`crate::NaturalSizes`]
+/// for any node carrying [`ReplacedElement`].
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct StyledNode {
@@ -34,7 +34,7 @@ pub struct StyledNode {
     children: ChildIds,
     style: ComputedStyle,
     text: Option<TextRun>,
-    intrinsic_size: IntrinsicSize,
+    replaced: Option<ReplacedElement>,
     is_foreign_descendant: bool,
     is_body_of_root: bool,
     role: NodeRole,
@@ -52,10 +52,26 @@ impl StyledNode {
         self.text.as_ref()
     }
 
-    /// Whether this node's own size still depends on an unloaded resource.
+    /// Whether this node is a replaced element (`<img>`, `<video>`, …), whose
+    /// size comes from a resource only layout asks about (through
+    /// [`crate::NaturalSizes`], issue #83).
     #[must_use]
-    pub const fn intrinsic_size(&self) -> IntrinsicSize {
-        self.intrinsic_size
+    pub const fn is_replaced(&self) -> bool {
+        self.replaced.is_some()
+    }
+
+    /// The replaced element this node is, or `None`.
+    pub(crate) const fn replaced(&self) -> Option<ReplacedElement> {
+        self.replaced
+    }
+
+    /// Whether this node sits on a line as one unbreakable box: an
+    /// `inline-block`, or a replaced element with `display: inline` (CSS 2.1
+    /// §9.2.2 — its content is the resource, never line boxes; issue #83).
+    #[must_use]
+    pub const fn is_atomic_inline(&self) -> bool {
+        let display = self.style.display();
+        display.is_inline_block() || (self.replaced.is_some() && matches!(display, Display::Inline))
     }
 
     /// Whether this node sits inside foreign content (<svg>, <math>).
@@ -158,7 +174,7 @@ impl StyledTree {
                 children: ChildIds::from_ids(node_ref.children()),
                 style,
                 text: character_data_of(node_ref),
-                intrinsic_size: intrinsic::for_tag(node_ref.tag()),
+                replaced: ReplacedElement::for_node(node_ref),
                 is_foreign_descendant: node_ref.is_foreign_descendant(),
                 is_body_of_root: node_ref.is_body_of_root(),
                 role,
@@ -203,7 +219,8 @@ fn inline_when_line_break(style: ComputedStyle, role: NodeRole) -> ComputedStyle
 /// For `<input>` and `<select>` elements the inline text is synthesized from the
 /// element's attributes or selected `<option>` rather than from a child text node —
 /// the controls have no direct text children in the page flow, but layout needs
-/// a label/value to paint (issue #87).
+/// a label/value to paint (issue #87). An `<img>` carries its `alt`, which layout
+/// shows only when the image is unavailable (WHATWG HTML §15.4.2, issue #83).
 fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
     if node_ref.kind() == SnapshotNodeKind::Text {
         if node_ref.is_foreign_descendant() {
@@ -211,18 +228,29 @@ fn character_data_of(node_ref: NodeRef<'_>) -> Option<TextRun> {
         }
         return node_ref.text().map(TextRun::new);
     }
-    synthesized_control_text(node_ref)
+    synthesized_text(node_ref)
 }
 
-/// Returns a synthetic [`TextRun`] for form control elements that display
-/// synthesized text (e.g. `<input>` labels/values, `<select>` selected option),
-/// or `None` for every other element kind.
-fn synthesized_control_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+/// Returns a synthetic [`TextRun`] for the elements that display text of their
+/// own rather than their children's (`<input>` labels/values, a `<select>`'s
+/// selected option, an `<img>`'s `alt`), or `None` for every other element kind.
+fn synthesized_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
     match node_ref.tag() {
         Some(TagName::Input) => synthesized_input_text(node_ref),
         Some(TagName::Select) => synthesized_select_text(node_ref),
+        Some(TagName::Img) => alternative_text(node_ref),
         _ => None,
     }
+}
+
+/// An `<img>`'s non-empty `alt`: `alt=""` says the image is decorative, so it
+/// shows nothing at all.
+fn alternative_text(node_ref: NodeRef<'_>) -> Option<TextRun> {
+    let alt = node_ref.attribute("alt")?;
+    if alt.is_empty() {
+        return None;
+    }
+    Some(TextRun::new(alt))
 }
 
 /// Returns a synthetic [`TextRun`] for `<input>` elements that have a visible

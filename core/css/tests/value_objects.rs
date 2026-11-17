@@ -100,11 +100,11 @@ fn inline_block_and_list_item_parse_and_classify() {
     assert_eq!(Display::InlineBlock.keyword(), "inline-block");
     assert_eq!(Display::ListItem.to_string(), "list-item");
     assert!(Display::InlineBlock.is_inline_level());
-    assert!(Display::InlineBlock.is_atomic_inline());
+    assert!(Display::InlineBlock.is_inline_block());
     assert!(Display::Inline.is_inline_level());
-    assert!(!Display::Inline.is_atomic_inline());
+    assert!(!Display::Inline.is_inline_block());
     assert!(!Display::ListItem.is_inline_level());
-    assert!(!Display::Block.is_atomic_inline());
+    assert!(!Display::Block.is_inline_block());
 }
 
 #[test]
@@ -280,8 +280,8 @@ fn source_span_and_stage_print_readably() {
 #[test]
 fn the_port_schema_version_and_support_registries_are_pinned() {
     assert_eq!(
-        PORT_SCHEMA_VERSION, 14,
-        "version 14 adds `StyledNode::role` and keeps a `<br>` inline-level (issue #82, ADR-0011 item 3)"
+        PORT_SCHEMA_VERSION, 15,
+        "version 15 adds the `NaturalSizes` port and sizes replaced boxes (issue #83, ADR-0028, ADR-0011 item 3)"
     );
     assert_eq!(SUPPORTED_PROPERTIES.len(), 143);
     assert!(SUPPORTED_PROPERTIES.contains(&"outline"));

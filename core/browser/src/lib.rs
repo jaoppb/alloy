@@ -33,4 +33,5 @@ pub use domain::{
     LinkTargets, LoadedDocument, NavigationId, Navigations, RegionError, StoreSnapshot,
     StylesheetRequest, SubresourceRequest, Subresources,
 };
+pub use domain::{ImageState, image_id_of};
 pub use infrastructure::MarkupDiscoverer;

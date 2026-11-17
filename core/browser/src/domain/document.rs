@@ -1,4 +1,5 @@
-//! The document a context currently shows, with everything fetched for it.
+//! The document a context currently shows, with the sheets fetched and the
+//! images requested for it.
 
 use css::StyleSheetSet;
 use dom::DomTree;
@@ -8,7 +9,8 @@ use network::Url;
 use crate::domain::{ImageStore, SubresourceRequest, Subresources};
 
 /// A DOM tree, the base URL its relative references resolve against, and the
-/// sheets and images fetched for it. A new document starts from none of them.
+/// sheets fetched and images requested for it. A new document starts from none
+/// of them.
 #[derive(Debug)]
 pub struct Document {
     tree: DomTree,
@@ -58,30 +60,40 @@ impl Document {
         &self.sheets
     }
 
-    /// The images fetched (or reserved) so far.
+    /// The images this document requested, with what became of each.
     #[must_use]
     pub const fn images(&self) -> &ImageStore {
         &self.images
     }
 
-    /// Gives every image `found` references a placeholder until its pixels
-    /// arrive: a discovered image must resolve to *something* from the first
-    /// paint (see [`ImageStore::reserve_placeholder`]).
-    pub fn reserve_placeholders(&mut self, found: &Subresources) {
+    /// Marks every image `found` references as loading until its pixels
+    /// arrive, so layout waits for it instead of showing its `alt` text (see
+    /// [`ImageStore::mark_loading`]).
+    pub fn mark_images_loading(&mut self, found: &Subresources) {
         for request in found {
-            if let SubresourceRequest::Image(image) = request {
-                self.images.reserve_placeholder(image.id());
-            }
+            mark_request_loading(&mut self.images, request);
         }
     }
 
-    /// Replaces `id`'s placeholder with its decoded pixels.
+    /// Records `id`'s decoded pixels.
     pub fn insert_image(&mut self, id: ImageId, frame: Framebuffer) {
         self.images.insert(id, frame);
+    }
+
+    /// Records that `id` will never be decoded (issue #83): its `<img>` may
+    /// then show its `alt` text.
+    pub fn record_image_failure(&mut self, id: ImageId) {
+        self.images.mark_failed(id);
     }
 
     /// Adds an already parsed author `sheet` to the cascade.
     pub fn add_sheet(&mut self, sheet: StyleSheetSet) {
         self.sheets.absorb(sheet);
+    }
+}
+
+fn mark_request_loading(images: &mut ImageStore, request: &SubresourceRequest) {
+    if let SubresourceRequest::Image(image) = request {
+        images.mark_loading(image.id());
     }
 }

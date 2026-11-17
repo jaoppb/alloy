@@ -56,10 +56,12 @@ impl Display {
         matches!(self, Self::Inline | Self::InlineBlock)
     }
 
-    /// Whether this box sits on a line as one unbreakable unit whose inside is
-    /// its own block formatting context (CSS 2.1 §9.2.4, "atomic inline-level").
+    /// Whether this is `inline-block`. Whether a box is an *atomic* inline
+    /// also depends on the element — a replaced one with `display: inline` is
+    /// one too (CSS 2.1 §9.2.2) — so layout asks
+    /// [`crate::StyledNode::is_atomic_inline`], never this.
     #[must_use]
-    pub const fn is_atomic_inline(self) -> bool {
+    pub const fn is_inline_block(self) -> bool {
         matches!(self, Self::InlineBlock)
     }
 

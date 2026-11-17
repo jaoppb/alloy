@@ -533,3 +533,187 @@ fn hr_matches_golden() {
     let frame = decode_png(&bytes).expect("valid PNG");
     assert_matches_golden(&frame, &golden_path("hr.png"));
 }
+
+/// `<img width="100" height="50">` with no author size and no `src` (issue #83).
+const IMG_ATTRS_PAGE: &str = "<!doctype html><html><head><style>body{margin:0;background:#fff;color:#000}</style></head>\
+                              <body><img width=\"100\" height=\"50\" style=\"background:red\"></body></html>";
+
+#[test]
+fn img_width_and_height_attributes_paint_a_100_by_50_box() {
+    let options = RenderOptions::new(200, 100);
+    let bytes = render_html_to_png(IMG_ATTRS_PAGE, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    assert_eq!(frame.pixel(0, 0), Some(RED), "the box starts at the origin");
+    assert_eq!(frame.pixel(99, 49), Some(RED), "and is 100×50");
+    assert_eq!(frame.pixel(100, 0), Some(Color::WHITE), "no wider");
+    assert_eq!(frame.pixel(0, 50), Some(Color::WHITE), "no taller");
+    assert_matches_golden(&frame, &golden_path("img_attributes.png"));
+}
+
+/// `alloy render` fetches nothing, so every `<img>` is unavailable and shows
+/// its `alt` text (WHATWG HTML §15.4.2, issue #83).
+#[test]
+fn an_img_without_its_image_paints_its_alt_text() {
+    let page = |img: &str| {
+        format!(
+            "<!doctype html><html><head><style>body{{margin:0;background:#fff;color:#000}}</style></head>\
+             <body>{img}</body></html>"
+        )
+    };
+    let options = RenderOptions::new(400, 200);
+    let with_alt = render_html_to_png(&page("<img alt=\"hello world\">"), &options).unwrap();
+    let bare = render_html_to_png(&page("<img>"), &options).unwrap();
+    assert_ne!(with_alt, bare, "the alt text is drawn");
+
+    let frame = decode_png(&with_alt).expect("valid PNG");
+    let inked =
+        (0..20).any(|row| (0..100).any(|column| frame.pixel(column, row) != Some(Color::WHITE)));
+    assert!(inked, "the text sits at the image's place, top left");
+}
+
+const BLUE: Color = Color::rgb(0, 0, 255);
+
+/// Renders `body` (with `body_style`) at 20×20, every discovered image decoded
+/// to `pixels` under the id the discoverer requested it with — so the ids
+/// layout's natural-size lookup and the painter read back are the real ones
+/// (issue #83).
+fn render_with_decoded_images(
+    body_style: &str,
+    body: &str,
+    pixels: &graphics::Framebuffer,
+) -> graphics::Framebuffer {
+    use browser::{ImageStore, MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
+
+    let markup = format!(
+        "<!doctype html><html><head><style>body{{background:#fff;{body_style}}}</style></head>\
+         <body>{body}</body></html>"
+    );
+    let tree = dom::parse(&markup).unwrap().into_tree();
+    let base = network::Url::parse("http://example.invalid/").unwrap();
+    let found = MarkupDiscoverer.discover(&snapshot(&tree, tree.document()), &base);
+    let mut images = ImageStore::new();
+    for request in &found {
+        if let SubresourceRequest::Image(image) = request {
+            images.insert(image.id(), pixels.clone());
+        }
+    }
+    let surface = graphics::SurfaceSize::new(20, 20).unwrap();
+    alloy::render_dom(&tree, css::StyleSheetSet::new(), &images, surface).unwrap()
+}
+
+fn solid(color: Color) -> graphics::Framebuffer {
+    graphics::Framebuffer::filled(graphics::SurfaceSize::new(4, 4).unwrap(), color).unwrap()
+}
+
+/// A 2×1 image: a red pixel, then a blue one.
+fn red_then_blue() -> graphics::Framebuffer {
+    let size = graphics::SurfaceSize::new(2, 1).unwrap();
+    graphics::Framebuffer::from_rgba8(size, vec![255, 0, 0, 255, 0, 0, 255, 255]).unwrap()
+}
+
+#[test]
+fn a_decoded_image_lays_its_img_out_at_its_natural_size() {
+    let frame = render_with_decoded_images("margin:0", "<img src=\"pic.png\">", &solid(RED));
+
+    assert_eq!(frame.pixel(0, 0), Some(RED));
+    assert_eq!(frame.pixel(3, 3), Some(RED));
+    assert_eq!(frame.pixel(4, 0), Some(Color::WHITE), "4 wide, not 300");
+    assert_eq!(frame.pixel(0, 4), Some(Color::WHITE), "4 tall, not 150");
+}
+
+/// The painter samples the whole image whatever the box's page position: an
+/// `<img>` under the UA `body { margin: 8px }` paints at (8, 8). The test above
+/// sits at the origin, where page and image coordinates coincide — which is
+/// how passing the content box as the image source went unnoticed.
+#[test]
+fn a_decoded_image_away_from_the_origin_paints_its_whole_box() {
+    let frame = render_with_decoded_images("", "<img src=\"pic.png\">", &solid(RED));
+
+    assert_eq!(frame.pixel(8, 8), Some(RED), "its top-left corner");
+    assert_eq!(frame.pixel(11, 11), Some(RED), "its bottom-right corner");
+    assert_eq!(
+        frame.pixel(7, 8),
+        Some(Color::WHITE),
+        "the margin stays blank"
+    );
+    assert_eq!(frame.pixel(12, 8), Some(Color::WHITE), "4 wide");
+}
+
+/// A box the attributes size larger than the image shows the whole image
+/// scaled into it, not its top-left corner cropped.
+#[test]
+fn a_decoded_image_scaled_by_its_attributes_fills_its_box() {
+    let frame = render_with_decoded_images(
+        "margin:0",
+        "<img src=\"pic.png\" width=\"16\" height=\"8\">",
+        &red_then_blue(),
+    );
+
+    assert_eq!(
+        frame.pixel(0, 0),
+        Some(RED),
+        "the left half is the red pixel"
+    );
+    assert_eq!(frame.pixel(7, 7), Some(RED));
+    assert_eq!(
+        frame.pixel(8, 0),
+        Some(BLUE),
+        "the right half is the blue pixel"
+    );
+    assert_eq!(frame.pixel(15, 7), Some(BLUE));
+    assert_eq!(frame.pixel(16, 0), Some(Color::WHITE), "16 wide");
+    assert_eq!(frame.pixel(0, 8), Some(Color::WHITE), "8 tall");
+}
+
+#[test]
+fn loading_hides_alt_text_and_failure_reveals_it_through_render_dom() {
+    use browser::{ImageStore, MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
+
+    let markup = "<!doctype html><html><head><style>body{margin:0;background:#fff;color:#000}</style></head>\
+                  <body><img src=\"pic.png\" alt=\"hello world\"></body></html>";
+    let tree = dom::parse(markup).unwrap().into_tree();
+    let base = network::Url::parse("http://example.invalid/").unwrap();
+    let found = MarkupDiscoverer.discover(&snapshot(&tree, tree.document()), &base);
+    let image_id = found
+        .iter()
+        .find_map(|request| match request {
+            SubresourceRequest::Image(image) => Some(image.id()),
+            SubresourceRequest::Stylesheet(_) => None,
+        })
+        .expect("image discovered");
+
+    let surface = graphics::SurfaceSize::new(120, 30).unwrap();
+    let mut loading = ImageStore::new();
+    loading.mark_loading(image_id);
+    let loading_frame =
+        alloy::render_dom(&tree, css::StyleSheetSet::new(), &loading, surface).unwrap();
+    let loading_inked = (0..30)
+        .any(|row| (0..120).any(|column| loading_frame.pixel(column, row) != Some(Color::WHITE)));
+    assert!(!loading_inked, "loading image hides alt text");
+
+    let mut failed = ImageStore::new();
+    failed.mark_failed(image_id);
+    let failed_frame =
+        alloy::render_dom(&tree, css::StyleSheetSet::new(), &failed, surface).unwrap();
+    let failed_inked = (0..30)
+        .any(|row| (0..120).any(|column| failed_frame.pixel(column, row) != Some(Color::WHITE)));
+    assert!(failed_inked, "failed image reveals alt text");
+}
+
+#[test]
+fn alt_text_line_fragments_do_not_double_paint_background_or_outline() {
+    let markup = "<!doctype html><html><head><style>body{margin:8px;background:#fff}</style></head>\
+                  <body><img alt=\"hi\" style=\"width:80px;height:40px;color:transparent;background:rgba(255,0,0,0.5);outline:2px solid #00f\"></body></html>";
+    let options = RenderOptions::new(100, 60);
+    let bytes = render_html_to_png(markup, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    // In the lower-right of the 80x40 box (below the 1-line "hi" text), the
+    // background is painted once; inside the text line rect (8..27, 8..27),
+    // pixels must match that single-painted background rather than darkening
+    // from a second fill or turning blue from a second outline.
+    let single_bg = frame.pixel(70, 40);
+    assert_eq!(frame.pixel(8, 8), single_bg);
+    assert_eq!(frame.pixel(15, 15), single_bg);
+}

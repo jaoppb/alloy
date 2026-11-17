@@ -7,6 +7,7 @@ pub mod effects;
 pub mod event_loop;
 pub mod fetch_channel;
 pub mod html_parse;
+pub mod image_sizes;
 pub mod keymap;
 pub mod loop_stats;
 pub mod paint;

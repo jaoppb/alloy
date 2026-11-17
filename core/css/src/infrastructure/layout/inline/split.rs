@@ -119,7 +119,7 @@ pub fn block_descendants<M: TextMeasurer>(
 ) -> Result<ChildIds, CssError> {
     let styled = context.node(node_id)?;
     let mut found = Vec::new();
-    if styled.style().display().is_atomic_inline() {
+    if styled.is_atomic_inline() {
         return Ok(ChildIds::from_ids(found));
     }
     gather_children(context, node_id, &mut found)?;
@@ -148,7 +148,7 @@ fn gather<M: TextMeasurer>(
 ) -> Result<(), CssError> {
     let styled = context.node(node_id)?;
     let display = styled.style().display();
-    if styled.is_foreign_descendant() || display.is_none() || display.is_atomic_inline() {
+    if styled.is_foreign_descendant() || display.is_none() || styled.is_atomic_inline() {
         return Ok(());
     }
     if !display.is_inline_level() {

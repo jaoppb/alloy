@@ -1,7 +1,7 @@
-//! The replaceable ports of `PRD-007`: [`CascadeResolver`], [`LayoutEngine`]
-//! and [`TextMeasurer`].
+//! The replaceable ports of `PRD-007`: [`CascadeResolver`], [`LayoutEngine`],
+//! [`TextMeasurer`] and — since issue #83 — [`NaturalSizes`].
 //!
-//! All three are object-safe and `Send + Sync`: every method speaks only this
+//! All four are object-safe and `Send + Sync`: every method speaks only this
 //! crate's own types (plus the shared `graphics` units), so `&dyn` handles work
 //! directly and `ADR-0011` item 2 is satisfied without a companion trait — the
 //! same shape as `graphics`'s `RenderBackend`
@@ -14,10 +14,16 @@
 //! `<10μs` per-hook budget of `PRD-001:96`. A resolver takes a `&DomSnapshot`
 //! and returns a `StyledTree`; a layout engine takes a `&StyledTree` and returns
 //! a `LayoutBoxTree`. Nothing finer.
+//!
+//! [`TextMeasurer`] and [`NaturalSizes`] are the two lookups a layout engine
+//! makes *while* it lays the tree out: Rust-to-Rust, injected into the engine
+//! when it is built, never crossing a script boundary — so the whole-tree rule
+//! does not apply to them (ADR-0028).
 
-use crate::domain::dom_snapshot::DomSnapshot;
+use crate::domain::dom_snapshot::{DomSnapshot, SnapshotId};
 use crate::domain::error::CssError;
 use crate::domain::layout_box_tree::LayoutBoxTree;
+use crate::domain::replaced::ReplacedResource;
 use crate::domain::styled_tree::StyledTree;
 use crate::domain::stylesheet_set::StyleSheetSet;
 use crate::domain::text::{ComputedText, TextMetrics, TextRun};
@@ -65,5 +71,33 @@ impl<T: TextMeasurer + ?Sized> TextMeasurer for &T {
 impl<T: TextMeasurer + ?Sized> TextMeasurer for std::sync::Arc<T> {
     fn measure(&self, run: &TextRun, style: &ComputedText) -> Result<TextMetrics, CssError> {
         (**self).measure(run, style)
+    }
+}
+
+/// What has become of the resource behind a replaced element (issue #83,
+/// ADR-0028).
+///
+/// Asked by the layout engine for each replaced element it lays out, keyed by
+/// the element's [`SnapshotId`]: the engine never sees where decoded images
+/// are kept, and whoever keeps them never sees layout. Answering
+/// [`ReplacedResource::Unavailable`] for a node it knows nothing about is the
+/// correct default — that is what a page with no fetched resource is.
+///
+/// Deterministic for as long as an engine holds it: the same node gets the
+/// same answer within one layout, which asks more than once (`ADR-0016`).
+pub trait NaturalSizes: Send + Sync {
+    /// The resource state of the replaced element `node`.
+    fn resource_of(&self, node: SnapshotId) -> ReplacedResource;
+}
+
+impl<T: NaturalSizes + ?Sized> NaturalSizes for &T {
+    fn resource_of(&self, node: SnapshotId) -> ReplacedResource {
+        (**self).resource_of(node)
+    }
+}
+
+impl<T: NaturalSizes + ?Sized> NaturalSizes for std::sync::Arc<T> {
+    fn resource_of(&self, node: SnapshotId) -> ReplacedResource {
+        (**self).resource_of(node)
     }
 }

@@ -1,8 +1,9 @@
 //! The initial `display` is `inline` (CSS Display L3 §2; #136 of #81): an
 //! element the UA sheet gives no display — `<u>`, `<sub>`, a custom element —
-//! sits on the line with its neighbours instead of breaking it. The replaced
-//! elements keep a stopgap `inline-block` until #83, so `<img>` sits on the
-//! line as an atomic box and keeps its size. The root element is blockified
+//! sits on the line with its neighbours instead of breaking it. A replaced
+//! element keeps `inline` too, and layout lays it out as one atomic inline
+//! (CSS 2.1 §9.2.2, #83), so `<img>` sits on the line and keeps its size. The
+//! root element is blockified
 //! (CSS Display L3 §2.7), whichever resolver cascaded it.
 //!
 //! Text is measured with [`css::BlockLayout::monospace`]: `0.6 * 16px` per
@@ -151,8 +152,21 @@ fn an_inline_block_root_is_blockified_too() {
     assert_eq!(laid.display_of("html"), Display::Block);
 }
 
+/// `embed[hidden]` is `inline` and 0×0 (WHATWG HTML §15.3.1): a zero-size
+/// atomic box on its neighbours' line.
 #[test]
-fn a_sized_image_keeps_its_box_until_83_sizes_replaced_elements() {
+fn a_hidden_embed_is_a_zero_size_box_on_the_line() {
+    let laid = Laid::body("aaa<embed hidden>bbb");
+    let embed: Vec<&LayoutBox> = laid.boxes.fragments_of(laid.tagged("embed")).collect();
+
+    assert_eq!(embed.len(), 1, "the hidden embed still generates its box");
+    assert!(embed[0].content().size().width().is_zero());
+    assert!(embed[0].content().size().height().is_zero());
+    laid.assert_one_row("aaa", "bbb");
+}
+
+#[test]
+fn a_sized_image_keeps_its_box_as_an_atomic_inline() {
     let laid = Laid::body("aaa<img style='width:10px;height:10px'>bbb");
     let image: Vec<&LayoutBox> = laid.boxes.fragments_of(laid.tagged("img")).collect();
 
@@ -166,15 +180,17 @@ fn a_sized_image_keeps_its_box_until_83_sizes_replaced_elements() {
     assert_eq!(size.height(), Au::from_whole_px(10).unwrap());
 }
 
-/// Every replaced element but `<svg>` (which has its own rule), as
-/// `core/css/src/domain/computed/intrinsic.rs` lists them. This copy only
-/// drives the behaviour checks below; the `ua_sheet.rs` unit test reads
-/// `REPLACED_TAGS` itself and is what guards the list's completeness.
-const REPLACED: [&str; 6] = ["img", "video", "canvas", "iframe", "object", "embed"];
+/// Every replaced element, as `core/css/src/domain/replaced.rs` lists them.
+const REPLACED: [&str; 7] = ["img", "video", "canvas", "iframe", "object", "embed", "svg"];
 
 #[test]
-fn every_replaced_element_keeps_its_box_and_hides_its_fallback_until_83() {
+fn every_replaced_element_keeps_its_box_and_hides_its_fallback() {
     for tag in REPLACED {
+        assert_eq!(
+            Laid::body(&format!("<{tag}></{tag}>")).display_of(tag),
+            Display::Inline,
+            "<{tag}> needs no UA display rule"
+        );
         let laid = Laid::body(&format!(
             "aa<{tag} style='width:40px;height:20px'>fallback</{tag}>bb"
         ));

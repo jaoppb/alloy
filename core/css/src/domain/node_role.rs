@@ -3,9 +3,11 @@
 //! Layout is handed only a [`crate::StyledTree`] (`PRD-007:56-60`), which
 //! carries no tag name, so an element whose rendering the HTML rendering rules
 //! fix outside CSS has to say so inside the aggregate. `StyledNode` already
-//! carries two such tag-derived facts as their own fields (`intrinsic_size`,
+//! carries two such tag-derived facts as their own fields (`replaced`,
 //! `is_body_of_root`); `NodeRole` is the closed set an element's layout role
-//! grows in, starting with a `<br>` (issue #82).
+//! grows in, starting with a `<br>` (issue #82). A replaced element stays a
+//! field of its own rather than a role: it carries what its attributes say
+//! (its default size, its ratio), which a tag-only role cannot (issue #83).
 
 use html::TagName;
 

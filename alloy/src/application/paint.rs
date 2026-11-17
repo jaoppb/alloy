@@ -4,13 +4,16 @@
 //! ADR-0010: paint lives in `alloy::application::paint`, keeping `core/css` and
 //! `core/graphics` decoupled.
 
-use browser::ImageStore;
+use browser::image_id_of;
 use css::domain::color::CssColor;
 use css::domain::computed::visual::{BorderColorEdges, BorderStyle, BorderStyleEdges};
-use css::{EdgeSizes, INITIAL_FONT_SIZE, LayoutBox, LayoutBoxTree, StyledNode, StyledTree};
+use css::{
+    EdgeSizes, INITIAL_FONT_SIZE, IntrinsicSize, LayoutBox, LayoutBoxTree, NaturalSize, StyledNode,
+    StyledTree,
+};
 use graphics::{
     Au, Color, DisplayListBuilder, FontId, FontProvider, GlyphId, GlyphInstance, GlyphRun,
-    GraphicsError, ImageId, Point, PxRect, Rect, Size,
+    GraphicsError, Point, Px, PxRect, Rect, Size,
 };
 
 /// Default font identifier used for text painting in the headless pipeline.
@@ -20,12 +23,11 @@ pub const DEFAULT_FONT: FontId = FontId::new(1);
 pub fn paint_box_tree<F: FontProvider>(
     box_tree: &LayoutBoxTree,
     styled_tree: &StyledTree,
-    images: &ImageStore,
     font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
     for laid_out in box_tree.boxes_in_document_order() {
-        paint_single_box(laid_out, styled_tree, images, font_provider, builder)?;
+        paint_single_box(laid_out, styled_tree, font_provider, builder)?;
     }
     Ok(())
 }
@@ -33,7 +35,6 @@ pub fn paint_box_tree<F: FontProvider>(
 fn paint_single_box<F: FontProvider>(
     laid_out: &LayoutBox,
     styled_tree: &StyledTree,
-    images: &ImageStore,
     font_provider: &F,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
@@ -45,11 +46,18 @@ fn paint_single_box<F: FontProvider>(
         return Ok(());
     }
 
+    // Text line fragments (DOM text nodes and owned-text lines such as
+    // `<input>`, `<select>`, or `<img alt>`) have no box decorations of their
+    // own; painting background/outline here would double-paint inside the
+    // owning box fragment.
+    if laid_out.text().is_some() {
+        return paint_text(laid_out, styled_node, font_provider, builder);
+    }
+
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
     paint_outline(laid_out, styled_node, builder)?;
-    paint_text(laid_out, styled_node, font_provider, builder)?;
-    paint_image(laid_out, images, builder)
+    paint_image(laid_out, builder)
 }
 
 fn paint_background(
@@ -312,22 +320,38 @@ fn paint_vertical_border(
     builder.draw_rect(rect_to_px_rect(Rect::new(origin, size)), color)
 }
 
+/// Draws a replaced box's decoded image — exactly when layout sized the box
+/// from it (`IntrinsicSize::Natural`), so layout and paint never disagree on
+/// whether an image is there (issue #83). A `Pending` or `Resolved` box has no
+/// decoded image to draw.
+///
+/// The whole image (its natural rectangle, in image pixels) is scaled into
+/// the content box (page coordinates): the two coincide only for an unscaled
+/// image at the page origin.
 fn paint_image(
     laid_out: &LayoutBox,
-    images: &ImageStore,
     builder: &mut DisplayListBuilder,
 ) -> Result<(), GraphicsError> {
-    let raw_id = u32::try_from(laid_out.node().index()).unwrap_or(u32::MAX);
-    let image_id = ImageId::new(raw_id);
-    if !images.contains(image_id) {
+    let IntrinsicSize::Natural(natural) = laid_out.intrinsic_size() else {
         return Ok(());
-    }
+    };
     let content = laid_out.content();
     if content.is_empty() {
         return Ok(());
     }
-    let area = rect_to_px_rect(content);
-    builder.draw_image(image_id, area, area)
+    let image_id = image_id_of(laid_out.node());
+    builder.draw_image(image_id, natural_rect(natural), rect_to_px_rect(content))
+}
+
+/// The image's own pixels, `0, 0` to its natural size: `draw_image`'s source
+/// is in image coordinates.
+fn natural_rect(natural: NaturalSize) -> PxRect {
+    PxRect::new(
+        Px::new(0.0),
+        Px::new(0.0),
+        natural.width().to_px(),
+        natural.height().to_px(),
+    )
 }
 
 /// Draws the text layout placed on this fragment's line, as one line from the

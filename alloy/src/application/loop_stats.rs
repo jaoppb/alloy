@@ -63,7 +63,7 @@ impl LoopStats {
         self.browsing.stylesheets_loaded()
     }
 
-    /// How many `<img>` fetches have decoded and replaced their placeholder.
+    /// How many `<img>` fetches have decoded.
     #[must_use]
     pub const fn images_loaded(&self) -> usize {
         self.browsing.images_loaded()

@@ -1,18 +1,66 @@
-//! The decoded images a live page currently knows about (moved from `alloy` by #111).
+//! The images a live page currently knows about: loading, decoded, or failed
+//! (moved from `alloy` by #111, extended by #83).
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use css::SnapshotId;
 use graphics::{Color, Framebuffer, GraphicsError, ImageId, ImageProvider, SurfaceSize};
 
-/// Decoded images by [`ImageId`], shared by pointer so a relayout snapshots
-/// them without copying pixel buffers.
+/// The [`ImageId`] of the `<img>` at `node`: its node's index. The one place
+/// the key is made — the discoverer requests under it, layout's natural-size
+/// lookup and the painter look it up (issue #83).
+#[must_use]
+pub fn image_id_of(node: SnapshotId) -> ImageId {
+    ImageId::new(u32::try_from(node.index()).unwrap_or(u32::MAX))
+}
+
+/// The images a page references, by [`ImageId`]: still loading, decoded —
+/// shared by pointer so a relayout snapshots them without copying pixel
+/// buffers — or failed (issue #83).
 ///
 /// Wraps the map so no caller manipulates the backing collection
 /// directly (CLAUDE.md: first-class collections, no naked primitives).
 #[derive(Clone, Debug, Default)]
 pub struct ImageStore {
-    frames: HashMap<ImageId, Arc<Framebuffer>>,
+    images: HashMap<ImageId, StoredImage>,
+}
+
+/// One image's entry.
+#[derive(Clone, Debug)]
+enum StoredImage {
+    Loading,
+    Decoded(Arc<Framebuffer>),
+    Failed,
+}
+
+/// What has become of one image a page references — what layout needs to
+/// size an `<img>` and decide whether it shows its `alt` text (issue #83).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageState {
+    /// Discovered and requested; no answer yet.
+    Loading,
+    /// Decoded, with the image's pixel size.
+    Decoded(SurfaceSize),
+    /// The fetch or the decode failed; it will not be retried.
+    Failed,
+}
+
+impl StoredImage {
+    fn state(&self) -> ImageState {
+        match self {
+            Self::Loading => ImageState::Loading,
+            Self::Decoded(frame) => ImageState::Decoded(frame.size()),
+            Self::Failed => ImageState::Failed,
+        }
+    }
+
+    fn frame(&self) -> Option<Arc<Framebuffer>> {
+        match self {
+            Self::Decoded(frame) => Some(Arc::clone(frame)),
+            Self::Loading | Self::Failed => None,
+        }
+    }
 }
 
 impl ImageStore {
@@ -22,35 +70,52 @@ impl ImageStore {
         Self::default()
     }
 
-    /// Records the decoded pixels for `id`, replacing any placeholder.
+    /// Records the decoded pixels for `id`, whatever was known before.
     pub fn insert(&mut self, id: ImageId, frame: Framebuffer) {
-        self.frames.insert(id, Arc::new(frame));
+        self.images
+            .insert(id, StoredImage::Decoded(Arc::new(frame)));
     }
 
-    /// Registers a placeholder for `id` unless a frame is already known — a
-    /// discovered image must resolve to *something* from the first paint.
-    pub fn reserve_placeholder(&mut self, id: ImageId) {
-        self.frames
-            .entry(id)
-            .or_insert_with(|| Arc::new(placeholder_framebuffer()));
+    /// Marks `id` as loading unless anything is already known about it, so
+    /// layout tells a requested image from an unavailable one: it waits for the
+    /// first instead of showing its `alt` text.
+    pub fn mark_loading(&mut self, id: ImageId) {
+        self.images.entry(id).or_insert(StoredImage::Loading);
+    }
+
+    /// Records that `id` will never be decoded: its fetch or its decode
+    /// failed. Decoded pixels are never thrown away for it.
+    pub fn mark_failed(&mut self, id: ImageId) {
+        let entry = self.images.entry(id).or_insert(StoredImage::Failed);
+        if matches!(entry, StoredImage::Decoded(_)) {
+            return;
+        }
+        *entry = StoredImage::Failed;
     }
 
     /// Forgets every image (a new navigation starts from nothing).
     pub fn clear(&mut self) {
-        self.frames.clear();
+        self.images.clear();
     }
 
-    /// Whether `id` has a frame (placeholder or decoded).
+    /// What has become of `id`, or `None` for an image this page never
+    /// referenced.
     #[must_use]
-    pub fn contains(&self, id: ImageId) -> bool {
-        self.frames.contains_key(&id)
+    pub fn state(&self, id: ImageId) -> Option<ImageState> {
+        self.images.get(&id).map(StoredImage::state)
     }
 
-    /// An immutable [`ImageProvider`] over the current contents.
+    /// An immutable [`ImageProvider`] over the decoded images; every other id
+    /// resolves to the placeholder.
     #[must_use]
     pub fn snapshot(&self) -> StoreSnapshot {
+        let frames = self
+            .images
+            .iter()
+            .filter_map(|(id, stored)| stored.frame().map(|frame| (*id, frame)))
+            .collect();
         StoreSnapshot {
-            frames: self.frames.clone(),
+            frames,
             placeholder: Arc::new(placeholder_framebuffer()),
         }
     }
@@ -73,13 +138,10 @@ impl ImageProvider for StoreSnapshot {
 
 /// A 1×1, fully transparent placeholder.
 ///
-/// `core/css` marks every replaced-element box (`<img>` included)
-/// [`css::IntrinsicSize::Pending`] the moment it sees the tag — regardless of
-/// whether the resource has loaded (`core/css/src/domain/computed/intrinsic.rs`)
-/// — and the painter always emits a `DrawImage` command for a pending box.
-/// Every id a discoverer finds must therefore resolve to *something* from the
-/// very first paint, or rendering fails outright before a single fetch has had
-/// a chance to complete.
+/// The painter emits a `DrawImage` command only for a decoded image, but a
+/// backend resolves ids against a snapshot taken at another moment than the
+/// display list was built: any id must resolve to *something*, never an
+/// error, or one late or superseded image would fail the whole frame.
 // "genuinely impossible state" `.expect()` carve-out CLAUDE.md documents:
 // 1x1 is a compile-time-known-valid, non-zero surface size (same pattern as
 // core/css/src/infrastructure/ua_sheet.rs). Private: an impossible-state
@@ -97,7 +159,7 @@ fn placeholder_framebuffer() -> Framebuffer {
 mod tests {
     use graphics::{Color, Framebuffer, ImageId, ImageProvider, SurfaceSize};
 
-    use super::ImageStore;
+    use super::{ImageState, ImageStore};
 
     fn red_pixel() -> Framebuffer {
         let size = SurfaceSize::new(1, 1).unwrap();
@@ -105,11 +167,11 @@ mod tests {
     }
 
     #[test]
-    fn a_placeholder_never_overwrites_a_decoded_frame() {
+    fn marking_loading_never_overwrites_a_decoded_frame() {
         let id = ImageId::new(7);
         let mut store = ImageStore::new();
         store.insert(id, red_pixel());
-        store.reserve_placeholder(id);
+        store.mark_loading(id);
         let frame = store.snapshot().get(id).unwrap();
         assert_eq!(frame.as_rgba8(), red_pixel().as_rgba8());
     }
@@ -121,11 +183,66 @@ mod tests {
     }
 
     #[test]
+    fn a_reserved_image_is_loading_until_decoded() {
+        let id = ImageId::new(2);
+        let mut store = ImageStore::new();
+        store.mark_loading(id);
+        assert_eq!(store.state(id), Some(ImageState::Loading));
+        store.insert(id, red_pixel());
+        let size = SurfaceSize::new(1, 1).unwrap();
+        assert_eq!(store.state(id), Some(ImageState::Decoded(size)));
+    }
+
+    #[test]
+    fn a_failed_image_is_failed_and_paints_the_placeholder() {
+        let id = ImageId::new(4);
+        let mut store = ImageStore::new();
+        store.mark_loading(id);
+        store.mark_failed(id);
+        assert_eq!(store.state(id), Some(ImageState::Failed));
+        let frame = store.snapshot().get(id).unwrap();
+        assert_eq!(frame.size(), SurfaceSize::new(1, 1).unwrap());
+    }
+
+    #[test]
+    fn a_failure_never_discards_decoded_pixels() {
+        let id = ImageId::new(5);
+        let mut store = ImageStore::new();
+        store.insert(id, red_pixel());
+        store.mark_failed(id);
+        assert!(matches!(store.state(id), Some(ImageState::Decoded(_))));
+    }
+
+    #[test]
+    fn an_image_the_page_never_referenced_has_no_state() {
+        assert_eq!(ImageStore::new().state(ImageId::new(9)), None);
+    }
+
+    #[test]
     fn clear_forgets_every_image() {
         let id = ImageId::new(3);
         let mut store = ImageStore::new();
-        store.reserve_placeholder(id);
+        store.mark_loading(id);
         store.clear();
-        assert!(!store.contains(id));
+        assert_eq!(store.state(id), None);
+    }
+
+    #[test]
+    fn marking_loading_never_overwrites_a_failed_entry() {
+        let id = ImageId::new(8);
+        let mut store = ImageStore::new();
+        store.mark_failed(id);
+        store.mark_loading(id);
+        assert_eq!(store.state(id), Some(ImageState::Failed));
+    }
+
+    #[test]
+    fn a_failed_image_can_still_be_decoded_later() {
+        let id = ImageId::new(10);
+        let mut store = ImageStore::new();
+        store.mark_failed(id);
+        store.insert(id, red_pixel());
+        let size = SurfaceSize::new(1, 1).unwrap();
+        assert_eq!(store.state(id), Some(ImageState::Decoded(size)));
     }
 }

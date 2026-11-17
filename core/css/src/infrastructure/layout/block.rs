@@ -19,7 +19,7 @@ use core::fmt;
 
 use graphics::{Au, Point};
 
-use crate::application::ports::{LayoutEngine, TextMeasurer};
+use crate::application::ports::{LayoutEngine, NaturalSizes, TextMeasurer};
 use crate::domain::computed::display::Display;
 use crate::domain::computed::inline_style::TextAlign;
 use crate::domain::computed::intrinsic::IntrinsicSize;
@@ -44,21 +44,41 @@ use crate::infrastructure::layout::inline::InlineItem;
 use crate::infrastructure::layout::margin_collapse::{
     CollapsedMargin, MarginFlow, collapses_at_bottom, collapses_at_top,
 };
+use crate::infrastructure::layout::replaced::{OwnBox, ReplacedBox};
 use crate::infrastructure::layout::{flex, inline};
+use crate::infrastructure::no_resources::NoResources;
 use crate::infrastructure::text_metrics::MonospaceMetrics;
 
 /// The built-in layout engine: normal flow, an inline formatting context, and
-/// Flexbox.
+/// Flexbox — measuring text through `M` and asking `N` about the resources of
+/// replaced elements (issue #83).
 #[derive(Clone)]
-pub struct BlockLayout<M = MonospaceMetrics> {
+pub struct BlockLayout<M = MonospaceMetrics, N = NoResources> {
     measurer: M,
+    natural_sizes: N,
 }
 
 impl<M: TextMeasurer> BlockLayout<M> {
-    /// A layout engine measuring text through `measurer` — received from parameter.
+    /// A layout engine measuring text through `measurer` — received from
+    /// parameter — for which no replaced element has a resource.
     #[must_use]
     pub const fn new(measurer: M) -> Self {
-        Self { measurer }
+        Self {
+            measurer,
+            natural_sizes: NoResources,
+        }
+    }
+}
+
+impl<M: TextMeasurer, N: NaturalSizes> BlockLayout<M, N> {
+    /// The same engine asking `natural_sizes` about every replaced element's
+    /// resource (ADR-0028).
+    #[must_use]
+    pub fn with_natural_sizes<S: NaturalSizes>(self, natural_sizes: S) -> BlockLayout<M, S> {
+        BlockLayout {
+            measurer: self.measurer,
+            natural_sizes,
+        }
     }
 }
 
@@ -77,19 +97,19 @@ impl<M: TextMeasurer + Default> Default for BlockLayout<M> {
     }
 }
 
-impl<M: TextMeasurer> fmt::Debug for BlockLayout<M> {
+impl<M: TextMeasurer, N: NaturalSizes> fmt::Debug for BlockLayout<M, N> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("BlockLayout")
     }
 }
 
-impl<M: TextMeasurer + Send + Sync> LayoutEngine for BlockLayout<M> {
+impl<M: TextMeasurer + Send + Sync, N: NaturalSizes> LayoutEngine for BlockLayout<M, N> {
     fn layout(
         &self,
         styled: &StyledTree,
         constraints: &ViewportConstraints,
     ) -> Result<LayoutBoxTree, CssError> {
-        let context = LayoutContext::new(styled, &self.measurer);
+        let context = LayoutContext::new(styled, &self.measurer, &self.natural_sizes);
         let root = styled.root();
         let mut builder = LayoutBoxTreeBuilder::new();
         if !generates_box(&context, root) {
@@ -142,15 +162,20 @@ pub(crate) fn layout_box<M: TextMeasurer>(
     let style = node.style();
     let font_size = box_model::font_size_of(style, input.parent_font_size());
     let metrics = box_model::resolve(style, font_size, input.containing_width())?;
+    let replaced = OwnBox::of(context, node).replaced_box(metrics);
     let content_width = input
         .forced_content_width()
+        .or_else(|| replaced.map(ReplacedBox::width))
         .unwrap_or_else(|| metrics.content_width_within(input.containing_width()));
     let inner = ContainingBlock::new(content_width, definite_content_height(metrics, input));
-    let children = layout_content(context, node, inner, font_size, input)?;
+    let children = match replaced {
+        Some(_) => ContentFlow::empty(),
+        None => layout_content(context, node, inner, font_size, input)?,
+    };
     let result = assemble(
         context,
         node,
-        Resolved::new(metrics, content_width),
+        Resolved::new(metrics, content_width, replaced),
         children,
         input,
     )?;
@@ -162,7 +187,8 @@ pub(crate) fn layout_box<M: TextMeasurer>(
     ))
 }
 
-/// Lays an atomic inline-level box (`display: inline-block`) out for a line.
+/// Lays an atomic inline-level box out for a line: an `inline-block`, or a
+/// replaced element with `display: inline` (CSS 2.1 §9.2.2).
 ///
 /// An explicit `width` is used as-is. An `auto` width is shrink-to-fit
 /// (CSS 2.1 §10.3.9), approximated in two passes: lay the box out at the
@@ -181,19 +207,8 @@ pub(crate) fn layout_inline_block<M: TextMeasurer>(
 ) -> Result<BlockResult, CssError> {
     let node = context.node(node_id)?;
     let style = node.style();
-    if style.width() != Sizing::Auto {
+    if style.width() != Sizing::Auto || OwnBox::of(context, node).sizes_itself() {
         return layout_box(context, node_id, input);
-    }
-    if node.intrinsic_size().is_pending() {
-        let fallback_width = input
-            .forced_content_width()
-            .or_else(|| Au::from_whole_px(300))
-            .unwrap_or(Au::ZERO);
-        return layout_box(
-            context,
-            node_id,
-            input.with_forced_content_width(fallback_width),
-        );
     }
     let available = available_content_width(style, input)?;
     let Some(fitted) = context.remembered_fit(node_id, available) else {
@@ -371,19 +386,40 @@ fn percentage_basis(length: Length, basis: Option<Au>) -> Option<Au> {
     Some(basis.unwrap_or(Au::ZERO))
 }
 
-/// What resolving a node's own box produced, before its children are folded in.
+/// What resolving a node's own box produced, before its children are folded
+/// in — and, for a replaced element, the box its resource gives it.
 #[derive(Clone, Copy)]
 struct Resolved {
     metrics: BoxMetrics,
     content_width: Au,
+    replaced: Option<ReplacedBox>,
 }
 
 impl Resolved {
-    const fn new(metrics: BoxMetrics, content_width: Au) -> Self {
+    const fn new(metrics: BoxMetrics, content_width: Au, replaced: Option<ReplacedBox>) -> Self {
         Self {
             metrics,
             content_width,
+            replaced,
         }
+    }
+
+    /// The content height a replaced box takes when nothing forces one.
+    fn replaced_height(self) -> Option<Au> {
+        self.replaced.map(ReplacedBox::height)
+    }
+
+    /// Whether this box's own size came from a replaced element rather than
+    /// child content.
+    const fn is_replaced(self) -> bool {
+        self.replaced.is_some()
+    }
+
+    /// What this box reports about its resource: a replaced box's marker, else
+    /// `Resolved`.
+    fn marker(self) -> IntrinsicSize {
+        self.replaced
+            .map_or(IntrinsicSize::Resolved, ReplacedBox::marker)
     }
 }
 
@@ -411,7 +447,7 @@ fn assemble<M: TextMeasurer>(
         children.trailing_margin(),
     );
     let content_height = used_content_height(
-        node,
+        resolved.replaced_height(),
         &children,
         metrics,
         input,
@@ -457,15 +493,15 @@ impl ChildMargins {
 }
 
 /// How `node`'s children's margins relate to its own: contained when `node`
-/// starts a new formatting context — an `inline-block`, a scroll container,
-/// the root element and the document box above it (block formatting
-/// contexts), or a flex item (whatever context its contents start) — and
-/// adjoining otherwise.
+/// starts a new formatting context — an atomic inline (an `inline-block`, or a
+/// replaced element with `display: inline`), a scroll container, the root
+/// element and the document box above it (block formatting contexts), or a
+/// flex item (whatever context its contents start) — and adjoining otherwise.
 fn child_margins_of<M: TextMeasurer>(
     context: &LayoutContext<'_, M>,
     node: &StyledNode,
 ) -> Result<ChildMargins, CssError> {
-    if node.style().display().is_atomic_inline() {
+    if node.is_atomic_inline() {
         return Ok(ChildMargins::Contained);
     }
     let Some(parent_id) = node.parent() else {
@@ -531,23 +567,19 @@ const fn bottom_arrangement(
     (own, trailing.resolve())
 }
 
-/// A forced height (a flex item) wins over a declared one, which wins over the
-/// height the children produced.
+/// A forced height (a flex item) wins over a declared one, which wins over a
+/// replaced box's own height, which wins over the height the children
+/// produced.
 fn used_content_height(
-    node: &StyledNode,
+    replaced_height: Option<Au>,
     children: &ContentFlow,
     metrics: BoxMetrics,
     input: BlockInput,
     escaping: Au,
 ) -> Au {
-    let declared = definite_content_height(metrics, input);
-    if let Some(height) = declared {
-        return height;
-    }
-    if node.intrinsic_size().is_pending() {
-        return Au::from_whole_px(150).unwrap_or(Au::ZERO);
-    }
-    children.height().saturating_add(escaping)
+    definite_content_height(metrics, input)
+        .or(replaced_height)
+        .unwrap_or_else(|| children.height().saturating_add(escaping))
 }
 
 /// Whether this box's own top and bottom margins end up adjoining: nothing of
@@ -591,8 +623,8 @@ fn assemble_fragments<M: TextMeasurer>(
         node.node(),
         rect_at(inset, resolved.content_width, content_height),
         edges,
-        marker_for(node, metrics),
-        box_generating_children(context, node)?,
+        resolved.marker(),
+        fragment_children(context, node, resolved)?,
     );
     let mut fragments = Fragments::one(own);
     let vertical = inset.vertical().saturating_add(children_offset);
@@ -615,15 +647,15 @@ const fn content_inset(metrics: BoxMetrics) -> Point {
     )
 }
 
-/// A replaced element keeps its `Pending` marker only while the cascade left it
-/// without both axes — once an author pins `width` **and** `height`, the box's
-/// geometry no longer depends on the resource.
-const fn marker_for(node: &StyledNode, metrics: BoxMetrics) -> IntrinsicSize {
-    let pinned = metrics.width().is_some() && metrics.height().is_some();
-    if node.intrinsic_size().is_pending() && !pinned {
-        return IntrinsicSize::Pending;
+fn fragment_children<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node: &StyledNode,
+    resolved: Resolved,
+) -> Result<ChildIds, CssError> {
+    if resolved.is_replaced() {
+        return Ok(ChildIds::new());
     }
-    IntrinsicSize::Resolved
+    box_generating_children(context, node)
 }
 
 fn box_generating_children<M: TextMeasurer>(
@@ -665,9 +697,6 @@ fn layout_content<M: TextMeasurer>(
     font_size: Au,
     input: BlockInput,
 ) -> Result<ContentFlow, CssError> {
-    if node.intrinsic_size().is_pending() {
-        return Ok(ContentFlow::empty());
-    }
     if display_of(node) == Display::Flex {
         return flex::layout(context, node, inner, font_size, input);
     }

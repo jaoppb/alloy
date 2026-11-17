@@ -269,3 +269,32 @@ Additive; nothing a consumer has to change.
 - **A `<br>`'s computed `display` is `inline` unless it is `none`**, whatever the cascade returned: like the root's
   blockification, the coercion lives in the tree builder, so no resolver can skip it and no layout segmentation (block,
   flex, block-in-inline) ever sees a block-level `<br>`.
+
+### `14 → 15` — Issue #83: replaced elements are sized, through a `NaturalSizes` port
+
+**Not additive** (ADR-0028). What a consumer has to change, and what a replacement adapter has to reproduce:
+
+- **A new port, `NaturalSizes`** (`resource_of(node) -> ReplacedResource`: `Loaded(NaturalSize)`, `Loading`,
+  `Unavailable`), asked by the layout engine for each replaced element it lays out — Rust-to-Rust, injected when the
+  engine is built, like `TextMeasurer`. `BlockLayout::new` uses `NoResources` (everything `Unavailable`);
+  `BlockLayout::with_natural_sizes` swaps in a real source. `alloy` answers it from the page's `ImageStore`
+  (`alloy/src/application/image_sizes.rs`); `core/css` never sees the store.
+- **A replaced box is sized** from the author's `width` / `height`, the resource's natural size and — before it loads —
+  the ratio of the element's own `width` / `height` attributes (CSS 2.1 §10.3.2, §10.6.2; WHATWG HTML §15.4.3). With
+  none of them an `<img>` is 0×0 and every other replaced element takes the 300×150 default object size; a `<canvas>`'s
+  natural size is its bitmap, its `width` / `height` attributes (default 300×150). A block-level replaced box with
+  `width: auto` no longer fills its containing block. Its children (fallback content) are never laid out. The `width` /
+  `height` attributes of `img`, `video`, `iframe`, `object` and `embed` are presentational hints, as `svg`'s already
+  were; a `<canvas>`'s are not (HTML §15.4.3 maps them only to `aspect-ratio`).
+- **`LayoutBox::intrinsic_size()` gains `IntrinsicSize::Natural(NaturalSize)`** for a box whose resource is loaded; a
+  box still `Loading` is `Pending` unless the author pinned both axes; an `Unavailable` one is `Resolved` — it was
+  `Pending` before, for every replaced element whatever its resource. A line fragment (text, or an inline box's line) is
+  always `Resolved`. `StyledNode::intrinsic_size()` is **removed** — only layout knows the resource — and so is the
+  unused `IntrinsicSize::is_pending()`; a consumer asks `StyledNode::is_replaced()`.
+- **A replaced element with `display: inline` is an atomic inline** (CSS 2.1 §9.2.2): `StyledNode::is_atomic_inline()`
+  answers it, and inline collection, emission, block-in-inline splitting and margin containment ask the node instead of
+  `Display::is_atomic_inline`, which is **renamed** `Display::is_inline_block` because it answers only that. So `ua.css`
+  drops #136's stopgap `img, video, canvas, iframe, object, embed { display: inline-block }` and the
+  `svg { display: inline-block }` rule: the computed `display` of those elements is now `inline`, and a hidden `<embed>`
+  (`embed[hidden]`: `inline`, 0×0) gets a 0×0 atomic box where it got none. The `width` / `height` attributes are read
+  with HTML's rules for parsing dimension values (§2.3.4.4) for both the hint and the ratio, so `100px` and `100` agree.

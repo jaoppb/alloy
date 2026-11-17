@@ -10,7 +10,7 @@ use region::ContextId;
 use super::BrowsingContext;
 use crate::domain::{
     BrowserEffect, DocumentRequest, Effects, FetchFailure, FetchPayload, FetchRequest, FetchResult,
-    LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
+    ImageState, LinkTarget, LinkTargets, LoadedDocument, NavigationId, SubresourceRequest,
 };
 use crate::infrastructure::MarkupDiscoverer;
 
@@ -166,7 +166,7 @@ fn a_completed_document_is_installed_and_reports_what_to_fetch_next() {
 }
 
 #[test]
-fn every_discovered_image_has_a_placeholder_before_its_pixels_arrive() {
+fn every_discovered_image_is_loading_before_its_pixels_arrive() {
     let mut context = context();
     let target = page("index.html");
     let navigation = started(&context.navigate(target.clone()));
@@ -188,7 +188,8 @@ fn every_discovered_image_has_a_placeholder_before_its_pixels_arrive() {
             _ => None,
         })
         .expect("the <img> was discovered");
-    assert!(context.document().unwrap().images().contains(image_id));
+    let images = context.document().unwrap().images();
+    assert_eq!(images.state(image_id), Some(ImageState::Loading));
 }
 
 #[test]
@@ -332,7 +333,7 @@ fn a_stylesheet_with_never_matching_media_is_not_absorbed() {
 }
 
 #[test]
-fn a_decoded_image_replaces_its_placeholder_and_damages_the_content() {
+fn a_decoded_image_is_recorded_and_damages_the_content() {
     let mut context = context();
     let navigation = load(&mut context, "<body>hi</body>", &page("a.html"));
 
@@ -340,26 +341,63 @@ fn a_decoded_image_replaces_its_placeholder_and_damages_the_content() {
 
     assert!(damaged(&effects));
     assert_eq!(context.stats().images_loaded(), 1);
-    assert!(
-        context
-            .document()
-            .unwrap()
-            .images()
-            .contains(ImageId::new(7))
-    );
+    let images = context.document().unwrap().images();
+    assert!(matches!(
+        images.state(ImageId::new(7)),
+        Some(ImageState::Decoded(_))
+    ));
 }
 
 #[test]
-fn a_failed_subresource_is_logged_and_changes_nothing() {
+fn a_failed_stylesheet_is_logged_and_changes_nothing() {
     let mut context = context();
     let navigation = load(&mut context, "<body>hi</body>", &page("a.html"));
     let failed = FetchResult::new(
         navigation,
-        FetchPayload::Image(ImageId::new(1), Err(FetchFailure::new("404"))),
+        FetchPayload::Stylesheet(MediaQuery::always(), Err(FetchFailure::new("404"))),
     );
 
     assert!(context.complete(failed).is_empty());
+}
+
+/// A failed image is remembered as failed, and the page is laid out again, so
+/// its `<img>` can show its `alt` text (issue #83).
+#[test]
+fn a_failed_image_is_recorded_as_failed_and_damages_the_content() {
+    let mut context = context();
+    let target = page("a.html");
+    let navigation = started(&context.navigate(target.clone()));
+    let load_effects = context.complete(document_result(
+        navigation,
+        r#"<body><img src="/p.png"></body>"#,
+        &target,
+    ));
+    let id = load_effects
+        .as_slice()
+        .iter()
+        .find_map(|effect| match effect {
+            BrowserEffect::Fetch(
+                FetchRequest::Subresource(SubresourceRequest::Image(image)),
+                _,
+            ) => Some(image.id()),
+            _ => None,
+        })
+        .expect("the <img> was discovered");
+    assert_eq!(
+        context.document().unwrap().images().state(id),
+        Some(ImageState::Loading)
+    );
+
+    let failed = FetchResult::new(
+        navigation,
+        FetchPayload::Image(id, Err(FetchFailure::new("404"))),
+    );
+    let effects = context.complete(failed);
+
+    assert!(damaged(&effects));
     assert_eq!(context.stats().images_loaded(), 0);
+    let images = context.document().unwrap().images();
+    assert_eq!(images.state(id), Some(ImageState::Failed));
 }
 
 #[test]

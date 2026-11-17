@@ -42,7 +42,7 @@ and tree construction into `dom::DomTree`, not necessarily visual styling or pai
 | `header`     | rendered    | B5    | block header container                                                                   |
 | `hr`         | partial     | B5    | void thematic break element; a 1px gray rule, `inset` paints solid (#82)                 |
 | `html`       | rendered    | B5    | root document element                                                                    |
-| `img`        | parsed only | B5    | void embedded image element; no intrinsic sizing or replaced layout (#83)                |
+| `img`        | partial     | B5    | void image; sized by width/height, natural size or `alt` (#83); `object-fit` pending (#70) |
 | `li`         | partial     | B5    | list item element with auto-closing tag omission; indent renders, ::marker pending (#71) |
 | `link`       | rendered    | B5    | void document resource link metadata; hidden via display: none, stylesheets cascaded     |
 | `main`       | rendered    | B5    | block main content container                                                             |

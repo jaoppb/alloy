@@ -27,10 +27,10 @@
 //!   ([`Declaration`], [`MediaQuery`]); the computed-value enums ([`Display`],
 //!   [`CssStage`], [`Origin`], [`SnapshotNodeKind`]); and the typed
 //!   [`CssError`].
-//! - [`application`] — the three ports ([`CascadeResolver`], [`LayoutEngine`],
-//!   [`TextMeasurer`]), the explicit [`snapshot`] mapping (`dom::DomTree →
-//!   DomSnapshot`), selector [`matches`]ing, [`collect_style_sheets`], and the
-//!   [`conformance`] suite.
+//! - [`application`] — the four ports ([`CascadeResolver`], [`LayoutEngine`],
+//!   [`TextMeasurer`], [`NaturalSizes`]), the explicit [`snapshot`] mapping
+//!   (`dom::DomTree → DomSnapshot`), selector [`matches`]ing,
+//!   [`collect_style_sheets`], and the [`conformance`] suite.
 //! - [`infrastructure`] — the hand-written CSS Syntax Level 3 parser
 //!   ([`parse_stylesheet`], [`parse_inline_style`], [`tokenize`]), the
 //!   placeholder Rust adapters ([`UaCascade`], [`BlockLayout`],
@@ -39,9 +39,10 @@
 //!
 //! ## Contract record
 //!
-//! This crate is the `CascadeResolver` / `LayoutEngine` / `TextMeasurer` port
-//! under the `ADR-0011` Replaceable Port Contract. The boundary aggregates and
-//! [`PORT_SCHEMA_VERSION`] **freeze at integration point I3** (end of B4);
+//! This crate is the `CascadeResolver` / `LayoutEngine` / `TextMeasurer` /
+//! `NaturalSizes` port under the `ADR-0011` Replaceable Port Contract. The
+//! boundary aggregates and [`PORT_SCHEMA_VERSION`] **freeze at integration
+//! point I3** (end of B4);
 //! `docs/architecture/style-cascade-port-contract.md` records the state of all
 //! seven items from that point on. A change after the freeze also needs a
 //! migration note in `PRD-007`.
@@ -133,7 +134,19 @@ pub mod infrastructure;
 /// at — and [`StyledTree`] keeps a `<br>` `inline` for every resolver unless
 /// its display is `none` (WHATWG HTML §15.3.4, issue #82). `PRD-007` §6
 /// carries the migration note.
-pub const PORT_SCHEMA_VERSION: u32 = 14;
+///
+/// `15` is **not additive** (issue #83, ADR-0028): a new [`NaturalSizes`] port
+/// tells [`BlockLayout`] (`with_natural_sizes`, default [`NoResources`]) what
+/// has become of each replaced element's resource; a replaced box is sized from
+/// the author's `width`/`height`, its [`NaturalSize`] and its attribute ratio
+/// (CSS 2.1 §10.3.2, §10.6.2), and reports `IntrinsicSize::Natural` once
+/// loaded; `StyledNode::intrinsic_size` and `IntrinsicSize::is_pending` are
+/// gone, [`StyledNode::is_replaced`] and [`StyledNode::is_atomic_inline`] are
+/// new, and `Display::is_atomic_inline` is renamed `is_inline_block`; a
+/// replaced element with `display: inline` is an atomic inline, so `ua.css`
+/// no longer gives `img`, `video`, `canvas`, `iframe`, `object`, `embed` or
+/// `svg` a `display`. `PRD-007` §6 carries the migration note.
+pub const PORT_SCHEMA_VERSION: u32 = 15;
 
 /// The CSS properties this crate can parse and resolve to a computed value.
 ///
@@ -330,16 +343,16 @@ pub const SUPPORTED_SELECTORS: [&str; 19] = [
 pub use application::collect_sheets::collect_style_sheets;
 pub use application::conformance;
 pub use application::matching::{matches, strongest_match};
-pub use application::ports::{CascadeResolver, LayoutEngine, TextMeasurer};
+pub use application::ports::{CascadeResolver, LayoutEngine, NaturalSizes, TextMeasurer};
 pub use application::snapshot::snapshot;
 pub use domain::color::{CssColor, ParseColorError};
 pub use domain::computed::display::ParseDisplayError;
 pub use domain::computed::outline::ParseOutlineStyleError;
 pub use domain::computed::style::INITIAL_FONT_SIZE;
 pub use domain::computed::{
-    ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, LengthEdges,
-    Outline, OutlineStyle, Overflow, OverflowStyle, PositionStyle, PositionType, Sizing,
-    SizingConstraints, Visibility, ZIndex,
+    ComputedStyle, Display, FamilyName, FontFamily, FontFamilyList, GenericFamily, IntrinsicSize,
+    LengthEdges, Outline, OutlineStyle, Overflow, OverflowStyle, PositionStyle, PositionType,
+    Sizing, SizingConstraints, Visibility, ZIndex,
 };
 pub use domain::declaration::{Declaration, DeclarationBlock, DeclarationValue, Importance};
 pub use domain::dom_snapshot::{
@@ -354,6 +367,7 @@ pub use domain::length::Length;
 pub use domain::media::{MediaCondition, MediaFeature, MediaQuery};
 pub use domain::node_role::NodeRole;
 pub use domain::parse_notes::{ParseNote, ParseNotes};
+pub use domain::replaced::{NaturalSize, ReplacedResource};
 pub use domain::selector::{
     AttributeMatch, AttributeSelector, AttributeSelectors, Combinator, ComplexSelector,
     CompoundSelector, IdentifierList, NthFormula, PseudoClass, PseudoClasses, SelectorList,
@@ -368,6 +382,7 @@ pub use infrastructure::cascade::UaCascade;
 pub use infrastructure::font_backed_measurer::FontBackedMeasurer;
 pub use infrastructure::layout::BlockLayout;
 pub use infrastructure::mock::{MockCascadeResolver, MockLayoutEngine, MockTextMeasurer};
+pub use infrastructure::no_resources::NoResources;
 pub use infrastructure::parser::{
     SpannedToken, Token, TokenStream, parse_inline_style, parse_media_attribute, parse_stylesheet,
     tokenize,
