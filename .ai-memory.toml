@@ -1,0 +1,45 @@
+# Opt-in marker for ai-memory: only a repository that carries this file is
+# captured by the agents' lifecycle hooks. No server address, token, or
+# hostname belongs here.
+workspace = "default"
+project = "jaoppb-alloy"
+drop_subagent_captures = true
+
+[briefing]
+inject_on_session_start = true
+max_chars = 4000
+
+[capture]
+ignore_paths = [
+  "docs/adr/**",
+  "docs/requirements/**",
+  "docs/architecture/**",
+  "spdd/**",
+  "CLAUDE.md",
+  "GEMINI.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  ".env",
+  "**/.env",
+  ".env.*",
+  "**/.env.*",
+  "*.pem",
+  "**/*.pem",
+  "*.key",
+  "**/*.key",
+  "*.p12",
+  "**/*.p12",
+  "*.pfx",
+  "**/*.pfx",
+  "*.db*",
+  "**/*.db*",
+  "*.sqlite*",
+  "**/*.sqlite*",
+  "target/**",
+  "fuzz/corpus/**",
+  "fuzz/artifacts/**",
+  "*.actual.png",
+  "**/*.actual.png",
+  "*.diff.png",
+  "**/*.diff.png",
+]
