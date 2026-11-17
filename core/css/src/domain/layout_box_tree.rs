@@ -96,16 +96,16 @@ impl FragmentText {
 }
 
 /// One laid-out box fragment: which node it belongs to, its content
-/// rectangle, the three edges around it, whether its size is still
-/// provisional, and — for a text node — the text on it.
+/// rectangle, the three edges around it, its resource's [`IntrinsicSize`], and
+/// — for a text line fragment — the text on it.
 ///
 /// A block-level or atomic box is one fragment. An inline box or a text node
 /// has one fragment per line it touches (#134), so a node may own several
 /// `LayoutBox`es; [`LayoutBoxTree::fragments_of`] lists them. A box that lays
-/// its own text out — an `<input>`'s or `<select>`'s label, a text node a flex
-/// container blockified — owns its box fragment plus that text's line
-/// fragments. Every fragment of a node carries the node's full
-/// [`Self::children`], whichever line they are on.
+/// its own text out — an `<input>`'s or `<select>`'s label, an unavailable
+/// `<img>`'s `alt` text, a text node a flex container blockified — owns its box
+/// fragment plus that text's line fragments. Every fragment of a node carries
+/// the node's full [`Self::children`], whichever line they are on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LayoutBox {
@@ -174,8 +174,9 @@ impl LayoutBox {
         self.padding
     }
 
-    /// Whether this box's geometry still waits on an unloaded resource
-    /// (Phase X reads this).
+    /// What layout knows about this box's resource: `Pending` while waiting on
+    /// an unloaded resource with an unpinned axis, `Natural` when sized from a
+    /// loaded image, or `Resolved`.
     #[must_use]
     pub const fn intrinsic_size(&self) -> IntrinsicSize {
         self.intrinsic_size

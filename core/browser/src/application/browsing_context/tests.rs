@@ -365,13 +365,33 @@ fn a_failed_stylesheet_is_logged_and_changes_nothing() {
 #[test]
 fn a_failed_image_is_recorded_as_failed_and_damages_the_content() {
     let mut context = context();
-    let navigation = load(&mut context, "<body>hi</body>", &page("a.html"));
-    let id = ImageId::new(1);
+    let target = page("a.html");
+    let navigation = started(&context.navigate(target.clone()));
+    let load_effects = context.complete(document_result(
+        navigation,
+        r#"<body><img src="/p.png"></body>"#,
+        &target,
+    ));
+    let id = load_effects
+        .as_slice()
+        .iter()
+        .find_map(|effect| match effect {
+            BrowserEffect::Fetch(
+                FetchRequest::Subresource(SubresourceRequest::Image(image)),
+                _,
+            ) => Some(image.id()),
+            _ => None,
+        })
+        .expect("the <img> was discovered");
+    assert_eq!(
+        context.document().unwrap().images().state(id),
+        Some(ImageState::Loading)
+    );
+
     let failed = FetchResult::new(
         navigation,
         FetchPayload::Image(id, Err(FetchFailure::new("404"))),
     );
-
     let effects = context.complete(failed);
 
     assert!(damaged(&effects));

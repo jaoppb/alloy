@@ -314,6 +314,8 @@ mod tests {
     #[test]
     fn an_empty_resource_has_no_natural_size() {
         assert_eq!(NaturalSize::from_pixels(0, 10), None);
+        assert_eq!(NaturalSize::from_pixels(10, 0), None);
+        assert_eq!(NaturalSize::from_pixels(u32::MAX, 10), None);
         assert!(NaturalSize::from_pixels(4, 2).is_some());
     }
 
@@ -325,5 +327,14 @@ mod tests {
         };
         assert_eq!(ratio.height_for(px(30)), px(20));
         assert_eq!(ratio.width_for(px(20)), px(30));
+    }
+
+    #[test]
+    fn the_ratio_saturates_instead_of_overflowing() {
+        let ratio = AspectRatio {
+            width: px(1),
+            height: px(1_000_000),
+        };
+        assert_eq!(ratio.height_for(px(1_000_000)), Au::from_raw(i32::MAX));
     }
 }

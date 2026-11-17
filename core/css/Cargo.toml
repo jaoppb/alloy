@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Style-cascade and layout boundary aggregates and the replaceable CascadeResolver / LayoutEngine / TextMeasurer ports (PRD-007, ADR-0011)."
+description = "Style-cascade and layout boundary aggregates and the replaceable CascadeResolver / LayoutEngine / TextMeasurer / NaturalSizes ports (PRD-007, ADR-0011, ADR-0028)."
 
 # `ADR-0011:99-102` item 6 asks every port for a `no-<adapter>` build. The only
 # adapters this crate ships are Rust — `UaCascade`, `BlockLayout`,

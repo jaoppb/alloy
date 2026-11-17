@@ -71,9 +71,7 @@ impl Document {
     /// [`ImageStore::mark_loading`]).
     pub fn mark_images_loading(&mut self, found: &Subresources) {
         for request in found {
-            if let SubresourceRequest::Image(image) = request {
-                self.images.mark_loading(image.id());
-            }
+            mark_request_loading(&mut self.images, request);
         }
     }
 
@@ -91,5 +89,11 @@ impl Document {
     /// Adds an already parsed author `sheet` to the cascade.
     pub fn add_sheet(&mut self, sheet: StyleSheetSet) {
         self.sheets.absorb(sheet);
+    }
+}
+
+fn mark_request_loading(images: &mut ImageStore, request: &SubresourceRequest) {
+    if let SubresourceRequest::Image(image) = request {
+        images.mark_loading(image.id());
     }
 }

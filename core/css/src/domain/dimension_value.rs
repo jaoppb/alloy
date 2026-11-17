@@ -10,7 +10,7 @@ use core::fmt::Write;
 
 use graphics::{AU_PER_PX, Au};
 
-/// The most fractional digits kept: more cannot change an [`Au`] (1/60 px).
+/// The most fractional digits kept: more cannot change an [`Au`] (1/64 px).
 const MAX_FRACTION_DIGITS: usize = 9;
 
 /// A parsed dimension attribute: a non-negative number of CSS pixels, or a
@@ -39,16 +39,11 @@ impl DimensionValue {
             return None;
         }
         let after_whole = rest.get(whole.len()..)?;
-        let fraction = after_whole.strip_prefix('.').map_or("", leading_digits);
-        let number_length = whole
-            .len()
-            .saturating_add(dot_length(after_whole))
-            .saturating_add(fraction.len());
-        let after_number = rest.get(number_length..)?;
+        let (fraction, unit) = parse_fraction_and_unit(after_whole);
         Some(Self {
             whole: whole.to_owned(),
             fraction: fraction.chars().take(MAX_FRACTION_DIGITS).collect(),
-            unit: unit_of(after_number),
+            unit,
         })
     }
 
@@ -108,9 +103,21 @@ fn leading_digits(text: &str) -> &str {
     text.get(..end).unwrap_or("")
 }
 
-/// `1` when `text` starts with the decimal point, else `0`.
-fn dot_length(text: &str) -> usize {
-    usize::from(text.starts_with('.'))
+/// HTML §2.3.4.4 step 9.2: a `.` without a following digit returns a length
+/// immediately, before checking for `%`.
+fn parse_fraction_and_unit(after_whole: &str) -> (&str, DimensionUnit) {
+    after_whole
+        .strip_prefix('.')
+        .map_or_else(|| ("", unit_of(after_whole)), fraction_after_dot)
+}
+
+fn fraction_after_dot(after_dot: &str) -> (&str, DimensionUnit) {
+    let digits = leading_digits(after_dot);
+    if digits.is_empty() {
+        return ("", DimensionUnit::Pixels);
+    }
+    let after_fraction = after_dot.get(digits.len()..).unwrap_or("");
+    (digits, unit_of(after_fraction))
 }
 
 fn unit_of(after_number: &str) -> DimensionUnit {
@@ -149,11 +156,15 @@ mod tests {
         assert_eq!(css("100abc"), Some("100px".to_owned()));
         assert_eq!(css("12.5"), Some("12.5px".to_owned()));
         assert_eq!(css("12."), Some("12px".to_owned()));
+        assert_eq!(css("12.%"), Some("12px".to_owned()));
+        assert_eq!(css("0"), Some("0px".to_owned()));
+        assert_eq!(css("0px"), Some("0px".to_owned()));
     }
 
     #[test]
     fn a_trailing_percent_sign_makes_a_percentage() {
         assert_eq!(css("50%"), Some("50%".to_owned()));
+        assert_eq!(css("0%"), Some("0%".to_owned()));
         assert_eq!(pixels("50%"), None);
     }
 
@@ -162,7 +173,9 @@ mod tests {
         assert_eq!(css(""), None);
         assert_eq!(css("auto"), None);
         assert_eq!(css("-5"), None);
+        assert_eq!(css("+100"), None);
         assert_eq!(css(".5"), None);
+        assert_eq!(css("\u{00A0}100"), None);
     }
 
     #[test]
@@ -170,8 +183,10 @@ mod tests {
         assert_eq!(non_negative_integer(" 400px"), Some(400));
         assert_eq!(non_negative_integer("+400"), Some(400));
         assert_eq!(non_negative_integer("-0"), Some(0));
+        assert_eq!(non_negative_integer("-0abc"), Some(0));
         assert_eq!(non_negative_integer("-5"), None);
         assert_eq!(non_negative_integer("auto"), None);
+        assert_eq!(non_negative_integer("4294967296"), None);
     }
 
     #[test]

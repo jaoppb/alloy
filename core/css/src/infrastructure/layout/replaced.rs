@@ -22,8 +22,12 @@ pub struct ReplacedBox {
 }
 
 impl ReplacedBox {
-    pub const fn size(self) -> UsedSize {
-        self.size
+    pub const fn width(self) -> graphics::Au {
+        self.size.width()
+    }
+
+    pub const fn height(self) -> graphics::Au {
+        self.size.height()
     }
 
     pub const fn marker(self) -> IntrinsicSize {

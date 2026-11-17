@@ -1,4 +1,5 @@
-//! The decoded images a live page currently knows about (moved from `alloy` by #111).
+//! The images a live page currently knows about: loading, decoded, or failed
+//! (moved from `alloy` by #111, extended by #83).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -224,5 +225,24 @@ mod tests {
         store.mark_loading(id);
         store.clear();
         assert_eq!(store.state(id), None);
+    }
+
+    #[test]
+    fn marking_loading_never_overwrites_a_failed_entry() {
+        let id = ImageId::new(8);
+        let mut store = ImageStore::new();
+        store.mark_failed(id);
+        store.mark_loading(id);
+        assert_eq!(store.state(id), Some(ImageState::Failed));
+    }
+
+    #[test]
+    fn a_failed_image_can_still_be_decoded_later() {
+        let id = ImageId::new(10);
+        let mut store = ImageStore::new();
+        store.mark_failed(id);
+        store.insert(id, red_pixel());
+        let size = SurfaceSize::new(1, 1).unwrap();
+        assert_eq!(store.state(id), Some(ImageState::Decoded(size)));
     }
 }

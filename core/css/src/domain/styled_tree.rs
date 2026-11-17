@@ -19,13 +19,13 @@ use crate::domain::replaced::ReplacedElement;
 use crate::domain::text::TextRun;
 
 /// One node's computed style, plus its place in the tree, the character data it
-/// carries, and whether its own size is still provisional.
+/// carries, and whether it is a replaced element whose size comes from a
+/// resource.
 ///
-/// The last two are what v0.5 B4 added: [`crate::LayoutEngine::layout`] is
-/// handed **only** a `&StyledTree` (`PRD-007:56-60`), so an inline formatting
-/// context can reach the text only if the text travels inside the aggregate,
-/// and Phase X can find the boxes waiting on a resource only if the marker
-/// does too.
+/// [`crate::LayoutEngine::layout`] is handed **only** a `&StyledTree`
+/// (`PRD-007:56-60`), so an inline formatting context can reach the text only if
+/// the text travels inside the aggregate, and layout asks [`crate::NaturalSizes`]
+/// for any node carrying [`ReplacedElement`].
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct StyledNode {

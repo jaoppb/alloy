@@ -504,6 +504,21 @@ scope = "browser"
 deny = ["engine::**", "ui::**", "window::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/browser must not import the engine, a script runtime, core/ui, or the window system — alloy's executor mediates between the sibling effect enums (ADR-0026)."
 
+# #83 / ADR-0028: `browser` uses `css::{SnapshotId, DomSnapshot, MediaQuery}`, so it depends on `css`,
+# but it must never name the `NaturalSizes` port or `css` layout types — `alloy::application::image_sizes`
+# mediates between `ImageStore` and `NaturalSizes`.
+[[restrict-use]]
+name = "browser-no-css-layout"
+scope = "browser"
+deny = [
+    "css::**::NaturalSizes",
+    "css::**::LayoutEngine",
+    "css::**::LayoutBoxTree",
+    "css::**::BlockLayout",
+    "css::infrastructure::**",
+]
+message = "core/browser must not import css layout types or NaturalSizes — alloy mediates between ImageStore and NaturalSizes (ADR-0028)."
+
 # #109 / ADR-0026: the chrome and the browsing context are siblings joined by `alloy`'s executor.
 # `ui` takes its hit regions as `region::ContentRegion`, so it never imports `browser`, and it
 # owns no thread (the converse of `browser-isolated`).

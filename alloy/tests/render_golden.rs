@@ -665,3 +665,55 @@ fn a_decoded_image_scaled_by_its_attributes_fills_its_box() {
     assert_eq!(frame.pixel(16, 0), Some(Color::WHITE), "16 wide");
     assert_eq!(frame.pixel(0, 8), Some(Color::WHITE), "8 tall");
 }
+
+#[test]
+fn loading_hides_alt_text_and_failure_reveals_it_through_render_dom() {
+    use browser::{ImageStore, MarkupDiscoverer, SubresourceDiscoverer, SubresourceRequest};
+
+    let markup = "<!doctype html><html><head><style>body{margin:0;background:#fff;color:#000}</style></head>\
+                  <body><img src=\"pic.png\" alt=\"hello world\"></body></html>";
+    let tree = dom::parse(markup).unwrap().into_tree();
+    let base = network::Url::parse("http://example.invalid/").unwrap();
+    let found = MarkupDiscoverer.discover(&snapshot(&tree, tree.document()), &base);
+    let image_id = found
+        .iter()
+        .find_map(|request| match request {
+            SubresourceRequest::Image(image) => Some(image.id()),
+            SubresourceRequest::Stylesheet(_) => None,
+        })
+        .expect("image discovered");
+
+    let surface = graphics::SurfaceSize::new(120, 30).unwrap();
+    let mut loading = ImageStore::new();
+    loading.mark_loading(image_id);
+    let loading_frame =
+        alloy::render_dom(&tree, css::StyleSheetSet::new(), &loading, surface).unwrap();
+    let loading_inked = (0..30)
+        .any(|row| (0..120).any(|column| loading_frame.pixel(column, row) != Some(Color::WHITE)));
+    assert!(!loading_inked, "loading image hides alt text");
+
+    let mut failed = ImageStore::new();
+    failed.mark_failed(image_id);
+    let failed_frame =
+        alloy::render_dom(&tree, css::StyleSheetSet::new(), &failed, surface).unwrap();
+    let failed_inked = (0..30)
+        .any(|row| (0..120).any(|column| failed_frame.pixel(column, row) != Some(Color::WHITE)));
+    assert!(failed_inked, "failed image reveals alt text");
+}
+
+#[test]
+fn alt_text_line_fragments_do_not_double_paint_background_or_outline() {
+    let markup = "<!doctype html><html><head><style>body{margin:8px;background:#fff}</style></head>\
+                  <body><img alt=\"hi\" style=\"width:80px;height:40px;color:transparent;background:rgba(255,0,0,0.5);outline:2px solid #00f\"></body></html>";
+    let options = RenderOptions::new(100, 60);
+    let bytes = render_html_to_png(markup, &options).expect("render succeeds");
+    let frame = decode_png(&bytes).expect("valid PNG");
+
+    // In the lower-right of the 80x40 box (below the 1-line "hi" text), the
+    // background is painted once; inside the text line rect (8..27, 8..27),
+    // pixels must match that single-painted background rather than darkening
+    // from a second fill or turning blue from a second outline.
+    let single_bg = frame.pixel(70, 40);
+    assert_eq!(frame.pixel(8, 8), single_bg);
+    assert_eq!(frame.pixel(15, 15), single_bg);
+}

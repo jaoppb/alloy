@@ -46,10 +46,17 @@ fn paint_single_box<F: FontProvider>(
         return Ok(());
     }
 
+    // Text line fragments (DOM text nodes and owned-text lines such as
+    // `<input>`, `<select>`, or `<img alt>`) have no box decorations of their
+    // own; painting background/outline here would double-paint inside the
+    // owning box fragment.
+    if laid_out.text().is_some() {
+        return paint_text(laid_out, styled_node, font_provider, builder);
+    }
+
     paint_background(laid_out, styled_node, builder)?;
     paint_borders(laid_out, styled_node, builder)?;
     paint_outline(laid_out, styled_node, builder)?;
-    paint_text(laid_out, styled_node, font_provider, builder)?;
     paint_image(laid_out, builder)
 }
 

@@ -165,7 +165,7 @@ pub(crate) fn layout_box<M: TextMeasurer>(
     let replaced = OwnBox::of(context, node).replaced_box(metrics);
     let content_width = input
         .forced_content_width()
-        .or_else(|| replaced.map(|own| own.size().width()))
+        .or_else(|| replaced.map(ReplacedBox::width))
         .unwrap_or_else(|| metrics.content_width_within(input.containing_width()));
     let inner = ContainingBlock::new(content_width, definite_content_height(metrics, input));
     let children = match replaced {
@@ -406,7 +406,13 @@ impl Resolved {
 
     /// The content height a replaced box takes when nothing forces one.
     fn replaced_height(self) -> Option<Au> {
-        self.replaced.map(|own| own.size().height())
+        self.replaced.map(ReplacedBox::height)
+    }
+
+    /// Whether this box's own size came from a replaced element rather than
+    /// child content.
+    const fn is_replaced(self) -> bool {
+        self.replaced.is_some()
     }
 
     /// What this box reports about its resource: a replaced box's marker, else
@@ -618,7 +624,7 @@ fn assemble_fragments<M: TextMeasurer>(
         rect_at(inset, resolved.content_width, content_height),
         edges,
         resolved.marker(),
-        box_generating_children(context, node)?,
+        fragment_children(context, node, resolved)?,
     );
     let mut fragments = Fragments::one(own);
     let vertical = inset.vertical().saturating_add(children_offset);
@@ -639,6 +645,17 @@ const fn content_inset(metrics: BoxMetrics) -> Point {
         border.left().saturating_add(padding.left()),
         border.top().saturating_add(padding.top()),
     )
+}
+
+fn fragment_children<M: TextMeasurer>(
+    context: &LayoutContext<'_, M>,
+    node: &StyledNode,
+    resolved: Resolved,
+) -> Result<ChildIds, CssError> {
+    if resolved.is_replaced() {
+        return Ok(ChildIds::new());
+    }
+    box_generating_children(context, node)
 }
 
 fn box_generating_children<M: TextMeasurer>(

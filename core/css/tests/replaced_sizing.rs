@@ -276,8 +276,8 @@ fn an_inline_image_is_an_atomic_inline_on_its_neighbours_line() {
     let after = laid.text("bb").content();
     assert_eq!(before.min_y(), after.min_y(), "one line box");
     assert!(
-        after.min_x() > before.max_x(),
-        "the image sits between them"
+        after.min_x() >= before.max_x().saturating_add(px(10)),
+        "the 10px image sits between them"
     );
 }
 
@@ -454,4 +454,120 @@ fn a_canvas_reads_its_attributes_as_non_negative_integers() {
 fn the_attribute_ratio_sizes_a_video_before_it_loads() {
     let laid = Laid::body("<video width=100 height=50 style='width:40px;height:auto'></video>");
     assert_eq!(laid.content_px("video"), (40, 20));
+}
+
+#[test]
+fn box_sizing_border_box_scales_replaced_content_inside_padding_and_border() {
+    let laid = Laid::with_resources(
+        "<img style='box-sizing:border-box;width:100px;padding:10px;border:5px solid'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(laid.content_px("img"), (70, 35));
+}
+
+#[test]
+fn an_author_stylesheet_rule_beats_presentational_dimension_attributes() {
+    let laid = Laid::body("<style>* { width: 30px }</style><img width=100 height=50>");
+    assert_eq!(laid.content_px("img"), (30, 50));
+}
+
+#[test]
+fn a_percentage_width_attribute_gives_no_attribute_ratio() {
+    let laid = Laid::with_resources(
+        "<img width='50%' height=20 style='width:40px;height:auto'>",
+        Resources::default().with("img", ReplacedResource::Loading),
+    );
+    assert_eq!(laid.content_px("img"), (40, 0));
+}
+
+#[test]
+fn css_percentage_and_em_widths_scale_a_loaded_image_by_its_natural_ratio() {
+    let pct = Laid::with_resources(
+        "<div style='width:400px'><img style='width:50%'></div>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(pct.content_px("img"), (200, 100));
+
+    let em = Laid::with_resources(
+        "<img style='width:5em'>",
+        Resources::default().with("img", loaded(40, 20)),
+    );
+    assert_eq!(em.content_px("img"), (80, 40));
+}
+
+#[test]
+fn svg_takes_default_object_size_and_css_dimension_attributes() {
+    assert_eq!(Laid::body("<svg></svg>").content_px("svg"), (300, 150));
+    assert_eq!(
+        Laid::body("<svg width=100 height=50></svg>").content_px("svg"),
+        (100, 50)
+    );
+    assert_eq!(
+        Laid::body("<svg width='10em' height='5em'></svg>").content_px("svg"),
+        (160, 80)
+    );
+}
+
+#[test]
+fn a_canvas_handles_fractional_negative_overflow_and_zero_attributes() {
+    let invalid = Laid::body("<canvas width='100.5' height='-5'></canvas>");
+    assert_eq!(invalid.content_px("canvas"), (100, 150));
+
+    let overflow = Laid::body("<canvas width='99999999999'></canvas>");
+    assert_eq!(overflow.content_px("canvas"), (300, 150));
+
+    let zero = Laid::body("<canvas width=0 height=0 style='width:100px'></canvas>");
+    assert_eq!(zero.content_px("canvas"), (100, 0));
+}
+
+#[test]
+fn alt_text_handles_block_display_line_wrapping_and_whitespace() {
+    let block = Laid::body("<img alt='hello' style='display:block'>");
+    assert_eq!(block.own_text("img"), ["hello"]);
+    assert_eq!(
+        whole_px(block.fragments("img")[0].content().size().width()),
+        800
+    );
+
+    let wrapped = Laid::body("<img alt='hello world' style='width:60px'>");
+    assert_eq!(wrapped.own_text("img"), ["hello", "world"]);
+
+    let spaces = Laid::body("<img alt='   '>");
+    assert!(spaces.own_text("img").is_empty());
+    assert_eq!(spaces.content_px("img"), (0, 0));
+}
+
+#[test]
+fn a_replaced_box_records_no_fallback_children_in_its_fragment() {
+    let laid = Laid::body("<video width=40 height=20><div>fallback</div></video>");
+    assert!(laid.box_of("video").children().is_empty());
+}
+
+#[test]
+fn natural_sizes_port_accepts_borrowed_and_arc_adapters() {
+    let markup = "<!doctype html><html><body><img></body></html>";
+    let tree = dom::parse(markup).unwrap().into_tree();
+    let dom = snapshot(&tree, tree.document());
+    let sheets = collect_style_sheets(&dom).unwrap();
+    let styled = UaCascade::new().resolve(&dom, &sheets).unwrap();
+    let viewport = ViewportConstraints::new(px(800), px(600));
+    let resolved = Resources::default()
+        .with("img", loaded(32, 16))
+        .resolved(&dom);
+
+    let borrowed = BlockLayout::monospace()
+        .with_natural_sizes(&resolved)
+        .layout(&styled, &viewport)
+        .unwrap();
+    let shared = std::sync::Arc::new(resolved);
+    let arced = BlockLayout::monospace()
+        .with_natural_sizes(shared)
+        .layout(&styled, &viewport)
+        .unwrap();
+
+    let img = first_tagged(&dom, "img").unwrap();
+    assert_eq!(
+        borrowed.fragments_of(img).next().unwrap().content().size(),
+        arced.fragments_of(img).next().unwrap().content().size()
+    );
 }
