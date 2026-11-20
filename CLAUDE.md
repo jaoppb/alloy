@@ -288,9 +288,9 @@ Hand-written `Display` + `std::error::Error` on domain errors keeps `domain/` fr
 
 Feature work follows Structured Prompt-Driven Development (ADR-0007): `/spdd-analysis` (→ `spdd/analysis/`) →
 `/spdd-reasons-canvas` (→ `spdd/prompt/`, the 7-stage REASONS canvas) → `/spdd-generate` → `/spdd-sync`. The skill
-definitions live in `.agents/skills/` (`.cursor` is a symlink to `.agents`); Claude Code does not auto-discover that
-directory, so read the relevant `SKILL.md` before following the flow. `docs/requirements/PRD-*.md` are the authoritative
-inputs, `docs/adr/*.md` the constraints.
+definitions live in `.agents/skills/`; `.cursor` (→ `.agents`) and `.claude/skills` (→ `../.agents/skills`) are
+symlinks, so Cursor and Claude Code both discover them as skills from that single source. `docs/requirements/PRD-*.md`
+are the authoritative inputs, `docs/adr/*.md` the constraints.
 
 New architectural decisions get an ADR in `docs/adr/` (MADR format) plus a row in `docs/adr/README.md`, written in the
 same PR as the code it justifies — not as a follow-up after review asks for it.

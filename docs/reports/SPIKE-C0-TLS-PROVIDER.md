@@ -183,8 +183,10 @@ no `unsafe` advantage over `ring`. Pick `ring`; revisit `aws-lc-rs` only if FIPS
 1. **`unsafe` (assembly + C) on the byte-decrypt / signature-verify surface**, via `ring`. This is precisely what
    `ADR-0018` row 1 forbids for third parties; it is accepted **knowingly and temporarily** under the ADR's "RustCrypto
    carve-out" clause, and must be spelled out in `PRD-009` §threat-model when that file is written in Phase P.
+
 2. **A build-time C toolchain** on all three OSes (`cc` compiles `ring`'s pregenerated asm + C). Standard CI images
    already have it; note it in the C1 CI job and the `PRD-009` non-functional section.
+
 3. **`unsafe-allowlist.toml` gains one row-1 entry** — the first and (for v0.5) only one. Added in this phase:
 
     ```toml
