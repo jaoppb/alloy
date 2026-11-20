@@ -208,8 +208,10 @@ RequestPolicy ..> PolicyVerdict
         ```
 
       Nunca `ClientConfig::builder()` sem argumento (esconde a escolha de provider).
+
     - `rustls` é sans-I/O: `StreamOwned<ClientConnection, TcpStream>` para o caminho simples, ou dirigir
       `ClientConnection` à mão se C1 quiser seu próprio laço de timeout-por-fase.
+
     - `webpki-roots =1.0.9` embarcado — **não** o trust store do SO (`~/.claude/plans/…-fancy-dijkstra.md:124`).
 3. **HTTP/1.1 à mão sobre `std::net`** (`infrastructure/http1/`):
     - `mod.rs` — request line + headers + leitura de status line + headers de resposta; `Content-Length` **ou**

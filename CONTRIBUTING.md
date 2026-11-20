@@ -33,17 +33,22 @@ just run --script <path>        # run the alloy binary against a .rhai script
 ## Workflow
 
 1. **Branch from `main`.** Use a descriptive branch name (`feat/…`, `fix/…`, `docs/…`, `refactor/…`).
+
 2. **Follow the architecture.** Every crate is layered `domain/` → `application/` → `infrastructure/` (dependencies
    point inward only); domain crates never depend on `rhai` directly. See the "Architecture" section of `CLAUDE.md` for
    the full crate map and layering rules.
+
 3. **Write to the coding standard.** Clean Code as the baseline, Object Calisthenics as the mechanically-enforced subset
    (no naked primitives, no naked `Vec`/`HashMap`, no `else`, one level of indentation per function, no
    `unwrap`/`expect`/`panic!` on a reachable path, and more — see `CLAUDE.md`). Clippy runs with `-D warnings` — a
    clippy warning is a build failure, not a suggestion.
+
 4. **Add or update tests** for any behavior change. `core/engine`, `core/runtime/rhai`, and `core/dom` are the reference
    for what "well-tested" looks like in this codebase.
+
 5. **New architectural decision?** Add an ADR under `docs/adr/` (MADR format) plus a row in `docs/adr/README.md`,
    **in the same PR as the code it justifies** — not as a follow-up after review asks for it.
+
 6. **Run the gate before pushing:**
 
     ```bash
@@ -53,6 +58,7 @@ just run --script <path>        # run the alloy binary against a .rhai script
    This mirrors CI: `fmt-check`, `clippy -D warnings`, `check`, `test`, `cargo-deny`, coverage, `arch-lint`, and the
    `no-engine` dependency check. Git hooks (via [Lefthook](https://lefthook.dev/)) run a subset of this automatically on
    `pre-commit`/`pre-push`, but a full `just gate` catches everything before you open the PR.
+
 7. **Format Markdown.** Any `.md` file you touch should pass `rumdl fmt` (config in `.rumdl.toml`) — the pre-commit hook
    rewrites it for you if you forget, but running it yourself avoids an extra commit.
 
