@@ -1,0 +1,118 @@
+# Declarative GitHub configuration, read by jaoppb/tools (`tools`, provided by the flake devShell, ADR-0029).
+# `just repo-check` and `just issues-check` compare GitHub with this file; `just repo-sync` applies it.
+# Issue #334.
+
+[github.repository]
+owner = "jaoppb"
+name = "alloy"
+
+# Merge commits only: every PR landed as `Merge pull request #…`.
+[github.repository.settings]
+allow_merge_commit = true
+allow_squash_merge = false
+allow_rebase_merge = false
+delete_branch_on_merge = true
+merge_commit_title = "PR_TITLE"
+merge_commit_message = "PR_BODY"
+
+[github.labels]
+# A label on GitHub that is not declared here fails `tools repo check`; it is never deleted automatically.
+unmanaged = "error"
+# GitHub's defaults and the audit-era taxonomy. `tools repo sync` deletes them even from issues that still
+# carry them, so `tools issues migrate` runs first (see the migration order in issue #334).
+deprecated = [
+    "bug", "documentation", "duplicate", "enhancement", "good first issue", "help wanted", "invalid",
+    "question", "wontfix", "technical debt",
+    "category:architecture", "category:code-smell", "category:concurrency", "category:data-integrity",
+    "category:dependencies", "category:documentation", "category:error-handling",
+    "category:maintainability", "category:observability", "category:performance", "category:security",
+    "category:testing", "category:tooling", "category:types",
+    "effort:L", "effort:M", "effort:S", "lang:rust", "lang:shell",
+    "lib:clap", "lib:proptest", "lib:rhai", "lib:rustls", "lib:softbuffer", "lib:thiserror",
+    "lib:ttf-parser", "lib:winit",
+    "priority:P0", "priority:P1", "priority:P2", "priority:P3",
+    "severity:high", "severity:info", "severity:low", "severity:medium",
+]
+items = [
+    { name = "type:feat", color = "1d76db", description = "New behaviour or capability" },
+    { name = "type:fix", color = "d73a4a", description = "Something is broken" },
+    { name = "type:chore", color = "8b949e", description = "Tooling, CI, housekeeping, dependencies, tests" },
+    { name = "type:docs", color = "0075ca", description = "Documentation, ADRs, specifications" },
+    { name = "type:refactor", color = "5319e7", description = "Restructure or optimise without changing behaviour" },
+    { name = "type:spike", color = "fbca04", description = "Time-boxed research that answers a question" },
+    { name = "area:engine", color = "2ea44f", description = "RuntimeEngine port, Rhai runtime and bindings (core/engine, core/runtime)" },
+    { name = "area:js", color = "2ea44f", description = "Web-content ECMAScript runtime (core/js)" },
+    { name = "area:dom", color = "2ea44f", description = "DOM arena domain crate (core/dom)" },
+    { name = "area:html", color = "2ea44f", description = "HTML tokenizer, vocabulary and tree sink (core/html)" },
+    { name = "area:css", color = "2ea44f", description = "Parser, cascade and layout (core/css)" },
+    { name = "area:graphics", color = "2ea44f", description = "DisplayList, render backends, PNG, text (core/graphics)" },
+    { name = "area:network", color = "2ea44f", description = "HTTP client, TLS and request policy (core/network)" },
+    { name = "area:window", color = "2ea44f", description = "WindowSystem, Presenter and input events (core/window)" },
+    { name = "area:ui", color = "2ea44f", description = "Browser chrome, omnibox, input router (core/ui)" },
+    { name = "area:browser", color = "2ea44f", description = "Browsing context, navigation, subresources (core/browser)" },
+    { name = "area:app", color = "2ea44f", description = "alloy binary, event loop, compositor, platform facts" },
+    { name = "area:devtools", color = "2ea44f", description = "DevTools and extension stubs" },
+    { name = "area:tooling", color = "2ea44f", description = "Nix flake, just, CI, lints, repository tooling" },
+    { name = "area:docs", color = "2ea44f", description = "Documentation, ADRs, requirements" },
+    { name = "audit", color = "c5def5", description = "Found by the codebase audit" },
+    # The issue audit recognises an epic by this exact name: the only open issues allowed without a parent.
+    { name = "epic", color = "3e4b9e", description = "Groups related child issues" },
+]
+
+# Applied by `tools issues migrate`; `tools issues check` fails while one is pending. `type:*` follows the
+# old category; the `area:*` of an issue is assigned by hand, except where a `lib:*` label implies it.
+[github.labels.migrations]
+bug = "type:fix"
+enhancement = "type:feat"
+documentation = "type:docs"
+"technical debt" = "type:refactor"
+"category:architecture" = "type:refactor"
+"category:code-smell" = "type:refactor"
+"category:maintainability" = "type:refactor"
+"category:performance" = "type:refactor"
+"category:types" = "type:refactor"
+"category:concurrency" = "type:fix"
+"category:data-integrity" = "type:fix"
+"category:error-handling" = "type:fix"
+"category:security" = "type:fix"
+"category:dependencies" = "type:chore"
+"category:observability" = "type:chore"
+"category:testing" = "type:chore"
+"category:tooling" = "type:chore"
+"category:documentation" = "type:docs"
+"lib:clap" = "area:app"
+"lib:rhai" = "area:engine"
+"lib:rustls" = "area:network"
+"lib:softbuffer" = "area:window"
+"lib:winit" = "area:window"
+"lib:ttf-parser" = "area:graphics"
+
+# `tools issues check` requires an open issue's milestone to be a release (`vX.Y.Z`, the default
+# `milestone_format`); `v1.0.0` is the catch-all for unscheduled issues.
+[github.milestones]
+unmanaged = "error"
+items = [
+    { title = "v0.6.0", description = "Next release after v0.5", state = "open" },
+    { title = "v0.7.0", description = "Roadmap release after v0.6", state = "open" },
+    { title = "v0.8.0", description = "Roadmap release after v0.7", state = "open" },
+    { title = "v0.9.0", description = "Roadmap release after v0.8", state = "open" },
+    { title = "v1.0.0", description = "First stable release; also holds issues not yet scheduled", state = "open" },
+]
+
+# Both forms carry exactly the label tools.toml declares; `tools repo check` compares them.
+[github.issue_templates]
+items = [
+    { file = "bug_report.yml", label = "type:fix", title = "fix: " },
+    { file = "feature_request.yml", label = "type:feat", title = "feat: " },
+]
+
+[github.issues.rules]
+cycle = true
+labels = true
+membership = false
+milestone = true
+parent = true
+release = true
+
+[workflow]
+extends = "builtin:tools"

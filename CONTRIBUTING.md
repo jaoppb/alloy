@@ -84,6 +84,19 @@ Use the issue templates under **New Issue** — a [bug report](.github/ISSUE_TEM
 [feature request](.github/ISSUE_TEMPLATE/feature_request.yml). See [`SECURITY.md`](SECURITY.md) instead if you're
 reporting a security vulnerability — do not open a public issue for those.
 
+Issues carry one `type:*` label (the issue forms set it), an `area:*` label that follows the crate map, a release
+milestone (`vX.Y.Z`) and, unless they are an `epic`, an open parent issue. The maintainers assign the rest while
+triaging. Labels, milestones and merge settings are declared in [`tools.toml`](tools.toml) and checked by
+[`jaoppb/tools`](https://github.com/jaoppb/tools), which the flake shell provides:
+
+```bash
+just issues-check   # audit issues: type, area, milestone, parent, pending label migrations (needs `gh auth login`)
+just repo-check     # compare GitHub labels, milestones and merge settings with tools.toml
+just config-check   # tools.toml parses and needs no schema migration
+```
+
+To add a label or milestone, edit `tools.toml`; `just repo-sync` applies it and is run by a maintainer.
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you're expected to uphold it.

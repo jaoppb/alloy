@@ -12,10 +12,21 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Declares and checks labels, milestones and repo settings (tools.toml, issue #334). The tag
+    # is the only version written here; flake.lock pins the revision.
+    tools = {
+      url = "github:jaoppb/tools/v0.3.1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { nixpkgs, rust-overlay, ... }:
+    {
+      nixpkgs,
+      rust-overlay,
+      tools,
+      ...
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -97,6 +108,13 @@
 
           # ci/*.sh read JSON with jq; the flake supplies it instead of the host.
           scriptTools = [ pkgs.jq ];
+
+          # `tools` reads and writes GitHub through the gh CLI.
+          repoTools = [
+            tools.packages.${system}.default
+            pkgs.gh
+            pkgs.just
+          ];
         in
         {
           markdown = mkShell { name = "markdown"; packages = [ rumdl ]; };
@@ -110,20 +128,21 @@
           # arch-lint reads cargo metadata.
           arch = mkShell { name = "arch"; packages = [ rustStable arch-lint-cli ]; };
           coverage = mkShell { name = "coverage"; packages = [ rustStable pkgs.cargo-llvm-cov ]; native = true; };
+          # `just issues-check` / `repo-check` (needs a token and the network, so not in `just gate`).
+          repo = mkShell { name = "repo"; packages = repoTools; };
           fuzz = mkShell { name = "fuzz"; packages = [ rustNightly pkgs.cargo-fuzz ]; native = true; };
 
           default = mkShell {
             name = "default";
             packages = [
               rustStable
-              pkgs.just
               pkgs.lefthook
               pkgs.cargo-deny
               pkgs.cargo-llvm-cov
               pkgs.cargo-geiger
               arch-lint-cli
               rumdl
-            ] ++ scriptTools;
+            ] ++ repoTools ++ scriptTools;
             native = true;
           };
         }
