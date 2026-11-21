@@ -27,11 +27,14 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#markdown --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
+      - uses: ./.github/actions/nix-shell
         with:
-          install_args: rumdl
+          shell: markdown
       - run: rumdl check .
 
   rust-quality:
@@ -40,11 +43,14 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
-      # rustup on the runner honours rust-toolchain.toml (channel + components).
-      - name: Show toolchain
-        run: rustup show active-toolchain
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: rust
       - uses: actions/cache@v6
         with:
           path: |
@@ -68,10 +74,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        # Linux and macOS run inside the flake (ADR-0029); windows-2022 is the one
+        # Nix-free job: rustup reads rust-toolchain.toml.
+        include:
+          - os: ubuntu-24.04
+            shell: nix develop .#rust --command bash -eo pipefail {0}
+          - os: macos-15
+            shell: nix develop .#rust --command bash -eo pipefail {0}
+          - os: windows-2022
+            shell: bash -eo pipefail {0}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        if: runner.os != 'Windows'
+        with:
+          shell: rust
       - name: Show toolchain
+        if: runner.os == 'Windows'
         run: rustup show active-toolchain
       - uses: actions/cache@v6
         with:
@@ -95,8 +117,14 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: rust
       - uses: actions/cache@v6
         with:
           path: |
@@ -131,8 +159,14 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: rust
       - uses: actions/cache@v6
         with:
           path: |
@@ -158,8 +192,14 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: rust
       - uses: actions/cache@v6
         with:
           path: |
@@ -184,8 +224,14 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: rust
       - uses: actions/cache@v6
         with:
           path: |
@@ -212,8 +258,14 @@ jobs:
       fail-fast: false
       matrix:
         target: [inflate, png_decode, css_parse, html_parse]
+    defaults:
+      run:
+        shell: nix develop .#fuzz --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: fuzz
       - uses: actions/cache@v6
         with:
           path: |
@@ -222,17 +274,12 @@ jobs:
             fuzz/target/
           key: ${{ runner.os }}-cargo-fuzz-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-fuzz-
-      - name: Install nightly (cargo-fuzz requires it)
-        run: rustup toolchain install nightly --profile minimal
-      - uses: jdx/mise-action@v5
-        with:
-          install_args: cargo:cargo-fuzz
       # 10 minutes per target (ADR-0018 row 1: TLS/HTTP/HTML/CSS/image/font
       # decoders must never panic on hostile bytes) — zero crashes expected.
       # Run from the repo root: cargo-fuzz auto-discovers ./fuzz/Cargo.toml,
       # the same convention `fuzz/` already documents (kept outside the main
       # workspace on purpose).
-      - run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=600
+      - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600
 
   supply-chain:
     name: cargo-deny
@@ -240,11 +287,14 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#supply-chain --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
+      - uses: ./.github/actions/nix-shell
         with:
-          install_args: cargo-deny
+          shell: supply-chain
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
@@ -260,8 +310,14 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#unsafe-audit --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: unsafe-audit
       - uses: actions/cache@v6
         with:
           path: |
@@ -270,9 +326,6 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-geiger-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-geiger-
-      - uses: jdx/mise-action@v5
-        with:
-          install_args: cargo:cargo-geiger
       - run: ci/unsafe_audit.sh
 
   # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
@@ -283,11 +336,14 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#arch --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
+      - uses: ./.github/actions/nix-shell
         with:
-          install_args: cargo:arch-lint-cli
+          shell: arch
       - run: arch-lint check
 
   coverage:
@@ -297,10 +353,14 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: nix develop .#coverage --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
-      - name: Add llvm-tools
-        run: rustup component add llvm-tools-preview
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: coverage
       - uses: actions/cache@v6
         with:
           path: |
@@ -309,9 +369,6 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-cov-
-      - uses: jdx/mise-action@v5
-        with:
-          install_args: cargo:cargo-llvm-cov
       # domain/ has no I/O and no excuse — roadmap §5 sets the v0.1 gate at 85%.
       - name: Coverage for engine domain/
         run: >
