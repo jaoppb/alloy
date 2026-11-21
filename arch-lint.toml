@@ -372,7 +372,7 @@ message = "core/platform is a leaf: it must not depend on any other workspace cr
 #
 # A deny pattern is matched against every path as written — a `use` path or a qualified path in
 # code (`window::domain::key::KeyCode` in a signature) — segment by segment, anchored at both ends:
-# `*` is exactly one segment, `**` any number including zero (arch-lint 0.6 `path_matches`, #128).
+# `*` is exactly one segment, `**` any number including zero (`path_matches`, #128; behaviour re-checked on arch-lint 0.11, #155).
 # So "anything under a crate or module" is `<path>::**` (it also matches the bare `<path>`), never
 # `<path>::*`, which misses `winit::window::Window`; and a fenced item is `<crate>::**::<Item>`, so
 # a re-export and its defining module (`network::HttpTransport`,
@@ -380,7 +380,9 @@ message = "core/platform is a leaf: it must not depend on any other workspace cr
 # written: a relative path (`super::…`) escapes every rule, and a glob import (`ports::*`) or an
 # alias of a parent path (`use network as net;`, `use std::sync as s;`) escapes every fence
 # narrower than the crate — an item fence or a module fence such as `std::sync::mpsc::**` — while
-# a crate-wide `<crate>::**` fence still catches it. Those cases are left to review.
+# a crate-wide `<crate>::**` fence still catches it. Those cases are left to review (all four
+# still pass on arch-lint 0.11, re-probed in #155; #139). The same goes for a fully qualified call
+# on a fenced item (`network::HttpTransport::execute(..)`, #148).
 
 # Engine must not import any concrete script runtime crate (ADR-0002:49 / ADR-0011 item 2)
 [[restrict-use]]
@@ -438,8 +440,9 @@ scope = "window-winit-free"
 deny = ["winit::**", "softbuffer::**"]
 message = "winit/softbuffer must stay confined to infrastructure/{winit_system,softbuffer_presenter,event_map} (ADR-0011 item 6)"
 # --- cross-crate isolation (one rule per crate, replaces the `layering` CI job's cargo-tree greps) ---
-# `deny-scope-dep` only resolves `crate::` paths inside one crate, so it cannot see
-# `use engine::X` in another crate; `restrict-use` matches any import path. The
+# `deny-scope-dep` resolves only `crate::` / `self::` / `super::` paths, against the package the
+# file belongs to (arch-lint 0.10+; before that, nothing in a member crate), so it still cannot
+# see `use engine::X` in another crate (re-checked on 0.11, #139, #155); `restrict-use` matches any import path. The
 # interpreter crates themselves are denied by the `*-interpreter-free` rules above.
 
 [[restrict-use]]
