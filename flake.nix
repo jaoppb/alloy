@@ -49,9 +49,9 @@
           # Not packaged in nixpkgs, or older there than CI tracks: built from crates.io, pinned.
           arch-lint-cli = pkgs.rustPlatform.buildRustPackage rec {
             pname = "arch-lint-cli";
-            version = "0.6.0";
-            src = pkgs.fetchCrate { inherit pname version; hash = "sha256-Ws+QV5nKM8fOV9zW5GvgePy93NQaOrcbtF2EETfK9Cc="; };
-            cargoHash = "sha256-CfrH3ljolTef/BP4kOanlz1qSWRUtbeEbA+TUfTWSnU=";
+            version = "0.11.0";
+            src = pkgs.fetchCrate { inherit pname version; hash = "sha256-AiIaDp+3wVcG3HHTrpJg0sV3HDqGky1wiocPMPLyCyE="; };
+            cargoHash = "sha256-FHZHU1/Gocvm00/F1Nz/4muMGb2c1WaEB9zwshWNFQg=";
             doCheck = false;
           };
           rumdl = pkgs.rustPlatform.buildRustPackage rec {
