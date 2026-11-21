@@ -190,8 +190,7 @@ update:
 
 # Check the flake shell (Linux/macOS, ADR-0029) and install the git hooks
 setup:
-    @if [ "$(uname -s)" != "Linux" ] && [ "$(uname -s)" != "Darwin" ]; then :; \
-     elif [ -z "${ALLOY_DEV_SHELL:-}" ]; then echo "not in the flake shell — run: nix develop (or direnv allow)"; exit 1; fi
+    @case "$(uname -s)" in Linux|Darwin) [ -n "${ALLOY_DEV_SHELL:-}" ] || { echo "not in the flake shell — run: nix develop (or direnv allow)"; exit 1; };; esac
     lefthook install
 
 # (Re)install the lefthook git hooks

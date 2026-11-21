@@ -1,4 +1,4 @@
-# Required development environment (ADR-0029, issue #152). Supersedes mise (ADR-0025).
+# Required development environment (ADR-0029, issue #152): supersedes ADR-0025 decisions 1 and 4.
 #
 # `nix develop` (or direnv's `use flake`) is how Alloy is built, tested and run on
 # Linux and macOS. The Rust channel is NOT declared here: it is read from
@@ -23,7 +23,7 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
+      forAllSystems = nixpkgs.lib.genAttrs systems;
 
       pkgsFor =
         system:
@@ -80,23 +80,37 @@
 
           # One shell per CI job family, so a job pays only for the tools it uses.
           mkShell =
-            { name, packages }:
+            {
+              name,
+              packages,
+              withNativeLibs ? false,
+            }:
             pkgs.mkShell {
               inherit name packages;
               ALLOY_DEV_SHELL = name;
-              LD_LIBRARY_PATH = lib.optionalString stdenv.hostPlatform.isLinux (lib.makeLibraryPath nativeLibs);
+              # Only shells that build or run the workspace pull the wayland/X11 closure.
+              LD_LIBRARY_PATH = lib.optionalString (withNativeLibs && stdenv.hostPlatform.isLinux) (
+                lib.makeLibraryPath nativeLibs
+              );
             };
 
           build = [ pkgs.pkg-config ] ++ nativeLibs;
+          # ci/*.sh read JSON with jq; the flake supplies it instead of the host.
+          scriptTools = [ pkgs.jq ];
         in
-        rec {
+        {
           markdown = mkShell { name = "markdown"; packages = [ rumdl ]; };
-          rust = mkShell { name = "rust"; packages = [ rustStable ] ++ build; };
+          rust = mkShell { name = "rust"; packages = [ rustStable ] ++ scriptTools ++ build; withNativeLibs = true; };
           supply-chain = mkShell { name = "supply-chain"; packages = [ rustStable pkgs.cargo-deny ]; };
-          unsafe-audit = mkShell { name = "unsafe-audit"; packages = [ rustStable pkgs.cargo-geiger ] ++ build; };
-          arch = mkShell { name = "arch"; packages = [ arch-lint-cli ]; };
-          coverage = mkShell { name = "coverage"; packages = [ rustStable pkgs.cargo-llvm-cov ] ++ build; };
-          fuzz = mkShell { name = "fuzz"; packages = [ rustNightly pkgs.cargo-fuzz ] ++ build; };
+          unsafe-audit = mkShell {
+            name = "unsafe-audit";
+            packages = [ rustStable pkgs.cargo-geiger ] ++ scriptTools ++ build;
+            withNativeLibs = true;
+          };
+          # arch-lint reads cargo metadata.
+          arch = mkShell { name = "arch"; packages = [ rustStable arch-lint-cli ]; };
+          coverage = mkShell { name = "coverage"; packages = [ rustStable pkgs.cargo-llvm-cov ] ++ build; withNativeLibs = true; };
+          fuzz = mkShell { name = "fuzz"; packages = [ rustNightly pkgs.cargo-fuzz ] ++ build; withNativeLibs = true; };
 
           default = mkShell {
             name = "default";
@@ -109,7 +123,8 @@
               pkgs.cargo-geiger
               arch-lint-cli
               rumdl
-            ] ++ build;
+            ] ++ scriptTools ++ build;
+            withNativeLibs = true;
           };
         }
       );

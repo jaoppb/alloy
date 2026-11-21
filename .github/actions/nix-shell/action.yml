@@ -1,0 +1,15 @@
+name: Nix shell
+description: Install Nix and restore/save the Nix store cache for one flake devShell (ADR-0029).
+inputs:
+  shell:
+    description: Name of the flake devShell the job runs in (flake.nix `devShells`).
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: cachix/install-nix-action@v32
+    # actions/cache cannot restore /nix/store (root-owned), hence this dedicated store cache.
+    - uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: nix-${{ runner.os }}-${{ inputs.shell }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-${{ inputs.shell }}-

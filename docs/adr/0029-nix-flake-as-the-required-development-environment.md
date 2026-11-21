@@ -1,6 +1,6 @@
 # ADR-0029: A Nix Flake Is the Required Development Environment
 
-- **Status**: Accepted (supersedes decisions 1, 2 and 4 of
+- **Status**: Accepted (supersedes decisions 1 and 4 of
   [ADR-0025](0025-mise-as-the-source-of-truth-for-tool-versions.md))
 - **Deciders**: Architecture Team
 - **Date**: 2026-11-21
@@ -18,9 +18,9 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 
 1. **A Nix flake (`flake.nix` + `flake.lock`) is the required environment** for building, testing and running Alloy on
    Linux and macOS. `nix develop`, or direnv's `use flake` (`.envrc`), is the only setup path. mise is removed.
-2. **`rust-toolchain.toml` stays the one place the Rust channel is declared.** The flake reads it through
-   `oxalica/rust-overlay` (`fromRustupToolchainFile`) and adds `llvm-tools-preview`, so rustup users, IDEs and the
-   Windows CI job agree with the flake.
+2. **Re-affirming ADR-0025 decision 2:** `rust-toolchain.toml` stays the one place the Rust channel is declared.** The
+   flake reads it through `oxalica/rust-overlay` (`fromRustupToolchainFile`) and adds `llvm-tools-preview`, so rustup
+   users, IDEs and the Windows CI job agree with the flake.
 3. **Tools** come from nixpkgs (`just`, `lefthook`, `cargo-deny`, `cargo-llvm-cov`, `cargo-geiger`, `cargo-fuzz`) except
    `arch-lint-cli` and `rumdl`, which the flake builds from crates.io at a pinned version (`arch-lint-cli` is not
    packaged; nixpkgs' `rumdl` is older than the version whose formatting CI enforces).
