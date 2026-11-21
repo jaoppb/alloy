@@ -29,7 +29,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#markdown --command bash -e {0}
+        shell: nix develop .#markdown --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -45,7 +45,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#rust --command bash -e {0}
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -78,11 +78,11 @@ jobs:
         # Nix-free job: rustup reads rust-toolchain.toml.
         include:
           - os: ubuntu-24.04
-            shell: nix develop .#rust --command bash -e {0}
+            shell: nix develop .#rust --command bash -eo pipefail {0}
           - os: macos-15
-            shell: nix develop .#rust --command bash -e {0}
+            shell: nix develop .#rust --command bash -eo pipefail {0}
           - os: windows-2022
-            shell: bash -e {0}
+            shell: bash -eo pipefail {0}
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -119,7 +119,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#rust --command bash -e {0}
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -161,7 +161,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#rust --command bash -e {0}
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -194,7 +194,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#rust --command bash -e {0}
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -226,7 +226,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#rust --command bash -e {0}
+        shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -260,7 +260,7 @@ jobs:
         target: [inflate, png_decode, css_parse, html_parse]
     defaults:
       run:
-        shell: nix develop .#fuzz --command bash -e {0}
+        shell: nix develop .#fuzz --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -289,7 +289,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#supply-chain --command bash -e {0}
+        shell: nix develop .#supply-chain --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -312,7 +312,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#unsafe-audit --command bash -e {0}
+        shell: nix develop .#unsafe-audit --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -338,7 +338,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#arch --command bash -e {0}
+        shell: nix develop .#arch --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell
@@ -355,7 +355,7 @@ jobs:
       contents: read
     defaults:
       run:
-        shell: nix develop .#coverage --command bash -e {0}
+        shell: nix develop .#coverage --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-shell

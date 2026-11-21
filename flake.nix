@@ -83,34 +83,34 @@
             {
               name,
               packages,
-              withNativeLibs ? false,
+              native ? false,
             }:
             pkgs.mkShell {
-              inherit name packages;
+              inherit name;
+              packages = packages ++ lib.optionals native ([ pkgs.pkg-config ] ++ nativeLibs);
               ALLOY_DEV_SHELL = name;
               # Only shells that build or run the workspace pull the wayland/X11 closure.
-              LD_LIBRARY_PATH = lib.optionalString (withNativeLibs && stdenv.hostPlatform.isLinux) (
+              LD_LIBRARY_PATH = lib.optionalString (native && stdenv.hostPlatform.isLinux) (
                 lib.makeLibraryPath nativeLibs
               );
             };
 
-          build = [ pkgs.pkg-config ] ++ nativeLibs;
           # ci/*.sh read JSON with jq; the flake supplies it instead of the host.
           scriptTools = [ pkgs.jq ];
         in
         {
           markdown = mkShell { name = "markdown"; packages = [ rumdl ]; };
-          rust = mkShell { name = "rust"; packages = [ rustStable ] ++ scriptTools ++ build; withNativeLibs = true; };
+          rust = mkShell { name = "rust"; packages = [ rustStable ] ++ scriptTools; native = true; };
           supply-chain = mkShell { name = "supply-chain"; packages = [ rustStable pkgs.cargo-deny ]; };
           unsafe-audit = mkShell {
             name = "unsafe-audit";
-            packages = [ rustStable pkgs.cargo-geiger ] ++ scriptTools ++ build;
-            withNativeLibs = true;
+            packages = [ rustStable pkgs.cargo-geiger ] ++ scriptTools;
+            native = true;
           };
           # arch-lint reads cargo metadata.
           arch = mkShell { name = "arch"; packages = [ rustStable arch-lint-cli ]; };
-          coverage = mkShell { name = "coverage"; packages = [ rustStable pkgs.cargo-llvm-cov ] ++ build; withNativeLibs = true; };
-          fuzz = mkShell { name = "fuzz"; packages = [ rustNightly pkgs.cargo-fuzz ] ++ build; withNativeLibs = true; };
+          coverage = mkShell { name = "coverage"; packages = [ rustStable pkgs.cargo-llvm-cov ]; native = true; };
+          fuzz = mkShell { name = "fuzz"; packages = [ rustNightly pkgs.cargo-fuzz ]; native = true; };
 
           default = mkShell {
             name = "default";
@@ -123,8 +123,8 @@
               pkgs.cargo-geiger
               arch-lint-cli
               rumdl
-            ] ++ scriptTools ++ build;
-            withNativeLibs = true;
+            ] ++ scriptTools;
+            native = true;
           };
         }
       );
