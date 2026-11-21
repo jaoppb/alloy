@@ -1,0 +1,20 @@
+# Issue #153, epic #154: mold is the mandatory Linux linker, and rustc warnings fail every build.
+#
+# mold does not exist on macOS/Windows, so the linker is set per Linux target only. The flake
+# devShell (flake.nix, ADR-0029) provides `clang` + `mold`; outside it a Linux build fails with a
+# clear "linker `clang` not found" error rather than silently falling back to GNU ld.
+#
+# Do NOT set the `RUSTFLAGS` env var in CI or scripts: it overrides `target.*.rustflags` instead of
+# merging with it and would silently drop mold. `build.warnings` replaces the old
+# `RUSTFLAGS=-D warnings` for that reason.
+
+[build]
+warnings = "deny"
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]

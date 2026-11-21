@@ -14,9 +14,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Rustc warnings are denied through `build.warnings` in .cargo/config.toml, not a `RUSTFLAGS` env
+# var: that would override `target.*.rustflags` and silently drop the mold linker (#153).
+# `ci/verify_mold.sh` runs in every Linux job that compiles; markdown, arch-lint and cargo-deny
+# compile nothing, so they have no artifact to check.
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
   RUST_BACKTRACE: 1
 
 jobs:
@@ -62,6 +65,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-quality-
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: ci/verify_mold.sh
 
   # ---- expensive gate: full test matrix on the 3 target OSes --------------
   test:
@@ -106,6 +110,8 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-test-
       - run: cargo check --workspace --all-targets
       - run: cargo test --workspace --all-features
+      - if: runner.os == 'Linux'
+        run: ci/verify_mold.sh
 
   # ---- ADR-0002 / ADR-0011 N-04: layering — no crate links a subsystem it
   # must not (renamed from `no-engine` in v0.5 Phase P: the checks below cover
@@ -140,6 +146,7 @@ jobs:
       - run: cargo test -p html --no-default-features
       - run: cargo test -p network --no-default-features
       - run: cargo test -p window --no-default-features
+      - run: ci/verify_mold.sh
       # PRD-007 / PRD-008 / PRD-009 / PRD-010 / v0.5 report §2.12 (R): the
       # engine/script-runtime/subsystem import boundaries of core/css, core/network,
       # core/window and core/runtime/rhai are `restrict-use` rules in arch-lint.toml,
@@ -183,6 +190,7 @@ jobs:
       # `-p html --test manifest_runner` here for the html5lib-class cut.
       - run: cargo test -p css --test manifest_runner
       - run: cargo test -p html --test manifest_runner
+      - run: ci/verify_mold.sh
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
   fault-injection:
@@ -215,6 +223,7 @@ jobs:
       # deterministic. Fails immediately if any profile sets `panic = "abort"`.
       # The suite moved to `rhai-bindings` with the DOM bridge (v0.5 report §2.12).
       - run: cargo test -p rhai-bindings --test fault_injection -- --test-threads=1
+      - run: ci/verify_mold.sh
 
   # ---- PRD-001 N-01 / v0.5 Phase M: the <10us per-hook budget must not regress -
   hook-benchmark:
@@ -245,6 +254,7 @@ jobs:
       # absolute PRD-001 N-01 ceiling (<10us) and a generous multiple of the
       # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
       - run: ci/hook_benchmark.sh
+      - run: ci/verify_mold.sh target/release/deps
 
   # ---- ADR-0018 row 1 surfaces: fuzz the hostile-byte decoders ---------------
   fuzz:
@@ -258,6 +268,11 @@ jobs:
       fail-fast: false
       matrix:
         target: [inflate, png_decode, css_parse, html_parse]
+    # The one RUSTFLAGS exception (#153): cargo-fuzz exports its sanitizer flags as `RUSTFLAGS`, which
+    # replaces `target.*.rustflags` in .cargo/config.toml and would drop mold. Repeat the flag here;
+    # cargo-fuzz appends its own to it. `ci/verify_mold.sh` below fails if it ever stops applying.
+    env:
+      RUSTFLAGS: -C link-arg=-fuse-ld=mold
     defaults:
       run:
         shell: nix develop .#fuzz --command bash -eo pipefail {0}
@@ -280,6 +295,7 @@ jobs:
       # the same convention `fuzz/` already documents (kept outside the main
       # workspace on purpose).
       - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600
+      - run: ci/verify_mold.sh fuzz/target/x86_64-unknown-linux-gnu/release
 
   supply-chain:
     name: cargo-deny
@@ -327,6 +343,7 @@ jobs:
           key: ${{ runner.os }}-cargo-geiger-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-geiger-
       - run: ci/unsafe_audit.sh
+      - run: ci/verify_mold.sh
 
   # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
   arch-lint:
@@ -397,3 +414,4 @@ jobs:
         with:
           name: coverage-lcov-v0-5
           path: lcov-v0-5.info
+      - run: ci/verify_mold.sh target/llvm-cov-target/debug/deps

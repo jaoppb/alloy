@@ -13,6 +13,9 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 cargo := env_var_or_default("CARGO", "cargo")
+# cargo-fuzz exports its own RUSTFLAGS, which replaces `target.*.rustflags` in .cargo/config.toml
+# and would drop mold on Linux (#153); repeat the flag for it. Empty elsewhere (mold is Linux-only).
+fuzz_env := if os() == "linux" { "RUSTFLAGS='-C link-arg=-fuse-ld=mold'" } else { "" }
 
 # Clippy invocation used everywhere (matches lefthook.yml / CI / package.json).
 clippy_flags := "--workspace --all-targets --all-features -- -D warnings"
@@ -100,7 +103,11 @@ hook-benchmark:
 # and cargo-fuzz — not part of `just gate`, CI-only otherwise).
 fuzz target="":
     @command -v cargo-fuzz >/dev/null || { echo "cargo-fuzz not found — run: nix develop .#fuzz"; exit 1; }
-    {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do cargo fuzz run $t -- -max_total_time=600; done" } else { "cargo fuzz run " + target + " -- -max_total_time=600" } }}
+    {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do " + fuzz_env + " cargo fuzz run $t -- -max_total_time=600; done" } else { fuzz_env + " cargo fuzz run " + target + " -- -max_total_time=600" } }}
+
+# Prove the artifacts under a directory (default target/debug/deps) were linked by mold (#153).
+verify-mold *dirs:
+    ./ci/verify_mold.sh {{dirs}}
 
 # Supply-chain audit: licenses, advisories, bans, sources
 deny:

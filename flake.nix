@@ -105,6 +105,14 @@
             ]
           );
 
+          # mold is the mandatory Linux linker (issue #153): `.cargo/config.toml` links through
+          # `clang -fuse-ld=mold`, so a Linux build outside the flake fails with a clear linker
+          # error. Same shells as `nativeLibs`: exactly the ones that link a binary.
+          linuxLinker = lib.optionals stdenv.hostPlatform.isLinux [
+            pkgs.clang
+            pkgs.mold
+          ];
+
           # One shell per CI job family, so a job pays only for the tools it uses.
           mkShell =
             {
@@ -114,7 +122,7 @@
             }:
             pkgs.mkShell {
               inherit name;
-              packages = packages ++ lib.optionals native ([ pkgs.pkg-config ] ++ nativeLibs);
+              packages = packages ++ lib.optionals native ([ pkgs.pkg-config ] ++ nativeLibs ++ linuxLinker);
               ALLOY_DEV_SHELL = name;
               # Only shells that build or run the workspace pull the wayland/X11 closure.
               LD_LIBRARY_PATH = lib.optionalString (native && stdenv.hostPlatform.isLinux) (

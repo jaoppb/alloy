@@ -137,6 +137,14 @@ tool and native library, with the Rust channel read from `rust-toolchain.toml`. 
 `nix develop` (or direnv's `use flake`); only the `windows-2022` CI job is Nix-free. A root `justfile` wraps them —
 `just` lists every recipe.
 
+**Linker (#153):** on Linux, `.cargo/config.toml` links every build through `clang -fuse-ld=mold` (x86_64 and aarch64);
+the flake devShell provides both, so a Linux build outside it fails with a linker error instead of falling back to GNU
+ld. macOS and Windows are untouched. Rustc warnings are denied through `[build] warnings = "deny"` in the same file —
+never set the `RUSTFLAGS` env var (in CI, scripts or your shell): it replaces `target.*.rustflags` and silently drops
+mold. `cargo-fuzz` sets its own, so the fuzz job and `just fuzz` repeat the mold flag. `just verify-mold [dir]` /
+`ci/verify_mold.sh` reads the ELF `.comment` section of the artifacts and fails if any isn't mold-linked; every Linux CI
+job that compiles runs it.
+
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection
 just setup                                   # one-time: checks the flake shell (`nix develop`), installs git hooks
