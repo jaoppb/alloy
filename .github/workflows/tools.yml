@@ -1,0 +1,69 @@
+name: Tools
+
+# Audits GitHub itself (issues, labels, milestones) against tools.toml (issue #334). The drift it
+# finds comes from GitHub state, not from commits, so it runs when an issue changes and when the
+# declaration does, and it is deliberately not part of ci.yml: an ordinary pull request must not go
+# red because of an issue someone else filed. `check` exits 1 on drift and 2 when the run cannot
+# complete; both fail the job.
+on:
+  issues:
+    # Closing or deleting an issue can clear a finding: most rules look at open issues.
+    types: [opened, edited, reopened, closed, deleted, transferred, labeled, unlabeled, milestoned, demilestoned]
+  pull_request:
+    paths: &declaration
+      - tools.toml
+      - .github/workflows/tools.yml
+      - .github/ISSUE_TEMPLATE/**
+      # flake.nix and flake.lock pin the `tools` binary the recipes run.
+      - flake.nix
+      - flake.lock
+  push:
+    branches: [main]
+    paths: *declaration
+  workflow_dispatch:
+
+# Least privilege: no token scopes by default; the job re-grants only what it reads.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'issues' && 'issues' || github.ref }}
+  # A burst of issue events (one per label) keeps only its last run: each run audits the whole
+  # repository, so the last one covers the others.
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: ${{ matrix.recipe }}
+    # tools.toml names this repository: a fork would audit it, not itself.
+    if: github.repository == 'jaoppb/alloy'
+    runs-on: ubuntu-24.04
+    # A pull request that moves the flake misses the Nix cache and builds `tools`.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      # The issue audit also reads the open pull requests.
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - recipe: config-check
+          - recipe: issues-check
+          # GitHub hides the merge settings from a read-only token, so `tools` assumes its defaults,
+          # which are the values tools.toml declares: that part passes without checking anything.
+          # A bare `just repo-check` run locally by someone who may push audits the settings too.
+          - recipe: repo-check
+            args: --labels --milestones
+    defaults:
+      run:
+        shell: nix develop .#repo --command bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix-shell
+        with:
+          shell: repo
+      - name: Run just ${{ matrix.recipe }} ${{ matrix.args }}
+        run: just ${{ matrix.recipe }} ${{ matrix.args }}
+        env:
+          GH_TOKEN: ${{ github.token }}
