@@ -5,7 +5,8 @@
 # (set by a tool such as cargo-fuzz or cargo-llvm-cov, or by a CI step) silently replaces. mold stamps
 # its name in the ELF `.comment` section, so this script reads it back from every executable and
 # shared object directly under each given directory (default: target/debug/deps) and fails on any
-# that is not mold-linked, or when a directory holds no such file at all.
+# that is not mold-linked, or when a directory holds no such file at all. A stale `target/` from
+# before mold (a local checkout, a restored CI cache) trips it: `cargo clean` or bump the cache key.
 #
 # Usage: ci/verify_mold.sh [artifact-dir ...]
 set -euo pipefail
@@ -28,7 +29,9 @@ for artifact_dir in "$@"; do
 	while IFS= read -r artifact; do
 		readelf -h "$artifact" >/dev/null 2>&1 || continue
 		checked=$((checked + 1))
-		if ! readelf -p .comment "$artifact" 2>/dev/null | grep -q 'mold'; then
+		# Capture first: `grep -q` exiting early would SIGPIPE readelf under `pipefail`.
+		comment="$(readelf -p .comment "$artifact" 2>/dev/null || true)"
+		if [[ "$comment" != *mold* ]]; then
 			echo "NOT linked with mold: $artifact" >&2
 			failed=$((failed + 1))
 		fi
