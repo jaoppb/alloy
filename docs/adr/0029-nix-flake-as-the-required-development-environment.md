@@ -22,8 +22,10 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
    flake reads it through `oxalica/rust-overlay` (`fromRustupToolchainFile`) and adds `llvm-tools-preview`, so rustup
    users, IDEs and the Windows CI job agree with the flake.
 3. **Tools** come from nixpkgs (`just`, `lefthook`, `cargo-deny`, `cargo-llvm-cov`, `cargo-geiger`, `cargo-fuzz`, `jq`)
-   except `arch-lint-cli` and `rumdl`, which the flake builds from crates.io at a pinned version (`arch-lint-cli` is not
-   packaged; nixpkgs' `rumdl` is older than the version whose formatting CI enforces).
+   except `arch-lint-cli`, which the flake builds from crates.io at a pinned version (it is not packaged), and `rumdl`,
+   which the flake fetches as the pinned upstream release binary (static musl on Linux): nixpkgs' `rumdl` is older than
+   the version whose formatting CI enforces, and compiling it from source took about 10 minutes and 18 GB of RAM, which
+   timed out the cold Markdown CI job.
 4. **Shells.** `default` carries every tool; `fuzz` carries a nightly toolchain and `cargo-fuzz`; slim shells
    (`markdown`, `rust`, `supply-chain`, `unsafe-audit`, `arch`, `coverage`) let each CI job pay only for its own tools.
    Every shell exports `ALLOY_DEV_SHELL`, which `just setup` checks.
@@ -36,6 +38,7 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 
 - Positive: one lockfile for the compiler, tools and native libraries; each worktree gets an identical shell; CI jobs
   and local runs use the same environment.
-- Negative: contributors on Linux and macOS must install Nix; the first entry builds `arch-lint-cli` and `rumdl` from
-  source unless cached; the Windows job is a second, rustup-based path that can drift from the flake.
+- Negative: contributors on Linux and macOS must install Nix; the first entry builds `arch-lint-cli` from source unless
+  cached; `rumdl` is a downloaded binary, so its hash must be updated with each version bump; the Windows job is a
+  second, rustup-based path that can drift from the flake.
 - Follow-ups: mold (#153) and sccache (#151) add their packages to this flake; `arch-lint-cli` moves to 0.11 with #155.

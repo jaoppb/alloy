@@ -54,15 +54,42 @@
             cargoHash = "sha256-CfrH3ljolTef/BP4kOanlz1qSWRUtbeEbA+TUfTWSnU=";
             doCheck = false;
           };
-          rumdl = pkgs.rustPlatform.buildRustPackage rec {
-            pname = "rumdl";
-            version = "0.3.5";
-            src = pkgs.fetchCrate { inherit pname version; hash = "sha256-MO3zK3rhydjLGLCkD/1XZcmqxsvScgrQ214Qh3FMPyw="; };
-            cargoHash = "sha256-PFNjs6jAnVjbJo97CA42OKBVxVAL/r1tK+jF+pcOtcw=";
-            # nixpkgs exports JEMALLOC_OVERRIDE to a path that does not exist; build the vendored jemalloc.
-            preBuild = "unset JEMALLOC_OVERRIDE";
-            doCheck = false;
-          };
+          # Prebuilt upstream release (static musl on Linux): compiling rumdl from source takes ~10 minutes
+          # and ~18 GB of RAM, which timed out the cold Markdown CI job. Hashes are the release's digests.
+          rumdl =
+            let
+              version = "0.3.5";
+              target =
+                {
+                  x86_64-linux = {
+                    triple = "x86_64-unknown-linux-musl";
+                    hash = "sha256-R6y6dwb/eleqOOys3llT2s1BH+yk024tbJlLGjMlPsQ=";
+                  };
+                  aarch64-linux = {
+                    triple = "aarch64-unknown-linux-musl";
+                    hash = "sha256-H2uBmM5oj299uMm64uoK4TuTr0RUc+FsYORXmAkSGTE=";
+                  };
+                  x86_64-darwin = {
+                    triple = "x86_64-apple-darwin";
+                    hash = "sha256-p/Sv6/gHmzh+/HquWu3eL50idOl2LU96CZ1wG1AFwII=";
+                  };
+                  aarch64-darwin = {
+                    triple = "aarch64-apple-darwin";
+                    hash = "sha256-fK62wCZJcEecDAGFyTZGMlW3tgSOZ1pkffvrqzN/kf4=";
+                  };
+                }
+                .${system};
+            in
+            pkgs.stdenvNoCC.mkDerivation {
+              pname = "rumdl";
+              inherit version;
+              src = pkgs.fetchurl {
+                url = "https://github.com/rvben/rumdl/releases/download/v${version}/rumdl-v${version}-${target.triple}.tar.gz";
+                inherit (target) hash;
+              };
+              sourceRoot = ".";
+              installPhase = "install -Dm755 rumdl $out/bin/rumdl";
+            };
 
           # winit + softbuffer link or dlopen these at run time on Linux.
           nativeLibs = lib.optionals stdenv.hostPlatform.isLinux (
