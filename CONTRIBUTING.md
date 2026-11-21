@@ -20,13 +20,14 @@ cycles. This document covers the human-facing workflow around it.
 ```bash
 git clone https://github.com/jaoppb/alloy.git
 cd alloy
-just setup   # needs mise: installs every tool in mise.toml, rust components, git hooks
+nix develop  # required on Linux/macOS (or `direnv allow`): every tool, the Rust toolchain, native libraries
+just setup   # checks you are in the flake shell, installs the git hooks
 ```
 
 `just` (no arguments) lists every available recipe. The two you'll use constantly:
 
 ```bash
-just gate                       # full local quality gate — mirrors CI exactly
+just gate                       # (inside the flake shell) full local quality gate — mirrors CI exactly
 just run --script <path>        # run the alloy binary against a .rhai script
 ```
 

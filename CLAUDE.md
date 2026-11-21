@@ -132,16 +132,18 @@ delivered crate now demonstrates; `docs/adr/` + `docs/requirements/` remain the 
 
 ## Commands
 
-Tooling is split: Cargo for Rust, `rumdl` for Markdown quality gates, `mise` (`mise.toml`) pinning every tool version
-except Rust (`rust-toolchain.toml`, ADR-0025). A root `justfile` wraps them — `just` lists every recipe.
+Tooling is split: Cargo for Rust, `rumdl` for Markdown quality gates, a Nix flake (`flake.nix`, ADR-0029) pinning every
+tool and native library, with the Rust channel read from `rust-toolchain.toml`. On Linux/macOS, run everything inside
+`nix develop` (or direnv's `use flake`); only the `windows-2022` CI job is Nix-free. A root `justfile` wraps them —
+`just` lists every recipe.
 
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection
-just setup                                   # one-time: `mise install` (all tools in mise.toml), rust components, git hooks
+just setup                                   # one-time: checks the flake shell (`nix develop`), installs git hooks
 just test engine "-- name"                   # scoped test run
 just run --script scripts/hello.rhai         # run the alloy binary
 just deny | just coverage | just layering    # individual CI gates (`no-engine` still works as an alias for `layering`)
-just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy) — CI-only otherwise, `fuzz` needs nightly + cargo-fuzz
+just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy); `fuzz` needs the `nix develop .#fuzz` shell
 
 # equivalent raw commands:
 rumdl check . && rumdl fmt --check .        # Markdown lint + format check (also in `just lint` / `just fmt-check`)
@@ -160,8 +162,8 @@ warnings are errors — never leave one behind. The strict lint set lives in `[w
 new architectural or dependency-direction check, extend `arch-lint.toml` with a rule — a bespoke ad hoc script (a
 `cargo tree | grep`, a manual dependency scan) duplicates a mechanism that almost certainly already exists there.
 
-Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `jdx/mise-action`, `cache`, …) on their current
-stable major/LTS — check before pinning a version, not after review flags a stale one.
+Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `cachix/install-nix-action`, `cache`, …) on their
+current stable major/LTS — check before pinning a version, not after review flags a stale one.
 
 Markdown formatting is enforced by **rumdl** (`.rumdl.toml`: print width 120, reflow). Run `rumdl fmt` after editing any
 `.md` file or the commit hook will rewrite it.
