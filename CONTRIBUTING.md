@@ -100,10 +100,10 @@ just config-check   # tools.toml parses and needs no schema migration
 
 To add a label or milestone, edit `tools.toml`; `just repo-sync` applies it and is run by a maintainer.
 
-Issue state is also shown on the [Alloy GitHub Project](https://github.com/users/jaoppb/projects/8). Its Status column
-is derived from the issue's labels, milestone, blocked-by links, parent and linked pull requests by the `[workflow]`
-rules in `tools.toml`, so you never move a card by hand. A maintainer runs `just project-check` (writes nothing) and
-`just project-sync` locally.
+Issue state is also shown on the [Alloy GitHub Project](https://github.com/users/jaoppb/projects/8). Move your card to
+In progress when you start; the `[workflow]` rules in `tools.toml` derive the rest (Backlog, Ready, In review once a
+pull request links, Done) from labels, milestone, blocked-by links, parent and linked pull requests, and epic cards stay
+where they are. A maintainer runs `just project-check` (writes nothing) and `just project-sync` locally.
 
 ## Code of Conduct
 

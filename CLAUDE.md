@@ -162,7 +162,7 @@ just run --script scripts/hello.rhai         # run the alloy binary
 just deny | just coverage | just layering    # individual CI gates (`no-engine` still works as an alias for `layering`)
 just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy); `fuzz` needs the `nix develop .#fuzz` shell
 just config-check | just issues-check | just repo-check   # `tools.toml` vs GitHub (needs `gh` auth + network; not in `just gate`, CI: `.github/workflows/tools.yml`); `just repo-sync` applies it, manually, after the issue #334 migration order
-just project-check | just project-sync      # the GitHub Project's Status (#335); `project-check` writes nothing and exits 1 on planned moves; `project-sync` writes, manually, never in CI
+just project-check | just project-sync      # the GitHub Project's Status (#335); `project-check` writes nothing and exits 1 on planned moves or frozen cards; `project-sync` writes, manually, never in CI
 
 # equivalent raw commands:
 rumdl check . && rumdl fmt --check .        # Markdown lint + format check (also in `just lint` / `just fmt-check`)
@@ -190,12 +190,13 @@ UI: `unmanaged = "error"` makes an undeclared one fail `just repo-check`. Every 
 and a milestone, and an open non-`epic` issue needs an open parent.
 
 The [Alloy GitHub Project](https://github.com/users/jaoppb/projects/8) (public, number and title in `[github.project]`)
-shows issue state. Its Status is **derived**, never set by hand: `[workflow]` in `tools.toml`
-(`extends = "builtin:cosmo"` plus a `triaged` fact of type, area and milestone) maps issue state, blocked-by links and
-native sub-issues onto Backlog, Ready, In progress, In review and Done. Run `just project-check`, then
-`just project-sync` to apply. Sync moves cards and never adds them: new issues join through the Project's "Auto-add to
-project" workflow, enabled in the UI. CI does not run either recipe: the default `GITHUB_TOKEN` cannot read a user-owned
-Projects v2 board, and no Project-write token is added.
+shows issue state. `[workflow]` in `tools.toml` (`extends = "builtin:cosmo"` plus a `triaged` fact of type, area and
+milestone) derives Backlog, Ready, In review and Done from labels, milestone, blocked-by links, parent and linked pull
+requests. **In progress is set by hand** when work starts (no rule moves Ready → In progress); once a card is In
+progress or In review, sync keeps it there until the issue closes. Epic cards are never moved by sync. Run
+`just project-check`, then `just project-sync` to apply. Sync moves cards and never adds them: new issues join through
+the Project's "Auto-add to project" workflow, enabled in the UI. CI runs neither recipe: the default `GITHUB_TOKEN` is
+not expected to read a user-owned Projects v2 board (unverified, #335), and no Project-write token is added.
 
 Markdown formatting is enforced by **rumdl** (`.rumdl.toml`: print width 120, reflow). Run `rumdl fmt` after editing any
 `.md` file or the commit hook will rewrite it.

@@ -209,7 +209,7 @@ repo-sync *args:
     @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
     tools repo sync {{args}}
 
-# Print the Status moves the workflow plans for the GitHub Project and write nothing; exits 1 when there are any (needs gh authentication with the `project` scope)
+# Print the Status moves the workflow plans for the GitHub Project and write nothing; exits 1 on planned moves or frozen cards (needs gh authentication with the `project` scope)
 [group('repo')]
 project-check *args:
     @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
