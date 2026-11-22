@@ -145,6 +145,15 @@ mold. `cargo-fuzz` sets its own, so the fuzz job and `just fuzz` repeat the mold
 `ci/verify_mold.sh` reads the ELF `.comment` section of the artifacts and fails if any isn't mold-linked; every Linux CI
 job that compiles runs it.
 
+**Compiler cache (#151):** `.cargo/config.toml` sets `build.rustc-wrapper = "sccache"`, and every flake devShell that
+runs cargo provides it, so a build outside the shell fails with a missing-`sccache` error instead of running uncached.
+Locally incremental compilation stays on: sccache skips incremental crates, so it caches dependencies across git
+worktrees (default disk cache in `~/.cache/sccache`; `sccache --show-stats` shows the hit rate) while the workspace
+crates stay incremental. CI sets `CARGO_INCREMENTAL=0` and uses the GitHub Actions cache backend through
+`mozilla-actions/sccache-action` (the `windows-2022` job installs sccache with it too); per-job `target/` caches are
+gone and every compiling job ends with `sccache --show-stats`. sccache cannot cache `bin`, `proc-macro` or `dylib` crate
+types, so those are rebuilt on every run.
+
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection
 just setup                                   # one-time: checks the flake shell (`nix develop`), installs git hooks

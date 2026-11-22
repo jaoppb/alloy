@@ -4,12 +4,20 @@
 # devShell (flake.nix, ADR-0029) provides `clang` + `mold`; outside it a Linux build fails with a
 # clear "linker `clang` not found" error rather than silently falling back to GNU ld.
 #
+# Issue #151, epic #154: sccache wraps every `rustc` call, so compiled dependencies are shared across
+# git worktrees (and, in CI, across jobs through the GitHub Actions cache backend). It comes from the
+# flake devShell, so outside it a build fails with "could not execute process `sccache`" instead of
+# silently running uncached. Local builds keep incremental compilation on (sccache skips incremental
+# crates, i.e. the workspace crates, which stay incremental); CI sets `CARGO_INCREMENTAL=0` so they
+# are cached too. On Windows (no Nix) the CI job installs it with `mozilla-actions/sccache-action`.
+#
 # Do NOT set the `RUSTFLAGS` env var in CI or scripts: it overrides `target.*.rustflags` instead of
 # merging with it and would silently drop mold. `build.warnings` replaces the old
 # `RUSTFLAGS=-D warnings` for that reason.
 
 [build]
 warnings = "deny"
+rustc-wrapper = "sccache"
 
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
