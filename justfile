@@ -111,10 +111,12 @@ verify-mold *dirs:
 
 # Supply-chain audit: licenses, advisories, bans, sources
 deny:
+    @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: nix develop"; exit 1; }
     {{cargo}} deny check
 
 # Just the security-advisory half of `deny` (fast)
 audit:
+    @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: nix develop"; exit 1; }
     {{cargo}} deny check advisories
 
 # Line coverage of the engine crate, and of css/network/window/html's domain/
