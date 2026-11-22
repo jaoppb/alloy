@@ -113,23 +113,16 @@
             pkgs.mold
           ];
 
-          # sccache is the mandatory `rustc` wrapper (`build.rustc-wrapper` in .cargo/config.toml, issue #151).
           # One shell per CI job family, so a job pays only for the tools it uses.
           mkShell =
             {
               name,
               packages,
               native ? false,
-              # cargo probes `rustc -vV` through the wrapper even for `cargo metadata`, so every shell
-              # that runs cargo needs sccache, not just those that compile.
-              runsCargo ? true,
             }:
             pkgs.mkShell {
               inherit name;
-              packages =
-                packages
-                ++ lib.optional runsCargo pkgs.sccache
-                ++ lib.optionals native ([ pkgs.pkg-config ] ++ nativeLibs ++ linuxLinker);
+              packages = packages ++ lib.optionals native ([ pkgs.pkg-config ] ++ nativeLibs ++ linuxLinker);
               ALLOY_DEV_SHELL = name;
               # Only shells that build or run the workspace pull the wayland/X11 closure.
               LD_LIBRARY_PATH = lib.optionalString (native && stdenv.hostPlatform.isLinux) (
@@ -141,7 +134,7 @@
           scriptTools = [ pkgs.jq ];
         in
         {
-          markdown = mkShell { name = "markdown"; packages = [ rumdl ]; runsCargo = false; };
+          markdown = mkShell { name = "markdown"; packages = [ rumdl ]; };
           rust = mkShell { name = "rust"; packages = [ rustStable ] ++ scriptTools; native = true; };
           supply-chain = mkShell { name = "supply-chain"; packages = [ rustStable pkgs.cargo-deny ]; };
           unsafe-audit = mkShell {
@@ -163,6 +156,8 @@
               pkgs.cargo-deny
               pkgs.cargo-llvm-cov
               pkgs.cargo-geiger
+              # Optional `rustc` wrapper (issue #151): opt in with `export RUSTC_WRAPPER=sccache`.
+              pkgs.sccache
               arch-lint-cli
               rumdl
             ] ++ scriptTools;

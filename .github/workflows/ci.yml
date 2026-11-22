@@ -16,25 +16,13 @@ concurrency:
 
 # Rustc warnings are denied through `build.warnings` in .cargo/config.toml, not a `RUSTFLAGS` env
 # var: that would override `target.*.rustflags` and silently drop the mold linker (#153).
-# There is no per-job `target/` cache (#151): sccache over the GitHub Actions cache backend shares compiled
-# crates between jobs, and `ci/verify_mold.sh` therefore always scans freshly linked artifacts.
+# The `-cargo-mold-` cache-key prefix keeps pre-mold (GNU ld) `target/` caches from being restored:
+# `ci/verify_mold.sh` scans the whole deps dir and would fail on their leftover artifacts.
 # `ci/verify_mold.sh` runs in every Linux job that compiles; markdown, arch-lint and cargo-deny
 # compile nothing, so they have no artifact to check.
-# `CARGO_INCREMENTAL=0` lets sccache cache the workspace crates too (it skips incremental builds); local
-# builds keep incremental on and cache dependencies only (#151). `SCCACHE_GHA_ENABLED` selects the GitHub
-# Actions cache backend; `mozilla-actions/sccache-action` exports its cache URL/token to later steps and prints
-# `sccache --show-stats` in its post step, so every compiling job ends with the stats. `SCCACHE_VERSION` is the
-# one place the action's sccache release is pinned: keep it equal to the flake's sccache (nixpkgs, `flake.lock`)
-# so the Windows job and the post step's `$SCCACHE_PATH` client match the flake binary that starts the server.
-# `cargo-deny` runs `cargo metadata`, which probes `rustc -vV` through the wrapper and fails without the cache
-# credentials; `arch-lint` makes no probe today but keeps the action so a future arch-lint-cli bump (#155) can't
-# break it the same way.
 env:
-  CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  SCCACHE_GHA_ENABLED: "true"
-  SCCACHE_VERSION: v0.19.0
 
 jobs:
   # ---- cheap gates first: markdown + rust style ----------------------------
@@ -68,15 +56,20 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mold-quality-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-quality-
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: ci/verify_mold.sh
 
   # ---- expensive gate: full test matrix on the 3 target OSes --------------
-
   test:
     name: Test (${{ matrix.os }})
     needs: rust-quality
@@ -108,9 +101,15 @@ jobs:
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mold-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-test-
       - run: cargo check --workspace --all-targets
       - run: cargo test --workspace --all-features
       - if: runner.os == 'Linux'
@@ -119,7 +118,6 @@ jobs:
   # ---- ADR-0002 / ADR-0011 N-04: layering — no crate links a subsystem it
   # must not (renamed from `no-engine` in v0.5 Phase P: the checks below cover
   # every subsystem's layering rule, not only the engine's, since B4/B5/C1/C2) -
-
   layering:
     name: Layering — no crate links a subsystem it must not
     needs: rust-quality
@@ -135,9 +133,15 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mold-noengine-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-noengine-
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
@@ -157,7 +161,6 @@ jobs:
       # `cargo tree | grep` step here.
 
   # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
-
   css-conformance:
     name: CSS + HTML support manifests
     needs: rust-quality
@@ -173,9 +176,15 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mold-cssconf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-cssconf-
       # Three statements of the same cut — core/css/tests/data/MANIFEST.md, the
       # SUPPORTED_PROPERTIES / SUPPORTED_SELECTORS registries, and what the
       # parser really accepts — must agree in every direction. There is no bless
@@ -186,7 +195,6 @@ jobs:
       - run: ci/verify_mold.sh
 
   # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
-
   fault-injection:
     name: Panic-injection fault isolation
     needs: rust-quality
@@ -202,9 +210,15 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mold-fault-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-fault-
       # A panic injected into a guarded binding must be trapped as ScriptPanic
       # with the process alive; run_dom_with_fallback must recover from every
       # error class. --test-threads=1 keeps the process-global panic hook
@@ -214,7 +228,6 @@ jobs:
       - run: ci/verify_mold.sh
 
   # ---- PRD-001 N-01 / v0.5 Phase M: the <10us per-hook budget must not regress -
-
   hook-benchmark:
     name: Hook dispatch overhead
     needs: rust-quality
@@ -230,9 +243,15 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mold-benchmark-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-benchmark-
       # ci/hook_benchmark.sh checks the measured mean against both the
       # absolute PRD-001 N-01 ceiling (<10us) and a generous multiple of the
       # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
@@ -240,7 +259,6 @@ jobs:
       - run: ci/verify_mold.sh target/release/deps
 
   # ---- ADR-0018 row 1 surfaces: fuzz the hostile-byte decoders ---------------
-
   fuzz:
     name: Fuzz (${{ matrix.target }})
     needs: rust-quality
@@ -257,9 +275,6 @@ jobs:
     # cargo-fuzz appends its own to it. `ci/verify_mold.sh` below fails if it ever stops applying.
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=mold
-      # The fuzzer runs 600 s after the build with no rustc call, which is sccache's default idle timeout:
-      # the server would exit before the post step and `--show-stats` would report zero requests.
-      SCCACHE_IDLE_TIMEOUT: "0"
     defaults:
       run:
         shell: nix develop .#fuzz --command bash -eo pipefail {0}
@@ -268,9 +283,14 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: fuzz
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            fuzz/target/
+          key: ${{ runner.os }}-cargo-mold-fuzz-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-fuzz-
       # 10 minutes per target (ADR-0018 row 1: TLS/HTTP/HTML/CSS/image/font
       # decoders must never panic on hostile bytes) — zero crashes expected.
       # Run from the repo root: cargo-fuzz auto-discovers ./fuzz/Cargo.toml,
@@ -293,9 +313,6 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: supply-chain
-      - uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: ${{ env.SCCACHE_VERSION }}
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
@@ -319,14 +336,18 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: unsafe-audit
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-mold-geiger-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-geiger-
       - run: ci/unsafe_audit.sh
       - run: ci/verify_mold.sh
 
   # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
-
   arch-lint:
     name: arch-lint
     needs: rust-quality
@@ -342,9 +363,6 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: arch
-      - uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: ${{ env.SCCACHE_VERSION }}
       - run: arch-lint check
 
   coverage:
@@ -362,9 +380,14 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: coverage
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v6
         with:
-          version: ${{ env.SCCACHE_VERSION }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-mold-cov-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mold-cov-
       # domain/ has no I/O and no excuse — roadmap §5 sets the v0.1 gate at 85%.
       - name: Coverage for engine domain/
         run: >

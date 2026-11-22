@@ -145,14 +145,12 @@ mold. `cargo-fuzz` sets its own, so the fuzz job and `just fuzz` repeat the mold
 `ci/verify_mold.sh` reads the ELF `.comment` section of the artifacts and fails if any isn't mold-linked; every Linux CI
 job that compiles runs it.
 
-**Compiler cache (#151):** `.cargo/config.toml` sets `build.rustc-wrapper = "sccache"`, and every flake devShell that
-runs cargo provides it, so a build outside the shell fails with a missing-`sccache` error instead of running uncached.
-Locally incremental compilation stays on: sccache skips incremental crates, so it caches dependencies across git
-worktrees (default disk cache in `~/.cache/sccache`; `sccache --show-stats` shows the hit rate) while the workspace
-crates stay incremental. CI sets `CARGO_INCREMENTAL=0` and uses the GitHub Actions cache backend through
-`mozilla-actions/sccache-action` (the `windows-2022` job installs sccache with it too); per-job `target/` caches are
-gone and every compiling job ends with `sccache --show-stats`. sccache cannot cache `bin`, `proc-macro` or `dylib` crate
-types, so those are rebuilt on every run.
+**Compiler cache (#151, optional):** the default flake shell provides `sccache`, but it is **not** wired in — there is
+no `build.rustc-wrapper` in `.cargo/config.toml`, and CI keeps its per-job cargo caches. Opt in with
+`export RUSTC_WRAPPER=sccache` (or a line in your own `.envrc`). Measured caveat (PR #342): sccache only hits when the
+absolute paths are identical, so a new git worktree with its own `target/` hit just 15.9% of dependency compiles (100%
+with the same target-dir path) and was within noise of no sccache; `bin`, `proc-macro` and `dylib` crates are never
+cached. Sharing across worktrees is a follow-up experiment.
 
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection

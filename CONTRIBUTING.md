@@ -26,8 +26,8 @@ nix develop  # required on Linux/macOS (or `direnv allow`; review `flake.nix` ch
 just setup   # checks you are in the flake shell, installs the git hooks
 ```
 
-The flake shell also provides `sccache`, the committed `rustc` wrapper (`.cargo/config.toml`): it caches compiled
-dependencies across your worktrees, so a second worktree doesn't rebuild them. Check it with `sccache --show-stats`.
+The default flake shell also provides `sccache`, off by default: `export RUSTC_WRAPPER=sccache` opts in. It only hits
+when absolute paths match, so a second worktree with its own `target/` gains little (see `CLAUDE.md`).
 
 `just` (no arguments) lists every available recipe. The two you'll use constantly:
 
