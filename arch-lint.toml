@@ -218,6 +218,14 @@ paths = ["core/platform/**"]
 
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
+# Per-crate domain layers (ADR-0010, #336): `allow-dep` states the allow-list — a domain layer may
+# depend on nothing in its crate but the crate scope itself (which contains the layer, so `to = []`
+# would trip on every file) — so a new sibling layer is denied by default instead of needing an edit
+# to a deny list. It replaces the `deny-scope-dep` that listed `<crate>-application` plus crates
+# `deny-scope-dep` cannot see anyway; the crate-level `restrict-use` fences below hold those.
+# `window-domain` stays a `deny-scope-dep`: it lies inside the overlapping `window-winit-free`
+# scope, and allowing that scope would also allow `window-application`.
+
 # Domain layer must not depend on application, runtime adapters, or CLI
 [[deny-scope-dep]]
 from = "domain"
@@ -230,11 +238,10 @@ from = "engine"
 to = ["runtime-rhai", "alloy-cli"]
 message = "Engine abstraction crate must not depend on concrete script runtimes or CLI (ADR-0002 / ADR-0011)."
 
-# DOM domain layer must not depend on application layer or other subsystems
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "dom-domain"
-to = ["dom-application", "engine", "runtime-rhai", "alloy-cli"]
-message = "DOM domain layer must not depend on application layer, engine ports, runtime, or CLI."
+to = ["dom"]
+doc = "ADR-0010"
 
 # DOM crate must not depend on engine, runtime adapters, bindings, or CLI
 [[deny-scope-dep]]
@@ -250,11 +257,10 @@ from = "runtime-rhai"
 to = ["dom", "graphics", "css", "runtime-rhai-bindings", "alloy-cli"]
 message = "core/runtime/rhai must name no domain crate — the bridges live in rhai-bindings (v0.5 report §2.12)."
 
-# Graphics domain layer must not depend on application layer or other subsystems
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "graphics-domain"
-to = ["graphics-application", "engine", "runtime-rhai", "alloy-cli"]
-message = "Graphics domain layer must not depend on application layer, engine ports, runtime, or CLI."
+to = ["graphics"]
+doc = "ADR-0010"
 
 # core/graphics is a pure rasterization domain: no DOM, no CSS, no engine, no runtime.
 # Every script bridge lives in core/runtime/rhai (v0.3 report decision 2.1), which is
@@ -264,11 +270,10 @@ from = "graphics"
 to = ["engine", "runtime-rhai", "alloy-cli", "dom"]
 message = "core/graphics must not depend on engine, DOM, concrete script runtimes, or CLI (PRD-005:62-63)."
 
-# CSS domain layer must not depend on the application layer or any adapter crate.
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "css-domain"
-to = ["css-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "CSS domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+to = ["css"]
+doc = "ADR-0010"
 
 # core/css realises the cascade/layout ports without naming the engine or a
 # script runtime — the scriptable adapter lives in rhai-bindings (PRD-007:64-67).
@@ -279,17 +284,15 @@ from = "css"
 to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
 message = "core/css must not depend on engine, concrete script runtimes, the bindings crate, or CLI (PRD-007). It may depend on dom, html and graphics."
 
-# Network domain layer must not depend on the application layer or any adapter crate.
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "network-domain"
-to = ["network-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "Network domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+to = ["network"]
+doc = "ADR-0010"
 
-# Browser domain layer must not depend on the application layer or any adapter crate.
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "browser-domain"
-to = ["browser-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "Browser domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+to = ["browser"]
+doc = "ADR-0010"
 
 # core/browser owns the document and says *what* to fetch; `alloy` does the fetching. It may
 # depend on dom, html, css, network (domain types) and graphics (domain types) — never on the
@@ -299,11 +302,10 @@ from = "browser"
 to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "ui"]
 message = "core/browser must not depend on core/ui, engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
 
-# UI domain layer must not depend on the application layer or any adapter crate.
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "ui-domain"
-to = ["ui-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "UI domain layer must not depend on application, engine, runtime, bindings, or CLI."
+to = ["ui"]
+doc = "ADR-0010"
 
 # core/ui is the chrome: it may use graphics, window and network (domain types) and the shared
 # `region` ids — never the browsing context, the document crates, the engine, a script runtime
@@ -352,16 +354,15 @@ from = "window"
 to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom", "css", "graphics", "network"]
 message = "core/window must not depend on engine, DOM, CSS, graphics, network, script runtimes, the bindings crate, or CLI (PRD-010)."
 
-# HTML domain layer must not depend on the application layer or any adapter crate.
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "html-domain"
-to = ["html-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "HTML domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+to = ["html"]
+doc = "ADR-0010"
 
-[[deny-scope-dep]]
+[[allow-dep]]
 from = "platform-domain"
-to = ["platform-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "Platform domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+to = ["platform"]
+doc = "ADR-0010"
 
 [[deny-scope-dep]]
 from = "platform"
@@ -445,17 +446,16 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 # see `use engine::X` in another crate (re-checked on 0.11, #139, #155); `restrict-use` matches any import path. The
 # interpreter crates themselves are denied by the `*-interpreter-free` rules above.
 #
-# The project-wide `[[independent]]` (ALD010), `[[acyclic]]` (ALD009) and `[[allow-dep]]` (ALD011) rules read the same
-# scope graph as `deny-scope-dep`, and #336 probed them on 0.11.0 and adopted none, so do not retry them without a
-# new arch-lint release:
+# The project-wide rules `[[independent]]` (ALD010), `[[acyclic]]` (ALD009) and `[[allow-dep]]` (ALD011) read the same
+# scope graph as `deny-scope-dep`, so they are blind across crates too (#336, probed on 0.11.0):
+# - `allow-dep` is adopted for the per-crate domain layers (see "layer dependency rules" above), where it is stricter.
 # - `independent` on `ui` / `browser` (or any two crates) reports nothing for a real `use browser::…` in `core/ui`:
-#   the graph has no cross-crate edges. The `restrict-use` fences above are the only rules that see that shape.
+#   the graph has no cross-crate edges. The `restrict-use` fences below are the only rules that see that shape, so
+#   they stay.
 # - `acyclic` over every scope fails on the clean tree: a crate scope (`graphics`) contains its layer scopes
 #   (`graphics-application`), so each layer "depends" on its own crate and the graph is full of false cycles. Limited
-#   with `scopes = [...]` to disjoint scopes it works, but it only catches a cycle, and the `restrict-use` /
-#   `deny-scope-dep` rules already forbid the edge that would close it, so it would enforce the same line twice.
-# - `allow-dep` on a layer (`dom-domain`, `to = []`) fails on the clean tree for the same nesting reason: the scope
-#   inside its own crate scope is a dependency, and allowing the crate scope allows the sibling layer too.
+#   with `scopes = [...]` it only sees cycles between layers of one crate, and `deny-scope-dep` / `restrict-use`
+#   already forbid the edge that would close one, so it would enforce the same line twice.
 
 [[restrict-use]]
 name = "dom-isolated"
