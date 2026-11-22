@@ -58,13 +58,28 @@
           rustNightly = pkgs.rust-bin.nightly.latest.minimal;
 
           # Not packaged in nixpkgs, or older there than CI tracks: built from crates.io, pinned.
-          arch-lint-cli = pkgs.rustPlatform.buildRustPackage rec {
+          arch-lintSource = pkgs.rustPlatform.buildRustPackage rec {
             pname = "arch-lint-cli";
             version = "0.11.0";
             src = pkgs.fetchCrate { inherit pname version; hash = "sha256-AiIaDp+3wVcG3HHTrpJg0sV3HDqGky1wiocPMPLyCyE="; };
             cargoHash = "sha256-FHZHU1/Gocvm00/F1Nz/4muMGb2c1WaEB9zwshWNFQg=";
             doCheck = false;
           };
+          # Prebuilt upstream release: static musl, so it runs unpatched. Upstream ships musl only for
+          # x86_64-linux (aarch64-linux has only -gnu), and that is the CI platform, where the source build costs
+          # about 1m49s cold. The hash is the release's `.sha256` asset (equal to GitHub's digest); update it with
+          # `version` and arch-lintSource. ADR-0029.
+          arch-lintPrebuilt = pkgs.stdenvNoCC.mkDerivation rec {
+            pname = "arch-lint-cli";
+            version = "0.11.0";
+            src = pkgs.fetchurl {
+              url = "https://github.com/ynishi/arch-lint/releases/download/arch-lint-v${version}/arch-lint-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-nTKYE1SVCZXgpz9vZ/v2xDrvucLLrJ+DOIPCOdrkS9g=";
+            };
+            sourceRoot = ".";
+            installPhase = "install -Dm755 -t $out/bin arch-lint cargo-arch-lint";
+          };
+          arch-lint-cli = if system == "x86_64-linux" then arch-lintPrebuilt else arch-lintSource;
           # Prebuilt upstream release (static musl on Linux): compiling rumdl from source takes ~10 minutes
           # and ~18 GB of RAM, which timed out the cold Markdown CI job. Hashes are the release's digests.
           rumdl =
