@@ -6,7 +6,7 @@
 # its name in the ELF `.comment` section, so this script reads it back from every executable and
 # shared object directly under each given directory (default: target/debug/deps) and fails on any
 # that is not mold-linked, or when a directory holds no such file at all. A stale `target/` from
-# before mold (a local checkout, a restored CI cache) trips it: `cargo clean` or bump the cache key.
+# before mold (a local checkout) trips it: `cargo clean`.
 #
 # Usage: ci/verify_mold.sh [artifact-dir ...]
 set -euo pipefail
