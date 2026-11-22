@@ -26,12 +26,15 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
    platform, where the source build costs about 1m49s cold; upstream ships no musl build for aarch64-linux) and builds
    from crates.io at the same pinned version elsewhere (it is not packaged), with the prebuilt hash taken from the
    release's `.sha256` asset and checked against GitHub's digest, and `rumdl`, which the flake fetches as the pinned
-   upstream release binary (static musl on Linux): nixpkgs' `rumdl` is older than the version whose formatting CI
-   enforces, and compiling it from source took about 10 minutes and 18 GB of RAM, which timed out the cold Markdown CI
-   job.
+   upstream release binary (static musl on Linux), pinned by four per-platform hashes (x86_64/aarch64 Linux and Darwin):
+   nixpkgs' `rumdl` is older than the version whose formatting CI enforces, and compiling it from source took about 10
+   minutes and 18 GB of RAM, which timed out the cold Markdown CI job. CI exercises only the x86_64-linux binary; the
+   aarch64-linux and both Darwin hashes were verified by hand with `nix store prefetch-file --hash-type sha256`
+   (2026-11-22, v0.3.5). The bump procedure is a comment in `flake.nix`.
 4. **Shells.** `default` carries every tool; `fuzz` carries a nightly toolchain and `cargo-fuzz`; slim shells
    (`markdown`, `rust`, `supply-chain`, `unsafe-audit`, `arch`, `coverage`) let each CI job pay only for its own tools.
-   Every shell exports `ALLOY_DEV_SHELL`, which `just setup` checks.
+   Every shell exports `ALLOY_DEV_SHELL`, which `just setup` checks. The `fuzz` shell's nightly comes from
+   `selectLatestNightlyWith`, so a `nix flake update` cannot land on a nightly with a missing component.
 5. **Windows is the one exception.** Nix does not run natively there, so the `windows-2022` CI job stays Nix-free
    (rustup reading `rust-toolchain.toml`) and Windows developers use WSL2 inside the flake. `justfile` recipes stay
    tool-agnostic; only `just setup` guards on Linux/macOS.
@@ -45,4 +48,9 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   `arch-lint-cli` from source unless cached; `rumdl` and the x86_64-linux `arch-lint-cli` are downloaded binaries, so
   their hashes must be updated with each version bump; the Windows job is a second, rustup-based path that can drift
   from the flake.
+- Cache budget: Actions allows 10 GB per repository, shared by the Nix store entries (one per shell and `flake.lock`
+  generation) and the cargo `target/` caches. The nix-shell action caps each entry with `gc-max-store-size-linux: 4G`
+  and `gc-max-store-size-macos: 3500M`, just above the largest closure (3.46 GB for `default`, 3.25 GB for `rust`, ~3.0
+  GB on macOS); a lower cap would evict live toolchain paths. Measured on 2026-11-22 with `gh cache list`, the cache was
+  already at 11.3 GiB (limit 10 GiB) before the caps; see the PR for the arithmetic.
 - Follow-ups: mold (#153) and sccache (#151) add their packages to this flake; `arch-lint-cli` moves to 0.11 with #155.

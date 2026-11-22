@@ -13,3 +13,10 @@ runs:
       with:
         primary-key: nix-${{ runner.os }}-${{ inputs.shell }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
         restore-prefixes-first-match: nix-${{ runner.os }}-${{ inputs.shell }}-
+        # Bound each entry's uncompressed store (`nix store gc --max`) so repeated flake.lock updates do not
+        # accumulate paths of old versions. The caps sit just above the largest shell closure (measured: Linux
+        # 3.46 GB for `default`, 3.25 GB for `rust`; macOS ~3.0 GB), since a lower cap would evict live toolchain
+        # paths. At the measured ~3.1x zstd ratio they bound an entry at ~1.3 GiB (Linux) / ~1.0 GiB (macOS).
+        # The whole repository shares a 10 GB Actions cache with the cargo caches: ADR-0029.
+        gc-max-store-size-linux: 4G
+        gc-max-store-size-macos: 3500M
