@@ -100,6 +100,11 @@ just config-check   # tools.toml parses and needs no schema migration
 
 To add a label or milestone, edit `tools.toml`; `just repo-sync` applies it and is run by a maintainer.
 
+Issue state is also shown on the [Alloy GitHub Project](https://github.com/users/jaoppb/projects/8). Its Status column
+is derived from the issue's labels, milestone, blocked-by links, parent and linked pull requests by the `[workflow]`
+rules in `tools.toml`, so you never move a card by hand. A maintainer runs `just project-check` (writes nothing) and
+`just project-sync` locally.
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you're expected to uphold it.
