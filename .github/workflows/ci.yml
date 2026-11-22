@@ -24,7 +24,8 @@ concurrency:
 # builds keep incremental on and cache dependencies only (#151). `SCCACHE_GHA_ENABLED` selects the GitHub
 # Actions cache backend; `mozilla-actions/sccache-action` exports its cache URL/token to later steps and prints
 # `sccache --show-stats` in its post step, so every compiling job ends with the stats. Its `version` matches
-# the flake's sccache (nixpkgs) so the Windows job runs the same release.
+# the flake's sccache (nixpkgs) so the Windows job runs the same release. Jobs that only run `cargo metadata`
+# (cargo-deny, arch-lint) need it too: cargo probes `rustc -vV` through the wrapper, which starts the server.
 env:
   CARGO_INCREMENTAL: 0
   SCCACHE_GHA_ENABLED: "true"
@@ -285,6 +286,9 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: supply-chain
+      - uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.19.0
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
@@ -331,6 +335,9 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: arch
+      - uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.19.0
       - run: arch-lint check
 
   coverage:
