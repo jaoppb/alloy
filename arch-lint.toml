@@ -219,10 +219,13 @@ paths = ["core/platform/**"]
 # --- layer dependency rules (hexagonal architecture) ------------------------
 
 # Per-crate domain layers (ADR-0010, #336): `allow-dep` states the allow-list — a domain layer may
-# depend on nothing in its crate but the crate scope itself (which contains the layer, so `to = []`
-# would trip on every file) — so a new sibling layer is denied by default instead of needing an edit
-# to a deny list. It replaces the `deny-scope-dep` that listed `<crate>-application` plus crates
-# `deny-scope-dep` cannot see anyway; the crate-level `restrict-use` fences below hold those.
+# depend on no declared scope of its crate but the crate scope itself (which contains the layer, so
+# `to = []` would trip on every file). Only scopes that are declared are checked: `<crate>-application`
+# is, so a domain -> application edge fails, while `crate::infrastructure::…` stays unchecked because no
+# `<crate>-infrastructure` scope exists (it was unchecked before too). It replaces the `deny-scope-dep`
+# that listed `<crate>-application` plus crates `deny-scope-dep` cannot see anyway; the crate-level
+# `restrict-use` fences below hold `engine`, `rhai_runtime` and `rhai_bindings`, and Cargo's no-cycle rule
+# holds `alloy` (it depends on every one of these crates).
 # `window-domain` stays a `deny-scope-dep`: it lies inside the overlapping `window-winit-free`
 # scope, and allowing that scope would also allow `window-application`.
 
