@@ -145,6 +145,15 @@ mold. `cargo-fuzz` sets its own, so the fuzz job and `just fuzz` repeat the mold
 `ci/verify_mold.sh` reads the ELF `.comment` section of the artifacts and fails if any isn't mold-linked; every Linux CI
 job that compiles runs it.
 
+**Compiler cache (#151, optional):** the default flake shell provides `sccache`, but it is **not** wired in — there is
+no `build.rustc-wrapper` in `.cargo/config.toml`, and CI keeps its per-job cargo caches (warm CI runs with sccache were
+slower than those caches, PR #342). Opt in with `export RUSTC_WRAPPER=sccache` (or a line in your own `.envrc`). Caveats
+measured in PR #342: sccache only hits when the absolute paths are identical, so a new git worktree with its own
+`target/` hit just 15.9% of dependency compiles in one local run (100% with the same target-dir path), within noise of
+no sccache on a loaded machine; workspace crates built with incremental compilation (the dev default) are never cached,
+so only third-party dependencies can benefit, and `bin`, `proc-macro` and `dylib` crates are never cached either.
+Sharing across worktrees is a follow-up experiment.
+
 ```bash
 just gate                                    # full local gate (fmt-check + clippy + check + test + deny + coverage + arch + layering + css-conformance + unsafe-audit) — mirrors CI minus fuzz/hook-benchmark/fault-injection
 just setup                                   # one-time: checks the flake shell (`nix develop`), installs git hooks

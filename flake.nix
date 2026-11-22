@@ -175,6 +175,8 @@
               pkgs.cargo-deny
               pkgs.cargo-llvm-cov
               pkgs.cargo-geiger
+              # Optional `rustc` wrapper (issue #151): opt in with `export RUSTC_WRAPPER=sccache`.
+              pkgs.sccache
               arch-lint-cli
               rumdl
             ] ++ repoTools ++ scriptTools;
