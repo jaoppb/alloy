@@ -64,11 +64,11 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: ci/verify_mold.sh
-
-  # ---- expensive gate: full test matrix on the 3 target OSes --------------
       - name: sccache stats
         if: always()
         run: sccache --show-stats
+
+  # ---- expensive gate: full test matrix on the 3 target OSes --------------
 
   test:
     name: Test (${{ matrix.os }})
@@ -106,13 +106,13 @@ jobs:
       - run: cargo test --workspace --all-features
       - if: runner.os == 'Linux'
         run: ci/verify_mold.sh
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats
 
   # ---- ADR-0002 / ADR-0011 N-04: layering — no crate links a subsystem it
   # must not (renamed from `no-engine` in v0.5 Phase P: the checks below cover
   # every subsystem's layering rule, not only the engine's, since B4/B5/C1/C2) -
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats
 
   layering:
     name: Layering — no crate links a subsystem it must not
@@ -147,11 +147,11 @@ jobs:
       # which confines every `winit`/`softbuffer` import to the three
       # infra files gated by the `winit-system` feature — not a bespoke
       # `cargo tree | grep` step here.
-
-  # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
       - name: sccache stats
         if: always()
         run: sccache --show-stats
+
+  # ---- relatório §2.8:350-354: the declared CSS cut cannot shrink silently --
 
   css-conformance:
     name: CSS + HTML support manifests
@@ -177,11 +177,11 @@ jobs:
       - run: cargo test -p css --test manifest_runner
       - run: cargo test -p html --test manifest_runner
       - run: ci/verify_mold.sh
-
-  # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
       - name: sccache stats
         if: always()
         run: sccache --show-stats
+
+  # ---- PRD-003:79 / roadmap §5: fault isolation by panic injection ---------
 
   fault-injection:
     name: Panic-injection fault isolation
@@ -206,11 +206,11 @@ jobs:
       # The suite moved to `rhai-bindings` with the DOM bridge (v0.5 report §2.12).
       - run: cargo test -p rhai-bindings --test fault_injection -- --test-threads=1
       - run: ci/verify_mold.sh
-
-  # ---- PRD-001 N-01 / v0.5 Phase M: the <10us per-hook budget must not regress -
       - name: sccache stats
         if: always()
         run: sccache --show-stats
+
+  # ---- PRD-001 N-01 / v0.5 Phase M: the <10us per-hook budget must not regress -
 
   hook-benchmark:
     name: Hook dispatch overhead
@@ -233,11 +233,11 @@ jobs:
       # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
       - run: ci/hook_benchmark.sh
       - run: ci/verify_mold.sh target/release/deps
-
-  # ---- ADR-0018 row 1 surfaces: fuzz the hostile-byte decoders ---------------
       - name: sccache stats
         if: always()
         run: sccache --show-stats
+
+  # ---- ADR-0018 row 1 surfaces: fuzz the hostile-byte decoders ---------------
 
   fuzz:
     name: Fuzz (${{ matrix.target }})
@@ -315,11 +315,11 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.11
       - run: ci/unsafe_audit.sh
       - run: ci/verify_mold.sh
-
-  # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
       - name: sccache stats
         if: always()
         run: sccache --show-stats
+
+  # ---- architecture rules & layer enforcement (ADR-0002 / ADR-0011 / ADR-0014) -----
 
   arch-lint:
     name: arch-lint
@@ -386,4 +386,3 @@ jobs:
       - name: sccache stats
         if: always()
         run: sccache --show-stats
-
