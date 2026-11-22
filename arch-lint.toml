@@ -444,6 +444,18 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 # file belongs to (arch-lint 0.10+; before that, nothing in a member crate), so it still cannot
 # see `use engine::X` in another crate (re-checked on 0.11, #139, #155); `restrict-use` matches any import path. The
 # interpreter crates themselves are denied by the `*-interpreter-free` rules above.
+#
+# The project-wide `[[independent]]` (ALD010), `[[acyclic]]` (ALD009) and `[[allow-dep]]` (ALD011) rules read the same
+# scope graph as `deny-scope-dep`, and #336 probed them on 0.11.0 and adopted none, so do not retry them without a
+# new arch-lint release:
+# - `independent` on `ui` / `browser` (or any two crates) reports nothing for a real `use browser::…` in `core/ui`:
+#   the graph has no cross-crate edges. The `restrict-use` fences above are the only rules that see that shape.
+# - `acyclic` over every scope fails on the clean tree: a crate scope (`graphics`) contains its layer scopes
+#   (`graphics-application`), so each layer "depends" on its own crate and the graph is full of false cycles. Limited
+#   with `scopes = [...]` to disjoint scopes it works, but it only catches a cycle, and the `restrict-use` /
+#   `deny-scope-dep` rules already forbid the edge that would close it, so it would enforce the same line twice.
+# - `allow-dep` on a layer (`dom-domain`, `to = []`) fails on the clean tree for the same nesting reason: the scope
+#   inside its own crate scope is a dependency, and allowing the crate scope allows the sibling layer too.
 
 [[restrict-use]]
 name = "dom-isolated"
