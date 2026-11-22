@@ -193,10 +193,11 @@ The [Alloy GitHub Project](https://github.com/users/jaoppb/projects/8) (public, 
 shows issue state. `[workflow]` in `tools.toml` (`extends = "builtin:cosmo"` plus a `triaged` fact of type, area and
 milestone) derives Backlog, Ready, In review and Done from labels, milestone, blocked-by links, parent and linked pull
 requests. **In progress is set by hand** when work starts (no rule moves Ready → In progress); once a card is In
-progress or In review, sync keeps it there until the issue closes. Epic cards are never moved by sync. Run
-`just project-check`, then `just project-sync` to apply. Sync moves cards and never adds them: new issues join through
-the Project's "Auto-add to project" workflow, enabled in the UI. CI runs neither recipe: the default `GITHUB_TOKEN` is
-not expected to read a user-owned Projects v2 board (unverified, #335), and no Project-write token is added.
+progress or In review, sync keeps it in one of the two (In review while a pull request is linked) until the issue
+closes. Epic cards are never moved by sync. Run `just project-check`, then `just project-sync` to apply. Sync moves
+cards and never adds them: new issues join through the Project's "Auto-add to project" workflow, enabled in the UI. CI
+runs neither recipe: the default `GITHUB_TOKEN` is not expected to read a user-owned Projects v2 board
+(unverified, #335), and no Project-write token is added.
 
 Markdown formatting is enforced by **rumdl** (`.rumdl.toml`: print width 120, reflow). Run `rumdl fmt` after editing any
 `.md` file or the commit hook will rewrite it.

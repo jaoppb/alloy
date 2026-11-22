@@ -116,8 +116,8 @@ release = true
 
 # Issue #335. The Project is https://github.com/users/jaoppb/projects/8: public, linked to this repository. The
 # installed `tools` declares only the number and title here; the Status option names come from `builtin:cosmo` and
-# must exist as options on the Project's Status field. `tools project sync` moves cards, it never adds them: new issues join through the Project's built-in
-# "Auto-add to project" workflow, which only the UI can enable.
+# must exist as options on the Project's Status field. `tools project sync` moves cards, it never adds them: new
+# issues join through the Project's built-in "Auto-add to project" workflow, which only the UI can enable.
 [github.project]
 number = 8
 title = "Alloy"
