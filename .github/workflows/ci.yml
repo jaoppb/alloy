@@ -23,14 +23,18 @@ concurrency:
 # `CARGO_INCREMENTAL=0` lets sccache cache the workspace crates too (it skips incremental builds); local
 # builds keep incremental on and cache dependencies only (#151). `SCCACHE_GHA_ENABLED` selects the GitHub
 # Actions cache backend; `mozilla-actions/sccache-action` exports its cache URL/token to later steps and prints
-# `sccache --show-stats` in its post step, so every compiling job ends with the stats. Its `version` matches
-# the flake's sccache (nixpkgs) so the Windows job runs the same release. Jobs that only run `cargo metadata`
-# (cargo-deny, arch-lint) need it too: cargo probes `rustc -vV` through the wrapper, which starts the server.
+# `sccache --show-stats` in its post step, so every compiling job ends with the stats. `SCCACHE_VERSION` is the
+# one place the action's sccache release is pinned: keep it equal to the flake's sccache (nixpkgs, `flake.lock`)
+# so the Windows job and the post step's `$SCCACHE_PATH` client match the flake binary that starts the server.
+# `cargo-deny` runs `cargo metadata`, which probes `rustc -vV` through the wrapper and fails without the cache
+# credentials; `arch-lint` makes no probe today but keeps the action so a future arch-lint-cli bump (#155) can't
+# break it the same way.
 env:
   CARGO_INCREMENTAL: 0
-  SCCACHE_GHA_ENABLED: "true"
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_VERSION: v0.19.0
 
 jobs:
   # ---- cheap gates first: markdown + rust style ----------------------------
@@ -66,7 +70,7 @@ jobs:
           shell: rust
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: ci/verify_mold.sh
@@ -106,7 +110,7 @@ jobs:
         run: rustup show active-toolchain
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       - run: cargo check --workspace --all-targets
       - run: cargo test --workspace --all-features
       - if: runner.os == 'Linux'
@@ -133,7 +137,7 @@ jobs:
           shell: rust
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
@@ -171,7 +175,7 @@ jobs:
           shell: rust
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       # Three statements of the same cut — core/css/tests/data/MANIFEST.md, the
       # SUPPORTED_PROPERTIES / SUPPORTED_SELECTORS registries, and what the
       # parser really accepts — must agree in every direction. There is no bless
@@ -200,7 +204,7 @@ jobs:
           shell: rust
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       # A panic injected into a guarded binding must be trapped as ScriptPanic
       # with the process alive; run_dom_with_fallback must recover from every
       # error class. --test-threads=1 keeps the process-global panic hook
@@ -228,7 +232,7 @@ jobs:
           shell: rust
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       # ci/hook_benchmark.sh checks the measured mean against both the
       # absolute PRD-001 N-01 ceiling (<10us) and a generous multiple of the
       # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
@@ -253,6 +257,9 @@ jobs:
     # cargo-fuzz appends its own to it. `ci/verify_mold.sh` below fails if it ever stops applying.
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=mold
+      # The fuzzer runs 600 s after the build with no rustc call, which is sccache's default idle timeout:
+      # the server would exit before the post step and `--show-stats` would report zero requests.
+      SCCACHE_IDLE_TIMEOUT: "0"
     defaults:
       run:
         shell: nix develop .#fuzz --command bash -eo pipefail {0}
@@ -263,7 +270,7 @@ jobs:
           shell: fuzz
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       # 10 minutes per target (ADR-0018 row 1: TLS/HTTP/HTML/CSS/image/font
       # decoders must never panic on hostile bytes) — zero crashes expected.
       # Run from the repo root: cargo-fuzz auto-discovers ./fuzz/Cargo.toml,
@@ -288,7 +295,7 @@ jobs:
           shell: supply-chain
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
@@ -314,7 +321,7 @@ jobs:
           shell: unsafe-audit
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       - run: ci/unsafe_audit.sh
       - run: ci/verify_mold.sh
 
@@ -337,7 +344,7 @@ jobs:
           shell: arch
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       - run: arch-lint check
 
   coverage:
@@ -357,7 +364,7 @@ jobs:
           shell: coverage
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          version: v0.19.0
+          version: ${{ env.SCCACHE_VERSION }}
       # domain/ has no I/O and no excuse — roadmap §5 sets the v0.1 gate at 85%.
       - name: Coverage for engine domain/
         run: >
