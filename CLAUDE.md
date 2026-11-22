@@ -152,6 +152,7 @@ just test engine "-- name"                   # scoped test run
 just run --script scripts/hello.rhai         # run the alloy binary
 just deny | just coverage | just layering    # individual CI gates (`no-engine` still works as an alias for `layering`)
 just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy); `fuzz` needs the `nix develop .#fuzz` shell
+just config-check | just issues-check | just repo-check   # `tools.toml` vs GitHub (needs `gh` auth + network; not in `just gate`, CI: `.github/workflows/tools.yml`); `just repo-sync` applies it, manually, after the issue #334 migration order
 
 # equivalent raw commands:
 rumdl check . && rumdl fmt --check .        # Markdown lint + format check (also in `just lint` / `just fmt-check`)
@@ -172,6 +173,11 @@ new architectural or dependency-direction check, extend `arch-lint.toml` with a 
 
 Keep `.github/workflows/ci.yml` action versions (`actions/checkout`, `cachix/install-nix-action`, `cache`, …) on their
 current stable major/LTS — check before pinning a version, not after review flags a stale one.
+
+Labels, milestones and merge settings are declared in `tools.toml` and checked by `jaoppb/tools` (`tools`, a flake input
+pinned to a release tag, provided by the devShell together with `gh`). Add a label or milestone there, not in the GitHub
+UI: `unmanaged = "error"` makes an undeclared one fail `just repo-check`. Every issue carries one `type:*`, an `area:*`
+and a milestone, and an open non-`epic` issue needs an open parent.
 
 Markdown formatting is enforced by **rumdl** (`.rumdl.toml`: print width 120, reflow). Run `rumdl fmt` after editing any
 `.md` file or the commit hook will rewrite it.

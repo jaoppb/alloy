@@ -1,7 +1,7 @@
 name: Bug Report
 description: Report something in Alloy that isn't working as expected.
-title: "[Bug]: "
-labels: ["bug", "triage"]
+title: "fix: "
+labels: ["type:fix"]
 body:
     - type: markdown
       attributes:

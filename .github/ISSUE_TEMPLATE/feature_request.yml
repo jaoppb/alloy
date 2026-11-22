@@ -1,7 +1,7 @@
 name: Feature Request
 description: Propose a new feature, subsystem, or enhancement for Alloy.
-title: "[Feature]: "
-labels: ["enhancement", "triage"]
+title: "feat: "
+labels: ["type:feat"]
 body:
     - type: markdown
       attributes:

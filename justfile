@@ -181,6 +181,34 @@ stop-tests:
 test-web:
     ./scripts/smoke_web_tests.sh
 
+# --- repository declaration (tools.toml, issue #334) ----------------------
+# Not in `just gate`: they need gh authentication and the network. CI runs them in
+# .github/workflows/tools.yml; `nix develop .#repo` is the light shell for them.
+
+# Check that tools.toml parses and needs no schema migration
+[group('repo')]
+config-check:
+    @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
+    tools config check
+
+# Audit the GitHub issues against tools.toml: type, area, milestone, parent and pending label migrations (needs gh authentication)
+[group('repo')]
+issues-check *args:
+    @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
+    tools issues check {{args}}
+
+# Check that GitHub labels, milestones and merge settings match tools.toml, or only the parts named, e.g. --labels (the settings need gh authentication with push access)
+[group('repo')]
+repo-check *args:
+    @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
+    tools repo check {{args}}
+
+# Apply tools.toml to GitHub. Manual only: it deletes deprecated labels even from issues that still carry them, so follow the migration order in issue #334
+[group('repo')]
+repo-sync *args:
+    @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
+    tools repo sync {{args}}
+
 # --- misc -------------------------------------------------------------
 
 # Dependency tree for the whole workspace
