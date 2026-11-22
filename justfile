@@ -13,6 +13,9 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 cargo := env_var_or_default("CARGO", "cargo")
+# cargo-fuzz exports its own RUSTFLAGS, which replaces `target.*.rustflags` in .cargo/config.toml
+# and would drop mold on Linux (#153); repeat the flag for it. Empty elsewhere (mold is Linux-only).
+fuzz_env := if os() == "linux" { "RUSTFLAGS='-C link-arg=-fuse-ld=mold'" } else { "" }
 
 # Clippy invocation used everywhere (matches lefthook.yml / CI / package.json).
 clippy_flags := "--workspace --all-targets --all-features -- -D warnings"
@@ -99,28 +102,25 @@ hook-benchmark:
 # ADR-0018 row-1 decoders under cargo-fuzz, 10 min/target (requires nightly
 # and cargo-fuzz — not part of `just gate`, CI-only otherwise).
 fuzz target="":
-    @command -v cargo-fuzz >/dev/null || { echo "cargo-fuzz not found — run: just setup"; exit 1; }
-    {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do cargo +nightly fuzz run $t -- -max_total_time=600; done" } else { "cargo +nightly fuzz run " + target + " -- -max_total_time=600" } }}
+    @command -v cargo-fuzz >/dev/null || { echo "cargo-fuzz not found — run: nix develop .#fuzz"; exit 1; }
+    {{ if target == "" { "for t in inflate png_decode css_parse html_parse; do " + fuzz_env + " cargo fuzz run $t -- -max_total_time=600; done" } else { fuzz_env + " cargo fuzz run " + target + " -- -max_total_time=600" } }}
 
-# A truncated mise install leaves a 0-byte `cargo-deny` that exits 0 with no output, which made
-# `just deny` / `just gate` pass while CI failed — so require a non-empty `--version`, not just `command -v`.
-[private]
-_require-cargo-deny:
-    @command -v cargo-deny >/dev/null || { echo "cargo-deny not found — run: just setup"; exit 1; }
-    @[ -n "$(cargo-deny --version 2>/dev/null)" ] || { echo "cargo-deny is installed but prints nothing (corrupt install) — run: mise install -f cargo-deny"; exit 1; }
+# Prove the artifacts under a directory (default target/debug/deps) were linked by mold (#153).
+verify-mold *dirs:
+    ./ci/verify_mold.sh {{dirs}}
 
 # Supply-chain audit: licenses, advisories, bans, sources
-deny: _require-cargo-deny
+deny:
     {{cargo}} deny check
 
 # Just the security-advisory half of `deny` (fast)
-audit: _require-cargo-deny
+audit:
     {{cargo}} deny check advisories
 
 # Line coverage of the engine crate, and of css/network/window/html's domain/
 # (v0.5 Phase P); both fail under the roadmap threshold.
 coverage:
-    @command -v cargo-llvm-cov >/dev/null || { echo "cargo-llvm-cov not found — run: just setup"; exit 1; }
+    @command -v cargo-llvm-cov >/dev/null || { echo "cargo-llvm-cov not found — run: nix develop"; exit 1; }
     {{cargo}} llvm-cov --package {{cov_pkg}} --all-features --summary-only --fail-under-lines {{cov_min}}
     {{cargo}} llvm-cov --package css --package network --package window --package html --all-features \
         --ignore-filename-regex '(/application/|/infrastructure/)' \
@@ -128,7 +128,7 @@ coverage:
 
 # Write an HTML coverage report under target/llvm-cov/html
 coverage-html:
-    @command -v cargo-llvm-cov >/dev/null || { echo "cargo-llvm-cov not found — run: just setup"; exit 1; }
+    @command -v cargo-llvm-cov >/dev/null || { echo "cargo-llvm-cov not found — run: nix develop"; exit 1; }
     {{cargo}} llvm-cov --package {{cov_pkg}} --all-features --html
     @echo "report: target/llvm-cov/html/index.html"
 
@@ -140,7 +140,7 @@ css-conformance:
 
 # Architecture gate: layers, dependencies, `tracing` + no-`unwrap` (arch-lint)
 arch:
-    @command -v arch-lint >/dev/null || { echo "arch-lint not found — run: just setup"; exit 1; }
+    @command -v arch-lint >/dev/null || { echo "arch-lint not found — run: nix develop"; exit 1; }
     arch-lint check
 
 # Prove core/engine links no script interpreter (ADR-0002 / ADR-0011 item 2) and
@@ -195,10 +195,9 @@ doc:
 update:
     {{cargo}} update
 
-# Install dev tooling: every tool pinned in mise.toml, rust components, git hooks (requires mise)
+# Check the flake shell (Linux/macOS, ADR-0029) and install the git hooks
 setup:
-    mise install
-    rustup component add rustfmt clippy llvm-tools-preview
+    @case "$(uname -s)" in Linux|Darwin) [ -n "${ALLOY_DEV_SHELL:-}" ] || { echo "not in the flake shell — run: nix develop (or direnv allow)"; exit 1; };; esac
     lefthook install
 
 # (Re)install the lefthook git hooks

@@ -26,7 +26,7 @@ manifest_path="${1:-$repo_root/alloy/Cargo.toml}"
 allowlist="$repo_root/unsafe-allowlist.toml"
 
 command -v cargo-geiger >/dev/null || {
-	echo "cargo-geiger not found — run: just setup" >&2
+	echo "cargo-geiger not found — run: nix develop" >&2
 	exit 1
 }
 command -v jq >/dev/null || {

@@ -1,6 +1,8 @@
 # ADR-0025: mise Is the Source of Truth for Tool Versions; Node Is Removed
 
-- **Status**: Accepted (supersedes the tooling choices of ADR-0008: pnpm, prettier, markdownlint-cli2)
+- **Status**: Partially superseded: decisions 1 and 4 by
+  [ADR-0029](0029-nix-flake-as-the-required-development-environment.md), decision 2 is re-affirmed there; decisions 3
+  and 5 stay in force. (Supersedes the tooling choices of ADR-0008: pnpm, prettier, markdownlint-cli2.)
 - **Deciders**: Architecture Team
 - **Date**: 2026-10-05
 
