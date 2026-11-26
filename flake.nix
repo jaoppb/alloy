@@ -186,6 +186,14 @@
           # `just issues-check` / `repo-check` (needs a token and the network, so not in `just gate`).
           repo = mkShell { name = "repo"; packages = repoTools; };
           fuzz = mkShell { name = "fuzz"; packages = [ rustNightly pkgs.cargo-fuzz ]; native = true; };
+          # Never entered by a job's commands: the CI job that saves the shared `toolchain` Nix cache entry runs
+          # `nix develop .#toolchain` once so the entry holds the union of the rust, coverage, unsafe-audit and
+          # fuzz closures (#357, ADR-0029). Keep its packages the union of those four shells.
+          toolchain = mkShell {
+            name = "toolchain";
+            packages = [ rustStable rustNightly pkgs.cargo-llvm-cov pkgs.cargo-geiger pkgs.cargo-fuzz ] ++ scriptTools;
+            native = true;
+          };
 
           default = mkShell {
             name = "default";

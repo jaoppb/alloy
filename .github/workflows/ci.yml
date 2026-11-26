@@ -56,6 +56,10 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
+          entry: toolchain
+      # The one saver of the shared `toolchain` entry: realise the other shells' closures too, so the entry
+      # holds the union that coverage, unsafe-audit, fuzz and the Linux test job restore (#357, ADR-0029).
+      - run: nix develop .#toolchain --command true
       - uses: actions/cache@v6
         with:
           path: |
@@ -98,6 +102,8 @@ jobs:
         if: runner.os != 'Windows'
         with:
           shell: rust
+          entry: ${{ runner.os == 'Linux' && 'toolchain' || 'rust' }}
+          save: ${{ runner.os == 'Linux' && 'false' || 'true' }}
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
@@ -133,6 +139,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -176,6 +184,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -210,6 +220,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -243,6 +255,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -283,6 +297,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: fuzz
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -336,6 +352,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: unsafe-audit
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -380,6 +398,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: coverage
+          entry: toolchain
+          save: 'false'
       - uses: actions/cache@v6
         with:
           path: |
@@ -417,3 +437,34 @@ jobs:
           name: coverage-lcov-v0-5
           path: lcov-v0-5.info
       - run: ci/verify_mold.sh target/llvm-cov-target/debug/deps
+
+  # ---- cache hygiene (#357): drop Nix store generations nothing restores any more ----------------
+  # The only job with `actions: write`, and it never starts on a pull request: permissions are per job,
+  # not per event, so the `if` is what keeps that token away from PR runs. It runs last, after every
+  # job saved its current entry, so a failed run never purges the entries the next run restores.
+  purge-nix-cache:
+    name: Purge stale Nix caches
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - markdown
+      - rust-quality
+      - test
+      - layering
+      - css-conformance
+      - fault-injection
+      - hook-benchmark
+      - fuzz
+      - supply-chain
+      - unsafe-audit
+      - arch-lint
+      - coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - run: ci/purge_stale_nix_caches.sh "${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
