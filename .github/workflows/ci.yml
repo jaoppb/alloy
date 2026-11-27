@@ -335,6 +335,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: supply-chain
+          entry: toolchain
+          save: 'false'
       - run: cargo deny check
 
   # ---- ADR-0018: `unsafe` governed by threat surface -----------------------
@@ -387,6 +389,8 @@ jobs:
       - uses: ./.github/actions/nix-shell
         with:
           shell: arch
+          entry: toolchain
+          save: 'false'
       - run: arch-lint check
 
   coverage:

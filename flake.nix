@@ -164,12 +164,14 @@
           # ci/*.sh read JSON with jq; the flake supplies it instead of the host.
           scriptTools = [ pkgs.jq ];
 
-          # Package lists of the four shells that share the `toolchain` cache entry; the `toolchain` shell is
+          # Package lists of the six shells that share the `toolchain` cache entry; the `toolchain` shell is
           # built from them, so it cannot drift from the shells it stands in for (#357).
           rustPackages = [ rustStable ] ++ scriptTools;
           coveragePackages = [ rustStable pkgs.cargo-llvm-cov ];
           unsafeAuditPackages = [ rustStable pkgs.cargo-geiger ] ++ scriptTools;
           fuzzPackages = [ rustNightly pkgs.cargo-fuzz ];
+          supplyChainPackages = [ rustStable pkgs.cargo-deny ];
+          archPackages = [ rustStable arch-lint-cli ];
 
           # `tools` reads and writes GitHub through the gh CLI.
           repoTools = [
@@ -181,24 +183,31 @@
         {
           markdown = mkShell { name = "markdown"; packages = [ rumdl ]; };
           rust = mkShell { name = "rust"; packages = rustPackages; native = true; };
-          supply-chain = mkShell { name = "supply-chain"; packages = [ rustStable pkgs.cargo-deny ]; };
+          supply-chain = mkShell { name = "supply-chain"; packages = supplyChainPackages; };
           unsafe-audit = mkShell {
             name = "unsafe-audit";
             packages = unsafeAuditPackages;
             native = true;
           };
           # arch-lint reads cargo metadata.
-          arch = mkShell { name = "arch"; packages = [ rustStable arch-lint-cli ]; };
+          arch = mkShell { name = "arch"; packages = archPackages; };
           coverage = mkShell { name = "coverage"; packages = coveragePackages; native = true; };
           # `just issues-check` / `repo-check` (needs a token and the network, so not in `just gate`).
           repo = mkShell { name = "repo"; packages = repoTools; };
           fuzz = mkShell { name = "fuzz"; packages = fuzzPackages; native = true; };
           # Never entered by a job's commands: the CI job that saves the shared `toolchain` Nix cache entry runs
-          # `nix develop .#toolchain` once so the entry holds the union of the rust, coverage, unsafe-audit and
-          # fuzz closures (#357, ADR-0029).
+          # `nix develop .#toolchain` once so the entry holds the union of the rust, coverage, unsafe-audit,
+          # fuzz, supply-chain and arch closures (#357, ADR-0029).
           toolchain = mkShell {
             name = "toolchain";
-            packages = lib.unique (rustPackages ++ coveragePackages ++ unsafeAuditPackages ++ fuzzPackages);
+            packages = lib.unique (
+              rustPackages
+              ++ coveragePackages
+              ++ unsafeAuditPackages
+              ++ fuzzPackages
+              ++ supplyChainPackages
+              ++ archPackages
+            );
             native = true;
           };
 

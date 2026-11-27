@@ -89,13 +89,17 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 
 ## Cache sharing and purge (#357)
 
-- Shared entry: `rust`, `coverage`, `unsafe-audit` and `fuzz` have near-identical closures (3.0–3.3 GB each), so on
-  Linux they restore one `nix-Linux-toolchain-<hash>` entry (the nix-shell action's `entry` input). `rust-quality` is
-  its only saver (`save: 'false'` elsewhere) and runs `nix develop .#toolchain --command true` so the entry holds the
-  union of the four closures (4.09 GB measured, which is why the Linux GC cap is 5G). macOS keeps its `rust` entry,
-  saved by the macOS test job. Cache scoping already stops a pull request from poisoning `main`: a PR's entry is
-  readable only by that PR's refs, while `main`'s entries are readable by all.
+- Shared entry: `rust`, `coverage`, `unsafe-audit`, `fuzz`, `supply-chain` and `arch` have near-identical closures
+  (0.7–3.3 GB each), so on Linux they restore one `nix-Linux-toolchain-<hash>` entry (the nix-shell action's `entry`
+  input). `rust-quality` is its only saver (`save: 'false'` elsewhere) and runs `nix develop .#toolchain --command true`
+  so the entry holds the union of the six closures (the `toolchain` shell is built from the shells' package lists, so it
+  cannot drift from them). It measures about 4.1 GB uncompressed, which is why the Linux GC cap is 5G. Markdown and
+  `repo` keep their own small entries; macOS keeps its `rust` entry, saved by the macOS test job. Cache scoping already
+  stops a pull request from poisoning `main`: a PR's entry is readable only by that PR's refs, while `main`'s entries
+  are readable by all. Trade-off: a failing `rust-quality` leaves the entry unseeded, so a re-run is cold, and its cold
+  run realises the extra closures once per flake change.
 - Purge: `ci/purge_stale_nix_caches.sh` deletes, on `main`, every `nix-*` entry not ending in the current
   `flake.nix`/`flake.lock`/`rust-toolchain.toml` hash. It needs `actions: write`, which is granted per job, not per
   event, so it lives in the `purge-nix-cache` job that runs only on a push to `main` and only after every other job
-  succeeded. Every job that a pull request can reach keeps `contents: read`.
+  succeeded and only while its commit is still the head of `main`. Every job that a pull request can reach keeps
+  `contents: read`.
