@@ -226,8 +226,7 @@ paths = ["core/platform/**"]
 # that listed `<crate>-application` plus crates `deny-scope-dep` cannot see anyway; the crate-level
 # `restrict-use` fences below hold `engine`, `rhai_runtime` and `rhai_bindings`, and Cargo's no-cycle rule
 # holds `alloy` (it depends on every one of these crates).
-# `window-domain` stays a `deny-scope-dep`: it lies inside the overlapping `window-winit-free`
-# scope, and allowing that scope would also allow `window-application`.
+# `window-domain` is listed against `window` and `window-winit-free`, see its rule below.
 
 # Domain layer must not depend on application, runtime adapters, or CLI
 [[deny-scope-dep]]
@@ -341,11 +340,13 @@ from = "html"
 to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom"]
 message = "core/html must not depend on engine, concrete script runtimes, the bindings crate, CLI, or dom (PRD-008, ADR-0024)."
 
-# Window domain layer must not depend on the application layer or any adapter crate.
-[[deny-scope-dep]]
+# Window domain layer: the allow-list names `window-winit-free` as well as `window`, because the domain
+# files sit inside both scopes (the scope backs `window-backend-confined`). `allow-dep` judges each edge on
+# its own, so allowing that scope does not allow `window-application`, which stays an offending edge.
+[[allow-dep]]
 from = "window-domain"
-to = ["window-application", "engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "Window domain layer must not depend on application ports, engine, runtime, bindings, or CLI."
+to = ["window", "window-winit-free"]
+doc = "ADR-0010"
 
 # core/window is a pure window-system-and-presenter domain: no engine, no
 # runtime, no other subsystem, and — deliberately, unlike core/css —
@@ -457,8 +458,8 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 #   they stay.
 # - `acyclic` over every scope fails on the clean tree: a crate scope (`graphics`) contains its layer scopes
 #   (`graphics-application`), so each layer "depends" on its own crate and the graph is full of false cycles. Limited
-#   with `scopes = [...]` it only sees cycles between layers of one crate, and `deny-scope-dep` / `restrict-use`
-#   already forbid the edge that would close one, so it would enforce the same line twice.
+#   with `scopes = [...]` it only sees cycles between layers of one crate, and `allow-dep` / `deny-scope-dep` /
+#   `restrict-use` already forbid the edge that would close one, so it would enforce the same line twice.
 
 [[restrict-use]]
 name = "dom-isolated"
