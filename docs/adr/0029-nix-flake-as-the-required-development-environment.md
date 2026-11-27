@@ -44,10 +44,12 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 
 - Positive: one lockfile for the compiler, tools and native libraries; each worktree gets an identical shell; CI jobs
   and local runs use the same environment.
+
 - Negative: contributors on Linux and macOS must install Nix; the first entry on aarch64-linux and macOS builds
   `arch-lint-cli` from source unless cached; `rumdl` and the x86_64-linux `arch-lint-cli` are downloaded binaries, so
   their hashes must be updated with each version bump; the Windows job is a second, rustup-based path that can drift
   from the flake.
+
 - Cache budget: Actions allows 10 GB per repository, shared by the Nix store entries (one per shell and `flake.lock`
   generation) and the cargo `target/` caches. On a key miss, cache-nix-action v7 runs `nix store gc --max <cap>` just
   before saving (on a hit it neither collects nor saves); the garbage collector deletes dead paths in store-directory
@@ -58,4 +60,29 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   `rust`, ~3.0 GB on macOS). Flake inputs are not rooted (nix#6895) and may be trimmed, then refetched. Measured on
   2026-11-22 with `gh cache list`, the cache was already at 11.3 GiB (limit 10 GiB) before the caps; #355 has the
   arithmetic and #357 tracks the total.
-- Follow-ups: mold (#153) and sccache (#151) add their packages to this flake; `arch-lint-cli` moves to 0.11 with #155.
+
+- sccache stays optional (supersedes the epic's original "mandatory sccache" decision, #154): #151 shipped it as an
+  opt-in (`RUSTC_WRAPPER=sccache`, default shell only, no `build.rustc-wrapper`). The measurement below is bound to the
+  pinned sccache **0.19.0**; follow-up #365 will re-measure on sccache ≥ 0.20.0.
+
+  Measured by #347 on a second worktree against the bar of ≥30% faster and ≥80% cache hits (two sequences, n=1 per
+  configuration per sequence, same commit, 16 cores, load average 10–77 in the first sequence and 40–56 in the second):
+
+  - **`SCCACHE_BASEDIRS` was not testable for Rust.** In 0.19.0 it applies to C/C++ only; Rust support arrived in
+    v0.20.0 (#2918, #3022), together with no longer hashing `CARGO_TARGET_DIR` (#3050). So #347 is no evidence that
+    basedirs fails for Rust.
+  - **`--remap-path-prefix`** (confirmed on the `rustc` command line) did not help: the hit count stayed at 30/189
+    (15.9%) with remap alone, basedirs alone and both together (basedirs was a no-op for Rust in 0.19.0, so these are
+    effectively one configuration), and wall-clock was within noise of no sccache: warm runs 68.8–73.6 s against a
+    single 71.3 s baseline in the quieter sequence; the other was too load-noisy to read.
+  - **A shared `CARGO_TARGET_DIR`** makes a second worktree's no-op rebuild take 1.7–4.2 s, but its first build is
+    within noise of baseline, and it is disqualified (single measurements): concurrent builds block on cargo's
+    build-directory lock (a second build waited ~53 s), a `cargo clean` in one worktree wipes the others' artifacts (a
+    62 s rebuild), and switching between divergent commits rebuilds the workspace (27–45 s).
+  - Workspace crates built with incremental compilation are not cached by 0.19.0 (v0.20.0 adds
+    `SCCACHE_ALLOW_INCREMENTAL`, #2810, #3020), nor are `bin`, `proc-macro` and `dylib` crates.
+
+  Nothing made it default-on; CI keeps its per-job caches.
+
+- Follow-ups: mold (#153) and sccache (#151, optional) add their packages to this flake; `arch-lint-cli` moves to 0.11
+  with #155.

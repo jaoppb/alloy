@@ -26,8 +26,10 @@ nix develop  # required on Linux/macOS (or `direnv allow`; review `flake.nix` ch
 just setup   # checks you are in the flake shell, installs the git hooks
 ```
 
-The default flake shell also provides `sccache`, off by default: `export RUSTC_WRAPPER=sccache` opts in. It only hits
-when absolute paths match, so a second worktree with its own `target/` gains little (see `CLAUDE.md`).
+The default flake shell also provides `sccache`, off by default: `export RUSTC_WRAPPER=sccache` opts in. In the #347
+measurement it only hit when absolute paths matched: with the pinned sccache 0.19.0 `SCCACHE_BASEDIRS` is not applied to
+Rust, path remapping had no measurable effect, and a shared `CARGO_TARGET_DIR` blocks concurrent builds, so a second
+worktree with its own `target/` gains little (#347, to be re-measured on sccache ≥ 0.20.0 in #365; see `CLAUDE.md`).
 
 `just` (no arguments) lists every available recipe. The two you'll use constantly:
 
