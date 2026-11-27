@@ -209,6 +209,18 @@ repo-sync *args:
     @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
     tools repo sync {{args}}
 
+# Print the Status moves the workflow plans for the GitHub Project and write nothing; exits 1 on planned moves or frozen cards (needs gh authentication with the `project` scope)
+[group('repo')]
+project-check *args:
+    @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
+    tools project check {{args}}
+
+# Move the Project cards to the Status the workflow derives. Manual only: it writes to the Project, so no CI job runs it (issue #335)
+[group('repo')]
+project-sync *args:
+    @command -v tools >/dev/null || { echo "tools not found — run: nix develop"; exit 1; }
+    tools project sync {{args}}
+
 # --- misc -------------------------------------------------------------
 
 # Dependency tree for the whole workspace

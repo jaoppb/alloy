@@ -114,5 +114,19 @@ milestone = true
 parent = true
 release = true
 
+# Issue #335. The Project is https://github.com/users/jaoppb/projects/8: public, linked to this repository. The
+# installed `tools` declares only the number and title here; the Status option names come from `builtin:cosmo` and
+# must exist as options on the Project's Status field. `tools project sync` moves cards, it never adds them: new
+# issues join through the Project's built-in "Auto-add to project" workflow, which only the UI can enable.
+[github.project]
+number = 8
+title = "Alloy"
+
+# `builtin:cosmo` keeps parent and epic membership enforced after jaoppb/tools#59 moves the issue audit onto the
+# workflow. `triaged` is what `tools config migrate` writes for a repository that does not require Priority/Effort
+# (`builtin:cosmo` alone requires both): a type, an area and a milestone.
 [workflow]
-extends = "builtin:tools"
+extends = "builtin:cosmo"
+
+[workflow.facts]
+triaged = "has_type && has_area && issue.milestone != null"
