@@ -87,10 +87,16 @@ jobs:
         # Linux and macOS run inside the flake (ADR-0029); windows-2022 is the one
         # Nix-free job: rustup reads rust-toolchain.toml.
         include:
+          # nix-entry/nix-save: Linux restores the shared `toolchain` entry that rust-quality saves; macOS has
+          # no other job, so it saves its own `rust` entry (#357).
           - os: ubuntu-24.04
             shell: nix develop .#rust --command bash -eo pipefail {0}
+            nix-entry: toolchain
+            nix-save: 'false'
           - os: macos-15
             shell: nix develop .#rust --command bash -eo pipefail {0}
+            nix-entry: rust
+            nix-save: 'true'
           - os: windows-2022
             shell: bash -eo pipefail {0}
     defaults:
@@ -102,8 +108,8 @@ jobs:
         if: runner.os != 'Windows'
         with:
           shell: rust
-          entry: ${{ runner.os == 'Linux' && 'toolchain' || 'rust' }}
-          save: ${{ runner.os == 'Linux' && 'false' || 'true' }}
+          entry: ${{ matrix.nix-entry }}
+          save: ${{ matrix.nix-save }}
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
@@ -445,6 +451,7 @@ jobs:
   purge-nix-cache:
     name: Purge stale Nix caches
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Must list every job of this workflow, so the purge never races a job still saving its entry.
     needs:
       - markdown
       - rust-quality
@@ -460,11 +467,24 @@ jobs:
       - coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Its own group: main runs do not cancel each other, and two purges must not interleave.
+    concurrency:
+      group: purge-nix-cache
+      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - run: ci/purge_stale_nix_caches.sh "${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}"
+        with:
+          persist-credentials: false
+      # An older run must not delete the entries a newer main run (another flake hash) just saved.
+      - id: head
+        run: echo "current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
+      - if: steps.head.outputs.current == github.sha
+        run: ci/purge_stale_nix_caches.sh "$FLAKE_HASH"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLAKE_HASH: ${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
