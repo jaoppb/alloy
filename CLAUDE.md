@@ -161,7 +161,7 @@ just test engine "-- name"                   # scoped test run
 just run --script scripts/hello.rhai         # run the alloy binary
 just deny | just coverage | just layering    # individual CI gates (`no-engine` still works as an alias for `layering`)
 just hook-benchmark | just fuzz [target]     # not in `just gate` (slow/hardware-noisy); `fuzz` needs the `nix develop .#fuzz` shell
-just config-check | just issues-check | just repo-check   # `tools.toml` vs GitHub (needs `gh` auth + network; not in `just gate`, CI: `.github/workflows/tools.yml`); `just repo-sync` applies it, manually, after the issue #334 migration order
+just config-check | just issues-check | just repo-check   # `tools.toml` vs GitHub (needs `gh` auth + network; not in `just gate`, CI: `.github/workflows/tools.yml`, which also runs when `justfile` changes); `just repo-sync` applies it, manually, after the issue #334 migration order
 
 # equivalent raw commands:
 rumdl check . && rumdl fmt --check .        # Markdown lint + format check (also in `just lint` / `just fmt-check`)
