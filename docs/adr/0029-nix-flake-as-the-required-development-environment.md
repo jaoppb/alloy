@@ -91,13 +91,15 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 
 - Shared entry: `rust`, `coverage`, `unsafe-audit`, `fuzz`, `supply-chain` and `arch` have near-identical closures
   (0.7–3.3 GB each), so on Linux they restore one `nix-Linux-toolchain-<hash>` entry (the nix-shell action's `entry`
-  input). `rust-quality` is its only saver (`save: 'false'` elsewhere) and runs `nix develop .#toolchain --command true`
-  so the entry holds the union of the six closures (the `toolchain` shell is built from the shells' package lists, so it
-  cannot drift from them). It measures about 4.1 GB uncompressed, which is why the Linux GC cap is 5G. Markdown and
-  `repo` keep their own small entries; macOS keeps its `rust` entry, saved by the macOS test job. Cache scoping already
-  stops a pull request from poisoning `main`: a PR's entry is readable only by that PR's refs, while `main`'s entries
-  are readable by all. Trade-off: a failing `rust-quality` leaves the entry unseeded, so a re-run is cold, and its cold
-  run realises the extra closures once per flake change.
+  input). `rust-quality` is its only saver (`save: 'false'` elsewhere). The action's rooting step (#355) roots `entry`,
+  not the job's own shell, so on Linux it realises and roots the `toolchain` shell: the union of the six closures, built
+  from the shells' package lists so it cannot drift from them. Rooting the job's `rust` shell instead would let the GC
+  evict the other five shells' paths from the shared entry. The union measures about 4.1 GB uncompressed and is fully
+  rooted, so the trim deletes nothing live; that is why the Linux GC cap is 5G rather than the 4G the bullet above
+  states for per-shell entries. Markdown and `repo` keep their own small entries; macOS keeps its `rust` entry, saved by
+  the macOS test job. Cache scoping already stops a pull request from poisoning `main`: a PR's entry is readable only by
+  that PR's refs, while `main`'s entries are readable by all. Trade-off: a failing `rust-quality` leaves the entry
+  unseeded, so a re-run is cold, and its cold run realises the extra closures once per flake change.
 - Budget: one generation of every entry sums to 9.08 GiB (Nix 3.26 GiB, cargo `target/` 5.82 GiB), measured with
   `gh cache list` on PR #360, against the 10 GiB limit (it was 11.3 GiB before this change). About 0.9 GiB of headroom
   remains, and PR-scoped entries count too, so check this figure before adding a cache. Warm Linux restores cost 3–16 s

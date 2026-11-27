@@ -57,9 +57,9 @@ jobs:
         with:
           shell: rust
           entry: toolchain
-      # The one saver of the shared `toolchain` entry: realise the other shells' closures too, so the entry
-      # holds the union that every Linux job passing `entry: toolchain` restores (#357, ADR-0029).
-      - run: nix develop .#toolchain --command true
+      # The one saver of the shared `toolchain` entry. The action's rooting step realises and roots the
+      # `toolchain` shell (the union of the other shells' closures) that every Linux job passing
+      # `entry: toolchain` restores, so no separate realising step is needed (#357, ADR-0029).
       - uses: actions/cache@v6
         with:
           path: |
