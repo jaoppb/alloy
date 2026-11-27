@@ -7,7 +7,7 @@ inputs:
   entry:
     description: >-
       Name of the cache entry the store is restored from and saved to. Defaults to `shell`; shells whose closures
-      are near-identical pass one shared name (`toolchain`) so Actions holds one entry for all of them.
+      are near-identical pass one shared name (`toolchain`) so Actions holds one entry for all of them. It must also name a flake devShell, which the saver roots.
     required: false
     default: ''
   save:
@@ -29,7 +29,7 @@ runs:
         # `nix store gc --max <cap>`. That deletes dead paths in store-directory order (not oldest first) until
         # the store fits, so the step below roots the entry's shell: only paths outside its closure can be deleted.
         # The caps sit just above the largest cached closure (measured: Linux 4.13 GB for the shared `toolchain`
-        # entry, the union of the six shells the `toolchain` shell in flake.nix unions; macOS ~3.0 GB), since a lower cap would
+        # entry, the union of the six shells that flake.nix's `toolchain` shell is built from; macOS ~3.0 GB), since a lower cap would
         # evict live toolchain paths. At the measured ~3.1x zstd ratio they bound an entry at ~1.6 GiB (Linux) /
         # ~1.0 GiB (macOS). Flake inputs are not part of the shell closure (nix#6895), so the trim may drop them;
         # they are refetched at evaluation. Budget and measurements: ADR-0029.
