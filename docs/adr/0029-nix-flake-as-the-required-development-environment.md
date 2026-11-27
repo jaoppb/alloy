@@ -98,6 +98,10 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   stops a pull request from poisoning `main`: a PR's entry is readable only by that PR's refs, while `main`'s entries
   are readable by all. Trade-off: a failing `rust-quality` leaves the entry unseeded, so a re-run is cold, and its cold
   run realises the extra closures once per flake change.
+- Budget: one generation of every entry sums to 9.08 GiB (Nix 3.26 GiB, cargo `target/` 5.82 GiB), measured with
+  `gh cache list` on PR #360, against the 10 GiB limit (it was 11.3 GiB before this change). About 0.9 GiB of headroom remains, and
+  PR-scoped entries count too, so check this figure before adding a cache. Warm Linux restores cost 3–16 s more than
+  with per-shell entries (extracting a 4.1 GB store instead of ~3.3 GB), while 11 jobs no longer save (9–24 s each).
 - Purge: `ci/purge_stale_nix_caches.sh` deletes, on `main`, every `nix-*` entry not ending in the current
   `flake.nix`/`flake.lock`/`rust-toolchain.toml` hash. It needs `actions: write`, which is granted per job, not per
   event, so it lives in the `purge-nix-cache` job that runs only on a push to `main` and only after every other job

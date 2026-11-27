@@ -58,7 +58,7 @@ jobs:
           shell: rust
           entry: toolchain
       # The one saver of the shared `toolchain` entry: realise the other shells' closures too, so the entry
-      # holds the union that coverage, unsafe-audit, fuzz and the Linux test job restore (#357, ADR-0029).
+      # holds the union that every Linux job passing `entry: toolchain` restores (#357, ADR-0029).
       - run: nix develop .#toolchain --command true
       - uses: actions/cache@v6
         with:
@@ -484,7 +484,9 @@ jobs:
           persist-credentials: false
       # An older run must not delete the entries a newer main run (another flake hash) just saved.
       - id: head
-        run: echo "current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" >> "$GITHUB_OUTPUT"
+        run: |
+          head_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          echo "current=$head_sha" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
       - if: steps.head.outputs.current == github.sha
