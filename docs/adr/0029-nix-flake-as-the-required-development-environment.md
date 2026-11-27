@@ -49,8 +49,13 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   their hashes must be updated with each version bump; the Windows job is a second, rustup-based path that can drift
   from the flake.
 - Cache budget: Actions allows 10 GB per repository, shared by the Nix store entries (one per shell and `flake.lock`
-  generation) and the cargo `target/` caches. The nix-shell action caps each entry with `gc-max-store-size-linux: 4G`
-  and `gc-max-store-size-macos: 3500M`, just above the largest closure (3.46 GB for `default`, 3.25 GB for `rust`, ~3.0
-  GB on macOS); a lower cap would evict live toolchain paths. Measured on 2026-11-22 with `gh cache list`, the cache was
-  already at 11.3 GiB (limit 10 GiB) before the caps; see the PR for the arithmetic.
+  generation) and the cargo `target/` caches. On a key miss, cache-nix-action v7 runs `nix store gc --max <cap>` just
+  before saving (on a hit it neither collects nor saves); the garbage collector deletes dead paths in store-directory
+  order, not oldest first. The nix-shell action therefore roots the shell with `nix develop --profile` after the
+  restore, so only paths outside the current shell closure can be deleted (verified locally: the profile's closure
+  equals the shell's, 3.25 GB for `rust`, and roots its `rustc`). The caps are `gc-max-store-size-linux: 4G` and
+  `gc-max-store-size-macos: 3500M`, just above the largest cached closure (3.28 GB for `unsafe-audit`, 3.25 GB for
+  `rust`, ~3.0 GB on macOS). Flake inputs are not rooted (nix#6895) and may be trimmed, then refetched. Measured on
+  2026-11-22 with `gh cache list`, the cache was already at 11.3 GiB (limit 10 GiB) before the caps; #355 has the
+  arithmetic and #357 tracks the total.
 - Follow-ups: mold (#153) and sccache (#151) add their packages to this flake; `arch-lint-cli` moves to 0.11 with #155.
