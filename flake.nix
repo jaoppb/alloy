@@ -195,9 +195,9 @@
           # `just issues-check` / `repo-check` (needs a token and the network, so not in `just gate`).
           repo = mkShell { name = "repo"; packages = repoTools; };
           fuzz = mkShell { name = "fuzz"; packages = fuzzPackages; native = true; };
-          # Never entered by a job's commands: the CI job that saves the shared `toolchain` Nix cache entry runs
-          # `nix develop .#toolchain` once so the entry holds the union of the rust, coverage, unsafe-audit,
-          # fuzz, supply-chain and arch closures (#357, ADR-0029).
+          # Never entered by a job's commands: the nix-shell action's rooting step (`--profile`) realises and roots
+          # it in the CI job that saves the shared `toolchain` Nix cache entry, so the entry holds the union of the
+          # rust, coverage, unsafe-audit, fuzz, supply-chain and arch closures (#357, ADR-0029).
           toolchain = mkShell {
             name = "toolchain";
             packages = lib.unique (
