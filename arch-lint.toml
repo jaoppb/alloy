@@ -380,7 +380,7 @@ message = "core/platform is a leaf: it must not depend on any other workspace cr
 # written: a relative path (`super::…`) escapes every rule, and a glob import (`ports::*`) or an
 # alias of a parent path (`use network as net;`, `use std::sync as s;`) escapes every fence
 # narrower than the crate — an item fence or a module fence such as `std::sync::mpsc::**` — while
-# a crate-wide `<crate>::**` fence still catches it. Those cases are left to review (all four
+# a crate-wide `<crate>::**` fence still catches it. Those cases are left to review (these three
 # still pass on arch-lint 0.11, re-probed in #155; #139). The same goes for a fully qualified call
 # on a fenced item (`network::HttpTransport::execute(..)`, #148).
 

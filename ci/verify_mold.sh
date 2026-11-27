@@ -5,7 +5,8 @@
 # (set by a tool such as cargo-fuzz or cargo-llvm-cov, or by a CI step) silently replaces. mold stamps
 # its name in the ELF `.comment` section, so this script reads it back from every executable and
 # shared object directly under each given directory (default: target/debug/deps) and fails on any
-# that is not mold-linked, or when a directory holds no such file at all. A stale `target/` from
+# that is not mold-linked, or when a directory is missing or holds no such file at all (the remaining
+# directories are still checked and the exit status is non-zero at the end). A stale `target/` from
 # before mold (a local checkout, a restored CI cache) trips it: `cargo clean` or bump the cache key.
 #
 # Usage: ci/verify_mold.sh [artifact-dir ...]
@@ -24,6 +25,11 @@ fi
 
 status=0
 for artifact_dir in "$@"; do
+	if [ ! -d "$artifact_dir" ]; then
+		echo "artifact directory not found: $artifact_dir — did the build run?" >&2
+		status=1
+		continue
+	fi
 	checked=0
 	failed=0
 	while IFS= read -r artifact; do

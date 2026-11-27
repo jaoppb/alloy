@@ -17,6 +17,8 @@ on:
       # flake.nix and flake.lock pin the `tools` binary the recipes run.
       - flake.nix
       - flake.lock
+      # The job runs `just <recipe>`: the recipes live in the justfile, so a change there alone must run it.
+      - justfile
   push:
     branches: [main]
     paths: *declaration
