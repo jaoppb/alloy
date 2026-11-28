@@ -88,15 +88,15 @@ documentation = "type:docs"
 "lib:ttf-parser" = "area:graphics"
 
 # `tools issues check` requires an open issue's milestone to be a release (`vX.Y.Z`, the default
-# `milestone_format`); `v1.0.0` is the catch-all for unscheduled issues.
+# `milestone_format`); `v0.7.0` is the MVP and `v1.0.0` the catch-all for unscheduled issues.
 [github.milestones]
 unmanaged = "error"
 items = [
-    { title = "v0.6.0", description = "Next release after v0.5", state = "open" },
-    { title = "v0.7.0", description = "Roadmap release after v0.6", state = "open" },
-    { title = "v0.8.0", description = "Roadmap release after v0.7", state = "open" },
-    { title = "v0.9.0", description = "Roadmap release after v0.8", state = "open" },
-    { title = "v1.0.0", description = "First stable release; also holds issues not yet scheduled", state = "open" },
+    { title = "v0.6.0", description = "Build and tooling: Nix flake, mold, CI caches", state = "open" },
+    { title = "v0.7.0", description = "MVP: a usable static browser (no JS) - scrolling, history, legible pages, no crashes on hostile input", state = "open" },
+    { title = "v0.8.0", description = "Post-MVP: rendering breadth (tables, floats, positioning) and correctness fixes", state = "open" },
+    { title = "v0.9.0", description = "Scripted browser: sandbox hardening and Rhai policy wired into the browse path", state = "open" },
+    { title = "v1.0.0", description = "First stable release; also holds refactors and issues not yet scheduled", state = "open" },
 ]
 
 # Both forms carry exactly the label tools.toml declares; `tools repo check` compares them.
