@@ -47,8 +47,8 @@ Chosen option: **Option 2.**
 - **The only `target_os` dispatch is the selection of the `os` module in `core/platform/src/infrastructure/mod.rs`.**
   Each per-OS module (`linux.rs`, `macos.rs`, `windows.rs`, `unsupported.rs`) exposes the same functions, so
   `HostPlatform` itself has no `cfg`.
-- The crate is a **leaf**: it has no dependencies and imports no workspace crate (`arch-lint.toml`: `platform-isolated`,
-  plus `deny-scope-dep` from `platform`). `#![forbid(unsafe_code)]`.
+- The crate is a **leaf**: it has no dependencies and imports no workspace crate (`arch-lint.toml`:
+  `platform-isolated`). `#![forbid(unsafe_code)]`.
 - `core/graphics` keeps its public `FontCatalog` / `GenericFamily` names (`GenericFamily` is re-exported from
   `platform`), so callers such as `alloy`'s `RuntimeFontProvider` are unchanged.
 

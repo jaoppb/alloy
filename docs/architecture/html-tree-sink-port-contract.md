@@ -144,7 +144,7 @@ The port protocol fully supports parser re-entrancy and suspension:
 - `core/html/tests/data/MANIFEST.md` lists tags, syntax and parse-error codes; `manifest_runner.rs` checks each registry
   against it in both directions and probes every code at its exact line and column.
 - `core/html` is a leaf crate: the dependency is `dom → html` (ADR-0024), forbidden in the other direction by the
-  `arch-lint` rules `html` (`deny-scope-dep`) and `html-isolated` (`restrict-use`). There is no `dom` feature.
+  `arch-lint` rule `html-isolated` (`restrict-use`). There is no `dom` feature.
 
 ---
 

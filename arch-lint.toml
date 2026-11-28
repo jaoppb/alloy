@@ -223,68 +223,33 @@ paths = ["core/platform/**"]
 # `to = []` would trip on every file). Only scopes that are declared are checked: `<crate>-application`
 # is, so a domain -> application edge fails, while `crate::infrastructure::…` stays unchecked because no
 # `<crate>-infrastructure` scope exists (it was unchecked before too). It replaces the `deny-scope-dep`
-# that listed `<crate>-application` plus crates `deny-scope-dep` cannot see anyway; the crate-level
-# `restrict-use` fences below hold `engine`, `rhai_runtime` and `rhai_bindings`, and Cargo's no-cycle rule
-# holds `alloy` (it depends on every one of these crates).
+# that listed `<crate>-application` plus crates `deny-scope-dep` cannot see anyway.
 # `window-domain` is listed against `window` and `window-winit-free`, see its rule below.
+#
+# Crate-level isolation is stated only by the `restrict-use` fences in the next section (#362): a
+# `deny-scope-dep` whose `to` names a scope of another crate can never fire, because it resolves
+# only `crate::` / `self::` / `super::` paths. The rule below is the one same-crate edge it can see.
 
-# Domain layer must not depend on application, runtime adapters, or CLI
+# Engine domain layer must not depend on the application layer
 [[deny-scope-dep]]
 from = "domain"
-to = ["application", "runtime-rhai", "alloy-cli"]
-message = "Domain layer must not depend on application ports or runtime infrastructure (ADR-0011)."
-
-# Engine port abstraction must not depend on concrete runtime adapters or CLI
-[[deny-scope-dep]]
-from = "engine"
-to = ["runtime-rhai", "alloy-cli"]
-message = "Engine abstraction crate must not depend on concrete script runtimes or CLI (ADR-0002 / ADR-0011)."
+to = ["application"]
+message = "Domain layer must not depend on application ports (ADR-0011)."
 
 [[allow-dep]]
 from = "dom-domain"
 to = ["dom"]
 doc = "ADR-0010"
 
-# DOM crate must not depend on engine, runtime adapters, bindings, or CLI
-[[deny-scope-dep]]
-from = "dom"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "core/dom must not depend on engine, concrete script runtimes, the bindings crate, or CLI."
-
-# core/runtime/rhai is the pure engine-port backend after the R split: it must not
-# name a domain crate, the bindings crate, or the CLI. The DOM bridge and every
-# later CSS/graphics/network/window bridge lives in rhai-bindings (v0.5 §2.12).
-[[deny-scope-dep]]
-from = "runtime-rhai"
-to = ["dom", "graphics", "css", "runtime-rhai-bindings", "alloy-cli"]
-message = "core/runtime/rhai must name no domain crate — the bridges live in rhai-bindings (v0.5 report §2.12)."
-
 [[allow-dep]]
 from = "graphics-domain"
 to = ["graphics"]
 doc = "ADR-0010"
 
-# core/graphics is a pure rasterization domain: no DOM, no CSS, no engine, no runtime.
-# Every script bridge lives in core/runtime/rhai (v0.3 report decision 2.1), which is
-# also why docs/architecture/overview.md no longer lists `graphics -> engine`.
-[[deny-scope-dep]]
-from = "graphics"
-to = ["engine", "runtime-rhai", "alloy-cli", "dom"]
-message = "core/graphics must not depend on engine, DOM, concrete script runtimes, or CLI (PRD-005:62-63)."
-
 [[allow-dep]]
 from = "css-domain"
 to = ["css"]
 doc = "ADR-0010"
-
-# core/css realises the cascade/layout ports without naming the engine or a
-# script runtime — the scriptable adapter lives in rhai-bindings (PRD-007:64-67).
-# It MAY depend on core/dom and core/graphics (shared units, ADR-0016), so those
-# are deliberately absent from this list.
-[[deny-scope-dep]]
-from = "css"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli"]
-message = "core/css must not depend on engine, concrete script runtimes, the bindings crate, or CLI (PRD-007). It may depend on dom, html and graphics."
 
 [[allow-dep]]
 from = "network-domain"
@@ -296,49 +261,10 @@ from = "browser-domain"
 to = ["browser"]
 doc = "ADR-0010"
 
-# core/browser owns the document and says *what* to fetch; `alloy` does the fetching. It may
-# depend on dom, html, css, network (domain types) and graphics (domain types) — never on the
-# engine, a script runtime, the bindings crate, the CLI, or the window system.
-[[deny-scope-dep]]
-from = "browser"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "ui"]
-message = "core/browser must not depend on core/ui, engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
-
 [[allow-dep]]
 from = "ui-domain"
 to = ["ui"]
 doc = "ADR-0010"
-
-# core/ui is the chrome: it may use graphics, window and network (domain types) and the shared
-# `region` ids — never the browsing context, the document crates, the engine, a script runtime
-# or the CLI (ADR-0026).
-[[deny-scope-dep]]
-from = "ui"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "browser", "dom", "css", "html"]
-message = "core/ui must not depend on core/browser, dom, css, html, engine, concrete script runtimes, the bindings crate, or CLI (ADR-0026)."
-
-# core/region is a leaf: the one vocabulary `ui` and `browser` share. It carries a `Rect`
-# and nothing else (ADR-0026).
-[[deny-scope-dep]]
-from = "region"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "browser", "ui", "dom", "css", "html", "network", "window"]
-message = "core/region is a leaf shared by ui and browser; it may depend on graphics only (ADR-0026)."
-
-# core/network is a pure transport-and-policy domain: no engine, no runtime, no
-# other subsystem. The scriptable RequestPolicy of Phase M lives in
-# rhai-bindings; the `restrict-use` rules below hold this line (PRD-009, ADR-0019).
-[[deny-scope-dep]]
-from = "network"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom", "css", "graphics"]
-message = "core/network must not depend on engine, DOM, CSS, graphics, script runtimes, the bindings crate, or CLI (PRD-009)."
-
-# core/html realises the TokenSink/TreeSink ports over core/dom without naming
-# the engine or a script runtime (PRD-008, B5). It is the leaf vocabulary crate: core/dom
-# depends on it, never the other way round (ADR-0024).
-[[deny-scope-dep]]
-from = "html"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom"]
-message = "core/html must not depend on engine, concrete script runtimes, the bindings crate, CLI, or dom (PRD-008, ADR-0024)."
 
 # Window domain layer: the allow-list names `window-winit-free` as well as `window`, because the domain
 # files sit inside both scopes (the scope backs `window-backend-confined`). `allow-dep` judges each edge on
@@ -347,16 +273,6 @@ message = "core/html must not depend on engine, concrete script runtimes, the bi
 from = "window-domain"
 to = ["window", "window-winit-free"]
 doc = "ADR-0010"
-
-# core/window is a pure window-system-and-presenter domain: no engine, no
-# runtime, no other subsystem, and — deliberately, unlike core/css —
-# no `graphics` either. `FrameView` is what keeps that edge from existing
-# (see the crate doc `## Layout`); the scriptable UI policy of Phase M lives
-# in rhai-bindings; the `restrict-use` rules below hold this line (PRD-010, ADR-0019).
-[[deny-scope-dep]]
-from = "window"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom", "css", "graphics", "network"]
-message = "core/window must not depend on engine, DOM, CSS, graphics, network, script runtimes, the bindings crate, or CLI (PRD-010)."
 
 [[allow-dep]]
 from = "html-domain"
@@ -367,11 +283,6 @@ doc = "ADR-0010"
 from = "platform-domain"
 to = ["platform"]
 doc = "ADR-0010"
-
-[[deny-scope-dep]]
-from = "platform"
-to = ["engine", "runtime-rhai", "runtime-rhai-bindings", "alloy-cli", "dom", "css", "graphics", "network", "window", "html"]
-message = "core/platform is a leaf: it must not depend on any other workspace crate (ADR-0022)."
 
 # --- import restrictions ---------------------------------------------------
 #
@@ -445,10 +356,14 @@ scope = "window-winit-free"
 deny = ["winit::**", "softbuffer::**"]
 message = "winit/softbuffer must stay confined to infrastructure/{winit_system,softbuffer_presenter,event_map} (ADR-0011 item 6)"
 # --- cross-crate isolation (one rule per crate, replaces the `layering` CI job's cargo-tree greps) ---
-# `deny-scope-dep` resolves only `crate::` / `self::` / `super::` paths, against the package the
-# file belongs to (arch-lint 0.10+; before that, nothing in a member crate), so it still cannot
-# see `use engine::X` in another crate (re-checked on 0.11, #139, #155); `restrict-use` matches any import path. The
-# interpreter crates themselves are denied by the `*-interpreter-free` rules above.
+# Crate-level isolation is stated only here, by `restrict-use` (#362): it matches any import path, whereas
+# `deny-scope-dep` resolves only `crate::` / `self::` / `super::` paths, against the package the file belongs to
+# (arch-lint 0.10+; before that, nothing in a member crate), so it cannot see `use engine::X` in another crate
+# (re-checked on 0.11, #139, #155, #362). The interpreter crates themselves are denied by the `*-interpreter-free`
+# rules above. Two kinds of edge no arch-lint rule sees are held by Cargo instead: `alloy` (the `alloy-cli` scope)
+# is depended on by nobody, because it depends on every other crate and Cargo forbids the cycle; and the engine's
+# edges to `runtime-rhai` are held by `core/engine/Cargo.toml`, which depends only on `bitflags` while
+# `rhai-runtime` and `alloy` depend on `engine`.
 #
 # The project-wide rules `[[independent]]` (ALD010), `[[acyclic]]` (ALD009) and `[[allow-dep]]` (ALD011) read the same
 # scope graph as `deny-scope-dep`, so they are blind across crates too (#336, probed on 0.11.0):
@@ -461,36 +376,58 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 #   with `scopes = [...]` it only sees cycles between layers of one crate, and `allow-dep` / `deny-scope-dep` /
 #   `restrict-use` already forbid the edge that would close one, so it would enforce the same line twice.
 
+
+# Engine port abstraction: names no concrete script runtime or bindings crate (ADR-0002 / ADR-0011). The edge
+# to `alloy` is held by Cargo (see the note above).
+[[restrict-use]]
+name = "engine-isolated"
+scope = "engine"
+deny = ["rhai_runtime::**", "rhai_bindings::**"]
+message = "Engine abstraction crate must not import concrete script runtimes or the bindings crate (ADR-0002 / ADR-0011)."
+
 [[restrict-use]]
 name = "dom-isolated"
 scope = "dom"
 deny = ["engine::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/dom must not import the engine, a script runtime, or the bindings crate."
 
+# core/graphics is a pure rasterization domain: no DOM, no CSS, no engine, no runtime. Every script bridge lives in
+# core/runtime/rhai (v0.3 report decision 2.1), which is also why docs/architecture/overview.md no longer lists
+# `graphics -> engine`.
 [[restrict-use]]
 name = "graphics-isolated"
 scope = "graphics"
 deny = ["engine::**", "dom::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/graphics must not import the engine, DOM, or a script runtime (PRD-005:62-63)."
 
+# core/css realises the cascade/layout ports without naming the engine or a script runtime — the scriptable adapter
+# lives in rhai-bindings (PRD-007:64-67). It MAY depend on core/dom and core/graphics (shared units, ADR-0016), so
+# those are deliberately absent from this list.
 [[restrict-use]]
 name = "css-isolated"
 scope = "css"
 deny = ["engine::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/css must not import the engine or a script runtime — the scriptable adapter lives in rhai-bindings (PRD-007). It may import dom, html and graphics."
 
+# core/html realises the TokenSink/TreeSink ports without naming the engine or a script runtime (PRD-008, B5). It is
+# the leaf vocabulary crate: core/dom depends on it, never the other way round (ADR-0024).
 [[restrict-use]]
 name = "html-isolated"
 scope = "html"
 deny = ["engine::**", "dom::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/html must not import the engine, dom, or a script runtime (PRD-008, ADR-0024)."
 
+# core/network is a pure transport-and-policy domain: no engine, no runtime, no other subsystem. The scriptable
+# RequestPolicy of Phase M lives in rhai-bindings (PRD-009, ADR-0019).
 [[restrict-use]]
 name = "network-isolated"
 scope = "network"
 deny = ["engine::**", "dom::**", "css::**", "graphics::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/network must not import the engine, another subsystem, or a script runtime — the scriptable RequestPolicy lives in rhai-bindings (PRD-009, ADR-0019)."
 
+# core/window is a pure window-system-and-presenter domain: no engine, no runtime, no other subsystem, and —
+# deliberately, unlike core/css — no `graphics` either. `FrameView` is what keeps that edge from existing (see the
+# crate doc `## Layout`); the scriptable UI policy of Phase M lives in rhai-bindings (PRD-010, ADR-0019).
 [[restrict-use]]
 name = "window-isolated"
 scope = "window"
@@ -517,6 +454,9 @@ deny = [
 ]
 message = "core/browser is a pure state machine: no thread, no channel, no HttpTransport call — it returns BrowserEffect::Fetch for alloy to execute (#110 decision 4, ADR-0019 amendment)."
 
+# core/browser owns the document and says *what* to fetch; `alloy` does the fetching. It may depend on dom, html, css,
+# network (domain types) and graphics (domain types) — never on the engine, a script runtime, the bindings crate, the
+# CLI, or the window system (ADR-0026).
 [[restrict-use]]
 name = "browser-isolated"
 scope = "browser"
@@ -540,7 +480,8 @@ message = "core/browser must not import css layout types or NaturalSizes — all
 
 # #109 / ADR-0026: the chrome and the browsing context are siblings joined by `alloy`'s executor.
 # `ui` takes its hit regions as `region::ContentRegion`, so it never imports `browser`, and it
-# owns no thread (the converse of `browser-isolated`).
+# owns no thread (the converse of `browser-isolated`). It may use graphics, window and network (domain types) and
+# the shared `region` ids.
 [[restrict-use]]
 name = "ui-isolated"
 scope = "ui"
@@ -594,6 +535,7 @@ deny = [
 ]
 message = "alloy's infrastructure adapters implement application ports; they must not call the event loop, BrowserApp or the EffectExecutor (#115, ADR-0010)."
 
+# core/region is a leaf: the one vocabulary `ui` and `browser` share. It carries a `Rect` and nothing else (ADR-0026).
 [[restrict-use]]
 name = "region-isolated"
 scope = "region"
@@ -636,12 +578,15 @@ deny = [
 ]
 message = "alloy's application layer names no std::thread, no PNG decoder, no HttpTransport / RequestPolicy or transport and no crate::infrastructure item (tests included) — fetch workers and image decoding are infrastructure adapters behind ports (#110 decision 26, #114, ADR-0010)."
 
+# core/platform is a leaf: it must not depend on any other workspace crate (ADR-0022).
 [[restrict-use]]
 name = "platform-isolated"
 scope = "platform"
 deny = ["engine::**", "dom::**", "css::**", "graphics::**", "html::**", "network::**", "window::**", "rhai::**", "rhai_runtime::**", "rhai_bindings::**"]
 message = "core/platform is a leaf every crate may depend on, so it imports none of them (ADR-0022)."
 
+# core/runtime/rhai is the pure engine-port backend after the R split: it names no domain crate and not the bindings
+# crate. The DOM bridge and every later CSS/graphics/network/window bridge lives in rhai-bindings (v0.5 §2.12).
 [[restrict-use]]
 name = "runtime-rhai-domain-free"
 scope = "runtime-rhai"
