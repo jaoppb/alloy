@@ -17,7 +17,8 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 ## Decision
 
 1. **A Nix flake (`flake.nix` + `flake.lock`) is the required environment** for building, testing and running Alloy on
-   Linux and macOS. `nix develop`, or direnv's `use flake` (`.envrc`), is the only setup path. mise is removed.
+   Linux and Apple Silicon macOS. `nix develop`, or direnv's `use flake` (`.envrc`), is the only setup path. mise is
+   removed.
 2. **Re-affirming ADR-0025 decision 2:** `rust-toolchain.toml` stays the one place the Rust channel is declared. The
    flake reads it through `oxalica/rust-overlay` (`fromRustupToolchainFile`) and adds `llvm-tools-preview`, so rustup
    users, IDEs and the Windows CI job agree with the flake.
@@ -31,15 +32,15 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
    about 10 minutes and 18 GB of RAM, which timed out the cold Markdown CI job. CI exercises only the x86_64-linux
    binary; the aarch64-linux and aarch64-darwin hashes were verified by hand with
    `nix store prefetch-file --hash-type sha256` (2026-11-22, v0.3.5). The bump procedure is a comment in `flake.nix`.
-   `x86_64-darwin` is not a supported system: Nixpkgs 26.11 dropped it (`nix flake check --all-systems` failed there
-   with "Nixpkgs 26.11 has dropped support for x86_64-darwin"), so the flake no longer declares it (#367).
 4. **Shells.** `default` carries every tool; `fuzz` carries a nightly toolchain and `cargo-fuzz`; slim shells
    (`markdown`, `rust`, `supply-chain`, `unsafe-audit`, `arch`, `coverage`) let each CI job pay only for its own tools.
    Every shell exports `ALLOY_DEV_SHELL`, which `just setup` checks. The `fuzz` shell's nightly comes from
    `selectLatestNightlyWith`, so a `nix flake update` cannot land on a nightly with a missing component.
-5. **Windows is the one exception.** Nix does not run natively there, so the `windows-2022` CI job stays Nix-free
-   (rustup reading `rust-toolchain.toml`) and Windows developers use WSL2 inside the flake. `justfile` recipes stay
-   tool-agnostic; only `just setup` guards on Linux/macOS.
+5. **Two exceptions: Windows and Intel macOS.** Nix does not run natively on Windows, so the `windows-2022` CI job stays
+   Nix-free (rustup reading `rust-toolchain.toml`) and Windows developers use WSL2 inside the flake. `x86_64-darwin` is
+   not a supported system: Nixpkgs 26.11 dropped it (`nix flake check --all-systems` failed there with "Nixpkgs 26.11
+   has dropped support for x86_64-darwin"), so the flake no longer declares it and Intel Macs have no supported path
+   (#367). `justfile` recipes stay tool-agnostic; only `just setup` guards on Linux/macOS.
 6. ADR-0025's decisions 3 (rumdl replaces prettier/markdownlint, no Node) and 5 (one-time reformat) stay in force.
 
 ## Consequences
@@ -47,10 +48,10 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
 - Positive: one lockfile for the compiler, tools and native libraries; each worktree gets an identical shell; CI jobs
   and local runs use the same environment.
 
-- Negative: contributors on Linux and macOS must install Nix; the first entry on aarch64-linux and macOS builds
-  `arch-lint-cli` from source unless cached; `rumdl` and the x86_64-linux `arch-lint-cli` are downloaded binaries, so
-  their hashes must be updated with each version bump; the Windows job is a second, rustup-based path that can drift
-  from the flake.
+- Negative: contributors on Linux and Apple Silicon macOS must install Nix; the first entry on aarch64-linux and macOS
+  builds `arch-lint-cli` from source unless cached; `rumdl` and the x86_64-linux `arch-lint-cli` are downloaded
+  binaries, so their hashes must be updated with each version bump; the Windows job is a second, rustup-based path that
+  can drift from the flake.
 
 - Cache budget: Actions allows 10 GB per repository, shared by the Nix store entries (one per shell and `flake.lock`
   generation) and the cargo `target/` caches. On a key miss, cache-nix-action v7 runs `nix store gc --max <cap>` just

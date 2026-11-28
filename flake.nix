@@ -1,8 +1,9 @@
 # Required development environment (ADR-0029, issue #152): supersedes ADR-0025 decisions 1 and 4.
 #
 # `nix develop` (or direnv's `use flake`) is how Alloy is built, tested and run on
-# Linux and macOS. The Rust channel is NOT declared here: it is read from
-# `rust-toolchain.toml`, so rustup users, IDEs and the Windows CI job agree.
+# Linux and Apple Silicon macOS (Intel Macs are unsupported). The Rust channel is NOT
+# declared here: it is read from `rust-toolchain.toml`, so rustup users, IDEs and the
+# Windows CI job agree.
 {
   description = "Alloy development environment";
 

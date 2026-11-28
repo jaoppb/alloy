@@ -133,9 +133,9 @@ delivered crate now demonstrates; `docs/adr/` + `docs/requirements/` remain the 
 ## Commands
 
 Tooling is split: Cargo for Rust, `rumdl` for Markdown quality gates, a Nix flake (`flake.nix`, ADR-0029) pinning every
-tool and native library, with the Rust channel read from `rust-toolchain.toml`. On Linux/macOS, run everything inside
-`nix develop` (or direnv's `use flake`); only the `windows-2022` CI job is Nix-free. A root `justfile` wraps them —
-`just` lists every recipe.
+tool and native library, with the Rust channel read from `rust-toolchain.toml`. On Linux and Apple Silicon macOS, run
+everything inside `nix develop` (or direnv's `use flake`); only the `windows-2022` CI job is Nix-free, and Intel Macs
+are unsupported (ADR-0029). A root `justfile` wraps them — `just` lists every recipe.
 
 **Linker (#153):** on Linux, `.cargo/config.toml` links every build through `clang -fuse-ld=mold` (x86_64 and aarch64);
 the flake devShell provides both, so a Linux build outside it fails with a linker error instead of falling back to GNU

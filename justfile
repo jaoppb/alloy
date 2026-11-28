@@ -237,7 +237,7 @@ doc:
 update:
     {{cargo}} update
 
-# Check the flake shell (Linux/macOS, ADR-0029) and install the git hooks
+# Check the flake shell (Linux and Apple Silicon macOS, ADR-0029) and install the git hooks
 setup:
     @case "$(uname -s)" in Linux|Darwin) [ -n "${ALLOY_DEV_SHELL:-}" ] || { echo "not in the flake shell — run: nix develop (or direnv allow)"; exit 1; };; esac
     lefthook install
