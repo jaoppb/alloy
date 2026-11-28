@@ -22,7 +22,7 @@ git clone https://github.com/jaoppb/alloy.git
 cd alloy
 # Prerequisite: Nix with flakes enabled (`experimental-features = nix-command flakes`),
 # https://nixos.org/download. Windows: develop inside WSL2 (ADR-0029).
-nix develop  # required on Linux/macOS (or `direnv allow`; review `flake.nix` changes before entering the directory): every tool, the Rust toolchain, native libraries
+nix develop  # required on Linux and Apple Silicon macOS; Intel Macs are unsupported (or `direnv allow`; review `flake.nix` changes before entering the directory): every tool, the Rust toolchain, native libraries
 just setup   # checks you are in the flake shell, installs the git hooks
 ```
 
