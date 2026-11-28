@@ -31,7 +31,6 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
@@ -88,7 +87,7 @@
           arch-lint-cli = if system == "x86_64-linux" then arch-lintPrebuilt else arch-lintSource;
           # Prebuilt upstream release (static musl on Linux): compiling rumdl from source takes ~10 minutes
           # and ~18 GB of RAM, which timed out the cold Markdown CI job. Hashes are the release's digests.
-          # To bump: set `version`, then for each of the four triples below run
+          # To bump: set `version`, then for each of the three triples below run
           #   nix store prefetch-file --hash-type sha256 <release-url>
           # which prints the SRI hash `fetchurl` needs (GitHub's release digests are hex, not SRI). ADR-0029.
           rumdl =
@@ -103,10 +102,6 @@
                   aarch64-linux = {
                     triple = "aarch64-unknown-linux-musl";
                     hash = "sha256-H2uBmM5oj299uMm64uoK4TuTr0RUc+FsYORXmAkSGTE=";
-                  };
-                  x86_64-darwin = {
-                    triple = "x86_64-apple-darwin";
-                    hash = "sha256-p/Sv6/gHmzh+/HquWu3eL50idOl2LU96CZ1wG1AFwII=";
                   };
                   aarch64-darwin = {
                     triple = "aarch64-apple-darwin";

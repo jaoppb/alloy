@@ -26,11 +26,13 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
    platform, where the source build costs about 1m49s cold; upstream ships no musl build for aarch64-linux) and builds
    from crates.io at the same pinned version elsewhere (it is not packaged), with the prebuilt hash taken from the
    release's `.sha256` asset and checked against GitHub's digest, and `rumdl`, which the flake fetches as the pinned
-   upstream release binary (static musl on Linux), pinned by four per-platform hashes (x86_64/aarch64 Linux and Darwin):
-   nixpkgs' `rumdl` is older than the version whose formatting CI enforces, and compiling it from source took about 10
-   minutes and 18 GB of RAM, which timed out the cold Markdown CI job. CI exercises only the x86_64-linux binary; the
-   aarch64-linux and both Darwin hashes were verified by hand with `nix store prefetch-file --hash-type sha256`
-   (2026-11-22, v0.3.5). The bump procedure is a comment in `flake.nix`.
+   upstream release binary (static musl on Linux), pinned by three per-platform hashes (x86_64/aarch64 Linux and aarch64
+   Darwin): nixpkgs' `rumdl` is older than the version whose formatting CI enforces, and compiling it from source took
+   about 10 minutes and 18 GB of RAM, which timed out the cold Markdown CI job. CI exercises only the x86_64-linux
+   binary; the aarch64-linux and aarch64-darwin hashes were verified by hand with
+   `nix store prefetch-file --hash-type sha256` (2026-11-22, v0.3.5). The bump procedure is a comment in `flake.nix`.
+   `x86_64-darwin` is not a supported system: Nixpkgs 26.11 dropped it (`nix flake check --all-systems` failed there
+   with "Nixpkgs 26.11 has dropped support for x86_64-darwin"), so the flake no longer declares it (#367).
 4. **Shells.** `default` carries every tool; `fuzz` carries a nightly toolchain and `cargo-fuzz`; slim shells
    (`markdown`, `rust`, `supply-chain`, `unsafe-audit`, `arch`, `coverage`) let each CI job pay only for its own tools.
    Every shell exports `ALLOY_DEV_SHELL`, which `just setup` checks. The `fuzz` shell's nightly comes from
