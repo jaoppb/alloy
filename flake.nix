@@ -54,8 +54,10 @@
           rustStable = (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml).override {
             extensions = [ "llvm-tools-preview" ];
           };
-          # cargo-fuzz needs nightly (`-Zsanitizer`); used only by the fuzz shell.
-          rustNightly = pkgs.rust-bin.nightly.latest.minimal;
+          # cargo-fuzz needs nightly (`-Zsanitizer`); used only by the fuzz shell. `selectLatestNightlyWith`
+          # picks the newest nightly that has every listed component, so a `nix flake update` cannot land
+          # on one with a component missing (oxalica/rust-overlay README).
+          rustNightly = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal);
 
           # Not packaged in nixpkgs, or older there than CI tracks: built from crates.io, pinned.
           arch-lintSource = pkgs.rustPlatform.buildRustPackage rec {
@@ -82,6 +84,9 @@
           arch-lint-cli = if system == "x86_64-linux" then arch-lintPrebuilt else arch-lintSource;
           # Prebuilt upstream release (static musl on Linux): compiling rumdl from source takes ~10 minutes
           # and ~18 GB of RAM, which timed out the cold Markdown CI job. Hashes are the release's digests.
+          # To bump: set `version`, then for each of the four triples below run
+          #   nix store prefetch-file --hash-type sha256 <release-url>
+          # which prints the SRI hash `fetchurl` needs (GitHub's release digests are hex, not SRI). ADR-0029.
           rumdl =
             let
               version = "0.3.5";
@@ -200,6 +205,6 @@
         }
       );
 
-      formatter = forAllSystems (system: (pkgsFor system).nixfmt-rfc-style);
+      formatter = forAllSystems (system: (pkgsFor system).nixfmt);
     };
 }
