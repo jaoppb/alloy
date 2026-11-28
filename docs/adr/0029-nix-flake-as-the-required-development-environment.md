@@ -109,6 +109,17 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   remains, and PR-scoped entries count too, so check this figure before adding a cache. Warm Linux restores cost 3–16 s
   more than with per-shell entries (extracting a 4.1 GB store instead of ~3.3 GB), while 11 jobs no longer save (9–24 s
   each).
+- Cargo cache cuts (#361): the budget bullet above counted cargo at 5.82 GiB, and the whole repository was still 10.02
+  GiB on warm `main` (`gh cache list --ref refs/heads/main`, 2026-11-28; cargo 6.25 GB = 5.82 GiB). Two changes bring it
+  under the 9 GiB target (a 1 GiB margin for one PR's own Nix entry). (1) The `cargo-cache` composite action makes a
+  `pull_request` run restore through `actions/cache/restore@v6` and never save; only a push to `main` saves, so a PR no
+  longer writes up to 6.25 GB of its own. (2) `main` keeps only the registry and git db, no `target/`, for Windows
+  `test` (1.19 GB) and the Linux `noengine` (0.48), `fault` (0.34), `benchmark` (0.11) and `cssconf` (0.11) jobs: 2.23
+  GB today. A registry-only entry is at most the `fuzz` entry's 0.042 GB (registry plus a tiny `fuzz/target/`), so the
+  net cut is at least 2.23 − 5 × 0.042 = 2.02 GB = 1.88 GiB, and cargo falls to at most 4.23 GB = 3.94 GiB. Linux `test`
+  (1.89 GB), `cov` (0.83) and macOS `test` (0.78) keep `target/` because their builds are the slowest. Cost: the five
+  cut jobs compile cold on every run, so the PR compares their times with baseline run 45062077815 (a cut that makes one
+  more than 10% slower is replaced, not kept).
 - Purge: `ci/purge_stale_nix_caches.sh` deletes, on `main`, every `nix-*` entry not ending in the current
   `flake.nix`/`flake.lock`/`rust-toolchain.toml` hash. It needs `actions: write`, which is granted per job, not per
   event, so it lives in the `purge-nix-cache` job that runs only on a push to `main` and only after every other job

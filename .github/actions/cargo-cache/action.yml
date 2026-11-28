@@ -1,0 +1,29 @@
+name: Cargo cache
+description: >-
+  Restore a job's cargo caches; only a push to `main` saves them (ADR-0029, #361).
+inputs:
+  name:
+    description: Cache key segment that names the job (`test`, `cov`, ...).
+    required: true
+  paths:
+    description: Newline-separated paths to cache (registry, git db and, where the build is long, `target/`).
+    required: true
+runs:
+  using: composite
+  steps:
+    # A pull request restores `main`'s entry through `restore-keys` and never saves: each PR would otherwise
+    # write its own full set whenever `main` has no exact-key hit, which kept the repository over the 10 GiB
+    # Actions budget (#361). Cache scoping already keeps a PR from writing into `main`'s scope.
+    - if: github.event_name == 'pull_request'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.paths }}
+        key: ${{ runner.os }}-cargo-mold-${{ inputs.name }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-mold-${{ inputs.name }}-
+    # Every other event (push to `main`, workflow_dispatch) restores and saves in the job's post step.
+    - if: github.event_name != 'pull_request'
+      uses: actions/cache@v6
+      with:
+        path: ${{ inputs.paths }}
+        key: ${{ runner.os }}-cargo-mold-${{ inputs.name }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-mold-${{ inputs.name }}-
