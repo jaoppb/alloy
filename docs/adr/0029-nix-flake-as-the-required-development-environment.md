@@ -69,8 +69,8 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   configuration per sequence, same commit, 16 cores, load average 10–77 in the first sequence and 40–56 in the second):
 
   - **`SCCACHE_BASEDIRS` was not testable for Rust.** In 0.19.0 it applies to C/C++ only; Rust support arrived in
-    v0.20.0 (#2918, #3022), together with no longer hashing `CARGO_TARGET_DIR` (#3050). So #347 is no evidence that
-    basedirs fails for Rust.
+    v0.20.0 (sccache#2918, sccache#3022), together with no longer hashing `CARGO_TARGET_DIR` (sccache#3050). So #347 is
+    no evidence that basedirs fails for Rust.
   - **`--remap-path-prefix`** (confirmed on the `rustc` command line) did not help: the hit count stayed at 30/189
     (15.9%) with remap alone, basedirs alone and both together (basedirs was a no-op for Rust in 0.19.0, so these are
     effectively one configuration), and wall-clock was within noise of no sccache: warm runs 68.8–73.6 s against a
@@ -80,7 +80,7 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
     build-directory lock (a second build waited ~53 s), a `cargo clean` in one worktree wipes the others' artifacts (a
     62 s rebuild), and switching between divergent commits rebuilds the workspace (27–45 s).
   - Workspace crates built with incremental compilation are not cached by 0.19.0 (v0.20.0 adds
-    `SCCACHE_ALLOW_INCREMENTAL`, #2810, #3020), nor are `bin`, `proc-macro` and `dylib` crates.
+    `SCCACHE_ALLOW_INCREMENTAL`, sccache#2810, sccache#3020), nor are `bin`, `proc-macro` and `dylib` crates.
 
   Nothing made it default-on; CI keeps its per-job caches.
 
