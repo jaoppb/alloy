@@ -110,19 +110,23 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   more than with per-shell entries (extracting a 4.1 GB store instead of ~3.3 GB), while 11 jobs no longer save (9–24 s
   each).
 - Cargo cache cuts (#361): the budget bullet above counted cargo at 5.82 GiB, and the whole repository was still 10.02
-  GiB on warm `main` (`gh cache list --ref refs/heads/main`, 2026-11-28; cargo 6.25 GB = 5.82 GiB). Two changes bring it
-  under the 9 GiB target (a 1 GiB margin for one PR's own Nix entry). (1) The `cargo-cache` composite action makes a run
-  on any ref but `main` (a pull request, a `workflow_dispatch` from a branch) restore through `actions/cache/restore@v6`
-  and never save; only a run on `main` saves, so a PR no longer writes up to 6.25 GB of its own. (2) `main` keeps only
-  the registry and git db, no `target/`, for Windows `test` (1.19 GB) and the Linux `noengine` (0.48), `fault` (0.34),
-  `benchmark` (0.11) and `cssconf` (0.11) jobs: 2.23 GB in total. A registry-only entry is small: the 276 registry
-  crates in `Cargo.lock` are 41 MB of `.crate` files (already compressed) plus a sparse-index slice, about 0.05 GB; the
-  arithmetic budgets 0.10 GB per entry to stay conservative. The net cut is then at least 2.23 − 5 × 0.10 = 1.73 GB =
-  1.61 GiB (about 1.98 GB = 1.84 GiB at 0.05 GB), which leaves cargo at no more than 4.52 GB = 4.21 GiB and the total at
-  about 8.4 GiB, once the old entries (which hold `target/` under the same key) are evicted after 7 days or deleted with
-  `gh cache delete`. Linux `test` (1.89 GB), `cov` (0.83) and macOS `test` (0.78) keep `target/` because their builds
-  are the slowest. Cost: the five cut jobs compile cold on every run; the pull request description records their
-  cold-run times against baseline run 45062077815, and a cut that makes one more than 10% slower is replaced, not kept.
+  GiB on warm `main` (`gh cache list --ref refs/heads/main`, 2026-11-28; cargo 6.25 GB = 5.82 GiB). Three changes bring
+  it under the 9 GiB target (a 1 GiB margin for one PR's own Nix entry). (1) The `cargo-cache` composite action makes a
+  run on any ref but `main` (a pull request, a `workflow_dispatch` from a branch) restore through
+  `actions/cache/restore@v6` and never save; only a run on `main` saves, so a PR no longer writes up to 6.25 GB of its
+  own. (2) Like the Nix `toolchain` entry, the Linux `test` entry (1.89 GB) is shared: only the Linux `test` job saves
+  it, and `quality` (0.29 GB), `noengine` (0.48), `cssconf` (0.11), `fault` (0.34), `benchmark` (0.11) and `geiger`
+  (0.19) restore it with `save: 'false'` and the same `paths`, so their own entries (1.52 GB) disappear. `cov` (0.83),
+  `fuzz` (0.04) and macOS `test` (0.78) keep their own. (3) Windows `test` keeps only the registry and git db, not
+  `target/` (1.19 GB). A registry-only entry is small: the 276 registry crates in `Cargo.lock` are 41 MB of `.crate`
+  files (already compressed) plus a sparse-index slice, about 0.05 GB, and the arithmetic budgets 0.10 GB. The net cut
+  is 1.52 + 1.19 − 0.10 = 2.61 GB = 2.43 GiB, which leaves cargo at 3.64 GB = 3.39 GiB and the total at about 7.6 GiB,
+  once the old entries (same keys, different `paths`, so never restored again) are evicted after 7 days or deleted with
+  `gh cache delete`. Rejected first attempt: dropping `target/` from `fault`, `benchmark` and `cssconf` (and `noengine`)
+  made PR #387's cold run 13.5% (fault, 101 s against 89 s), 28% (benchmark, 120 s against 94 s) and 37% (cssconf, 71 s
+  against 52 s) slower than baseline run 45062077815, past the 10% bar. Windows `test` took 209 s against 242 s, inside
+  it. The baseline is itself a cold run, so against warm `main` run 46149620103 (Windows `test` 145 s, `fault` 47 s,
+  `benchmark` 69 s, `cssconf` 47 s) the Windows cut costs about 44%; that cost is accepted for 1.09 GB.
 - Purge: `ci/purge_stale_nix_caches.sh` deletes, on `main`, every `nix-*` entry not ending in the current
   `flake.nix`/`flake.lock`/`rust-toolchain.toml` hash. It needs `actions: write`, which is granted per job, not per
   event, so it lives in the `purge-nix-cache` job that runs only on a push to `main` and only after every other job

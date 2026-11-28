@@ -8,13 +8,19 @@ inputs:
   paths:
     description: Newline-separated paths to cache (registry, git db and, where the build is long, `target/`).
     required: true
+  save:
+    description: >-
+      `true` for the one job that owns the entry; `false` for jobs that only restore an entry another job saves.
+      Even a saver does not save off `main`.
+    required: false
+    default: 'true'
 runs:
   using: composite
   steps:
     # Any ref but `main` (a pull request, a dispatch from a branch) restores `main`'s entry through
     # `restore-keys` and never saves: each would otherwise write its own full set whenever `main` has no
     # exact-key hit, which kept the repository over the 10 GiB Actions budget (#361).
-    - if: github.ref != 'refs/heads/main'
+    - if: github.ref != 'refs/heads/main' || inputs.save != 'true'
       uses: actions/cache/restore@v6
       with:
         path: ${{ inputs.paths }}
@@ -22,7 +28,7 @@ runs:
         restore-keys: ${{ runner.os }}-cargo-mold-${{ inputs.name }}-
     # Keyed on the ref, not the event, so a workflow_dispatch from a feature branch cannot save either. A run on
     # `main` restores and saves in the job's post step.
-    - if: github.ref == 'refs/heads/main'
+    - if: github.ref == 'refs/heads/main' && inputs.save == 'true'
       uses: actions/cache@v6
       with:
         path: ${{ inputs.paths }}

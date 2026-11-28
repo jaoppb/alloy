@@ -62,7 +62,8 @@ jobs:
       # `entry: toolchain` restores, so no separate realising step is needed (#357, ADR-0029).
       - uses: ./.github/actions/cargo-cache
         with:
-          name: quality
+          name: test
+          save: 'false'
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
@@ -121,7 +122,10 @@ jobs:
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
-      # Windows keeps only the registry: its 1.19 GB `target/` is the largest single cut (#361, ADR-0029).
+      # The Linux `test` entry is the one shared cargo cache: this job is its only saver and the other Linux
+      # jobs (quality, noengine, cssconf, fault, benchmark, geiger) restore it with `save: 'false'`, so their
+      # `paths` must match it exactly. Windows keeps only the registry: its 1.19 GB `target/` is the largest
+      # single cut (#361, ADR-0029).
       - if: runner.os == 'Windows'
         uses: ./.github/actions/cargo-cache
         with:
@@ -166,11 +170,13 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: noengine
+          name: test
+          save: 'false'
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            target/
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
@@ -209,11 +215,13 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: cssconf
+          name: test
+          save: 'false'
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            target/
       # Three statements of the same cut — core/css/tests/data/MANIFEST.md, the
       # SUPPORTED_PROPERTIES / SUPPORTED_SELECTORS registries, and what the
       # parser really accepts — must agree in every direction. There is no bless
@@ -243,11 +251,13 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: fault
+          name: test
+          save: 'false'
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            target/
       # A panic injected into a guarded binding must be trapped as ScriptPanic
       # with the process alive; run_dom_with_fallback must recover from every
       # error class. --test-threads=1 keeps the process-global panic hook
@@ -276,11 +286,13 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: benchmark
+          name: test
+          save: 'false'
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            target/
       # ci/hook_benchmark.sh checks the measured mean against both the
       # absolute PRD-001 N-01 ceiling (<10us) and a generous multiple of the
       # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
@@ -373,10 +385,12 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: geiger
+          name: test
+          save: 'false'
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
             target/
       - run: ci/unsafe_audit.sh
       - run: ci/verify_mold.sh
