@@ -222,8 +222,8 @@ paths = ["core/platform/**"]
 # depend on no declared scope of its crate but the crate scope itself (which contains the layer, so
 # `to = []` would trip on every file). Only scopes that are declared are checked: `<crate>-application`
 # is, so a domain -> application edge fails, while `crate::infrastructure::…` stays unchecked because no
-# `<crate>-infrastructure` scope exists (it was unchecked before too). It replaces the `deny-scope-dep`
-# that listed `<crate>-application` plus crates `deny-scope-dep` cannot see anyway.
+# `<crate>-infrastructure` scope exists (it was unchecked before too). It replaces the per-crate
+# `deny-scope-dep`s that listed `<crate>-application` plus crates `deny-scope-dep` cannot see anyway.
 # `window-domain` is listed against `window` and `window-winit-free`, see its rule below.
 #
 # Crate-level isolation is stated only by the `restrict-use` fences in the next section (#362): a
@@ -360,10 +360,11 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 # `deny-scope-dep` resolves only `crate::` / `self::` / `super::` paths, against the package the file belongs to
 # (arch-lint 0.10+; before that, nothing in a member crate), so it cannot see `use engine::X` in another crate
 # (re-checked on 0.11, #139, #155, #362). The interpreter crates themselves are denied by the `*-interpreter-free`
-# rules above. Two kinds of edge no arch-lint rule sees are held by Cargo instead: `alloy` (the `alloy-cli` scope)
-# is depended on by nobody, because it depends on every other crate and Cargo forbids the cycle; and the engine's
-# edges to `runtime-rhai` are held by `core/engine/Cargo.toml`, which depends only on `bitflags` while
-# `rhai-runtime` and `alloy` depend on `engine`.
+# rules above. One kind of edge no arch-lint rule sees is held by Cargo instead: imports of `alloy` (the `alloy-cli`
+# scope). `alloy` depends on every crate the fences below cover, so none of them can depend on it (Cargo forbids the
+# cycle); the stub crates `js`, `devtools` and `extension` are the exception, as `alloy` does not depend on them yet.
+# The engine's edge to `alloy` is covered the same way, and `core/engine/Cargo.toml` depends only on `bitflags`; its
+# edges to `rhai_runtime` and `rhai_bindings` are the `engine-isolated` fence's.
 #
 # The project-wide rules `[[independent]]` (ALD010), `[[acyclic]]` (ALD009) and `[[allow-dep]]` (ALD011) read the same
 # scope graph as `deny-scope-dep`, so they are blind across crates too (#336, probed on 0.11.0):
@@ -375,7 +376,6 @@ message = "winit/softbuffer must stay confined to infrastructure/{winit_system,s
 #   (`graphics-application`), so each layer "depends" on its own crate and the graph is full of false cycles. Limited
 #   with `scopes = [...]` it only sees cycles between layers of one crate, and `allow-dep` / `deny-scope-dep` /
 #   `restrict-use` already forbid the edge that would close one, so it would enforce the same line twice.
-
 
 # Engine port abstraction: names no concrete script runtime or bindings crate (ADR-0002 / ADR-0011). The edge
 # to `alloy` is held by Cargo (see the note above).
