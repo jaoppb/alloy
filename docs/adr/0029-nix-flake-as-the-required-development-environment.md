@@ -128,14 +128,14 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   52 → 71 (+37%) slower, and a registry-only `noengine` 78 → 104 (+33%), so those keep a `target/` (`fault` via the
   shared entry). Sharing the `test` entry made `noengine` 78 → 131, `cssconf` 52 → 93 and `benchmark` 94 → 132, so those
   do not use it. The shipped design measured `quality` 115 → 119, `fault` 89 → 100 (+12%; its other runs with the shared
-  entry took 88 and 95 s), `geiger` 246 → 262 (+6.5%) and Windows `test` 242 → 186; `noengine`, `cssconf` and
-  `benchmark` are unchanged by it. Single-run times on shared runners vary by tens of percent, so they are evidence, not
-  proof. The baseline is itself a cold run, and against warm `main` run 46149620103 (`fault` 47 s, Windows `test` 145 s)
-  the two costly choices look worse: Windows `test` (186–237 s over four runs) +28–63% and `fault` +87–113%. Both costs
-  are accepted because issue #361 asked for a cut of at least 1.6 GiB, more than the 1.02 GiB that the 9 GiB target
-  strictly needs: without sharing `fault` the cut falls to 1.57 GB (1.46 GiB, total about 8.56 GiB), and without the
-  Windows cut to 0.82 GB (0.76 GiB, total about 9.26 GiB). The first would still meet the 9 GiB target; the issue's cut
-  is the reason it is not taken, and the maintainer may relax it.
+  entry took 88 and 95 s), `geiger` 246 → 262 (+6.5%) and Windows `test` 242 → 186–237 (four runs); `noengine`,
+  `cssconf` and `benchmark` are unchanged by it. Single-run times on shared runners vary by tens of percent, so they are
+  evidence, not proof. The baseline is itself a cold run, and against warm `main` run 46149620103 (`fault` 47 s, Windows
+  `test` 145 s) the two costly choices look worse: Windows `test` (186–237 s over four runs) +28–63% and `fault`
+  +87–113%. Both costs are accepted because issue #361 asked for a cut of at least 1.6 GiB, more than the 1.02 GiB that
+  the 9 GiB target strictly needs: without sharing `fault` the cut falls to 1.57 GB (1.46 GiB, total about 8.56 GiB),
+  and without the Windows cut to 0.82 GB (0.76 GiB, total about 9.26 GiB). The first would still meet the 9 GiB target;
+  the issue's cut is the reason it is not taken, and the maintainer may relax it.
 - Purge: `ci/purge_stale_nix_caches.sh` deletes, on `main`, every `nix-*` entry not ending in the current
   `flake.nix`/`flake.lock`/`rust-toolchain.toml` hash. It needs `actions: write`, which is granted per job, not per
   event, so it lives in the `purge-nix-cache` job that runs only on a push to `main` and only after every other job
