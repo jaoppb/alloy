@@ -122,10 +122,9 @@ jobs:
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
-      # The Linux `test` entry is the one shared cargo cache: this job is its only saver and the other Linux
-      # jobs (quality, noengine, cssconf, fault, benchmark, geiger) restore it with `save: 'false'`, so their
-      # `paths` must match it exactly. Windows keeps only the registry: its 1.19 GB `target/` is the largest
-      # single cut (#361, ADR-0029).
+      # The Linux `test` entry is shared: this job is its only saver and quality, fault and geiger restore it
+      # with `save: 'false'`, so their `paths` must match it exactly. Windows keeps only the registry: its
+      # 1.19 GB `target/` is the largest single cut (#361, ADR-0029).
       - if: runner.os == 'Windows'
         uses: ./.github/actions/cargo-cache
         with:
@@ -168,15 +167,14 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
+      # Registry only: a cold `target/` cost nothing measurable here, and its 0.48 GB entry did (#361, ADR-0029).
       - uses: ./.github/actions/cargo-cache
         with:
-          name: test
-          save: 'false'
+          name: noengine
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
@@ -215,8 +213,7 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: test
-          save: 'false'
+          name: cssconf
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
@@ -286,8 +283,7 @@ jobs:
           save: 'false'
       - uses: ./.github/actions/cargo-cache
         with:
-          name: test
-          save: 'false'
+          name: benchmark
           paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
