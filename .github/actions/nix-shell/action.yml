@@ -4,6 +4,17 @@ inputs:
   shell:
     description: Name of the flake devShell the job runs in (flake.nix `devShells`).
     required: true
+  entry:
+    description: >-
+      Name of the cache entry the store is restored from and saved to. Defaults to `shell`; shells whose closures
+      are near-identical pass one shared name (`toolchain`) so Actions holds one entry for all of them. It must also name a flake devShell, which the saver roots.
+    required: false
+    default: ''
+  save:
+    description: >-
+      `true` to save the store after the job; `false` for jobs that only restore a shared entry another job saves.
+    required: false
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -11,18 +22,24 @@ runs:
     # actions/cache cannot restore /nix/store (root-owned), hence this dedicated store cache.
     - uses: nix-community/cache-nix-action@v7
       with:
-        primary-key: nix-${{ runner.os }}-${{ inputs.shell }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
-        restore-prefixes-first-match: nix-${{ runner.os }}-${{ inputs.shell }}-
+        primary-key: nix-${{ runner.os }}-${{ inputs.entry || inputs.shell }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-${{ inputs.entry || inputs.shell }}-
+        save: ${{ inputs.save }}
         # Bound each entry's uncompressed store: on a key miss, just before saving, the action runs
         # `nix store gc --max <cap>`. That deletes dead paths in store-directory order (not oldest first) until
-        # the store fits, so the step below roots the shell: only paths outside its closure can be deleted.
-        # The caps sit just above the largest cached closure (measured: 3.28 GB for `unsafe-audit`, 3.25 GB
-        # for `rust`; macOS ~3.0 GB). At the measured ~3.1x zstd ratio they bound an entry at ~1.3 GiB (Linux) /
+        # the store fits, so the step below roots the entry's shell: only paths outside its closure can be deleted.
+        # The caps sit just above the largest cached closure (measured: Linux 4.13 GB for the shared `toolchain`
+        # entry, the union of the six shells that flake.nix's `toolchain` shell is built from; macOS ~3.0 GB), since a lower cap would
+        # evict live toolchain paths. At the measured ~3.1x zstd ratio they bound an entry at ~1.6 GiB (Linux) /
         # ~1.0 GiB (macOS). Flake inputs are not part of the shell closure (nix#6895), so the trim may drop them;
         # they are refetched at evaluation. Budget and measurements: ADR-0029.
-        gc-max-store-size-linux: 4G
+        gc-max-store-size-linux: 5G
         gc-max-store-size-macos: 3500M
     # Root the shell for the post-step GC above, which runs after every job step has exited: nothing else
     # roots it by then (`nix develop` holds only a temporary root). A profile is a permanent GC root.
-    - shell: bash
-      run: nix develop ".#${{ inputs.shell }}" --profile "$RUNNER_TEMP/nix-shell-root" --command true
+    # Root the shell the entry holds (`entry`, else `shell`), not the job's own: the shared `toolchain` entry is
+    # the union of several shells, so rooting only `rust` would let the GC evict the others' paths. Only the
+    # saver trims, so restore-only jobs skip the step.
+    - if: inputs.save == 'true'
+      shell: bash
+      run: nix develop ".#${{ inputs.entry || inputs.shell }}" --profile "$RUNNER_TEMP/nix-shell-root" --command true
