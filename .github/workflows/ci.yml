@@ -167,7 +167,6 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
-      # Registry only: a cold `target/` cost nothing measurable here, and its 0.48 GB entry did (#361, ADR-0029).
       - uses: ./.github/actions/cargo-cache
         with:
           name: noengine
@@ -175,6 +174,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            target/
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
