@@ -53,22 +53,23 @@ jobs:
         shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      # The one saver of the shared `toolchain` entry. The action's rooting step realises and roots the
+      # `toolchain` shell (the union of the other shells' closures) that every Linux job passing
+      # `entry: toolchain` restores, so no separate realising step is needed (#357, ADR-0029).
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
           entry: toolchain
-      # The one saver of the shared `toolchain` entry. The action's rooting step realises and roots the
-      # `toolchain` shell (the union of the other shells' closures) that every Linux job passing
-      # `entry: toolchain` restores, so no separate realising step is needed (#357, ADR-0029).
-      - uses: actions/cache@v6
+      # Restores the Linux `test` entry and never saves; `paths` must match that saver's list exactly (#361).
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: test
+          save: 'false'
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-quality-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-quality-
       # The runner's host rustup also puts cargo-fmt/cargo-clippy on PATH, which hid a shell toolchain without
       # them (#364), so assert they come from the Nix store.
       - run: |
@@ -122,15 +123,25 @@ jobs:
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
-      - uses: actions/cache@v6
+      # Windows keeps only the registry: its 1.19 GB `target/` is the largest single cut (#361, ADR-0029).
+      - if: runner.os == 'Windows'
+        uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: test
+          paths: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+      # The one saver of the Linux `test` entry that quality, fault and geiger restore (#361, ADR-0029).
+      - if: runner.os != 'Windows'
+        uses: ./.github/actions/cargo-cache
+        with:
+          name: test
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-test-
       - run: cargo check --workspace --all-targets
       - run: cargo test --workspace --all-features
       - if: runner.os == 'Linux'
@@ -156,15 +167,14 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: noengine
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-noengine-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-noengine-
       - run: cargo build -p engine --all-features
       - run: cargo test -p dom --no-default-features
       - run: cargo test -p css --no-default-features
@@ -201,15 +211,14 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: cssconf
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-cssconf-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-cssconf-
       # Three statements of the same cut — core/css/tests/data/MANIFEST.md, the
       # SUPPORTED_PROPERTIES / SUPPORTED_SELECTORS registries, and what the
       # parser really accepts — must agree in every direction. There is no bless
@@ -237,15 +246,16 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      # Restores the Linux `test` entry and never saves; `paths` must match that saver's list exactly (#361).
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: test
+          save: 'false'
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-fault-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-fault-
       # A panic injected into a guarded binding must be trapped as ScriptPanic
       # with the process alive; run_dom_with_fallback must recover from every
       # error class. --test-threads=1 keeps the process-global panic hook
@@ -272,15 +282,14 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: benchmark
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-benchmark-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-benchmark-
       # ci/hook_benchmark.sh checks the measured mean against both the
       # absolute PRD-001 N-01 ceiling (<10us) and a generous multiple of the
       # committed baseline (core/runtime/rhai/benches/baselines/hook_overhead.json).
@@ -314,14 +323,13 @@ jobs:
           shell: fuzz
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: fuzz
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             fuzz/target/
-          key: ${{ runner.os }}-cargo-mold-fuzz-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-fuzz-
       # 10 minutes per target (ADR-0018 row 1: TLS/HTTP/HTML/CSS/image/font
       # decoders must never panic on hostile bytes) — zero crashes expected.
       # Run from the repo root: cargo-fuzz auto-discovers ./fuzz/Cargo.toml,
@@ -372,14 +380,16 @@ jobs:
           shell: unsafe-audit
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      # Restores the Linux `test` entry and never saves; `paths` must match that saver's list exactly (#361).
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: test
+          save: 'false'
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-mold-geiger-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-geiger-
       - run: ci/unsafe_audit.sh
       - run: ci/verify_mold.sh
 
@@ -420,14 +430,13 @@ jobs:
           shell: coverage
           entry: toolchain
           save: 'false'
-      - uses: actions/cache@v6
+      - uses: ./.github/actions/cargo-cache
         with:
-          path: |
+          name: cov
+          paths: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             target/
-          key: ${{ runner.os }}-cargo-mold-cov-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-mold-cov-
       # domain/ has no I/O and no excuse — roadmap §5 sets the v0.1 gate at 85%.
       - name: Coverage for engine domain/
         run: >
