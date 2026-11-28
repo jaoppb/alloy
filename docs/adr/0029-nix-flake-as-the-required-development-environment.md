@@ -119,17 +119,21 @@ a per-job `jdx/mise-action` install. Issue #152 (epic #154) asks for one lockfil
   so their own entries (0.82 GB) disappear. (3) Windows `test` (1.19 GB) keeps only the registry and git db, not
   `target/`. A registry-only entry is small: the 276 registry crates in `Cargo.lock` are 41 MB of `.crate` files
   (already compressed) plus a sparse-index slice, about 0.05 GB, and the arithmetic budgets 0.10 GB. The net cut is
-  0.82 + (1.19 − 0.10) = 1.91 GB = 1.78 GiB, which leaves cargo at 4.34 GB = 4.04 GiB and the total at about 8.2 GiB,
-  once the old entries (same keys, different `paths`, so never restored again) are evicted after 7 days or deleted with
-  `gh cache delete`. `cov` (0.83), `noengine` (0.48), `benchmark` (0.11), `cssconf` (0.11), `fuzz` (0.04) and macOS
-  `test` (0.78) are unchanged. The choice was made on PR #387's cold CI runs against baseline run 45062077815 (job
-  seconds, baseline → run): dropping `target/` made `fault` 89 → 101 (+13.5%), `benchmark` 94 → 120 (+28%) and `cssconf`
+  0.82 + (1.19 − 0.10) = 1.91 GB = 1.78 GiB, which leaves cargo at 4.34 GB = 4.04 GiB and the total at about 8.2 GiB.
+  The old entries are never restored again (the `quality`, `fault` and `geiger` keys are no longer used; Windows `test`
+  keeps its key with different `paths`), so they age out after 7 days or can be deleted with `gh cache delete`. `cov`
+  (0.83), `noengine` (0.48), `benchmark` (0.11), `cssconf` (0.11), `fuzz` (0.04) and macOS `test` (0.78) are unchanged.
+- Cargo cut timings (#361): the cuts were chosen on PR #387's cold CI runs against baseline run 45062077815 (job
+  seconds, baseline → run). Dropping `target/` made `fault` 89 → 101 (+13.5%), `benchmark` 94 → 120 (+28%) and `cssconf`
   52 → 71 (+37%) slower, and a registry-only `noengine` 78 → 104 (+33%), so those keep a `target/` (`fault` via the
-  shared entry, 88–95 s); sharing the `test` entry made `noengine` 78 → 131, `cssconf` 52 → 93 and `benchmark` 94 → 132,
-  so those do not use it. `quality` (115 → 93), `geiger` (246 → 219) and Windows `test` (242 → 201–237) stay inside the
-  10% bar. Single-run times on shared runners vary by tens of percent, so they are evidence, not proof. The baseline is
-  itself a cold run: against warm `main` run 46149620103 (Windows `test` 145 s) the Windows cut costs 40–60%, a cost
-  accepted for 1.09 GB.
+  shared entry). Sharing the `test` entry made `noengine` 78 → 131, `cssconf` 52 → 93 and `benchmark` 94 → 132, so those
+  do not use it. The shipped design measured `quality` 115 → 119, `fault` 89 → 100 (+12%; its other runs with the shared
+  entry took 88 and 95 s), `geiger` 246 → 262 (+6.5%) and Windows `test` 242 → 186; `noengine`, `cssconf` and
+  `benchmark` are unchanged by it. Single-run times on shared runners vary by tens of percent, so they are evidence, not
+  proof. The baseline is itself a cold run, and against warm `main` run 46149620103 (`fault` 47 s, Windows `test` 145 s)
+  the two costly choices look worse: Windows `test` +28–63% and `fault` +87–113%. Both costs are accepted: without
+  sharing `fault` the cut falls to 1.57 GB (1.46 GiB), and without the Windows cut to 0.82 GB (0.76 GiB), each under the
+  1.6 GiB required.
 - Purge: `ci/purge_stale_nix_caches.sh` deletes, on `main`, every `nix-*` entry not ending in the current
   `flake.nix`/`flake.lock`/`rust-toolchain.toml` hash. It needs `actions: write`, which is granted per job, not per
   event, so it lives in the `purge-nix-cache` job that runs only on a push to `main` and only after every other job

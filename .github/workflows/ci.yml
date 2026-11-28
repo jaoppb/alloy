@@ -53,13 +53,14 @@ jobs:
         shell: nix develop .#rust --command bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@v7
+      # The one saver of the shared `toolchain` entry. The action's rooting step realises and roots the
+      # `toolchain` shell (the union of the other shells' closures) that every Linux job passing
+      # `entry: toolchain` restores, so no separate realising step is needed (#357, ADR-0029).
       - uses: ./.github/actions/nix-shell
         with:
           shell: rust
           entry: toolchain
-      # The one saver of the shared `toolchain` entry. The action's rooting step realises and roots the
-      # `toolchain` shell (the union of the other shells' closures) that every Linux job passing
-      # `entry: toolchain` restores, so no separate realising step is needed (#357, ADR-0029).
+      # Restores the Linux `test` entry and never saves; `paths` must match that saver's list exactly (#361).
       - uses: ./.github/actions/cargo-cache
         with:
           name: test
@@ -122,9 +123,7 @@ jobs:
       - name: Show toolchain
         if: runner.os == 'Windows'
         run: rustup show active-toolchain
-      # The Linux `test` entry is shared: this job is its only saver and quality, fault and geiger restore it
-      # with `save: 'false'`, so their `paths` must match it exactly. Windows keeps only the registry: its
-      # 1.19 GB `target/` is the largest single cut (#361, ADR-0029).
+      # Windows keeps only the registry: its 1.19 GB `target/` is the largest single cut (#361, ADR-0029).
       - if: runner.os == 'Windows'
         uses: ./.github/actions/cargo-cache
         with:
@@ -133,6 +132,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+      # The one saver of the Linux `test` entry that quality, fault and geiger restore (#361, ADR-0029).
       - if: runner.os != 'Windows'
         uses: ./.github/actions/cargo-cache
         with:
@@ -246,6 +246,7 @@ jobs:
           shell: rust
           entry: toolchain
           save: 'false'
+      # Restores the Linux `test` entry and never saves; `paths` must match that saver's list exactly (#361).
       - uses: ./.github/actions/cargo-cache
         with:
           name: test
@@ -379,6 +380,7 @@ jobs:
           shell: unsafe-audit
           entry: toolchain
           save: 'false'
+      # Restores the Linux `test` entry and never saves; `paths` must match that saver's list exactly (#361).
       - uses: ./.github/actions/cargo-cache
         with:
           name: test
