@@ -50,9 +50,13 @@
           pkgs = pkgsFor system;
           inherit (pkgs) lib stdenv;
 
-          # Channel + rustfmt/clippy come from rust-toolchain.toml; coverage needs llvm-tools.
+          # Channel + components come from rust-toolchain.toml; coverage needs llvm-tools on top. `.override
+          # { extensions }` replaces the file's components rather than adding to them (rust-overlay
+          # lib/rust-bin.nix `fromRustupToolchain` sets `extensions = components`), so re-list them here or
+          # the shell loses rustfmt and clippy (#364).
+          toolchainFile = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml)).toolchain;
           rustStable = (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml).override {
-            extensions = [ "llvm-tools-preview" ];
+            extensions = toolchainFile.components ++ [ "llvm-tools-preview" ];
           };
           # cargo-fuzz needs nightly (`-Zsanitizer`); used only by the fuzz shell. `selectLatestNightlyWith`
           # picks the newest nightly that has every listed component, so a `nix flake update` cannot land
