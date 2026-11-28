@@ -69,6 +69,15 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-mold-quality-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-mold-quality-
+      # The runner's host rustup also puts cargo-fmt/cargo-clippy on PATH, which hid a shell toolchain without
+      # them (#364), so assert they come from the Nix store.
+      - run: |
+          for tool in cargo-fmt cargo-clippy; do
+            case "$(command -v "$tool")" in
+              /nix/store/*) ;;
+              *) echo "::error::$tool does not come from the Nix shell toolchain"; exit 1 ;;
+            esac
+          done
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: ci/verify_mold.sh
